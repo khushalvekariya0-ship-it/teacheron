@@ -1,0 +1,2329 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// TutorLink — production data model (PostgreSQL 15+, Prisma ORM 6.x)
+//
+// Conventions
+//   • ids are cuid() strings.
+//   • Money is always Int cents with a `currency` column (default "usd"). Never Float/Decimal.
+//   • Every timestamp is `@db.Timestamptz(6)` and stored in UTC. Calendar-only values
+//     (homework due dates, availability exceptions) use `@db.Date` in the tutor's/learner's zone.
+//   • Enum values mirror the string unions in src/lib/types.ts (lower_snake_case) so API DTOs map 1:1.
+//     Exceptions: Grade (k, g1…g12) and Permission (users_read ⇄ "users.read") — see comments.
+//   • Users are never hard-deleted: erasure = anonymize PII + set deletedAt. Financial and safety
+//     records therefore use onDelete: Restrict; owned rows (tokens, prefs, drafts) Cascade.
+//   • "Learner" is either a User (student account) or a Child (parent-managed profile). Tables that
+//     reference a learner carry `learnerUserId` + `childId` with a CHECK that exactly one is set.
+//
+// Prisma 7 note: if you adopt Prisma 7, move `url`/`directUrl` to prisma.config.ts and switch the
+// generator to `prisma-client` with an explicit `output`. Do not add prisma.config.ts to this repo
+// root while the Next.js app type-checks **/*.ts.
+//
+// ── Raw SQL that Prisma cannot express (add in a hand-edited migration: `prisma migrate dev --create-only`)
+//
+//   CREATE EXTENSION IF NOT EXISTS btree_gist;
+//
+//   -- 1. No overlapping bookings per tutor (buffer baked into blockedFrom/blockedUntil at write time).
+//   ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap_per_tutor
+//     EXCLUDE USING gist ("tutorId" WITH =, tstzrange("blockedFrom", "blockedUntil", '[)') WITH &&)
+//     WHERE (status IN ('pending', 'confirmed', 'in_progress'));
+//     -- A violation raises SQLSTATE 23P01 → API returns 409 slot_unavailable.
+//
+//   -- 2. One non-cancelled trial per tutor + learner (also enforced in BookingsService).
+//   CREATE UNIQUE INDEX bookings_one_trial_per_learner ON bookings ("tutorId", COALESCE("childId", "bookerId"))
+//     WHERE type = 'trial' AND status NOT IN ('cancelled_by_student', 'cancelled_by_tutor');
+//
+//   -- 3. At most one open dispute per booking.
+//   CREATE UNIQUE INDEX disputes_one_open_per_booking ON disputes ("bookingId")
+//     WHERE status NOT IN ('resolved', 'rejected');
+//
+//   -- 4. At most one live subscription per tutor.
+//   CREATE UNIQUE INDEX subscriptions_one_live_per_tutor ON subscriptions ("tutorId")
+//     WHERE status IN ('trialing', 'active', 'past_due', 'incomplete');
+//
+//   -- 5. Conversations: treat NULL childId as a value (Prisma's @@unique treats NULLs as distinct).
+//   --    Edit the generated index for conversations_tutorId_learnerId_childId_key to add NULLS NOT DISTINCT.
+//
+//   -- 6. Exactly one learner reference.
+//   ALTER TABLE learning_goals ADD CONSTRAINT learning_goals_one_learner CHECK (num_nonnulls("learnerUserId", "childId") = 1);
+//   ALTER TABLE progress_notes ADD CONSTRAINT progress_notes_one_learner CHECK (num_nonnulls("learnerUserId", "childId") = 1);
+//   ALTER TABLE homework       ADD CONSTRAINT homework_one_learner       CHECK (num_nonnulls("learnerUserId", "childId") = 1);
+//
+//   -- 7. Integrity checks.
+//   ALTER TABLE bookings ADD CONSTRAINT bookings_money CHECK ("priceCents" >= 0 AND "discountCents" BETWEEN 0 AND "priceCents"
+//     AND "platformFeeCents" >= 0 AND "tutorEarningsCents" >= 0 AND "endAt" > "startAt");
+//   ALTER TABLE requirements ADD CONSTRAINT requirements_budget CHECK ("budgetMaxCents" >= "budgetMinCents");
+//   ALTER TABLE reviews ADD CONSTRAINT reviews_rating CHECK (rating BETWEEN 1 AND 5);
+//   ALTER TABLE progress_notes ADD CONSTRAINT progress_notes_rating CHECK (rating IS NULL OR rating BETWEEN 1 AND 5);
+//   ALTER TABLE availability_windows ADD CONSTRAINT availability_windows_range
+//     CHECK ("dayOfWeek" BETWEEN 0 AND 6 AND "startMinute" >= 0 AND "endMinute" <= 1440 AND "endMinute" > "startMinute");
+//   ALTER TABLE feature_flags ADD CONSTRAINT feature_flags_rollout CHECK ("rolloutPercent" BETWEEN 0 AND 100);
+//   ALTER TABLE testimonials ADD CONSTRAINT testimonials_consent CHECK (status <> 'published' OR "consentGiven");
+//
+//   -- 8. Audit log is append-only for the application role.
+//   REVOKE UPDATE, DELETE ON audit_logs FROM tutorlink_app;
+//
+//   Prisma does not model exclusion constraints, CHECKs or partial/expression indexes. Keep them in
+//   migrations and confirm `prisma migrate diff` never proposes dropping them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Enums (mirror src/lib/types.ts)
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum Role {
+  student
+  parent
+  tutor
+  admin
+  support
+}
+
+/// Serialized over the API with dots: users_read ⇄ "users.read".
+/// staff_manage and payouts_manage are production additions (super admin).
+enum Permission {
+  users_read
+  users_write
+  tutors_verify
+  bookings_manage
+  payments_read
+  payments_refund
+  disputes_manage
+  reports_moderate
+  conversations_read_flagged
+  content_manage
+  settings_manage
+  flags_manage
+  audit_read
+  staff_manage
+  payouts_manage
+}
+
+enum UserStatus {
+  active
+  suspended
+  pending_verification
+}
+
+enum AgeBand {
+  adult
+  teen_13_17
+}
+
+enum ConsentStatus {
+  pending
+  granted
+  revoked
+  expired
+}
+
+enum AuthTokenKind {
+  email_verification
+  password_reset
+  email_change
+}
+
+/// "K" ⇄ k, "1".."12" ⇄ g1..g12.
+enum Grade {
+  k
+  g1
+  g2
+  g3
+  g4
+  g5
+  g6
+  g7
+  g8
+  g9
+  g10
+  g11
+  g12
+  college
+  adult
+}
+
+enum Level {
+  elementary
+  middle
+  high
+  college
+  adult
+}
+
+enum TeachingMode {
+  online
+  in_person
+}
+
+enum TutorCategory {
+  certified_teacher
+  subject_expert
+  graduate_student
+  test_prep_specialist
+  learning_specialist
+}
+
+enum TutorProfileStatus {
+  draft
+  pending_review
+  active
+  hidden
+  suspended
+}
+
+enum VerificationKind {
+  identity
+  education
+  certification
+  background
+}
+
+enum VerificationStatus {
+  not_started
+  submitted
+  under_review
+  verified
+  rejected
+  expired
+}
+
+enum FilePurpose {
+  message_attachment
+  requirement_attachment
+  verification_document
+  dispute_evidence
+  homework_submission
+  avatar
+  cms_media
+}
+
+enum ScanStatus {
+  pending
+  clean
+  infected
+  failed
+}
+
+enum Weekday {
+  sun
+  mon
+  tue
+  wed
+  thu
+  fri
+  sat
+}
+
+enum TimeOfDay {
+  morning
+  afternoon
+  evening
+}
+
+enum ExceptionType {
+  blocked
+  custom
+}
+
+enum RequirementStatus {
+  draft
+  published
+  paused
+  closed
+}
+
+enum ApplicationStatus {
+  applied
+  viewed
+  shortlisted
+  contacted
+  trial_requested
+  hired
+  rejected
+  withdrawn
+  closed
+}
+
+enum MatchSource {
+  concierge
+  requirement
+  search
+}
+
+enum LeadCreditReason {
+  plan_grant
+  purchase
+  application
+  refund
+  adjustment
+  expiry
+}
+
+enum SavedSearchKind {
+  tutors
+  jobs
+}
+
+enum AlertFrequency {
+  instant
+  daily
+  weekly
+  off
+}
+
+enum ParticipantRole {
+  learner
+  guardian
+  tutor
+}
+
+enum MessageModeration {
+  contact_info_masked
+  flagged
+  removed
+}
+
+enum FlagSource {
+  automated
+  user_report
+  staff
+}
+
+enum ModerationReason {
+  contact_info
+  off_platform_payment
+  harassment
+  inappropriate_content
+  minor_safety
+  spam
+  other
+}
+
+enum FlagStatus {
+  open
+  reviewed
+  actioned
+  dismissed
+}
+
+/// Trial is a booking TYPE, not a status — trials flow through the same state machine.
+enum BookingType {
+  trial
+  regular
+}
+
+enum BookingStatus {
+  pending
+  confirmed
+  in_progress
+  completed
+  cancelled_by_student
+  cancelled_by_tutor
+  rescheduled
+  no_show_student
+  no_show_tutor
+  payment_failed
+  disputed
+  refunded
+}
+
+enum BookingActor {
+  booker
+  tutor
+  admin
+  system
+}
+
+/// Booking-level payment state (mirrors PaymentStatus in types.ts).
+enum PaymentStatus {
+  unpaid
+  authorized
+  paid
+  refunded
+  partially_refunded
+  failed
+}
+
+enum AttendanceSource {
+  meeting_provider
+  manual
+  system
+}
+
+enum MeetingPlatform {
+  zoom
+  google_meet
+}
+
+enum TopicStatus {
+  not_started
+  in_progress
+  completed
+}
+
+enum HomeworkStatus {
+  assigned
+  submitted
+  reviewed
+  overdue
+}
+
+enum PaymentKind {
+  booking
+  subscription
+  lead_credits
+}
+
+/// Payment-record state. First five mirror Payment.status in types.ts; requires_capture and
+/// canceled are production additions for Stripe manual capture.
+enum PaymentRecordStatus {
+  pending
+  succeeded
+  failed
+  refunded
+  partially_refunded
+  requires_capture
+  canceled
+}
+
+enum RefundReason {
+  cancellation
+  tutor_no_show
+  dispute
+  goodwill
+  duplicate
+}
+
+enum RefundStatus {
+  pending
+  succeeded
+  failed
+  canceled
+}
+
+enum PayoutStatus {
+  scheduled
+  in_transit
+  paid
+  failed
+}
+
+enum PayoutItemKind {
+  earning
+  adjustment
+}
+
+enum PlanCode {
+  free
+  pro
+  premium
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  incomplete
+}
+
+enum CouponKind {
+  percent
+  fixed
+}
+
+enum PromotionKind {
+  coupon_campaign
+  featured_placement
+  referral_bonus
+}
+
+enum ReferralStatus {
+  pending
+  qualified
+  rewarded
+  voided
+}
+
+enum CreditReason {
+  dispute_credit
+  tutor_no_show
+  referral
+  goodwill
+  redemption
+  expiry
+  adjustment
+}
+
+enum ReviewAuthorRole {
+  student
+  parent
+}
+
+enum ReviewStatus {
+  published
+  flagged
+  removed
+}
+
+enum ReportTargetType {
+  user
+  tutor
+  message
+  review
+  requirement
+}
+
+enum ReportStatus {
+  open
+  reviewing
+  actioned
+  dismissed
+}
+
+enum DisputeReason {
+  missed_session
+  tutor_no_show
+  student_no_show
+  service_issue
+  payment_issue
+  refund_issue
+  other
+}
+
+enum DisputeStatus {
+  open
+  under_review
+  awaiting_information
+  resolved
+  rejected
+  escalated
+}
+
+enum DisputeOutcome {
+  full_refund
+  partial_refund
+  credit
+  no_refund
+}
+
+enum NotificationType {
+  message
+  application
+  application_status
+  job_match
+  booking_request
+  booking_confirmed
+  booking_cancelled
+  booking_rescheduled
+  reminder
+  payment
+  refund
+  payout
+  verification
+  review_request
+  homework
+  progress
+  security
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  sms
+}
+
+enum NotificationCategory {
+  messages
+  bookings
+  reminders
+  payments
+  jobs
+  progress
+  marketing
+}
+
+enum DeliveryStatus {
+  queued
+  sent
+  delivered
+  failed
+  suppressed
+}
+
+enum ContentStatus {
+  draft
+  published
+  archived
+}
+
+enum FaqAudience {
+  families
+  tutors
+  payments
+  safety
+}
+
+enum WebhookProvider {
+  stripe
+  zoom
+  google
+  twilio
+  resend
+  background_check
+}
+
+enum WebhookStatus {
+  received
+  processing
+  processed
+  failed
+  ignored
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Identity, access & sessions
+// ═════════════════════════════════════════════════════════════════════════════
+
+model User {
+  id                 String     @id @default(cuid())
+  role               Role
+  status             UserStatus @default(pending_verification)
+  /// Stored lower-cased (normalize in the service; optionally CITEXT via migration).
+  email              String     @unique
+  emailVerifiedAt    DateTime?  @db.Timestamptz(6)
+  /// argon2id encoded hash. Null for SSO-only accounts.
+  passwordHash       String?
+  firstName          String
+  lastName           String
+  /// E.164. Collected only when the user opts into SMS.
+  phone              String?
+  phoneVerifiedAt    DateTime?  @db.Timestamptz(6)
+  city               String?
+  state              String?    @db.Char(2)
+  zip                String?    @db.VarChar(10)
+  timezone           String     @default("America/New_York")
+  /// Super admin = admin + implicit every permission (incl. staff_manage).
+  isSuperAdmin       Boolean    @default(false)
+  mfaEnabled         Boolean    @default(false)
+  /// TOTP secret, envelope-encrypted with KMS. Required for admin/support before first sign-in.
+  mfaSecretEncrypted String?
+  stripeCustomerId   String?    @unique
+  referralCode       String?    @unique
+  lastLoginAt        DateTime?  @db.Timestamptz(6)
+  createdAt          DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?  @db.Timestamptz(6)
+
+  studentProfile             StudentProfile?
+  parentProfile              ParentProfile?
+  tutorProfile               TutorProfile?
+  staffPermissions           StaffPermission[]
+  sessions                   UserSession[]
+  loginEvents                LoginEvent[]
+  authTokens                 AuthToken[]
+  consentsAsStudent          ParentalConsent[]        @relation("ConsentStudent")
+  consentsAsParent           ParentalConsent[]        @relation("ConsentParent")
+  verificationReviews        VerificationRequest[]    @relation("VerificationReviewer")
+  files                      FileObject[]
+  requirements               Requirement[]
+  matches                    Match[]
+  favorites                  Favorite[]
+  savedSearches              SavedSearch[]
+  learnerConversations       Conversation[]
+  conversationParticipations ConversationParticipant[]
+  messagesSent               Message[]
+  messageFlagsReviewed       MessageFlag[]
+  blocksMade                 Block[]                  @relation("BlocksMade")
+  blocksReceived             Block[]                  @relation("BlocksReceived")
+  bookingsMade               Booking[]
+  bookingEvents              BookingEvent[]
+  attendance                 SessionAttendance[]
+  learningGoals              LearningGoal[]           @relation("GoalLearner")
+  goalsCreated               LearningGoal[]           @relation("GoalCreatedBy")
+  progressNotes              ProgressNote[]
+  homework                   Homework[]
+  homeworkSubmissions        HomeworkSubmission[]
+  payments                   Payment[]
+  refundsInitiated           Refund[]
+  couponRedemptions          CouponRedemption[]
+  referralsMade              Referral[]               @relation("ReferralsMade")
+  referralReceived           Referral?                @relation("ReferralReceived")
+  accountCredits             AccountCreditEntry[]
+  reviewsWritten             Review[]                 @relation("ReviewAuthor")
+  reviewsModerated           Review[]                 @relation("ReviewModerator")
+  reportsFiled               Report[]                 @relation("ReportReporter")
+  reportsAssigned            Report[]                 @relation("ReportAssignee")
+  disputesOpened             Dispute[]                @relation("DisputeOpener")
+  disputesResolved           Dispute[]                @relation("DisputeResolver")
+  disputeEvidence            DisputeEvidence[]
+  disputeNotes               DisputeNote[]
+  notifications              Notification[]
+  notificationPreferences    NotificationPreference[]
+  cmsPages                   CmsPage[]
+  blogPosts                  BlogPost[]
+  testimonials               Testimonial[]
+  auditLogs                  AuditLog[]
+  idempotencyKeys            IdempotencyKey[]
+
+  @@index([role, status])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// Granular staff permissions (admin/support). Checked in services, not only in guards.
+model StaffPermission {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission
+  createdAt  DateTime   @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, permission])
+  @@map("staff_permissions")
+}
+
+/// Server-side session. The cookie holds an opaque random token; only its SHA-256 is stored.
+model UserSession {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  userAgent     String?
+  /// HMAC of the client IP (PII minimization).
+  ipHash        String?
+  mfaVerifiedAt DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  lastSeenAt    DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt     DateTime  @db.Timestamptz(6)
+  revokedAt     DateTime? @db.Timestamptz(6)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model LoginEvent {
+  id            String   @id @default(cuid())
+  /// Null when the attempted email does not match an account.
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  emailHash     String?
+  success       Boolean
+  failureReason String?
+  ipHash        String?
+  userAgent     String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("login_events")
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  expiresAt DateTime      @db.Timestamptz(6)
+  usedAt    DateTime?     @db.Timestamptz(6)
+  createdAt DateTime      @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, kind])
+  @@map("auth_tokens")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Learner profiles, children & parental consent
+// ═════════════════════════════════════════════════════════════════════════════
+
+model StudentProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Under-13 registration is blocked; 13–17 requires ParentalConsent before booking or messaging.
+  ageBand         AgeBand
+  grade           Grade?
+  learningGoals   String[] @default([])
+  learningSupport String[] @default([])
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("student_profiles")
+}
+
+model ParentProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children  Child[]
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("parent_profiles")
+}
+
+/// Parent-managed learner profile. Children never log in; first name + grade only (no DOB, no photo).
+model Child {
+  id              String        @id @default(cuid())
+  parentId        String
+  parent          ParentProfile @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  firstName       String
+  grade           Grade
+  birthYear       Int?
+  learningGoals   String[]      @default([])
+  /// Subject slugs of interest (display only; bookings reference Subject by FK).
+  subjectSlugs    String[]      @default([])
+  notes           String?
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?     @db.Timestamptz(6)
+
+  requirements  Requirement[]
+  bookings      Booking[]
+  conversations Conversation[]
+  goals         LearningGoal[]
+  progressNotes ProgressNote[]
+  homework      Homework[]
+
+  @@index([parentId])
+  @@map("children")
+}
+
+/// COPPA-style verifiable consent for students aged 13–17 (email-link consent from a parent/guardian).
+model ParentalConsent {
+  id             String        @id @default(cuid())
+  studentId      String
+  student        User          @relation("ConsentStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  parentEmail    String
+  /// Set when the parent has (or creates) a TutorLink account.
+  parentUserId   String?
+  parentUser     User?         @relation("ConsentParent", fields: [parentUserId], references: [id], onDelete: SetNull)
+  status         ConsentStatus @default(pending)
+  tokenHash      String        @unique
+  tokenExpiresAt DateTime      @db.Timestamptz(6)
+  grantedAt      DateTime?     @db.Timestamptz(6)
+  revokedAt      DateTime?     @db.Timestamptz(6)
+  /// Method, IP hash and user agent captured at grant time.
+  evidence       Json?
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+
+  @@index([studentId, status])
+  @@index([parentEmail])
+  @@map("parental_consents")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Catalog & geography
+// ═════════════════════════════════════════════════════════════════════════════
+
+model SubjectCategory {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  subjects    Subject[]
+
+  @@map("subject_categories")
+}
+
+model Subject {
+  id         String          @id @default(cuid())
+  slug       String          @unique
+  name       String
+  categoryId String
+  category   SubjectCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  summary    String
+  popular    Boolean         @default(false)
+  active     Boolean         @default(true)
+  createdAt  DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime        @updatedAt @db.Timestamptz(6)
+
+  tutors        TutorSubject[]
+  requirements  Requirement[]
+  bookings      Booking[]
+  conversations Conversation[]
+  learningGoals LearningGoal[]
+  homework      Homework[]
+
+  @@index([categoryId])
+  @@map("subjects")
+}
+
+/// Metro areas with landing pages. Pages are only enabled where real tutor supply exists.
+model Metro {
+  id                 String     @id @default(cuid())
+  slug               String     @unique
+  city               String
+  state              String     @db.Char(2)
+  stateName          String
+  lat                Float
+  lng                Float
+  timezone           String
+  landingPageEnabled Boolean    @default(false)
+  createdAt          DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @db.Timestamptz(6)
+  locations          Location[]
+
+  @@map("metros")
+}
+
+/// Geocoded ZIP-centroid point. Never a street address (tutors' homes are not stored or shown).
+/// Optional: add a PostGIS geography(Point) column + GIST index via migration for radius search.
+model Location {
+  id            String         @id @default(cuid())
+  zip           String         @db.VarChar(10)
+  city          String
+  state         String         @db.Char(2)
+  lat           Float
+  lng           Float
+  /// Geocoding provider place id (Google Places).
+  placeId       String?
+  metroId       String?
+  metro         Metro?         @relation(fields: [metroId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  tutorProfiles TutorProfile[]
+  requirements  Requirement[]
+
+  @@unique([zip, city, state])
+  @@index([metroId])
+  @@map("locations")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Tutors
+// ═════════════════════════════════════════════════════════════════════════════
+
+model TutorProfile {
+  id                    String             @id @default(cuid())
+  userId                String             @unique
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  slug                  String             @unique
+  status                TutorProfileStatus @default(draft)
+  headline              String
+  bio                   String
+  approach              String             @default("")
+  category              TutorCategory
+  specialties           String[]           @default([])
+  levels                Level[]
+  learningSupport       String[]           @default([])
+  languages             String[]           @default(["English"])
+  experienceYears       Int                @default(0)
+  modes                 TeachingMode[]
+  hourlyRateCents       Int
+  currency              String             @default("usd")
+  /// Service-area centre (ZIP centroid) for in-person teaching.
+  locationId            String?
+  location              Location?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  serviceRadiusMiles    Int                @default(10)
+  timezone              String
+  avatarKey             String?
+  /// Display-only placement. NEVER an input to search ranking or match scores.
+  featured              Boolean            @default(false)
+  featuredUntil         DateTime?          @db.Timestamptz(6)
+  /// Denormalized from published reviews on completed bookings only. Null = no reviews.
+  ratingAvg             Decimal?           @db.Decimal(3, 2)
+  reviewCount           Int                @default(0)
+  lessonsCompleted      Int                @default(0)
+  responseTimeHours     Int?
+  onboardingStep        Int                @default(0)
+  onboardingData        Json?
+  onboardingSubmittedAt DateTime?          @db.Timestamptz(6)
+  createdAt             DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt             DateTime?          @db.Timestamptz(6)
+
+  subjects               TutorSubject[]
+  education              Education[]
+  certifications         Certification[]
+  verificationRequests   VerificationRequest[]
+  availabilityWindows    AvailabilityWindow[]
+  availabilityExceptions AvailabilityException[]
+  bookingRules           BookingRules?
+  trialConfig            TrialConfig?
+  applications           Application[]
+  matches                Match[]
+  leadCreditEntries      LeadCreditEntry[]
+  savedRequirements      SavedRequirement[]
+  favoritedBy            Favorite[]
+  conversations          Conversation[]
+  bookings               Booking[]
+  learningGoals          LearningGoal[]
+  progressNotes          ProgressNote[]
+  homework               Homework[]
+  reviews                Review[]
+  stripeAccount          StripeAccount?
+  payouts                Payout[]
+  subscriptions          Subscription[]
+
+  @@index([status, hourlyRateCents])
+  @@index([status, category])
+  @@index([status, experienceYears])
+  @@index([locationId])
+  @@index([languages], type: Gin)
+  @@map("tutor_profiles")
+}
+
+model TutorSubject {
+  tutorId   String
+  tutor     TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@id([tutorId, subjectId])
+  @@index([subjectId])
+  @@map("tutor_subjects")
+}
+
+model Education {
+  id          String       @id @default(cuid())
+  tutorId     String
+  tutor       TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  degree      String
+  field       String
+  institution String
+  year        Int
+  verified    Boolean      @default(false)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([tutorId])
+  @@map("education")
+}
+
+model Certification {
+  id           String       @id @default(cuid())
+  tutorId      String
+  tutor        TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  name         String
+  issuer       String
+  year         Int
+  credentialId String?
+  expiresOn    DateTime?    @db.Date
+  verified     Boolean      @default(false)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([tutorId])
+  @@map("certifications")
+}
+
+model VerificationRequest {
+  id           String                 @id @default(cuid())
+  tutorId      String
+  tutor        TutorProfile           @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  kind         VerificationKind
+  status       VerificationStatus     @default(submitted)
+  /// External vendor for background checks (FCRA workflow), e.g. "checkr".
+  provider     String?
+  providerRef  String?
+  submittedAt  DateTime               @default(now()) @db.Timestamptz(6)
+  reviewedById String?
+  reviewedBy   User?                  @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?              @db.Timestamptz(6)
+  /// Required (≥ 10 chars) when rejecting, shown to the tutor.
+  note         String?
+  /// Verified checks expire (default 730 days); a scheduled job moves them to `expired`.
+  expiresAt    DateTime?              @db.Timestamptz(6)
+  createdAt    DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime               @updatedAt @db.Timestamptz(6)
+  documents    VerificationDocument[]
+
+  @@index([status, submittedAt])
+  @@index([tutorId, kind])
+  @@index([expiresAt])
+  @@map("verification_requests")
+}
+
+model VerificationDocument {
+  id        String              @id @default(cuid())
+  requestId String
+  request   VerificationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fileId    String
+  file      FileObject          @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+
+  @@index([requestId])
+  @@map("verification_documents")
+}
+
+// ── Availability & booking configuration ────────────────────────────────────
+
+/// Recurring weekly window in the tutor's own time zone. Minutes from local midnight
+/// (API maps to/from "HH:mm"). dayOfWeek: 0 = Sunday.
+model AvailabilityWindow {
+  id          String       @id @default(cuid())
+  tutorId     String
+  tutor       TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int
+  startMinute Int
+  endMinute   Int
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([tutorId, dayOfWeek])
+  @@map("availability_windows")
+}
+
+model AvailabilityException {
+  id        String        @id @default(cuid())
+  tutorId   String
+  tutor     TutorProfile  @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  /// Calendar date in the tutor's time zone.
+  date      DateTime      @db.Date
+  type      ExceptionType
+  /// For `custom`: [{ start: "HH:mm", end: "HH:mm" }].
+  windows   Json?
+  note      String?
+  createdAt DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @db.Timestamptz(6)
+
+  @@unique([tutorId, date])
+  @@map("availability_exceptions")
+}
+
+model BookingRules {
+  id               String       @id @default(cuid())
+  tutorId          String       @unique
+  tutor            TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  minNoticeHours   Int          @default(12)
+  maxAdvanceDays   Int          @default(45)
+  bufferMinutes    Int          @default(15)
+  sessionLengths   Int[]        @default([60])
+  /// false ⇒ instant booking (also gated by the `instant_booking` feature flag).
+  requiresApproval Boolean      @default(true)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@map("booking_rules")
+}
+
+model TrialConfig {
+  id          String       @id @default(cuid())
+  tutorId     String       @unique
+  tutor       TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  enabled     Boolean      @default(false)
+  /// 0 ⇒ free trial. Range $0–$200.
+  priceCents  Int          @default(0)
+  currency    String       @default("usd")
+  durationMin Int          @default(30)
+  notes       String?
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@map("trial_configs")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Requirements (tutor jobs), applications, matching & lead credits
+// ═════════════════════════════════════════════════════════════════════════════
+
+model Requirement {
+  id                 String            @id @default(cuid())
+  ownerId            String
+  owner              User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  childId            String?
+  child              Child?            @relation(fields: [childId], references: [id], onDelete: SetNull)
+  title              String            @default("")
+  /// Nullable while in draft; required to publish.
+  subjectId          String?
+  subject            Subject?          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  grade              Grade?
+  objectives         String            @default("")
+  modes              TeachingMode[]
+  locationId         String?
+  location           Location?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  days               Weekday[]
+  timesOfDay         TimeOfDay[]
+  sessionsPerWeek    Int               @default(1)
+  budgetMinCents     Int
+  budgetMaxCents     Int
+  currency           String            @default("usd")
+  minExperienceYears Int?
+  languages          String[]          @default(["English"])
+  learningSupport    String[]          @default([])
+  preferences        String            @default("")
+  details            String            @default("")
+  status             RequirementStatus @default(draft)
+  /// Last completed step of the multi-step form (drafts only).
+  draftStep          Int?
+  publishedAt        DateTime?         @db.Timestamptz(6)
+  closedAt           DateTime?         @db.Timestamptz(6)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?         @db.Timestamptz(6)
+
+  attachments  RequirementAttachment[]
+  applications Application[]
+  matches      Match[]
+  savedBy      SavedRequirement[]
+
+  @@index([status, subjectId, publishedAt])
+  @@index([ownerId, status])
+  @@index([locationId])
+  @@map("requirements")
+}
+
+model RequirementAttachment {
+  id            String      @id @default(cuid())
+  requirementId String
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  fileId        String
+  file          FileObject  @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([requirementId])
+  @@map("requirement_attachments")
+}
+
+/// Tutor's saved jobs.
+model SavedRequirement {
+  tutorId       String
+  tutor         TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   Requirement  @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@id([tutorId, requirementId])
+  @@map("saved_requirements")
+}
+
+/// One row per tutor per requirement. Re-applying after withdrawal re-opens the same row
+/// (status → applied) and spends a new credit — see docs/DECISIONS.md.
+model Application {
+  id                String            @id @default(cuid())
+  requirementId     String
+  requirement       Requirement       @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  tutorId           String
+  tutor             TutorProfile      @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  /// Contact details are masked before storage.
+  message           String
+  proposedRateCents Int
+  currency          String            @default("usd")
+  status            ApplicationStatus @default(applied)
+  viewedAt          DateTime?         @db.Timestamptz(6)
+  withdrawnAt       DateTime?         @db.Timestamptz(6)
+  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @db.Timestamptz(6)
+  creditEntries     LeadCreditEntry[]
+
+  @@unique([requirementId, tutorId])
+  @@index([tutorId, status])
+  @@index([requirementId, status])
+  @@map("applications")
+}
+
+/// Stored, explainable match snapshot. `factors` = FactorResult[] exactly as shown to the user.
+model Match {
+  id               String       @id @default(cuid())
+  source           MatchSource
+  requirementId    String?
+  requirement      Requirement? @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  userId           String?
+  user             User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tutorId          String
+  tutor            TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  percent          Int
+  disqualified     Boolean      @default(false)
+  distanceMiles    Float?
+  factors          Json
+  criteria         Json
+  weights          Json
+  algorithmVersion String
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([requirementId, percent(sort: Desc)])
+  @@index([userId, createdAt])
+  @@index([tutorId])
+  @@map("matches")
+}
+
+/// Append-only credit ledger. Balance = SUM(delta) per tutor.
+model LeadCreditEntry {
+  id             String           @id @default(cuid())
+  tutorId        String
+  tutor          TutorProfile     @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  delta          Int
+  reason         LeadCreditReason
+  note           String?
+  applicationId  String?
+  application    Application?     @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  paymentId      String?
+  payment        Payment?         @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  idempotencyKey String?          @unique
+  expiresAt      DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([tutorId, createdAt])
+  @@map("lead_credit_entries")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Discovery: favorites & saved searches
+// ═════════════════════════════════════════════════════════════════════════════
+
+model Favorite {
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tutorId   String
+  tutor     TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@id([userId, tutorId])
+  @@index([tutorId])
+  @@map("favorites")
+}
+
+model SavedSearch {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind          SavedSearchKind
+  label         String
+  /// URL contract from src/lib/search.ts (TutorSearch) or the job-board filters.
+  query         Json
+  frequency     AlertFrequency  @default(daily)
+  lastAlertedAt DateTime?       @db.Timestamptz(6)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([kind, frequency])
+  @@map("saved_searches")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Messaging
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// One thread per (tutor, learner account, child). Only students/parents can start a thread.
+model Conversation {
+  id            String                    @id @default(cuid())
+  tutorId       String
+  tutor         TutorProfile              @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  learnerId     String
+  learner       User                      @relation(fields: [learnerId], references: [id], onDelete: Restrict)
+  childId       String?
+  child         Child?                    @relation(fields: [childId], references: [id], onDelete: Restrict)
+  subjectId     String?
+  subject       Subject?                  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  /// Safeguarding: guardian is a participant; flagged content is reviewable by T&S.
+  involvesMinor Boolean                   @default(false)
+  flaggedAt     DateTime?                 @db.Timestamptz(6)
+  lastMessageAt DateTime                  @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime                  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime                  @updatedAt @db.Timestamptz(6)
+  participants  ConversationParticipant[]
+  messages      Message[]
+  blocks        Block[]
+
+  @@unique([tutorId, learnerId, childId])
+  @@index([learnerId, lastMessageAt])
+  @@index([tutorId, lastMessageAt])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String          @id @default(cuid())
+  conversationId String
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role           ParticipantRole
+  /// Read receipts are per participant, not per message.
+  lastReadAt     DateTime?       @db.Timestamptz(6)
+  mutedAt        DateTime?       @db.Timestamptz(6)
+  joinedAt       DateTime        @default(now()) @db.Timestamptz(6)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id                    String              @id @default(cuid())
+  conversationId        String
+  conversation          Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// Always a User id (tutors send as their user, not their TutorProfile id).
+  senderId              String
+  sender                User                @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  /// Stored AFTER contact-detail masking.
+  body                  String
+  /// Pre-mask original, KMS-encrypted, retained for T&S review for a limited period (see DECISIONS).
+  originalBodyEncrypted String?
+  moderation            MessageModeration?
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+  editedAt              DateTime?           @db.Timestamptz(6)
+  deletedAt             DateTime?           @db.Timestamptz(6)
+  attachments           MessageAttachment[]
+  flags                 MessageFlag[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id        String     @id @default(cuid())
+  messageId String
+  message   Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileId    String
+  file      FileObject @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  createdAt DateTime   @default(now()) @db.Timestamptz(6)
+
+  @@index([messageId])
+  @@map("message_attachments")
+}
+
+model MessageFlag {
+  id           String           @id @default(cuid())
+  messageId    String
+  message      Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  source       FlagSource
+  reason       ModerationReason
+  details      String?
+  status       FlagStatus       @default(open)
+  reviewedById String?
+  reviewedBy   User?            @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?        @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([messageId])
+  @@map("message_flags")
+}
+
+/// User-level block (the preview blocks per conversation; production blocks the user pair).
+model Block {
+  id             String        @id @default(cuid())
+  blockerId      String
+  blocker        User          @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId      String
+  blocked        User          @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  reason         String?
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Bookings, lessons & attendance
+// ═════════════════════════════════════════════════════════════════════════════
+
+model Booking {
+  id                 String        @id @default(cuid())
+  tutorId            String
+  tutor              TutorProfile  @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  /// The paying account (student or parent).
+  bookerId           String
+  booker             User          @relation(fields: [bookerId], references: [id], onDelete: Restrict)
+  /// Set when a parent books for a child. Learner = child ?? booker.
+  childId            String?
+  child              Child?        @relation(fields: [childId], references: [id], onDelete: Restrict)
+  subjectId          String
+  subject            Subject       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  type               BookingType   @default(regular)
+  status             BookingStatus @default(pending)
+  startAt            DateTime      @db.Timestamptz(6)
+  endAt              DateTime      @db.Timestamptz(6)
+  durationMin        Int
+  /// startAt − buffer / endAt + buffer (tutor buffer at booking time). Used by the exclusion constraint.
+  blockedFrom        DateTime      @db.Timestamptz(6)
+  blockedUntil       DateTime      @db.Timestamptz(6)
+  mode               TeachingMode
+  /// Server-computed; never trusted from the client.
+  priceCents         Int
+  discountCents      Int           @default(0)
+  platformFeeCents   Int
+  tutorEarningsCents Int
+  currency           String        @default("usd")
+  paymentStatus      PaymentStatus @default(unpaid)
+  locationNote       String?
+  /// Masked for contact details.
+  notes              String?
+  /// Client-generated per checkout attempt; unique per booker.
+  idempotencyKey     String
+  rescheduledFromId  String?       @unique
+  rescheduledFrom    Booking?      @relation("BookingReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo      Booking?      @relation("BookingReschedule")
+  /// Cumulative across the reschedule chain (enforces maxReschedulesPerBooking).
+  rescheduleCount    Int           @default(0)
+  /// Cancellation/reschedule/no-show policy and commission rate in force at booking time.
+  policySnapshot     Json
+  confirmedAt        DateTime?     @db.Timestamptz(6)
+  startedAt          DateTime?     @db.Timestamptz(6)
+  completedAt        DateTime?     @db.Timestamptz(6)
+  cancelledAt        DateTime?     @db.Timestamptz(6)
+  createdAt          DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime      @updatedAt @db.Timestamptz(6)
+
+  events           BookingEvent[]
+  attendance       SessionAttendance[]
+  meetingLink      MeetingLink?
+  payments         Payment[]
+  review           Review?
+  disputes         Dispute[]
+  progressNotes    ProgressNote[]
+  couponRedemption CouponRedemption?
+  payoutItems      PayoutItem[]
+  accountCredits   AccountCreditEntry[]
+
+  @@unique([bookerId, idempotencyKey])
+  @@index([tutorId, startAt])
+  @@index([bookerId, startAt])
+  @@index([childId, startAt])
+  @@index([status, startAt])
+  @@map("bookings")
+}
+
+/// Immutable state history (Booking.history in the preview).
+model BookingEvent {
+  id         String         @id @default(cuid())
+  bookingId  String
+  booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  /// Null for system transitions.
+  actorId    String?
+  actor      User?          @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorRole  BookingActor
+  fromStatus BookingStatus?
+  toStatus   BookingStatus
+  note       String?
+  metadata   Json?
+  createdAt  DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_events")
+}
+
+/// Lesson attendance (join/leave), from the meeting provider webhook or manual check-in.
+model SessionAttendance {
+  id              String           @id @default(cuid())
+  bookingId       String
+  booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  participantRole ParticipantRole
+  joinedAt        DateTime?        @db.Timestamptz(6)
+  leftAt          DateTime?        @db.Timestamptz(6)
+  source          AttendanceSource
+  createdAt       DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([bookingId])
+  @@map("session_attendance")
+}
+
+/// Created on confirmation; revealed to participants only from 15 minutes before start until end.
+model MeetingLink {
+  id                String          @id @default(cuid())
+  bookingId         String          @unique
+  booking           Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  platform          MeetingPlatform
+  externalId        String
+  joinUrl           String
+  hostUrl           String?
+  passcodeEncrypted String?
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  expiresAt         DateTime?       @db.Timestamptz(6)
+
+  @@unique([platform, externalId])
+  @@map("meeting_links")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Learning: goals, progress, homework
+// ═════════════════════════════════════════════════════════════════════════════
+
+model LearningGoal {
+  id            String       @id @default(cuid())
+  tutorId       String
+  tutor         TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  learnerUserId String?
+  learnerUser   User?        @relation("GoalLearner", fields: [learnerUserId], references: [id], onDelete: Cascade)
+  childId       String?
+  child         Child?       @relation(fields: [childId], references: [id], onDelete: Cascade)
+  subjectId     String
+  subject       Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  title         String
+  targetDate    DateTime?    @db.Date
+  createdById   String
+  createdBy     User         @relation("GoalCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+  topics        GoalTopic[]
+
+  @@index([tutorId])
+  @@index([learnerUserId])
+  @@index([childId])
+  @@map("learning_goals")
+}
+
+model GoalTopic {
+  id        String       @id @default(cuid())
+  goalId    String
+  goal      LearningGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  name      String
+  status    TopicStatus  @default(not_started)
+  sortOrder Int          @default(0)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([goalId, name])
+  @@map("goal_topics")
+}
+
+model ProgressNote {
+  id            String       @id @default(cuid())
+  tutorId       String
+  tutor         TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  learnerUserId String?
+  learnerUser   User?        @relation(fields: [learnerUserId], references: [id], onDelete: Cascade)
+  childId       String?
+  child         Child?       @relation(fields: [childId], references: [id], onDelete: Cascade)
+  bookingId     String?
+  booking       Booking?     @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  body          String
+  /// Understanding / confidence, 1–5.
+  rating        Int?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([learnerUserId, createdAt])
+  @@index([childId, createdAt])
+  @@index([tutorId, createdAt])
+  @@map("progress_notes")
+}
+
+model Homework {
+  id            String               @id @default(cuid())
+  tutorId       String
+  tutor         TutorProfile         @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  learnerUserId String?
+  learnerUser   User?                @relation(fields: [learnerUserId], references: [id], onDelete: Cascade)
+  childId       String?
+  child         Child?               @relation(fields: [childId], references: [id], onDelete: Cascade)
+  subjectId     String
+  subject       Subject              @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  title         String
+  instructions  String
+  dueDate       DateTime             @db.Date
+  status        HomeworkStatus       @default(assigned)
+  feedbackBody  String?
+  feedbackGrade String?
+  reviewedAt    DateTime?            @db.Timestamptz(6)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
+  submissions   HomeworkSubmission[]
+
+  @@index([tutorId, status])
+  @@index([learnerUserId, dueDate])
+  @@index([childId, dueDate])
+  @@map("homework")
+}
+
+model HomeworkSubmission {
+  id            String      @id @default(cuid())
+  homeworkId    String
+  homework      Homework    @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  submittedById String
+  submittedBy   User        @relation(fields: [submittedById], references: [id], onDelete: Restrict)
+  body          String      @default("")
+  fileId        String?
+  file          FileObject? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  submittedAt   DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([homeworkId])
+  @@map("homework_submissions")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Money: payments, refunds, payouts, plans, subscriptions, promotions, credits
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// One Stripe PaymentIntent (or equivalent) per row. Booking payments use manual capture.
+model Payment {
+  id                     String              @id @default(cuid())
+  userId                 String
+  user                   User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bookingId              String?
+  booking                Booking?            @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  subscriptionId         String?
+  subscription           Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  kind                   PaymentKind
+  status                 PaymentRecordStatus @default(pending)
+  amountCents            Int
+  amountCapturedCents    Int                 @default(0)
+  amountRefundedCents    Int                 @default(0)
+  /// Platform commission retained (booking payments).
+  applicationFeeCents    Int                 @default(0)
+  currency               String              @default("usd")
+  description            String
+  stripePaymentIntentId  String?             @unique
+  stripeChargeId         String?             @unique
+  /// Display only, e.g. "visa" + "4242". Card numbers are never stored.
+  methodBrand            String?
+  methodLast4            String?             @db.VarChar(4)
+  authorizedAt           DateTime?           @db.Timestamptz(6)
+  /// Card authorizations lapse after ~7 days; a job re-authorizes or cancels before this.
+  authorizationExpiresAt DateTime?           @db.Timestamptz(6)
+  capturedAt             DateTime?           @db.Timestamptz(6)
+  failureCode            String?
+  idempotencyKey         String              @unique
+  createdAt              DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime            @updatedAt @db.Timestamptz(6)
+  refunds                Refund[]
+  leadCreditEntries      LeadCreditEntry[]
+
+  @@index([userId, createdAt])
+  @@index([bookingId])
+  @@index([status, authorizationExpiresAt])
+  @@map("payments")
+}
+
+model Refund {
+  id             String        @id @default(cuid())
+  paymentId      String
+  payment        Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amountCents    Int
+  currency       String        @default("usd")
+  reason         RefundReason
+  status         RefundStatus  @default(pending)
+  stripeRefundId String?       @unique
+  disputeId      String?
+  dispute        Dispute?      @relation(fields: [disputeId], references: [id], onDelete: SetNull)
+  /// Null for automatic (policy) refunds.
+  initiatedById  String?
+  initiatedBy    User?         @relation(fields: [initiatedById], references: [id], onDelete: SetNull)
+  note           String?
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+/// Stripe Connect (Express) account for a tutor.
+model StripeAccount {
+  id               String       @id @default(cuid())
+  tutorId          String       @unique
+  tutor            TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  stripeAccountId  String       @unique
+  chargesEnabled   Boolean      @default(false)
+  payoutsEnabled   Boolean      @default(false)
+  detailsSubmitted Boolean      @default(false)
+  requirementsDue  Json?
+  country          String       @default("US")
+  defaultCurrency  String       @default("usd")
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@map("stripe_accounts")
+}
+
+model Payout {
+  id               String       @id @default(cuid())
+  tutorId          String
+  tutor            TutorProfile @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  amountCents      Int
+  currency         String       @default("usd")
+  status           PayoutStatus @default(scheduled)
+  stripeTransferId String?      @unique
+  stripePayoutId   String?      @unique
+  arrivalDate      DateTime?    @db.Date
+  failureReason    String?
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+  items            PayoutItem[]
+
+  @@index([tutorId, createdAt])
+  @@index([status])
+  @@map("payouts")
+}
+
+/// Links earnings (and post-payout adjustments) to the bookings they came from.
+model PayoutItem {
+  id          String         @id @default(cuid())
+  payoutId    String
+  payout      Payout         @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  bookingId   String
+  booking     Booking        @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  kind        PayoutItemKind @default(earning)
+  amountCents Int
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@unique([payoutId, bookingId, kind])
+  @@index([bookingId])
+  @@map("payout_items")
+}
+
+model Plan {
+  id                 String         @id @default(cuid())
+  code               PlanCode       @unique
+  name               String
+  description        String
+  priceCents         Int
+  currency           String         @default("usd")
+  interval           String         @default("month")
+  /// Booking commission for tutors on this plan (1800 = 18%).
+  commissionBps      Int
+  monthlyLeadCredits Int
+  features           String[]       @default([])
+  stripePriceId      String?        @unique
+  active             Boolean        @default(true)
+  createdAt          DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
+  subscriptions      Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  tutorId              String
+  tutor                TutorProfile       @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  planId               String
+  plan                 Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status               SubscriptionStatus
+  stripeSubscriptionId String?            @unique
+  currentPeriodStart   DateTime           @db.Timestamptz(6)
+  currentPeriodEnd     DateTime           @db.Timestamptz(6)
+  cancelAtPeriodEnd    Boolean            @default(false)
+  canceledAt           DateTime?          @db.Timestamptz(6)
+  createdAt            DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @db.Timestamptz(6)
+  payments             Payment[]
+
+  @@index([tutorId, status])
+  @@map("subscriptions")
+}
+
+model Promotion {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  kind        PromotionKind
+  startsAt    DateTime      @db.Timestamptz(6)
+  endsAt      DateTime?     @db.Timestamptz(6)
+  active      Boolean       @default(false)
+  config      Json?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(6)
+  coupons     Coupon[]
+
+  @@map("promotions")
+}
+
+model Coupon {
+  id               String             @id @default(cuid())
+  /// Upper-case A–Z/0–9, 4–16 chars.
+  code             String             @unique
+  kind             CouponKind
+  /// Percent (1–100) when kind = percent; cents when kind = fixed.
+  value            Int
+  currency         String             @default("usd")
+  minPurchaseCents Int                @default(0)
+  maxRedemptions   Int
+  perUserLimit     Int                @default(1)
+  /// Denormalized counter, incremented in the same transaction as CouponRedemption.
+  redemptionCount  Int                @default(0)
+  firstBookingOnly Boolean            @default(false)
+  active           Boolean            @default(true)
+  startsAt         DateTime?          @db.Timestamptz(6)
+  expiresAt        DateTime           @db.Timestamptz(6)
+  promotionId      String?
+  promotion        Promotion?         @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  createdAt        DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(6)
+  redemptions      CouponRedemption[]
+
+  @@index([active, expiresAt])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id            String    @id @default(cuid())
+  couponId      String
+  coupon        Coupon    @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bookingId     String?   @unique
+  booking       Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  discountCents Int
+  currency      String    @default("usd")
+  /// Set when the booking is cancelled and the redemption is returned (see DECISIONS).
+  reversedAt    DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([couponId])
+  @@index([userId, couponId])
+  @@map("coupon_redemptions")
+}
+
+model Referral {
+  id             String               @id @default(cuid())
+  referrerId     String
+  referrer       User                 @relation("ReferralsMade", fields: [referrerId], references: [id], onDelete: Restrict)
+  referredUserId String?              @unique
+  referredUser   User?                @relation("ReferralReceived", fields: [referredUserId], references: [id], onDelete: SetNull)
+  codeUsed       String
+  status         ReferralStatus       @default(pending)
+  rewardCents    Int                  @default(0)
+  currency       String               @default("usd")
+  qualifiedAt    DateTime?            @db.Timestamptz(6)
+  rewardedAt     DateTime?            @db.Timestamptz(6)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
+  credits        AccountCreditEntry[]
+
+  @@index([referrerId])
+  @@map("referrals")
+}
+
+/// Learner platform-credit ledger (dispute "credit" outcomes, tutor no-show credit, referrals).
+/// Balance = SUM(deltaCents) per user; applied at checkout before the card is charged.
+model AccountCreditEntry {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deltaCents Int
+  currency   String       @default("usd")
+  reason     CreditReason
+  bookingId  String?
+  booking    Booking?     @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  disputeId  String?
+  dispute    Dispute?     @relation(fields: [disputeId], references: [id], onDelete: SetNull)
+  referralId String?
+  referral   Referral?    @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  note       String?
+  expiresAt  DateTime?    @db.Timestamptz(6)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, createdAt])
+  @@map("account_credit_entries")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Reviews
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// One review per booking, by the booker, only once the booking is completed.
+model Review {
+  id                String           @id @default(cuid())
+  bookingId         String           @unique
+  booking           Booking          @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  tutorId           String
+  tutor             TutorProfile     @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  authorId          String
+  author            User             @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  /// "Jordan L." — frozen at submission.
+  authorDisplayName String
+  authorRole        ReviewAuthorRole
+  rating            Int
+  body              String
+  status            ReviewStatus     @default(published)
+  moderatedById     String?
+  moderatedBy       User?            @relation("ReviewModerator", fields: [moderatedById], references: [id], onDelete: SetNull)
+  moderatedAt       DateTime?        @db.Timestamptz(6)
+  moderationNote    String?
+  createdAt         DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
+  response          ReviewResponse?
+
+  @@index([tutorId, status, createdAt])
+  @@map("reviews")
+}
+
+/// The tutor's single public response.
+model ReviewResponse {
+  id        String   @id @default(cuid())
+  reviewId  String   @unique
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("review_responses")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Trust & safety: reports, disputes, files
+// ═════════════════════════════════════════════════════════════════════════════
+
+model Report {
+  id             String           @id @default(cuid())
+  reporterId     String
+  reporter       User             @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  targetType     ReportTargetType
+  /// Polymorphic id (validated in ReportsService).
+  targetId       String
+  reason         String
+  details        String           @default("")
+  status         ReportStatus     @default(open)
+  assignedToId   String?
+  assignedTo     User?            @relation("ReportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolutionNote String?
+  resolvedAt     DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("reports")
+}
+
+model Dispute {
+  id                    String               @id @default(cuid())
+  bookingId             String
+  booking               Booking              @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  openedById            String
+  openedBy              User                 @relation("DisputeOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  reason                DisputeReason
+  details               String
+  status                DisputeStatus        @default(open)
+  outcome               DisputeOutcome?
+  resolutionAmountCents Int?
+  currency              String               @default("usd")
+  resolutionNote        String?
+  resolvedById          String?
+  resolvedBy            User?                @relation("DisputeResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt            DateTime?            @db.Timestamptz(6)
+  createdAt             DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime             @updatedAt @db.Timestamptz(6)
+  evidence              DisputeEvidence[]
+  notes                 DisputeNote[]
+  refunds               Refund[]
+  credits               AccountCreditEntry[]
+
+  @@index([status, createdAt])
+  @@index([bookingId])
+  @@map("disputes")
+}
+
+model DisputeEvidence {
+  id           String     @id @default(cuid())
+  disputeId    String
+  dispute      Dispute    @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  fileId       String
+  file         FileObject @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  uploadedById String
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  description  String?
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
+}
+
+/// Internal staff notes (never shown to the parties unless `internal` = false).
+model DisputeNote {
+  id        String   @id @default(cuid())
+  disputeId String
+  dispute   Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  body      String
+  internal  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([disputeId, createdAt])
+  @@map("dispute_notes")
+}
+
+/// Every uploaded object. Uploads land in a quarantine prefix and are only served once scanStatus = clean.
+model FileObject {
+  id          String      @id @default(cuid())
+  ownerId     String
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  purpose     FilePurpose
+  bucket      String
+  key         String      @unique
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  sha256      String?
+  scanStatus  ScanStatus  @default(pending)
+  scannedAt   DateTime?   @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(6)
+  deletedAt   DateTime?   @db.Timestamptz(6)
+
+  messageAttachments     MessageAttachment[]
+  requirementAttachments RequirementAttachment[]
+  verificationDocuments  VerificationDocument[]
+  disputeEvidence        DisputeEvidence[]
+  homeworkSubmissions    HomeworkSubmission[]
+
+  @@index([ownerId, createdAt])
+  @@index([scanStatus])
+  @@map("files")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Notifications
+// ═════════════════════════════════════════════════════════════════════════════
+
+model Notification {
+  id         String                 @id @default(cuid())
+  userId     String
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String
+  href       String?
+  readAt     DateTime?              @db.Timestamptz(6)
+  createdAt  DateTime               @default(now()) @db.Timestamptz(6)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+/// Outbound email/SMS attempts (provider ids make delivery webhooks idempotent).
+model NotificationDelivery {
+  id                String              @id @default(cuid())
+  notificationId    String
+  notification      Notification        @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  channel           NotificationChannel
+  provider          String
+  providerMessageId String?
+  status            DeliveryStatus      @default(queued)
+  error             String?
+  sentAt            DateTime?           @db.Timestamptz(6)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
+
+  @@unique([notificationId, channel])
+  @@index([providerMessageId])
+  @@map("notification_deliveries")
+}
+
+model NotificationPreference {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  NotificationCategory
+  channel   NotificationChannel
+  enabled   Boolean
+  updatedAt DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, category, channel])
+  @@map("notification_preferences")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CMS & SEO
+// ═════════════════════════════════════════════════════════════════════════════
+
+model CmsPage {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String
+  /// Structured rich-text blocks.
+  body        Json
+  status      ContentStatus @default(draft)
+  publishedAt DateTime?     @db.Timestamptz(6)
+  authorId    String?
+  author      User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime?     @db.Timestamptz(6)
+
+  @@map("cms_pages")
+}
+
+model BlogPost {
+  id            String        @id @default(cuid())
+  slug          String        @unique
+  title         String
+  excerpt       String
+  category      String
+  body          Json
+  authorName    String
+  authorId      String?
+  author        User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  coverImageKey String?
+  readMinutes   Int
+  status        ContentStatus @default(draft)
+  publishedAt   DateTime?     @db.Timestamptz(6)
+  createdAt     DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime?     @db.Timestamptz(6)
+
+  @@index([status, publishedAt])
+  @@map("blog_posts")
+}
+
+model Faq {
+  id        String        @id @default(cuid())
+  question  String
+  answer    String
+  audience  FaqAudience
+  sortOrder Int           @default(0)
+  status    ContentStatus @default(draft)
+  createdAt DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @db.Timestamptz(6)
+
+  @@index([audience, sortOrder])
+  @@map("faqs")
+}
+
+/// Only publishable with recorded consent (CHECK in migration). Preview testimonials are illustrative only.
+model Testimonial {
+  id                String        @id @default(cuid())
+  quote             String
+  name              String
+  context           String
+  userId            String?
+  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  consentGiven      Boolean       @default(false)
+  consentRecordedAt DateTime?     @db.Timestamptz(6)
+  consentEvidence   Json?
+  verifiedCustomer  Boolean       @default(false)
+  status            ContentStatus @default(draft)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
+
+  @@map("testimonials")
+}
+
+/// Per-path overrides; defaults come from page `generateMetadata`.
+model SeoMetadata {
+  id           String   @id @default(cuid())
+  path         String   @unique
+  title        String
+  description  String
+  canonicalUrl String?
+  ogImageKey   String?
+  noindex      Boolean  @default(false)
+  jsonLd       Json?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("seo_metadata")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Platform: flags, settings, audit, idempotency, webhooks
+// ═════════════════════════════════════════════════════════════════════════════
+
+model FeatureFlag {
+  id             String   @id @default(cuid())
+  key            String   @unique
+  label          String
+  description    String
+  enabled        Boolean  @default(false)
+  /// Deterministic bucketing: hash(flagKey + userId) % 100 < rolloutPercent.
+  rolloutPercent Int      @default(0)
+  /// Optional targeting rules (roles, user ids, metros).
+  rules          Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("feature_flags")
+}
+
+/// Keys: booking_policy, platform_fee_bps, match_weights, credit_packs, credits_per_application …
+/// Changes are audit-logged; bookings snapshot the policy in force (Booking.policySnapshot).
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("platform_settings")
+}
+
+/// Append-only. Staff actions, refunds, permission and setting changes, private-conversation access.
+model AuditLog {
+  id         String   @id @default(cuid())
+  /// Null for system actions.
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actorRole  Role?
+  /// e.g. booking.transition, verification.approve, dispute.resolve, conversation.access
+  action     String
+  targetType String
+  targetId   String
+  meta       Json?
+  ipHash     String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+/// Stored responses for `Idempotency-Key` requests (bookings, payments, credits, refunds).
+model IdempotencyKey {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "METHOD /v1/route-template", e.g. "POST /v1/bookings".
+  scope          String
+  key            String
+  /// SHA-256 of the canonical request body; a reused key with a different body is rejected.
+  requestHash    String
+  lockedUntil    DateTime? @db.Timestamptz(6)
+  responseStatus Int?
+  responseBody   Json?
+  resourceType   String?
+  resourceId     String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt      DateTime  @db.Timestamptz(6)
+
+  @@unique([userId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+/// Transactional outbox: domain events written in the same transaction as the state change,
+/// relayed to BullMQ by a poller. Consumers must be idempotent (at-least-once delivery).
+model OutboxEvent {
+  id            String    @id @default(cuid())
+  /// e.g. booking.confirmed, message.created, dispute.resolved
+  topic         String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  attempts      Int       @default(0)
+  lastError     String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  publishedAt   DateTime? @db.Timestamptz(6)
+
+  @@index([publishedAt, createdAt])
+  @@index([aggregateType, aggregateId])
+  @@map("outbox_events")
+}
+
+/// Inbound webhook log; (provider, eventId) uniqueness makes delivery at-least-once safe.
+model WebhookEvent {
+  id          String          @id @default(cuid())
+  provider    WebhookProvider
+  eventId     String
+  type        String
+  payload     Json
+  status      WebhookStatus   @default(received)
+  attempts    Int             @default(0)
+  lastError   String?
+  receivedAt  DateTime        @default(now()) @db.Timestamptz(6)
+  processedAt DateTime?       @db.Timestamptz(6)
+
+  @@unique([provider, eventId])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
+}
