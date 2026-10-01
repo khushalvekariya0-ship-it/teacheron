@@ -4,11 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart,
-  Route, Search, ShieldCheck, Target, Wallet,
+  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarCheck2, CalendarDays, Check, Code, CreditCard, FlaskConical, Gift, Languages, LineChart,
+  Music, Route, Search, ShieldCheck, Target, Wallet,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
@@ -16,12 +17,11 @@ import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/market
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
+import { SubjectSearch } from "./SubjectSearch";
 import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
-import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
-import { formatCents } from "@/lib/format";
 
 /* ═══ 1 · Hero — bold: black stage, huge type, lime accent, a learner climbing the stairs ═══ */
 
@@ -174,83 +174,96 @@ export function Hero() {
   );
 }
 
-/* ═══ 3 · Subjects — photo tiles + full A–Z directory ════════════════════════════ */
+/* ═══ 3 · Subjects — search first, then the eight most-asked-for areas ══════════════ */
 
-const TILE_CATEGORIES = ["math", "science", "english", "test-prep", "languages", "computer-science", "arts", "learning-support"];
+/** Most popular first (top row), then the rest. Labels are the short names people search for. */
+const SUBJECT_TILES: { slug: string; label: string; body: string; icon: LucideIcon }[] = [
+  { slug: "math", label: "Mathematics", body: "Arithmetic to calculus and statistics", icon: Calculator },
+  { slug: "science", label: "Science", body: "Biology, chemistry and physics", icon: FlaskConical },
+  { slug: "english", label: "English", body: "Reading, writing and literature", icon: BookOpen },
+  { slug: "test-prep", label: "Test Prep", body: "SAT, ACT, AP and graduate exams", icon: Target },
+  { slug: "languages", label: "Languages", body: "Spanish, French, Mandarin and ESL", icon: Languages },
+  { slug: "computer-science", label: "Coding", body: "Python, Java and web development", icon: Code },
+  { slug: "arts", label: "Music & Arts", body: "Instruments, voice and art", icon: Music },
+  { slug: "learning-support", label: "Study Skills", body: "Study habits, focus and support", icon: Brain },
+];
 
-function categoryStats(slug: string) {
-  const subjects = SUBJECTS.filter((s) => s.category === slug).map((s) => s.slug);
-  const tutors = TUTORS.filter((t) => t.subjects.some((s) => subjects.includes(s)));
-  const from = tutors.length ? Math.min(...tutors.map((t) => t.hourlyRateCents)) : null;
-  return { count: tutors.length, from };
+function SubjectCard({ tile, tutorCount }: { tile: (typeof SUBJECT_TILES)[number]; tutorCount: number }) {
+  const subjectCount = SUBJECTS.filter((s) => s.category === tile.slug).length;
+  return (
+    <Link
+      href={`/subjects#${tile.slug}`}
+      className="group flex h-full overflow-hidden rounded-2xl border border-line bg-surface shadow-xs transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1.5 hover:border-line-strong hover:shadow-xl focus-visible:-translate-y-1.5 sm:flex-col"
+    >
+      {/* Same frame for every photo: one ratio, one radius, one soft overlay */}
+      <div className="relative w-28 shrink-0 overflow-hidden bg-canvas sm:aspect-[4/3] sm:w-auto">
+        <Image
+          src={`/images/subjects/${tile.slug}.jpg`}
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 300px, (min-width: 640px) 50vw, 112px"
+          className="object-cover saturate-[0.85] transition-[transform,filter] duration-700 ease-out group-hover:scale-[1.07] group-hover:saturate-100"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-night/45 via-night/5 to-transparent" aria-hidden />
+        <span className="absolute left-3 top-3 hidden size-10 place-items-center rounded-xl bg-white/95 text-night shadow-sm sm:grid" aria-hidden>
+          <tile.icon className="size-5" />
+        </span>
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
+        <h3 className="font-heading text-[17px] font-bold tracking-[-0.01em] text-ink sm:text-[19px]">{tile.label}</h3>
+        <p className="mt-1 line-clamp-2 text-[13.5px] leading-snug text-muted sm:mb-5 sm:text-[14px]">{tile.body}</p>
+        <div className="mt-auto flex items-center justify-between gap-3 pt-3 sm:border-t sm:border-line sm:pt-4">
+          <span className="text-[13px] font-semibold tabular-nums text-ink-2">
+            {tutorCount > 0 ? `${tutorCount} ${tutorCount === 1 ? "tutor" : "tutors"}` : `${subjectCount} subjects`}
+          </span>
+          <span className="inline-flex items-center gap-1 whitespace-nowrap text-[13.5px] font-semibold text-brand">
+            Find a tutor <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export function SubjectTiles() {
-  const [all, setAll] = React.useState(false);
+  const tutors = useTutors();
+  const counts = React.useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const tile of SUBJECT_TILES) {
+      const subjects = new Set(SUBJECTS.filter((s) => s.category === tile.slug).map((s) => s.slug));
+      out[tile.slug] = tutors.filter((t) => t.subjects.some((s) => subjects.has(s))).length;
+    }
+    return out;
+  }, [tutors]);
+
   return (
     <Section>
-      <SectionHeading title="Explore popular subjects" description="From kindergarten reading to AP Calculus, SAT prep and Python — online or near you." action={<ArrowLink href="/subjects">All subjects</ArrowLink>} />
-      <Stagger className="grid grid-cols-2 gap-x-3 gap-y-5 sm:gap-4 lg:grid-cols-4" stagger={0.05}>
-        {TILE_CATEGORIES.map((slug) => {
-          const cat = SUBJECT_CATEGORIES.find((c) => c.slug === slug)!;
-          const { count, from } = categoryStats(slug);
-          return (
-            <StaggerItem key={slug}>
-              <Link href={`/subjects#${slug}`} className="group block">
-                <div className="relative aspect-[3/2] overflow-hidden rounded-xl bg-canvas">
-                  <Image src={`/images/subjects/${slug}.jpg`} alt="" fill sizes="(min-width: 1024px) 300px, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                </div>
-                <p className="mt-2.5 flex items-center justify-between gap-2 text-[15px] font-semibold text-ink sm:mt-3 sm:text-[17px]">
-                  {cat.name}
-                  <ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-1 group-hover:text-brand" />
-                </p>
-                <p className="mt-0.5 text-[13px] text-muted sm:text-[14px]">
-                  {count === 0 ? (
-                    "No tutors yet"
-                  ) : (
-                    <>
-                      {count} {count === 1 ? "tutor" : "tutors"}
-                      {from !== null && <> · from {formatCents(from)}/hr</>}
-                    </>
-                  )}
-                </p>
-              </Link>
-            </StaggerItem>
-          );
-        })}
+      <SectionHeading
+        align="center"
+        className="mb-8 lg:mb-10"
+        title="Find the right tutor for what you want to learn"
+        description="Search for a subject, a skill or a tutor by name — or start with one of the most popular areas below."
+      />
+      <Reveal className="relative z-20 mx-auto max-w-2xl">
+        <SubjectSearch />
+      </Reveal>
+
+      <Stagger className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:mt-14 lg:grid-cols-4" stagger={0.05}>
+        {SUBJECT_TILES.map((tile) => (
+          <StaggerItem key={tile.slug} className="h-full">
+            <SubjectCard tile={tile} tutorCount={counts[tile.slug] ?? 0} />
+          </StaggerItem>
+        ))}
       </Stagger>
 
-      <div className="mt-10 rounded-2xl border border-line bg-canvas">
-        <button type="button" onClick={() => setAll((v) => !v)} aria-expanded={all} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left sm:px-6">
-          <span>
-            <span className="block text-[16px] font-semibold text-ink">Browse all {SUBJECTS.length} subjects A–Z</span>
-            <span className="block text-[14px] text-muted">Every subject our tutors teach, grouped by area</span>
-          </span>
-          <ChevronDown className={cn("size-5 shrink-0 text-ink transition-transform duration-300", all && "rotate-180")} />
-        </button>
-        <AnimatePresence initial={false}>
-          {all && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-              <div className="grid gap-8 border-t border-line px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 xl:grid-cols-5">
-                {SUBJECT_CATEGORIES.map((c) => (
-                  <div key={c.slug}>
-                    <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-muted">{c.name}</p>
-                    <ul className="mt-2.5 space-y-1.5">
-                      {SUBJECTS.filter((s) => s.category === c.slug).map((s) => (
-                        <li key={s.slug}>
-                          <Link href={`/subjects/${s.slug}`} className="text-[14.5px] text-ink hover:text-brand hover:underline">
-                            {s.name}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <Reveal className="mt-10 flex justify-center lg:mt-12">
+        <Button asChild variant="secondary" size="lg" className="h-13 px-7 text-[16px]">
+          <Link href="/subjects" className="group">
+            View all {SUBJECTS.length} subjects <ArrowRight className="transition-transform group-hover:translate-x-1" />
+          </Link>
+        </Button>
+      </Reveal>
     </Section>
   );
 }
