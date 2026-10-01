@@ -6,56 +6,50 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock, Mic, PhoneOff, Repeat2,
-  Search, ShieldCheck, Signal, Target, Video, Wallet,
+  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock,
+  Search, ShieldCheck, Target, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
+import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, Marquee, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
 import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
-import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { HeroSearch } from "./HeroSearch";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
 
-/* ═══ 1 · Hero — Preply-style: badge, big promise, video-lesson picture, one action ═══ */
+/* ═══ 1 · Hero — big promise and a subject search, beside two slowly drifting photo columns ═══ */
 
-/** A lesson on a video call: the learner large, the tutor in a corner tile. Photos only — no example data. */
-function VideoLesson() {
-  const pop = (delay: number) => ({
-    initial: { opacity: 0, y: 18, scale: 0.96 },
-    animate: { opacity: 1, y: 0, scale: 1 },
-    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] as const, delay },
-  });
+const HERO_COLUMNS = [
+  ["/images/online-lesson.jpg", "/images/family-reading.jpg", "/images/in-person.jpg", "/images/adult-learner.jpg"],
+  ["/images/hero-tutoring-close.jpg", "/images/online-class.jpg", "/images/become-a-tutor.jpg", "/images/family.jpg"],
+];
+const HERO_POPULAR = ["algebra", "sat", "reading", "spanish", "chemistry", "python"];
+
+/** One column of photos that loops vertically (the list is drawn twice so the loop is seamless). Photos only — no example data. */
+function PhotoColumn({ photos, duration, reverse }: { photos: string[]; duration: number; reverse?: boolean }) {
   return (
-    <div className="relative mx-auto aspect-[10/9] w-full max-w-[560px]" aria-hidden>
-      <motion.div {...pop(0.35)} className="absolute bottom-0 left-0 h-[86%] w-[80%] overflow-hidden rounded-2xl shadow-xl">
-        <Image src="/images/online-lesson.jpg" alt="" fill priority sizes="(min-width: 1024px) 450px, 80vw" className="object-cover" />
-        <span className="absolute left-3 top-3 rounded-md bg-night/55 px-2 py-1 text-[12px] font-semibold text-white backdrop-blur-sm">Learner</span>
-        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-night/60 p-1.5 backdrop-blur-sm">
-          <span className="grid size-9 place-items-center rounded-full bg-white/15 text-white">
-            <Mic className="size-4" />
-          </span>
-          <span className="grid size-9 place-items-center rounded-full bg-white/15 text-white">
-            <Video className="size-4" />
-          </span>
-          <span className="grid size-9 place-items-center rounded-full bg-danger text-white">
-            <PhoneOff className="size-4" />
-          </span>
-        </div>
-      </motion.div>
-      <motion.div {...pop(0.55)} className="absolute right-0 top-0 w-[40%]">
-        <div data-float className="relative aspect-[4/5] overflow-hidden rounded-xl border-4 border-brand-soft shadow-lg">
-          <Image src="/images/become-a-tutor.jpg" alt="" fill sizes="(min-width: 1024px) 230px, 40vw" className="object-cover" />
-          <span className="absolute left-2 top-2 rounded-md bg-night/55 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">Tutor</span>
-          <Signal className="absolute right-2 top-2 size-3.5 text-white drop-shadow" />
-        </div>
-      </motion.div>
+    <div className="h-full overflow-hidden">
+      <div
+        className="flex animate-marquee-y flex-col group-hover:[animation-play-state:paused]"
+        style={{ "--marquee-duration": `${duration}s`, animationDirection: reverse ? "reverse" : undefined } as React.CSSProperties}
+      >
+        {[0, 1].map((copy) => (
+          <div key={copy} className="flex flex-col gap-4 pb-4">
+            {photos.map((src, i) => (
+              <div key={src} className={cn("relative overflow-hidden rounded-3xl bg-canvas", i % 2 ? "aspect-[5/4]" : "aspect-[4/5]")}>
+                <Image src={src} alt="" fill loading={copy === 0 && i < 3 ? "eager" : "lazy"} sizes="(min-width: 1280px) 280px, 24vw" className="object-cover" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -69,44 +63,80 @@ export function Hero() {
         gsap.set(items, { autoAlpha: 1 });
         return;
       }
-      gsap.fromTo(items, { y: 20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.85, ease: "expo.out", stagger: 0.09, delay: 0.25 });
-      gsap.to("[data-float]", { y: -8, duration: 3.4, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 1.4 });
+      gsap.fromTo(items, { y: 22, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, ease: "expo.out", stagger: 0.08, delay: 0.55 });
     },
     { scope: root },
   );
 
-  const cta = (className?: string) => (
-    <Button asChild variant="brand" size="lg" className={cn("h-16 px-10 text-[17px]", className)}>
-      <Link href="/tutors">
-        Find your tutor <ArrowRight />
-      </Link>
-    </Button>
-  );
-
   return (
-    <section ref={root} className="relative overflow-hidden bg-brand-soft">
-      <div className="container-page grid items-center gap-10 pb-12 pt-10 sm:pb-16 sm:pt-14 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:pb-20 lg:pt-16">
-        <div className="text-center lg:text-left">
+    <section ref={root} className="relative overflow-hidden border-b border-line bg-surface">
+      {/* Soft blue glow and a faint grid behind the copy */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div className="absolute -left-40 -top-40 size-[640px] rounded-full bg-brand-soft blur-3xl" />
+        <div className="absolute inset-0 bg-line-grid mask-radial opacity-70" />
+      </div>
+
+      <div className="container-page relative grid grid-cols-1 items-center gap-12 pb-12 pt-12 sm:pb-16 sm:pt-16 lg:min-h-[640px] lg:grid-cols-[1.1fr_1fr] lg:gap-12 lg:py-0 xl:gap-20">
+        <div className="text-center lg:py-20 lg:text-left">
           <div data-hero-in data-reveal className="flex justify-center lg:justify-start">
-            <span className="inline-flex items-center gap-2 rounded-lg border-2 border-ink px-3.5 py-1.5 font-heading text-[17px] font-bold tracking-[-0.01em] text-ink sm:text-[18px]">
-              <Repeat2 className="size-5" strokeWidth={2.4} aria-hidden />
-              Real progress, together
+            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/80 px-3.5 py-1.5 text-[13.5px] font-semibold text-ink-2 shadow-xs backdrop-blur">
+              <span className="size-2 animate-pulse-dot rounded-full bg-brand" aria-hidden />
+              Private tutoring · online and in person
             </span>
           </div>
-          <h1 className="mx-auto mt-6 max-w-[16ch] font-heading text-[2.6rem] font-bold leading-[1.04] tracking-[-0.03em] text-ink sm:text-[3.4rem] lg:mx-0 lg:text-[4rem]">
-            <WordReveal as="span" text="Learn with a tutor who makes every lesson count." delay={0.1} />
+
+          <h1 className="mt-6 font-heading text-[2.6rem] font-bold leading-[1.04] tracking-[-0.035em] text-ink sm:text-[3.5rem] lg:text-[3.9rem] xl:text-[4.4rem]">
+            <WordReveal as="span" className="block" text="Learn with the right tutor." delay={0.1} />
+            <WordReveal as="span" className="block text-brand" text="Grow with every lesson." delay={0.35} />
           </h1>
-          <div data-hero-in data-reveal className="mt-9 hidden lg:block">
-            <Magnetic>{cta()}</Magnetic>
+
+          <p data-hero-in data-reveal className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18.5px] lg:mx-0">
+            Find a tutor for any subject, at your level and on your schedule &mdash; then learn one-to-one, online or in person.
+          </p>
+
+          <div data-hero-in data-reveal className="relative z-20 mx-auto mt-8 max-w-xl lg:mx-0">
+            <HeroSearch />
+          </div>
+
+          <div data-hero-in data-reveal className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+            <span className="mr-1 text-[13.5px] font-medium text-muted">Popular:</span>
+            {HERO_POPULAR.map((slug) => (
+              <Link
+                key={slug}
+                href={`/tutors?subject=${slug}`}
+                className="rounded-full border border-line bg-surface px-3 py-1.5 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-brand"
+              >
+                {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+              </Link>
+            ))}
+          </div>
+
+          <p data-hero-in data-reveal className="mt-8 text-[14.5px] text-muted">
+            Want to teach?{" "}
+            <Link href="/become-a-tutor" className="group inline-flex items-center gap-1 font-semibold text-ink underline-offset-4 hover:underline">
+              Become a tutor <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+          </p>
+        </div>
+
+        {/* Wide screens: two photo columns drifting in opposite directions */}
+        <div data-hero-in data-reveal className="group relative hidden h-[640px] grid-cols-2 gap-4 mask-fade-y lg:grid" aria-hidden>
+          <PhotoColumn photos={HERO_COLUMNS[0]} duration={46} />
+          <div className="-mt-24 h-[calc(100%+6rem)]">
+            <PhotoColumn photos={HERO_COLUMNS[1]} duration={52} reverse />
           </div>
         </div>
 
-        <div data-hero-in data-reveal>
-          <VideoLesson />
+        {/* Phones and tablets: one row of photos sliding sideways */}
+        <div data-hero-in data-reveal className="-mx-4 min-w-0 sm:-mx-6 lg:hidden" aria-hidden>
+          <Marquee duration={50}>
+            {[...HERO_COLUMNS[0], ...HERO_COLUMNS[1]].map((src, i) => (
+              <div key={src} className="relative aspect-[4/5] w-36 shrink-0 overflow-hidden rounded-2xl bg-canvas sm:w-44">
+                <Image src={src} alt="" fill loading={i < 3 ? "eager" : "lazy"} sizes="176px" className="object-cover" />
+              </div>
+            ))}
+          </Marquee>
         </div>
-
-        {/* Phones and tablets: the button sits under the picture, full width (as on Preply) */}
-        <div data-hero-in data-reveal className="lg:hidden">{cta("w-full")}</div>
       </div>
     </section>
   );

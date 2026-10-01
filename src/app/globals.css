@@ -108,6 +108,11 @@
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }
   }
+  --animate-marquee-y: marquee-y var(--marquee-duration, 40s) linear infinite;
+  @keyframes marquee-y {
+    from { transform: translateY(0); }
+    to { transform: translateY(-50%); }
+  }
   @keyframes shimmer {
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
@@ -417,6 +422,7 @@ html.theme-switching *::after {
 }
 
 @utility mask-fade-b { mask-image: linear-gradient(to bottom, black 55%, transparent); }
+@utility mask-fade-y { mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent); }
 @utility mask-fade-x { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
 @utility mask-radial { mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%); }
 

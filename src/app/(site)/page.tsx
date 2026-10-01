@@ -5,7 +5,7 @@ import { FAQS } from "@/lib/data/content";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: { absolute: `${SITE.name} — Find the Right Tutor. Learn With Confidence.` },
+  title: { absolute: `${SITE.name} — Learn With the Right Tutor. Grow With Every Lesson.` },
   description: SITE.description,
   alternates: { canonical: "/" },
 };
