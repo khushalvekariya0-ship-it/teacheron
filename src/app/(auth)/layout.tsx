@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { SITE } from "@/lib/site";
 
 /** Simple, centred sign-in / sign-up layout: a slim header, the form in one column, a legal footer. */
@@ -12,7 +11,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="container-page flex h-16 items-center justify-between gap-4">
           <Logo />
           <div className="flex items-center gap-1.5">
-            <ThemeToggle />
             <Link href="/" className="group inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3.5 text-[13px] font-semibold text-ink transition-colors hover:border-ink">
               <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" aria-hidden />
               Back to site

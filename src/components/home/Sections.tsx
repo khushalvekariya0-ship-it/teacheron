@@ -24,7 +24,7 @@ import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 
-/* ═══ 1 · Hero — bold: navy stage, huge type, the blue → violet gradient, a learner climbing the stairs ═══ */
+/* ═══ 1 · Hero — bold: light stage, huge type, the blue → violet gradient, a learner climbing the stairs ═══ */
 
 const HERO_FEATURES = [
   { icon: BadgeCheck, title: "Identity Checks", body: "Badge shown once verified" },
@@ -43,7 +43,7 @@ function StairsVisual({ className, card = true }: { className?: string; card?: b
       <div data-hero-photo className="absolute inset-0 [clip-path:polygon(34%_0,100%_0,100%_100%,6%_100%,6%_64%)]">
         <Image src="/images/hero-stairs.jpg" alt="" fill preload sizes="(min-width: 1024px) 56vw, 100vw" className="object-cover object-[45%_62%] grayscale" />
         <div className="absolute inset-0 bg-[linear-gradient(160deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] mix-blend-multiply [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night via-night/60 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-page to-transparent" />
       </div>
 
       {/* Handwritten note with an arrow toward the climber */}
@@ -81,12 +81,12 @@ function StairsVisual({ className, card = true }: { className?: string; card?: b
 
       {/* Small glass card, top right: what a lesson is — no figures */}
       {card && (
-        <div data-hero-card className="absolute right-[6%] top-[9%] w-[168px] rounded-2xl border border-white/15 bg-white/10 p-4 text-white shadow-2xl backdrop-blur-md">
-          <p className="font-heading text-[26px] font-black leading-none tracking-[-0.02em]">1-on-1</p>
-          <p className="mt-1 text-[12.5px] text-slate-300">Private lessons</p>
-          <div className="my-3 h-px bg-white/15" />
-          <p className="font-heading text-[26px] font-black leading-none tracking-[-0.02em]">Online</p>
-          <p className="mt-1 text-[12.5px] text-slate-300">or in person</p>
+        <div data-hero-card className="absolute right-[6%] top-[9%] w-[168px] rounded-xl border border-line bg-white/95 p-4 text-ink shadow-xl backdrop-blur-md">
+          <p className="font-heading text-[26px] font-extrabold leading-none tracking-[-0.02em]">1-on-1</p>
+          <p className="mt-1 text-[12.5px] text-muted">Private lessons</p>
+          <div className="my-3 h-px bg-line" />
+          <p className="font-heading text-[26px] font-extrabold leading-none tracking-[-0.02em]">Online</p>
+          <p className="mt-1 text-[12.5px] text-muted">or in person</p>
         </div>
       )}
     </div>
@@ -114,24 +114,24 @@ export function Hero() {
   );
 
   return (
-    <section ref={root} className="relative isolate overflow-hidden bg-night">
-      <div className="dark">
+    <section ref={root} className="relative isolate overflow-hidden bg-gradient-to-b from-brand-50 to-page">
+      <div>
         {/* Wide screens: the visual fills the right half, edge to edge */}
         <StairsVisual className="absolute inset-y-0 right-0 hidden w-[56%] lg:block" />
 
         <div className="container-page relative z-10 pb-10 pt-12 sm:pt-16 lg:pb-16 lg:pt-20 xl:pt-24">
           <div className="max-w-[560px] lg:max-w-[46%]">
-            <p data-hero-in data-reveal className="text-[13px] font-bold uppercase tracking-[0.28em] text-[#9db2ff]">
-              Learn <span className="px-1.5 text-white/40">/</span> Practice <span className="px-1.5 text-white/40">/</span> Grow
+            <p data-hero-in data-reveal className="text-[13px] font-bold uppercase tracking-[0.28em] text-brand">
+              Learn <span className="px-1.5 text-subtle">/</span> Practice <span className="px-1.5 text-subtle">/</span> Grow
             </p>
 
-            <h1 className="mt-5 font-heading text-[4.1rem] font-black uppercase leading-[0.86] tracking-[-0.025em] text-white sm:text-[6rem] lg:text-[6rem] xl:text-[7.25rem]">
+            <h1 className="mt-5 font-heading text-[4.1rem] font-extrabold uppercase leading-[0.86] tracking-[-0.025em] text-ink sm:text-[6rem] lg:text-[6rem] xl:text-[7.25rem]">
               <WordReveal as="span" className="block" text="Build" delay={0.2} />
               <WordReveal as="span" className="block" text="your" delay={0.3} />
               <WordReveal as="span" className="block" gradient text="future" delay={0.4} />
             </h1>
 
-            <p data-hero-in data-reveal className="mt-7 max-w-md text-[16.5px] leading-relaxed text-slate-300 sm:text-[17.5px]">
+            <p data-hero-in data-reveal className="mt-7 max-w-md text-[16.5px] leading-relaxed text-ink-2 sm:text-[17.5px]">
               Learn with the right tutor. Grow with every lesson. Everything you need to get there, in one place.
             </p>
 
@@ -141,8 +141,8 @@ export function Hero() {
                   Find a Tutor <ArrowRight />
                 </Link>
               </Button>
-              <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-white">
-                <span className="grid size-12 place-items-center rounded-full border border-white/30 transition-colors group-hover:border-[#9db2ff] group-hover:text-[#9db2ff]">
+              <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-ink">
+                <span className="grid size-12 place-items-center rounded-full border border-line-strong transition-colors group-hover:border-brand group-hover:text-brand">
                   <Route className="size-5" aria-hidden />
                 </span>
                 How It Works
@@ -430,7 +430,7 @@ export function HowItWorks() {
 /* ═══ 5 · Smart tutor matching — a short guided start on a deep navy stage ═══════════ */
 
 const matchField =
-  "h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/[0.03] pl-14 pr-12 text-[16px] text-slate-100 outline-none transition-colors hover:border-white/30 focus:border-[#5b8cff] focus:ring-2 focus:ring-[#5b8cff]/30";
+  "h-14 w-full appearance-none rounded-xl border border-line-strong bg-surface pl-14 pr-12 text-[16px] text-ink outline-none transition-colors hover:border-ink/40 focus:border-[#5b8cff] focus:ring-2 focus:ring-[#5b8cff]/30";
 
 function MatchSelect({
   icon: Icon,
@@ -442,21 +442,21 @@ function MatchSelect({
   const id = React.useId();
   return (
     <div>
-      <label htmlFor={id} className="mb-2.5 block text-[16px] font-medium text-white">
+      <label htmlFor={id} className="mb-2.5 block text-[16px] font-semibold text-ink">
         {label}
       </label>
       <div className="relative">
-        <Icon className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-slate-300" aria-hidden />
+        <Icon className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden />
         <select
           id={id}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
-          className={cn(matchField, !props.value && "text-slate-400", error && "border-red-400/70")}
+          className={cn(matchField, !props.value && "text-muted", error && "border-danger")}
           {...props}
         >
           {children}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-slate-300" aria-hidden />
+        <ChevronDown className="pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden />
       </div>
       {error && (
         <p id={`${id}-error`} className="mt-2 text-[13.5px] text-red-300">
@@ -485,29 +485,29 @@ export function GetMatched() {
   };
 
   return (
-    <section aria-labelledby="match-title" className="dark relative isolate overflow-hidden bg-[#0a1030]">
+    <section aria-labelledby="match-title" className="relative isolate overflow-hidden bg-canvas">
       {/* Soft light from the top left */}
-      <div className="pointer-events-none absolute -left-40 -top-40 -z-10 size-[620px] rounded-full bg-[#1b2a78]/40 blur-3xl" aria-hidden />
+      <div className="pointer-events-none absolute -left-40 -top-40 -z-10 size-[620px] rounded-full bg-[#dfe5ff]/60 blur-3xl" aria-hidden />
 
       <div className="container-page grid items-center gap-14 py-20 sm:py-24 lg:grid-cols-[1fr_1.02fr] lg:gap-16 lg:py-28">
         <div>
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#16245f] px-3.5 py-1.5 text-[14px] font-medium text-white">
-              <Zap className="size-4 fill-white" aria-hidden /> Smart tutor matching
+            <span className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand-soft px-3.5 py-1.5 text-[14px] font-semibold text-brand">
+              <Zap className="size-4 fill-current" aria-hidden /> Smart tutor matching
             </span>
           </Reveal>
-          <h2 id="match-title" className="mt-6 font-heading text-[2.9rem] font-extrabold leading-[1.04] tracking-[-0.02em] text-white sm:text-[3.6rem] lg:text-[4.1rem]">
+          <h2 id="match-title" className="mt-6 font-heading text-[2.9rem] font-extrabold leading-[1.04] tracking-[-0.02em] text-ink sm:text-[3.6rem] lg:text-[4.1rem]">
             <WordReveal as="span" inView className="block" text="Find a tutor that" delay={0.05} />
             <Reveal as="span" delay={0.25} className="block">
               <span className="bg-gradient-to-r from-[#3b82f6] via-[#4f6ef7] to-[#8b5cf6] bg-clip-text pb-1 text-transparent">fits you.</span>
             </Reveal>
           </h2>
           <Reveal delay={0.1}>
-            <p className="mt-5 text-[18px] text-slate-300 sm:text-[20px]">Tell us a little about what you want to learn.</p>
-            <ul className="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-[15.5px] text-slate-300">
+            <p className="mt-5 text-[18px] text-ink-2 sm:text-[20px]">Tell us a little about what you want to learn.</p>
+            <ul className="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-[15.5px] text-ink-2">
               {["Takes about 2 minutes", "No account needed"].map((x) => (
                 <li key={x} className="flex items-center gap-2.5">
-                  <Check className="size-5 text-emerald-400" strokeWidth={2.5} aria-hidden /> {x}
+                  <Check className="size-5 text-success" strokeWidth={2.5} aria-hidden /> {x}
                 </li>
               ))}
             </ul>
@@ -550,7 +550,7 @@ export function GetMatched() {
               >
                 Find my matches <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
               </button>
-              <p className="flex items-start gap-3 text-[15px] leading-snug text-slate-300">
+              <p className="flex items-start gap-3 text-[15px] leading-snug text-ink-2">
                 <Info className="mt-0.5 size-5 shrink-0" aria-hidden />
                 <span>
                   Your answers help us find tutors
@@ -559,7 +559,7 @@ export function GetMatched() {
                 </span>
               </p>
             </form>
-            <p className="mt-8 flex max-w-[624px] items-center gap-3 border-t border-white/10 pt-6 text-[14.5px] text-slate-400">
+            <p className="mt-8 flex max-w-[624px] items-center gap-3 border-t border-line pt-6 text-[14.5px] text-muted">
               <ShieldCheck className="size-5 shrink-0" aria-hidden /> Paid placement never affects the ranking.
             </p>
           </Reveal>
@@ -567,7 +567,7 @@ export function GetMatched() {
 
         {/* Photo on a blue shape, with a small card about how matches are made */}
         <Reveal delay={0.15} className="relative mx-auto w-full max-w-[600px] lg:mx-0">
-          <svg className="absolute -right-6 -top-14 -z-10 h-[115%] w-[118%] text-[#1d2c8c] sm:-right-10" viewBox="0 0 600 560" fill="currentColor" aria-hidden>
+          <svg className="absolute -right-6 -top-14 -z-10 h-[115%] w-[118%] text-[#dfe5ff] sm:-right-10" viewBox="0 0 600 560" fill="currentColor" aria-hidden>
             <path d="M462 18c58-14 112 10 124 60 14 58-8 118-2 182 7 72 16 148-26 202-46 59-138 70-222 72-86 2-176-12-236-64C40 418-6 330 30 268c26-45 74-42 112-86 36-42 44-112 96-140 60-32 156 0 224-24z" />
           </svg>
           <svg className="absolute -right-3 -top-8 size-12 text-[#7b6cf6] sm:-right-8 sm:-top-10" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" aria-hidden>
@@ -576,13 +576,13 @@ export function GetMatched() {
           <div data-match-photo className="relative aspect-[1.08] overflow-hidden rounded-[28px] shadow-2xl">
             <Image src="/images/online-lesson.jpg" alt="A student with headphones taking notes during an online lesson" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover object-[58%_40%]" />
           </div>
-          <div className="absolute -bottom-6 -left-3 flex items-center gap-3.5 rounded-2xl border border-white/15 bg-[#101a45]/90 p-4 pr-6 shadow-2xl backdrop-blur-md sm:-left-10 sm:bottom-6">
+          <div className="absolute -bottom-6 -left-3 flex items-center gap-3.5 rounded-2xl border border-line bg-white/95 p-4 pr-6 shadow-xl backdrop-blur-md sm:-left-10 sm:bottom-6">
             <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#2f5bff] text-white">
               <Users className="size-5" aria-hidden />
             </span>
             <span>
-              <span className="block text-[15px] font-semibold text-white">Matches in {SUBJECTS.length} subjects</span>
-              <span className="block text-[13.5px] text-slate-300">ranked on 8 clear factors</span>
+              <span className="block text-[15px] font-semibold text-ink">Matches in {SUBJECTS.length} subjects</span>
+              <span className="block text-[13.5px] text-muted">ranked on 8 clear factors</span>
             </span>
           </div>
         </Reveal>

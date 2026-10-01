@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { SearchTrigger } from "@/components/layout/CommandPalette";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Bell, ChevronsUpDown, LogOut, Menu, RotateCcw, Search, Globe, Check, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
@@ -439,7 +438,6 @@ function ShellLayout({
                 <Link href={user.role === "tutor" ? "/dashboard/jobs" : "/post-requirement"}>{user.role === "tutor" ? "Find jobs" : "Post a requirement"}</Link>
               </Button>
             )}
-            <ThemeToggle />
             <NotificationsPopover user={user} />
             <div className="lg:hidden">
               <AccountMenu user={user} compact />

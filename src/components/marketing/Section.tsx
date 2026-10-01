@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Reveal, WordReveal } from "@/components/motion";
 
 /*
- * Page structure: full-bleed sections stacked on the page colour (deep navy by default, white in light mode). Color blocks (light brand tint,
+ * Page structure: full-bleed sections stacked on a white page. Color blocks (light brand tint,
  * soft grey, brand blue) mark heroes and key moments. Headlines are bold and calm.
  */
 
@@ -18,7 +18,7 @@ type Tone = "default" | "canvas" | "brand" | "dark" | "yellow";
 const TONE: Record<Tone, string> = {
   default: "bg-page",
   canvas: "bg-canvas",
-  brand: "bg-brand-soft dark:bg-canvas",
+  brand: "bg-brand-soft",
   dark: "bg-night text-white",
   yellow: "bg-yellow-soft",
 };
@@ -186,12 +186,7 @@ export function PageHero({
     </div>
   );
   return (
-    <section className={cn("relative overflow-hidden", tone === "brand" ? "bg-brand-soft dark:bg-night" : tone === "yellow" ? "bg-yellow-soft" : "bg-canvas")}>
-      {/* Navy theme: soft blue and violet light behind the heading */}
-      <div className="pointer-events-none absolute inset-0 hidden dark:block" aria-hidden>
-        <div className="absolute -left-40 -top-56 size-[640px] rounded-full bg-[#2f4bd8]/25 blur-3xl" />
-        <div className="absolute -right-40 top-0 size-[480px] rounded-full bg-[#7552f0]/15 blur-3xl" />
-      </div>
+    <section className={cn("relative overflow-hidden", tone === "brand" ? "bg-brand-soft" : tone === "yellow" ? "bg-yellow-soft" : "bg-canvas")}>
       <div
         className={cn(
           "container-page relative",
@@ -234,7 +229,6 @@ export function CtaBand({
       <div className="container-page py-16 sm:py-20">
         <div className="relative overflow-hidden rounded-2xl border border-line bg-surface px-6 py-12 sm:px-12 sm:py-14">
           <div className="absolute inset-x-0 top-0 h-px bg-brand-gradient" aria-hidden />
-          <div className="pointer-events-none absolute -right-24 -top-28 hidden size-80 rounded-full bg-[#4b66f5]/20 blur-3xl dark:block" aria-hidden />
           <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <WordReveal as="h2" inView text={title} accent={2} className="font-heading text-[2rem] font-bold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[2.5rem]" />

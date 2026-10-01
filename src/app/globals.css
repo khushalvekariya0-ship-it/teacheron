@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
 
 /* ─── Design tokens ─────────────────────────────────────────────────────────────
    Professional and crisp: white pages, cool slate greys, near-black slate ink for headlines
@@ -8,8 +7,8 @@
    selected states. Flat — no gradients or glass; contrast and type weight do the work.
    ───────────────────────────────────────────────────────────────────────────── */
 @theme {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-heading: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: var(--font-heading);
   --font-hand: var(--font-caveat), "Segoe Print", cursive;
@@ -159,83 +158,6 @@
 /* ─── Dark theme ───────────────────────────────────────────────────────────────
    Set by the `dark` class on <html> (toggle in the header; first visit follows the OS).
    Only token values change — components keep their classes. */
-/* `.dark` on <html> is the site-wide theme; on any other element it scopes the dark tokens to that block. */
-.dark {
-  color-scheme: dark;
-
-  /* Deep navy page; cards and fields sit one step lighter so they read as glass panels. */
-  --color-page: #0a1030;
-  --color-surface: #0f1843;
-  --color-canvas: #0c1438;
-  --color-sunken: #16205a;
-
-  --color-ink: #f1f4ff;
-  --color-ink-2: #c9d1ea;
-  --color-muted: #8f9abf;
-  --color-subtle: #616d96;
-
-  --color-line: #ffffff17;
-  --color-line-strong: #ffffff2b;
-
-  --color-on-ink: #0a1030;
-  --color-marker: #24398f;
-
-  --color-brand: #3d5ef2;
-  --color-brand-hover: #5574ff;
-  --color-brand-press: #2f4fe0;
-  --color-brand-soft: #16245f;
-  --color-brand-50: #111c4d;
-
-  --color-navy: #f1f4ff;
-  --color-navy-hover: #d9e0f7;
-  --color-navy-press: #ffffff;
-  --color-navy-50: #111a48;
-  --color-navy-100: #1a2557;
-  --color-navy-200: #27346b;
-
-  --color-sky: #7dd3fc;
-  --color-sky-soft: #0f2350;
-  --color-indigo: #9db2ff;
-  --color-indigo-soft: #151f55;
-  --color-violet: #b3a6ff;
-  --color-violet-soft: #1c1a52;
-  --color-teal: #5eead4;
-  --color-teal-soft: #0d2a3a;
-  --color-peach: #c9d1ea;
-  --color-peach-soft: #161f4a;
-  --color-pink: #9db2ff;
-  --color-pink-soft: #16245f;
-  --color-yellow: #c9d1ea;
-  --color-yellow-soft: #161f4a;
-
-  --color-success-50: #0c2a1c;
-  --color-success-200: #14532d;
-  --color-warning-50: #2a1d06;
-  --color-warning-200: #713f12;
-  --color-danger-50: #2c1014;
-  --color-danger-200: #7f1d1d;
-  --color-star: #fbbf24;
-
-  --shadow-sm: 0 1px 2px 0 rgb(2 6 23 / 0.45);
-  --shadow-md: 0 6px 14px -6px rgb(2 6 23 / 0.6);
-  --shadow-lg: 0 16px 32px -12px rgb(2 6 23 / 0.7);
-  --shadow-xl: 0 28px 56px -18px rgb(2 6 23 / 0.8);
-}
-/* Accent and status colours used as small text need a lighter tint on dark backgrounds
-   (the solid fills keep the deeper tone so white text on them stays readable). */
-.dark .text-brand { color: #9db2ff; }
-.dark .text-danger { color: #f87171; }
-.dark .text-success { color: #4ade80; }
-.dark .text-warning { color: #fbbf24; }
-
-/* Smooth colour change when switching themes (not on first paint). */
-html.theme-switching,
-html.theme-switching *,
-html.theme-switching *::before,
-html.theme-switching *::after {
-  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, fill 0.35s ease, stroke 0.35s ease !important;
-}
-
 /* ─── Base ──────────────────────────────────────────────────────────────────── */
 @layer base {
   html {

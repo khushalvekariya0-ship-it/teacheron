@@ -247,7 +247,7 @@ export function CommandPalette() {
 }
 
 /** Pill-shaped search trigger with the ⌘K hint. */
-export function SearchTrigger({ className, compact, onBrand }: { className?: string; compact?: boolean; onBrand?: boolean }) {
+export function SearchTrigger({ className, compact }: { className?: string; compact?: boolean }) {
   return (
     <button
       type="button"
@@ -255,8 +255,7 @@ export function SearchTrigger({ className, compact, onBrand }: { className?: str
       aria-label="Search (Ctrl or Command + K)"
       className={cn(
         "group inline-flex h-10 items-center gap-2 rounded-lg text-[14px] font-medium text-ink transition-colors",
-        compact ? "w-10 justify-center hover:bg-ink/5" : "border-2 pl-3 pr-1.5",
-        !compact && (onBrand ? "border-ink/15 bg-surface/60 hover:border-ink" : "border-line bg-surface hover:border-ink"),
+        compact ? "w-10 justify-center hover:bg-ink/5" : "border border-line-strong bg-surface pl-3 pr-1.5 hover:border-ink/40",
         className,
       )}
     >

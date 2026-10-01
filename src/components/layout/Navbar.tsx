@@ -7,7 +7,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "framer-motion";
 import {
   ArrowRight, Bell, BookOpen, Briefcase, ChevronDown, ChevronRight, CircleHelp, ClipboardList, Compass, GitCompareArrows, Info, LayoutDashboard,
-  LogOut, Mail, MapPin, Menu, MessagesSquare, Moon, Newspaper, Route, Search, ShieldCheck, Sparkles, Sun, Tag, UserRound, Users, Wallet, X,
+  LogOut, Mail, MapPin, Menu, MessagesSquare, Newspaper, Route, Search, ShieldCheck, Sparkles, Tag, UserRound, Users, Wallet, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
@@ -20,8 +20,6 @@ import { ROLE_LABEL } from "@/lib/data/users";
 import { homeFor } from "@/lib/permissions";
 import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { SearchTrigger, openCommandPalette } from "./CommandPalette";
-import { ThemeToggle } from "./ThemeToggle";
-import { setTheme, useTheme } from "@/lib/theme";
 
 type NavLink = { label: string; href: string; description: string; icon: React.ComponentType<{ className?: string }> };
 type NavGroup = { label: string; href?: string; links?: NavLink[]; feature?: { title: string; body: string; href: string; cta: string }; mega?: "subjects" };
@@ -67,20 +65,17 @@ function ActivePill() {
 /**
  * Floating framed bar (thin border, frosted glass, crisp corners). At the top of a page it shows every
  * section; once you scroll it narrows into a slim bar (logo · search · theme · ☰ menu) that stays put
- * in both scroll directions. On the homepage it sits on the navy hero until you scroll.
+ * in both scroll directions.
  */
 export function Navbar() {
   const pathname = usePathname();
-  const onBrand = pathname === "/";
   const [open, setOpen] = React.useState<string | null>(null);
   const [menu, setMenu] = React.useState(false);
-  const [scrolled, setScrolled] = React.useState(false);
   const [compact, setCompact] = React.useState(false);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { scrollY } = useScroll();
   useMotionValueEvent(scrollY, "change", (y) => {
-    setScrolled(y > 8);
     // Small hysteresis so the bar doesn't flicker around the threshold.
     setCompact((c) => (c ? y > 90 : y > 140));
   });
@@ -108,18 +103,16 @@ export function Navbar() {
       : g.mega === "subjects"
         ? isCurrent(pathname, "/subjects")
         : !!g.links?.some((l) => !l.href.includes("#") && l.href !== "/subjects" && isCurrent(pathname, l.href));
-  // Over the homepage hero: dark tokens (and dark dropdowns) until the page scrolls.
-  const tinted = onBrand && !scrolled;
 
   return (
     <header
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
-      className={cn("sticky top-0 z-40 px-2 pt-2 transition-colors duration-300 sm:px-4 sm:pt-3", tinted ? "dark bg-night" : "bg-transparent")}
+      className="sticky top-0 z-40 px-2 pt-2 sm:px-4 sm:pt-3"
     >
       <div
         className={cn(
           "mx-auto flex items-center gap-6 rounded-xl border pl-4 pr-2 transition-[max-width,height,background-color,border-color,box-shadow] duration-300 sm:pl-5 sm:pr-3",
-          tinted ? "border-white/10 bg-white/[0.03]" : "border-line bg-page/80 shadow-lg backdrop-blur-xl",
+          "border-line-strong/80 bg-white/95 shadow-[0_10px_30px_-14px_rgb(15_23_42/0.35)] backdrop-blur-xl",
           compact ? "h-14 max-w-[1040px]" : "h-16 max-w-[1248px] lg:h-[68px]",
         )}
       >
@@ -179,9 +172,8 @@ export function Navbar() {
         </AnimatePresence>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <SearchTrigger className={cn("hidden", !compact && "md:inline-flex")} onBrand={tinted} />
-          <SearchTrigger compact className={cn(!compact && "md:hidden")} onBrand={tinted} />
-          <ThemeToggle />
+          <SearchTrigger className={cn("hidden", !compact && "md:inline-flex")} />
+          <SearchTrigger compact className={cn(!compact && "md:hidden")} />
           <AnimatePresence initial={false} mode="popLayout">
             {compact ? (
               <motion.div
@@ -364,7 +356,6 @@ const SHEET_GROUPS: { title: string; links: SheetLink[] }[] = [
 
 function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const pathname = usePathname();
-  const theme = useTheme();
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
@@ -451,28 +442,6 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                     </motion.section>
                   ))}
 
-                  <div className="mt-7 flex items-center justify-between rounded-xl border border-line p-3">
-                    <span className="px-1 text-[15px] font-semibold text-ink">Appearance</span>
-                    <div role="radiogroup" aria-label="Theme" className="flex rounded-lg bg-canvas p-1">
-                      {(["light", "dark"] as const).map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          role="radio"
-                          aria-checked={theme === t}
-                          onClick={() => setTheme(t)}
-                          className={cn(
-                            "relative inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13.5px] font-semibold transition-colors",
-                            theme === t ? "text-ink" : "text-muted hover:text-ink",
-                          )}
-                        >
-                          {theme === t && <motion.span layoutId="theme-seg" className="absolute inset-0 rounded-md bg-surface shadow-sm ring-1 ring-line" transition={{ type: "spring", bounce: 0.15, duration: 0.35 }} />}
-                          {t === "light" ? <Sun className="relative size-4" /> : <Moon className="relative size-4" />}
-                          <span className="relative">{t === "light" ? "Light" : "Dark"}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </nav>
 
                 <div className="shrink-0 border-t border-line px-5 py-4">
