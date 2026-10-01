@@ -5,8 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
-  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
+  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
   Music, Route, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -167,95 +168,188 @@ export function Hero() {
   );
 }
 
-/* ═══ 3 · Subjects — search first, then the eight most-asked-for areas ══════════════ */
+/* ═══ 3 · Subjects — search, then an explorer: pick an area, see its topics ══════════════ */
 
-/** Most popular first (top row), then the rest. Labels are the short names people search for. */
-const SUBJECT_TILES: { slug: string; label: string; body: string; icon: LucideIcon }[] = [
-  { slug: "math", label: "Mathematics", body: "Arithmetic to calculus and statistics", icon: Calculator },
-  { slug: "science", label: "Science", body: "Biology, chemistry and physics", icon: FlaskConical },
-  { slug: "english", label: "English", body: "Reading, writing and literature", icon: BookOpen },
-  { slug: "test-prep", label: "Test Prep", body: "SAT, ACT, AP and graduate exams", icon: Target },
-  { slug: "languages", label: "Languages", body: "Spanish, French, Mandarin and ESL", icon: Languages },
-  { slug: "computer-science", label: "Coding", body: "Python, Java and web development", icon: Code },
-  { slug: "arts", label: "Music & Arts", body: "Instruments, voice and art", icon: Music },
-  { slug: "learning-support", label: "Study Skills", body: "Study habits, focus and support", icon: Brain },
+/** The eight most-asked-for areas, most popular first. Labels are the short names people search for. */
+const SUBJECT_AREAS: { slug: string; label: string; icon: LucideIcon; body: string }[] = [
+  { slug: "math", label: "Mathematics", icon: Calculator, body: "From number sense and fractions to algebra, calculus and statistics — help with homework, tests and getting ahead." },
+  { slug: "science", label: "Science", icon: FlaskConical, body: "Biology, chemistry, physics and earth science, with labs, problem sets and AP courses explained step by step." },
+  { slug: "english", label: "English", icon: BookOpen, body: "Reading, writing, grammar and literature — from early readers to confident essay writers." },
+  { slug: "test-prep", label: "Test Prep", icon: Target, body: "Structured plans for the SAT, ACT, AP exams and graduate admissions tests, with practice tests reviewed together." },
+  { slug: "languages", label: "Languages", icon: Languages, body: "Conversation-first lessons in Spanish, French, Mandarin and English as a second language." },
+  { slug: "computer-science", label: "Coding", icon: Code, body: "Python, Java and web development — from first lines of code to AP Computer Science." },
+  { slug: "arts", label: "Music & Arts", icon: Music, body: "Piano, guitar, voice and drawing for beginners and experienced learners alike." },
+  { slug: "learning-support", label: "Study Skills", icon: Brain, body: "Study habits, executive function and dyslexia support — patient, specialised help that builds independence." },
 ];
 
-function SubjectCard({ tile, tutorCount }: { tile: (typeof SUBJECT_TILES)[number]; tutorCount: number }) {
-  const subjectCount = SUBJECTS.filter((s) => s.category === tile.slug).length;
-  return (
-    <Link
-      href={`/subjects#${tile.slug}`}
-      className="group flex h-full overflow-hidden rounded-2xl border border-line bg-surface shadow-xs transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1.5 hover:border-line-strong hover:shadow-xl focus-visible:-translate-y-1.5 sm:flex-col"
-    >
-      {/* Same frame for every photo: one ratio, one radius, one soft overlay */}
-      <div className="relative w-28 shrink-0 overflow-hidden bg-canvas sm:aspect-[4/3] sm:w-auto">
-        <Image
-          src={`/images/subjects/${tile.slug}.jpg`}
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 300px, (min-width: 640px) 50vw, 112px"
-          className="object-cover saturate-[0.85] transition-[transform,filter] duration-700 ease-out group-hover:scale-[1.07] group-hover:saturate-100"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-night/45 via-night/5 to-transparent" aria-hidden />
-        <span className="absolute left-3 top-3 hidden size-10 place-items-center rounded-xl bg-white/95 text-night shadow-sm sm:grid" aria-hidden>
-          <tile.icon className="size-5" />
-        </span>
-      </div>
+function SubjectExplorer() {
+  const tutors = useTutors();
+  const [active, setActive] = React.useState(SUBJECT_AREAS[0].slug);
 
-      <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
-        <h3 className="font-heading text-[17px] font-bold tracking-[-0.01em] text-ink sm:text-[19px]">{tile.label}</h3>
-        <p className="mt-1 line-clamp-2 text-[13.5px] leading-snug text-muted sm:mb-5 sm:text-[14px]">{tile.body}</p>
-        <div className="mt-auto flex items-center justify-between gap-3 pt-3 sm:border-t sm:border-line sm:pt-4">
-          <span className="text-[13px] font-semibold tabular-nums text-ink-2">
-            {tutorCount > 0 ? `${tutorCount} ${tutorCount === 1 ? "tutor" : "tutors"}` : `${subjectCount} subjects`}
-          </span>
-          <span className="inline-flex items-center gap-1 whitespace-nowrap text-[13.5px] font-semibold text-brand">
-            Find a tutor <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
-          </span>
-        </div>
-      </div>
-    </Link>
+  // Real counts only: tutors per subject and per area.
+  const counts = React.useMemo(() => {
+    const bySubject: Record<string, number> = {};
+    for (const t of tutors) for (const s of t.subjects) bySubject[s] = (bySubject[s] ?? 0) + 1;
+    const byArea: Record<string, number> = {};
+    for (const a of SUBJECT_AREAS) {
+      const subs = new Set(SUBJECTS.filter((s) => s.category === a.slug).map((s) => s.slug));
+      byArea[a.slug] = tutors.filter((t) => t.subjects.some((s) => subs.has(s))).length;
+    }
+    return { bySubject, byArea };
+  }, [tutors]);
+
+  const area = SUBJECT_AREAS.find((a) => a.slug === active) ?? SUBJECT_AREAS[0];
+  const topics = SUBJECTS.filter((s) => s.category === area.slug);
+  const areaTutors = counts.byArea[area.slug] ?? 0;
+  const summary = (slug: string) => {
+    const n = counts.byArea[slug] ?? 0;
+    const k = SUBJECTS.filter((s) => s.category === slug).length;
+    return n > 0 ? `${n} ${n === 1 ? "tutor" : "tutors"}` : `${k} subjects`;
+  };
+
+  return (
+    <TabsPrimitive.Root
+      value={active}
+      onValueChange={setActive}
+      orientation="vertical"
+      className="grid overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_24px_60px_-32px_rgb(15_23_42/0.35)] lg:grid-cols-[290px_minmax(0,1fr)]"
+    >
+      <TabsPrimitive.List aria-label="Subject areas" className="scrollbar-none flex gap-1 overflow-x-auto border-b border-line p-2 lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:p-3">
+        {SUBJECT_AREAS.map((a) => {
+          const on = a.slug === active;
+          return (
+            <TabsPrimitive.Trigger
+              key={a.slug}
+              value={a.slug}
+              onMouseEnter={() => setActive(a.slug)}
+              className={cn(
+                "group relative flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/40 lg:py-3",
+                on ? "bg-brand-soft" : "hover:bg-canvas",
+              )}
+            >
+              {on && <motion.span layoutId="explorer-bar" className="absolute inset-y-2 left-0 hidden w-[3px] rounded-full bg-brand-gradient lg:block" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
+              <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg border transition-colors", on ? "border-transparent bg-brand-gradient text-white" : "border-line text-ink-2 group-hover:text-ink")}>
+                <a.icon className="size-[18px]" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={cn("block whitespace-nowrap text-[15px] font-semibold", on ? "text-ink" : "text-ink-2")}>{a.label}</span>
+                <span className="hidden text-[12.5px] tabular-nums text-muted lg:block">{summary(a.slug)}</span>
+              </span>
+              <ChevronRight className={cn("hidden size-4 shrink-0 transition-[opacity,transform] lg:block", on ? "translate-x-0 text-brand opacity-100" : "-translate-x-1 text-muted opacity-0")} aria-hidden />
+            </TabsPrimitive.Trigger>
+          );
+        })}
+      </TabsPrimitive.List>
+
+      <TabsPrimitive.Content value={area.slug} forceMount className="outline-none">
+        {/* Keyed so each area fades in fresh; no exit animation, so the panel is never empty. */}
+        <motion.div
+            key={area.slug}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="grid gap-8 p-5 sm:p-7 lg:min-h-[460px] lg:grid-cols-[minmax(0,1fr)_260px] lg:p-8 xl:grid-cols-[minmax(0,1fr)_300px]"
+          >
+            {/* Phones and tablets: a short photo strip */}
+            <div className="relative aspect-[16/7] overflow-hidden rounded-xl bg-canvas lg:hidden">
+              <Image src={`/images/subjects/${area.slug}.jpg`} alt="" fill sizes="100vw" className="object-cover" />
+            </div>
+
+            <div className="flex flex-col">
+              <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-brand">
+                <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+                {topics.length} subjects{areaTutors > 0 && ` · ${areaTutors} ${areaTutors === 1 ? "tutor" : "tutors"}`}
+              </p>
+              <h3 className="mt-3 font-heading text-[28px] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[34px]">{area.label}</h3>
+              <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-ink-2">{area.body}</p>
+
+              <p className="mt-7 text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Choose a topic</p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {topics.map((s) => {
+                  const n = counts.bySubject[s.slug] ?? 0;
+                  return (
+                    <li key={s.slug}>
+                      <Link
+                        href={`/tutors?subject=${s.slug}`}
+                        className="group inline-flex items-center gap-2 rounded-lg border border-line bg-page px-3.5 py-2 text-[14.5px] font-medium text-ink transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
+                      >
+                        {s.name}
+                        {n > 0 && <span className="rounded-md bg-canvas px-1.5 text-[12px] tabular-nums text-muted">{n}</span>}
+                        <ArrowRight className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="mt-auto flex flex-wrap items-center gap-3 pt-8">
+                <Button asChild variant="brand">
+                  <Link href={`/subjects#${area.slug}`}>
+                    Explore {area.label} <ArrowRight />
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary">
+                  <Link href="/concierge">Help me choose</Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* Wide screens: the area's photo on an offset gradient block */}
+            <div className="relative hidden lg:block">
+              <div className="absolute -right-2 -top-2 h-[70%] w-[70%] rounded-xl bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-to))]" aria-hidden />
+              <div className="relative h-full min-h-[380px] overflow-hidden rounded-xl border border-line bg-canvas">
+                {/* All eight photos load together, so switching areas never waits for an image. */}
+                {SUBJECT_AREAS.map((a) => (
+                  <Image
+                    key={a.slug}
+                    src={`/images/subjects/${a.slug}.jpg`}
+                    alt=""
+                    fill
+                    sizes="300px"
+                    className={cn("object-cover transition-opacity duration-300", a.slug === area.slug ? "opacity-100" : "opacity-0")}
+                  />
+                ))}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night/80 to-transparent p-4 pt-16">
+                  <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-white">
+                    <area.icon className="size-4" aria-hidden /> {area.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+        </motion.div>
+      </TabsPrimitive.Content>
+    </TabsPrimitive.Root>
   );
 }
 
 export function SubjectTiles() {
-  const tutors = useTutors();
-  const counts = React.useMemo(() => {
-    const out: Record<string, number> = {};
-    for (const tile of SUBJECT_TILES) {
-      const subjects = new Set(SUBJECTS.filter((s) => s.category === tile.slug).map((s) => s.slug));
-      out[tile.slug] = tutors.filter((t) => t.subjects.some((s) => subjects.has(s))).length;
-    }
-    return out;
-  }, [tutors]);
-
   return (
-    <Section>
-      <SectionHeading
-        align="center"
-        className="mb-8 lg:mb-10"
-        title="Find the right tutor for what you want to learn"
-        description="Search for a subject, a skill or a tutor by name — or start with one of the most popular areas below."
-      />
-      <Reveal className="relative z-20 mx-auto max-w-2xl">
-        <SubjectSearch />
+    <Section tone="canvas">
+      <div className="mb-10 grid items-end gap-8 lg:mb-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,500px)] lg:gap-14">
+        <SectionHeading
+          className="mb-0 lg:mb-0"
+          eyebrow="Explore subjects"
+          title="What will you master next?"
+          accent={2}
+          description="Pick an area to see every topic our tutors teach — or search for a subject, a skill or a tutor by name."
+        />
+        <Reveal delay={0.1} className="relative z-20">
+          <SubjectSearch />
+        </Reveal>
+      </div>
+
+      <Reveal>
+        <SubjectExplorer />
       </Reveal>
 
-      <Stagger className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:mt-14 lg:grid-cols-4" stagger={0.05}>
-        {SUBJECT_TILES.map((tile) => (
-          <StaggerItem key={tile.slug} className="h-full">
-            <SubjectCard tile={tile} tutorCount={counts[tile.slug] ?? 0} />
-          </StaggerItem>
-        ))}
-      </Stagger>
-
-      <Reveal className="mt-10 flex justify-center lg:mt-12">
-        <Button asChild variant="secondary" size="lg" className="h-13 px-7 text-[16px]">
-          <Link href="/subjects" className="group">
-            View all {SUBJECTS.length} subjects <ArrowRight className="transition-transform group-hover:translate-x-1" />
-          </Link>
-        </Button>
+      <Reveal className="mt-6 flex flex-col items-start justify-between gap-4 rounded-xl border border-dashed border-line-strong px-5 py-4 sm:flex-row sm:items-center">
+        <p className="text-[15px] text-ink-2">
+          <span className="font-semibold text-ink">Can&rsquo;t find your subject?</span> We cover {SUBJECTS.length} subjects in {SUBJECT_CATEGORIES.length} areas.
+        </p>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <ArrowLink href="/subjects">View all subjects</ArrowLink>
+          <ArrowLink href="/concierge">Help me find a tutor</ArrowLink>
+        </div>
       </Reveal>
     </Section>
   );
