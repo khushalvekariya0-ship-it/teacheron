@@ -8,11 +8,17 @@ import { TooltipProvider } from "@/components/ui/Overlay";
 import { Toaster } from "@/components/ui/Toast";
 import { BackToTop } from "@/components/layout/BackToTop";
 import { useApp, STORE_KEY } from "@/lib/store";
+import { clearRememberMe, sessionShouldEnd } from "@/lib/remember";
 
 /** Rehydrates the persisted store after mount so server and first client render always match. */
 function StoreHydrator() {
   React.useEffect(() => {
     const done = () => {
+      // "Remember me" was unticked and the browser was closed since: end that session.
+      if (sessionShouldEnd() && useApp.getState().sessionUserId) {
+        useApp.getState().logout();
+        clearRememberMe();
+      }
       useApp.getState().setHydrated();
       // Stand-in for the backend scheduler: expire stale requests, auto-complete finished lessons.
       useApp.getState().runScheduledJobs();
