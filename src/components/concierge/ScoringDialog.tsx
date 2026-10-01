@@ -48,7 +48,7 @@ export function ScoringDialog({ trigger }: { trigger?: React.ReactNode }) {
                   </div>
                   <div className="mt-2 h-1 overflow-hidden rounded-full bg-sunken" aria-hidden>
                     <motion.div
-                      className="h-full rounded-full bg-brand"
+                      className="h-full rounded-full bg-brand-gradient"
                       initial={{ width: 0 }}
                       animate={{ width: `${(DEFAULT_WEIGHTS[k] / max) * 100}%` }}
                       transition={{ duration: 0.7, ease: EASE, delay: 0.1 + i * 0.04 }}

@@ -59,7 +59,7 @@ export function MatchBar({ value, className }: { value: number; className?: stri
   return (
     <div className={cn("h-1 w-full overflow-hidden rounded-full bg-sunken", className)} aria-hidden>
       <motion.div
-        className="h-full rounded-full bg-brand"
+        className="h-full rounded-full bg-brand-gradient"
         initial={{ width: 0 }}
         whileInView={{ width: `${Math.max(0, Math.min(100, value))}%` }}
         viewport={{ once: true }}

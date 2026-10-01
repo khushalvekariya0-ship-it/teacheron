@@ -378,7 +378,7 @@ export function BarList({ data, format = (n) => n.toLocaleString("en-US") }: { d
           <span className="truncate text-ink-2">{d.label}</span>
           <span className="h-2 overflow-hidden rounded-full bg-sunken">
             <motion.span
-              className="block h-full rounded-full bg-brand"
+              className="block h-full rounded-full bg-brand-gradient"
               initial={{ width: 0 }}
               whileInView={{ width: `${(d.value / max) * 100}%` }}
               viewport={{ once: true }}

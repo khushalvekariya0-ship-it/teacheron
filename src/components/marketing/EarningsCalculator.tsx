@@ -115,7 +115,7 @@ export function EarningsCalculator({ defaultRateCents }: { defaultRateCents: num
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-sunken" aria-hidden>
                   <motion.div
-                    className={cn("h-full rounded-full", isBest ? "bg-brand" : "bg-ink/25")}
+                    className={cn("h-full rounded-full", isBest ? "bg-brand-gradient" : "bg-ink/25")}
                     initial={false}
                     animate={{ width: `${Math.max(0, (r.net / maxNet) * 100)}%` }}
                     transition={{ duration: 0.5, ease: EASE }}

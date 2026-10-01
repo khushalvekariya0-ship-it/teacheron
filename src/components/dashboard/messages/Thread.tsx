@@ -217,13 +217,13 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
                       <div
                         className={cn(
                           "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[14.5px] leading-relaxed sm:max-w-[70%]",
-                          mine ? "bg-ink text-on-ink" : "bg-canvas text-ink",
+                          mine ? "bg-brand-gradient text-white" : "bg-canvas text-ink",
                           endOfRun && (mine ? "rounded-br-md" : "rounded-bl-md"),
                         )}
                       >
                         {m.body}
                         {m.attachment && (
-                          <span className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px]", m.body && "mt-2", mine ? "border-on-ink/20 bg-on-ink/10 text-on-ink" : "border-line bg-canvas text-ink-2")} title="File previews aren't available in this demo">
+                          <span className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px]", m.body && "mt-2", mine ? "border-white/25 bg-white/10 text-white" : "border-line bg-canvas text-ink-2")} title="File previews aren't available in this demo">
                             <FileText className="size-4 shrink-0 opacity-80" aria-hidden />
                             <span className="min-w-0 truncate font-medium">{m.attachment.name}</span>
                             <span className="shrink-0 opacity-70">{formatSize(m.attachment.sizeKb)}</span>

@@ -116,7 +116,7 @@ export function Navbar() {
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
       className={cn(
         "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-300",
-        tinted ? "dark border-transparent bg-night" : "border-line bg-surface",
+        tinted ? "dark border-transparent bg-night" : "border-line bg-page/85 backdrop-blur-xl",
         compact && "shadow-sm",
       )}
     >
@@ -202,7 +202,7 @@ export function Navbar() {
                 exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 className="hidden items-center gap-2 xl:flex"
               >
-                <AccountArea onHero={tinted} />
+                <AccountArea />
               </motion.div>
             )}
           </AnimatePresence>
@@ -485,7 +485,7 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
   );
 }
 
-function AccountArea({ onHero }: { onHero?: boolean }) {
+function AccountArea() {
   const me = useSession();
   const hydrated = useApp((s) => s.hydrated);
   const unread = useUnreadNotifications();
@@ -501,7 +501,7 @@ function AccountArea({ onHero }: { onHero?: boolean }) {
         <Button asChild variant="secondary" size="sm" className="h-10 bg-transparent px-4 hover:bg-ink/5">
           <Link href="/login">Log in</Link>
         </Button>
-        <Button asChild size="sm" className={cn("h-10 px-4", onHero && "border-volt bg-volt text-night hover:border-volt-hover hover:bg-volt-hover active:bg-volt")}>
+        <Button asChild variant="brand" size="sm" className="h-10 px-4">
           <Link href="/register">Sign up</Link>
         </Button>
       </>

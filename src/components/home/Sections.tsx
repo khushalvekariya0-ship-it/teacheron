@@ -24,7 +24,7 @@ import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 
-/* ═══ 1 · Hero — bold: black stage, huge type, lime accent, a learner climbing the stairs ═══ */
+/* ═══ 1 · Hero — bold: navy stage, huge type, the blue → violet gradient, a learner climbing the stairs ═══ */
 
 const HERO_FEATURES = [
   { icon: BadgeCheck, title: "Identity Checks", body: "Badge shown once verified" },
@@ -33,16 +33,16 @@ const HERO_FEATURES = [
   { icon: Wallet, title: "Pay Per Lesson", body: "No subscription for families" },
 ];
 
-/** The photo, the lime beam and the handwritten note. Photo only — no example data. */
+/** The photo, the gradient beam and the handwritten note. Photo only — no example data. */
 function StairsVisual({ className, card = true }: { className?: string; card?: boolean }) {
   return (
     <div className={cn("pointer-events-none", className)} aria-hidden>
-      {/* Lime slab behind the photo */}
-      <div data-hero-slab className="absolute inset-0 bg-volt [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
-      {/* Photo, cut on a diagonal, with the lime light multiplied into the sunlit wall */}
+      {/* Gradient slab behind the photo */}
+      <div data-hero-slab className="absolute inset-0 bg-[linear-gradient(160deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
+      {/* Photo, cut on a diagonal, with the gradient light multiplied into the sunlit wall */}
       <div data-hero-photo className="absolute inset-0 [clip-path:polygon(34%_0,100%_0,100%_100%,6%_100%,6%_64%)]">
         <Image src="/images/hero-stairs.jpg" alt="" fill preload sizes="(min-width: 1024px) 56vw, 100vw" className="object-cover object-[45%_62%] grayscale" />
-        <div className="absolute inset-0 bg-volt mix-blend-multiply [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(160deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] mix-blend-multiply [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
         <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night via-night/60 to-transparent" />
       </div>
 
@@ -79,14 +79,14 @@ function StairsVisual({ className, card = true }: { className?: string; card?: b
         </svg>
       </div>
 
-      {/* Small white card, top right: what a lesson is — no figures */}
+      {/* Small glass card, top right: what a lesson is — no figures */}
       {card && (
-        <div data-hero-card className="absolute right-[6%] top-[9%] w-[168px] rounded-2xl bg-white p-4 text-night shadow-2xl">
+        <div data-hero-card className="absolute right-[6%] top-[9%] w-[168px] rounded-2xl border border-white/15 bg-white/10 p-4 text-white shadow-2xl backdrop-blur-md">
           <p className="font-heading text-[26px] font-black leading-none tracking-[-0.02em]">1-on-1</p>
-          <p className="mt-1 text-[12.5px] text-slate-500">Private lessons</p>
-          <div className="my-3 h-px bg-slate-200" />
+          <p className="mt-1 text-[12.5px] text-slate-300">Private lessons</p>
+          <div className="my-3 h-px bg-white/15" />
           <p className="font-heading text-[26px] font-black leading-none tracking-[-0.02em]">Online</p>
-          <p className="mt-1 text-[12.5px] text-slate-500">or in person</p>
+          <p className="mt-1 text-[12.5px] text-slate-300">or in person</p>
         </div>
       )}
     </div>
@@ -121,14 +121,14 @@ export function Hero() {
 
         <div className="container-page relative z-10 pb-10 pt-12 sm:pt-16 lg:pb-16 lg:pt-20 xl:pt-24">
           <div className="max-w-[560px] lg:max-w-[46%]">
-            <p data-hero-in data-reveal className="text-[13px] font-bold uppercase tracking-[0.28em] text-volt">
+            <p data-hero-in data-reveal className="text-[13px] font-bold uppercase tracking-[0.28em] text-[#9db2ff]">
               Learn <span className="px-1.5 text-white/40">/</span> Practice <span className="px-1.5 text-white/40">/</span> Grow
             </p>
 
             <h1 className="mt-5 font-heading text-[4.1rem] font-black uppercase leading-[0.86] tracking-[-0.025em] text-white sm:text-[6rem] lg:text-[6rem] xl:text-[7.25rem]">
               <WordReveal as="span" className="block" text="Build" delay={0.2} />
               <WordReveal as="span" className="block" text="your" delay={0.3} />
-              <WordReveal as="span" className="block text-volt" text="future" delay={0.4} />
+              <WordReveal as="span" className="block" gradient text="future" delay={0.4} />
             </h1>
 
             <p data-hero-in data-reveal className="mt-7 max-w-md text-[16.5px] leading-relaxed text-slate-300 sm:text-[17.5px]">
@@ -136,13 +136,13 @@ export function Hero() {
             </p>
 
             <div data-hero-in data-reveal className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
-              <Button asChild size="lg" className="h-14 rounded-xl border-volt bg-volt px-7 text-[16px] font-bold text-night hover:border-volt-hover hover:bg-volt-hover active:bg-volt">
+              <Button asChild variant="brand" size="lg" className="h-14 rounded-xl px-7 text-[16px] font-bold">
                 <Link href="/tutors">
                   Find a Tutor <ArrowRight />
                 </Link>
               </Button>
               <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-white">
-                <span className="grid size-12 place-items-center rounded-full border border-white/30 transition-colors group-hover:border-volt group-hover:text-volt">
+                <span className="grid size-12 place-items-center rounded-full border border-white/30 transition-colors group-hover:border-[#9db2ff] group-hover:text-[#9db2ff]">
                   <Route className="size-5" aria-hidden />
                 </span>
                 How It Works
@@ -386,19 +386,19 @@ const STEPS: { title: string; body: string; badge: string; visual: React.Compone
   {
     title: "Find your tutor.",
     body: "Search by subject, grade, schedule and budget. Every result shows why the tutor is a good fit — never paid placement.",
-    badge: "bg-[#86d9c9]",
+    badge: "bg-[#2f7bff]",
     visual: TutorStack,
   },
   {
     title: "Start learning.",
     body: "Book a trial at a real opening in your time zone. Your tutor shapes every lesson around your goals from day one.",
-    badge: "bg-volt",
+    badge: "bg-[#4b66f5]",
     visual: VideoCall,
   },
   {
     title: "Grow with every lesson.",
     body: "Choose how often you meet, keep notes and goals in one place, and watch your confidence build week by week.",
-    badge: "bg-[#7cb2ff]",
+    badge: "bg-[#7552f0]",
     visual: ProgressLayers,
   },
 ];
@@ -412,7 +412,7 @@ export function HowItWorks() {
           <StaggerItem key={s.title} className="h-full">
             <article className="flex h-full flex-col overflow-hidden rounded-lg border border-ink/25 bg-surface">
               <div className="px-6 pt-7 sm:px-8 sm:pt-8">
-                <span className={cn("grid size-10 place-items-center rounded-md font-heading text-[22px] font-bold text-night", s.badge)}>{i + 1}</span>
+                <span className={cn("grid size-10 place-items-center rounded-md font-heading text-[22px] font-bold text-white", s.badge)}>{i + 1}</span>
                 <h3 className="mt-6 font-heading text-[30px] font-bold leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">{s.title}</h3>
                 <p className="mt-4 max-w-md text-[15.5px] leading-relaxed text-ink-2">{s.body}</p>
               </div>
@@ -779,7 +779,7 @@ export function HomeFaq() {
 
 export function ClosingCta() {
   return (
-    <section className="bg-brand">
+    <section className="bg-brand-gradient">
       <div className="container-page flex flex-col items-start gap-8 py-16 sm:py-20 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
           <h2 className="font-heading text-[2.1rem] font-bold leading-[1.08] tracking-[-0.025em] text-white sm:text-[2.6rem]">Start with a trial lesson.</h2>

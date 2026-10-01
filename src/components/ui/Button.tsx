@@ -7,16 +7,16 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
-  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold select-none transition-[background-color,border-color,color,transform] duration-150 ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink [&_svg]:shrink-0",
+  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold select-none transition-[background-color,border-color,color,transform,filter,box-shadow] duration-150 ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         // Solid slate ink: the main action on a page.
         primary: "border-2 border-ink bg-ink text-on-ink hover:border-navy-hover hover:bg-navy-hover active:bg-black",
-        // Solid blue accent: booking actions ("Book trial lesson").
-        brand: "border-2 border-brand bg-brand text-white hover:border-brand-hover hover:bg-brand-hover active:bg-brand-press",
-        // White with a 2px black outline.
-        secondary: "border-2 border-ink bg-surface text-ink hover:bg-canvas",
+        // Signature blue → violet gradient: the key actions (find, book, sign up).
+        brand: "bg-brand-gradient text-white shadow-[0_10px_28px_-12px_rgb(75_102_245/0.75)] hover:brightness-110 hover:shadow-[0_14px_32px_-12px_rgb(75_102_245/0.9)] active:brightness-95",
+        // Quiet outline on the page colour.
+        secondary: "border border-line-strong bg-surface text-ink hover:border-ink/40 hover:bg-canvas",
         outline: "border-2 border-line bg-surface text-ink hover:border-ink",
         ghost: "text-ink-2 hover:bg-canvas hover:text-ink",
         subtle: "bg-canvas text-ink hover:bg-sunken",

@@ -5,7 +5,7 @@ import { THEME_STORAGE_KEY } from "./theme-script";
 
 /*
  * Light / dark theme. The `dark` class on <html> is the single source of truth: an inline script
- * in the root layout sets it before first paint (saved choice, else the OS preference), and
+ * in the root layout sets it before first paint (saved choice, else navy/dark by default), and
  * `setTheme` flips it and remembers the choice.
  */
 
@@ -38,23 +38,12 @@ export function setTheme(theme: Theme) {
 
 function subscribe(onChange: () => void) {
   listeners.add(onChange);
-  // Until the visitor picks a theme, follow the OS setting live.
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  const onOs = () => {
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(THEME_STORAGE_KEY);
-    } catch {}
-    if (!saved) apply(mq.matches ? "dark" : "light", true);
-  };
-  mq.addEventListener("change", onOs);
   return () => {
     listeners.delete(onChange);
-    mq.removeEventListener("change", onOs);
   };
 }
 
-/** Current theme (renders "light" on the server, then the real value on the client). */
+/** Current theme (renders "dark" — the default — on the server, then the real value on the client). */
 export function useTheme(): Theme {
-  return React.useSyncExternalStore(subscribe, current, () => "light");
+  return React.useSyncExternalStore(subscribe, current, () => "dark");
 }

@@ -209,7 +209,7 @@ export function Audiences() {
               value={a.id}
               className={cn("relative inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[15px] font-semibold transition-colors sm:px-5", tab === a.id ? "text-white" : "text-ink-2 hover:text-ink")}
             >
-              {tab === a.id && <motion.span layoutId="audience-pill" className="absolute inset-0 rounded-lg bg-brand" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
+              {tab === a.id && <motion.span layoutId="audience-pill" className="absolute inset-0 rounded-lg bg-brand-gradient" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
               <a.icon className="relative size-4.5" aria-hidden />
               <span className="relative">{a.tab}</span>
             </TabsPrimitive.Trigger>

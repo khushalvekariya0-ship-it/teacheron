@@ -87,7 +87,7 @@ export function MatchingWeights() {
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-sunken" aria-hidden>
                   <motion.div
-                    className="h-full rounded-full bg-brand"
+                    className="h-full rounded-full bg-brand-gradient"
                     initial={{ width: 0 }}
                     animate={{ width: seen ? `${share}%` : 0 }}
                     transition={{ duration: 0.8, ease: EASE, delay: seen ? 0.05 * i : 0 }}

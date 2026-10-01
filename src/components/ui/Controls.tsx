@@ -214,7 +214,7 @@ export function Progress({ value, className, label, tone = "navy" }: { value: nu
   return (
     <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v)} aria-label={label} className={cn("h-1.5 w-full overflow-hidden rounded-full bg-sunken", className)}>
       <motion.div
-        className={cn("h-full rounded-full", tone === "navy" ? "bg-brand" : "bg-teal")}
+        className={cn("h-full rounded-full", tone === "navy" ? "bg-brand-gradient" : "bg-teal")}
         initial={{ width: 0 }}
         animate={{ width: `${v}%` }}
         transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}

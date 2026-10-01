@@ -8,14 +8,14 @@ import { cn } from "@/lib/utils";
 import { Reveal, WordReveal, Magnetic } from "@/components/motion";
 
 /*
- * Page structure: full-bleed sections stacked on a white page. Color blocks (light brand tint,
+ * Page structure: full-bleed sections stacked on the page colour (deep navy by default, white in light mode). Color blocks (light brand tint,
  * soft grey, brand blue) mark heroes and key moments. Headlines are bold and calm.
  */
 
 type Tone = "default" | "canvas" | "brand" | "dark" | "yellow";
 
 const TONE: Record<Tone, string> = {
-  default: "bg-surface",
+  default: "bg-page",
   canvas: "bg-canvas",
   brand: "bg-brand-soft",
   dark: "bg-night text-white",
@@ -53,7 +53,7 @@ export function Panel({
   ...rest
 }: { children: React.ReactNode; className?: string; as?: "section" | "div" | "article" } & Omit<React.HTMLAttributes<HTMLElement>, "className" | "children">) {
   return (
-    <Tag className={cn("relative overflow-clip bg-surface", className)} {...rest}>
+    <Tag className={cn("relative overflow-clip bg-page", className)} {...rest}>
       {children}
     </Tag>
   );
@@ -180,7 +180,12 @@ export function PageHero({
     </div>
   );
   return (
-    <section className={cn("relative overflow-hidden", tone === "brand" ? "bg-brand-soft" : tone === "yellow" ? "bg-yellow-soft" : "bg-canvas")}>
+    <section className={cn("relative overflow-hidden", tone === "brand" ? "bg-brand-soft dark:bg-night" : tone === "yellow" ? "bg-yellow-soft" : "bg-canvas")}>
+      {/* Navy theme: soft blue and violet light behind the heading */}
+      <div className="pointer-events-none absolute inset-0 hidden dark:block" aria-hidden>
+        <div className="absolute -left-40 -top-56 size-[640px] rounded-full bg-[#2f4bd8]/25 blur-3xl" />
+        <div className="absolute -right-40 top-0 size-[480px] rounded-full bg-[#7552f0]/15 blur-3xl" />
+      </div>
       <div
         className={cn(
           "container-page relative",
@@ -193,7 +198,7 @@ export function PageHero({
             {text}
             <Reveal delay={0.15}>
               <div className="relative aspect-[4/3] overflow-hidden rounded-2xl shadow-xl">
-                <Image src={image.src} alt={image.alt} fill priority sizes="(min-width: 1024px) 520px, 100vw" className="object-cover" />
+                <Image src={image.src} alt={image.alt} fill preload sizes="(min-width: 1024px) 520px, 100vw" className="object-cover" />
               </div>
             </Reveal>
           </div>
@@ -219,7 +224,7 @@ export function CtaBand({
   secondary?: { href: string; label: string };
 }) {
   return (
-    <section className="relative overflow-hidden bg-brand">
+    <section className="relative overflow-hidden bg-brand-gradient">
       <div className="container-page relative flex flex-col items-start gap-8 py-16 sm:py-20 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
           <WordReveal as="h2" inView text={title} className="font-heading text-[2.1rem] font-bold leading-[1.08] tracking-[-0.025em] text-white sm:text-[2.6rem]" />

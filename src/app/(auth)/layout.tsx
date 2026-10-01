@@ -7,7 +7,7 @@ import { SITE } from "@/lib/site";
 /** Simple, centred sign-in / sign-up layout: a slim header, the form in one column, a legal footer. */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
+    <div className="flex min-h-dvh flex-col bg-page">
       <header className="border-b border-line">
         <div className="container-page flex h-16 items-center justify-between gap-4">
           <Logo />

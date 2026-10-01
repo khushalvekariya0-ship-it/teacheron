@@ -14,11 +14,13 @@
   --font-display: var(--font-heading);
   --font-hand: var(--font-caveat), "Segoe Print", cursive;
 
-  /* Bold accent for the homepage hero (same in both themes; text on it is always night) */
-  --color-volt: #c6f432;
-  --color-volt-hover: #d6ff52;
+  /* Signature gradient (same in both themes): blue → indigo → violet. White text on it is 4.6:1+. */
+  --color-grad-from: #2f7bff;
+  --color-grad-via: #4b66f5;
+  --color-grad-to: #7552f0;
 
-  /* Surfaces */
+  /* Surfaces: `page` is the page/section background, `surface` is cards, fields and menus on it. */
+  --color-page: #ffffff;
   --color-surface: #ffffff;
   --color-canvas: #f6f8fb;
   --color-sunken: #eef2f6;
@@ -35,18 +37,18 @@
 
   /* Text/icons placed on an ink (inverse) surface — flips with the theme. */
   --color-on-ink: #ffffff;
-  /* Always-dark surface (footer, top banner, dark bands, overlays) — same in both themes. */
-  --color-night: #020617;
+  /* Always-dark surface (hero, footer, top banner, dark bands, overlays) — deep navy in both themes. */
+  --color-night: #060b24;
   /* Highlighter behind a word and text selection. */
   --color-marker: #c7d8fb;
 
   /* Brand: one blue accent (buttons, progress, focus) + a light blue-grey block (heroes, selection).
      White text on brand is 6.7:1. */
-  --color-brand: #1d4ed8;
-  --color-brand-hover: #1e40af;
-  --color-brand-press: #1e3a8a;
-  --color-brand-soft: #eef4ff;
-  --color-brand-50: #f5f8ff;
+  --color-brand: #3550e8;
+  --color-brand-hover: #2a43d1;
+  --color-brand-press: #2338b4;
+  --color-brand-soft: #eef1ff;
+  --color-brand-50: #f6f7ff;
 
   /* "navy" is the interactive accent across the app (primary buttons, selected states, links).
      In this design it is slate ink. */
@@ -161,48 +163,50 @@
 .dark {
   color-scheme: dark;
 
-  --color-surface: #0b1120;
-  --color-canvas: #0f172a;
-  --color-sunken: #1a2436;
+  /* Deep navy page; cards and fields sit one step lighter so they read as glass panels. */
+  --color-page: #0a1030;
+  --color-surface: #0f1843;
+  --color-canvas: #0c1438;
+  --color-sunken: #16205a;
 
-  --color-ink: #e2e8f0;
-  --color-ink-2: #cbd5e1;
-  --color-muted: #94a3b8;
-  --color-subtle: #64748b;
+  --color-ink: #f1f4ff;
+  --color-ink-2: #c9d1ea;
+  --color-muted: #8f9abf;
+  --color-subtle: #616d96;
 
-  --color-line: #1e293b;
-  --color-line-strong: #334155;
+  --color-line: #ffffff17;
+  --color-line-strong: #ffffff2b;
 
-  --color-on-ink: #0b1120;
-  --color-marker: #1e3a8a;
+  --color-on-ink: #0a1030;
+  --color-marker: #24398f;
 
-  --color-brand: #2563eb;
-  --color-brand-hover: #3b82f6;
-  --color-brand-press: #1d4ed8;
-  --color-brand-soft: #13203b;
-  --color-brand-50: #0f1a31;
+  --color-brand: #3d5ef2;
+  --color-brand-hover: #5574ff;
+  --color-brand-press: #2f4fe0;
+  --color-brand-soft: #16245f;
+  --color-brand-50: #111c4d;
 
-  --color-navy: #e2e8f0;
-  --color-navy-hover: #cbd5e1;
-  --color-navy-press: #f8fafc;
-  --color-navy-50: #111b2e;
-  --color-navy-100: #1e293b;
-  --color-navy-200: #334155;
+  --color-navy: #f1f4ff;
+  --color-navy-hover: #d9e0f7;
+  --color-navy-press: #ffffff;
+  --color-navy-50: #111a48;
+  --color-navy-100: #1a2557;
+  --color-navy-200: #27346b;
 
   --color-sky: #7dd3fc;
-  --color-sky-soft: #0f2236;
-  --color-indigo: #93b4ff;
-  --color-indigo-soft: #131d38;
-  --color-violet: #a5b4fc;
-  --color-violet-soft: #171a38;
+  --color-sky-soft: #0f2350;
+  --color-indigo: #9db2ff;
+  --color-indigo-soft: #151f55;
+  --color-violet: #b3a6ff;
+  --color-violet-soft: #1c1a52;
   --color-teal: #5eead4;
-  --color-teal-soft: #0d2621;
-  --color-peach: #cbd5e1;
-  --color-peach-soft: #172031;
-  --color-pink: #93b4ff;
-  --color-pink-soft: #13203b;
-  --color-yellow: #cbd5e1;
-  --color-yellow-soft: #172031;
+  --color-teal-soft: #0d2a3a;
+  --color-peach: #c9d1ea;
+  --color-peach-soft: #161f4a;
+  --color-pink: #9db2ff;
+  --color-pink-soft: #16245f;
+  --color-yellow: #c9d1ea;
+  --color-yellow-soft: #161f4a;
 
   --color-success-50: #0c2a1c;
   --color-success-200: #14532d;
@@ -212,14 +216,14 @@
   --color-danger-200: #7f1d1d;
   --color-star: #fbbf24;
 
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 10px -4px rgb(0 0 0 / 0.5);
-  --shadow-lg: 0 12px 28px -10px rgb(0 0 0 / 0.6);
-  --shadow-xl: 0 24px 48px -16px rgb(0 0 0 / 0.7);
+  --shadow-sm: 0 1px 2px 0 rgb(2 6 23 / 0.45);
+  --shadow-md: 0 6px 14px -6px rgb(2 6 23 / 0.6);
+  --shadow-lg: 0 16px 32px -12px rgb(2 6 23 / 0.7);
+  --shadow-xl: 0 28px 56px -18px rgb(2 6 23 / 0.8);
 }
 /* Accent and status colours used as small text need a lighter tint on dark backgrounds
    (the solid fills keep the deeper tone so white text on them stays readable). */
-.dark .text-brand { color: #8ab4ff; }
+.dark .text-brand { color: #9db2ff; }
 .dark .text-danger { color: #f87171; }
 .dark .text-success { color: #4ade80; }
 .dark .text-warning { color: #fbbf24; }
@@ -310,7 +314,10 @@ html.theme-switching *::after {
 
 /* Former gradient layer, now flat (kept so existing class names keep working). */
 @utility text-aurora {
-  color: inherit;
+  background-image: linear-gradient(90deg, #3b82f6, #4f6ef7 45%, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 @utility bg-aurora-soft {
   background-color: var(--color-canvas);
@@ -320,6 +327,17 @@ html.theme-switching *::after {
 }
 .aurora-blob {
   display: none;
+}
+
+/* The signature blue → violet gradient as a fill, and as text. */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(90deg, var(--color-grad-from), var(--color-grad-via), var(--color-grad-to));
+}
+@utility text-gradient {
+  background-image: linear-gradient(90deg, #3b82f6, #4f6ef7 45%, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* Highlighter stroke under a word (use on an inline element). */

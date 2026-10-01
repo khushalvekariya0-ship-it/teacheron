@@ -23,22 +23,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
-  ],
+  themeColor: "#0a1030",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-US" className={`${inter.variable} ${interTight.variable} ${geistMono.variable} ${caveat.variable}`} suppressHydrationWarning>
+    <html lang="en-US" className={`dark ${inter.variable} ${interTight.variable} ${geistMono.variable} ${caveat.variable}`} suppressHydrationWarning>
       <head>
         {/* Before first paint: mark JS as available (GSAP reveals start hidden) and apply the saved light/dark theme. */}
         <script dangerouslySetInnerHTML={{ __html: HEAD_INIT_SCRIPT }} />
       </head>
-      <body className="min-h-dvh bg-surface antialiased">
+      <body className="min-h-dvh bg-page antialiased">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-md focus:bg-navy focus:px-4 focus:py-2 focus:text-sm focus:text-on-ink">
           Skip to content
         </a>

@@ -21,7 +21,7 @@ const LINKS = [
 /** Branded 404. Rendered inside the root layout only (no site navbar), so it's a complete page. */
 export default function NotFound() {
   return (
-    <main id="main" className="relative flex min-h-dvh flex-col overflow-hidden bg-surface">
+    <main id="main" className="relative flex min-h-dvh flex-col overflow-hidden bg-page">
       <div className="pointer-events-none absolute inset-0 bg-line-grid mask-radial opacity-80" aria-hidden />
       <header className="container-page relative flex h-16 items-center">
         <Logo />
