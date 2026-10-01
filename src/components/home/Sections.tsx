@@ -6,50 +6,88 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock,
-  Search, ShieldCheck, Target, Wallet,
+  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart,
+  Route, Search, ShieldCheck, Target, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, Marquee, gsap, useGSAP } from "@/components/motion";
+import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
 import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
-import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
-import { HeroSearch } from "./HeroSearch";
+import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
 
-/* ═══ 1 · Hero — big promise and a subject search, beside two slowly drifting photo columns ═══ */
+/* ═══ 1 · Hero — bold: black stage, huge type, lime accent, a learner climbing the stairs ═══ */
 
-const HERO_COLUMNS = [
-  ["/images/online-lesson.jpg", "/images/family-reading.jpg", "/images/in-person.jpg", "/images/adult-learner.jpg"],
-  ["/images/hero-tutoring-close.jpg", "/images/online-class.jpg", "/images/become-a-tutor.jpg", "/images/family.jpg"],
+const HERO_FEATURES = [
+  { icon: BadgeCheck, title: "Identity Checks", body: "Badge shown once verified" },
+  { icon: CalendarDays, title: "Flexible Learning", body: "Book times that suit you" },
+  { icon: Gift, title: "Free Trials", body: "Offered by many tutors" },
+  { icon: Wallet, title: "Pay Per Lesson", body: "No subscription for families" },
 ];
-const HERO_POPULAR = ["algebra", "sat", "reading", "spanish", "chemistry", "python"];
 
-/** One column of photos that loops vertically (the list is drawn twice so the loop is seamless). Photos only — no example data. */
-function PhotoColumn({ photos, duration, reverse }: { photos: string[]; duration: number; reverse?: boolean }) {
+/** The photo, the lime beam and the handwritten note. Photo only — no example data. */
+function StairsVisual({ className, card = true }: { className?: string; card?: boolean }) {
   return (
-    <div className="h-full overflow-hidden">
-      <div
-        className="flex animate-marquee-y flex-col group-hover:[animation-play-state:paused]"
-        style={{ "--marquee-duration": `${duration}s`, animationDirection: reverse ? "reverse" : undefined } as React.CSSProperties}
-      >
-        {[0, 1].map((copy) => (
-          <div key={copy} className="flex flex-col gap-4 pb-4">
-            {photos.map((src, i) => (
-              <div key={src} className={cn("relative overflow-hidden rounded-3xl bg-canvas", i % 2 ? "aspect-[5/4]" : "aspect-[4/5]")}>
-                <Image src={src} alt="" fill loading={copy === 0 && i < 3 ? "eager" : "lazy"} sizes="(min-width: 1280px) 280px, 24vw" className="object-cover" />
-              </div>
-            ))}
-          </div>
-        ))}
+    <div className={cn("pointer-events-none", className)} aria-hidden>
+      {/* Lime slab behind the photo */}
+      <div data-hero-slab className="absolute inset-0 bg-volt [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
+      {/* Photo, cut on a diagonal, with the lime light multiplied into the sunlit wall */}
+      <div data-hero-photo className="absolute inset-0 [clip-path:polygon(34%_0,100%_0,100%_100%,6%_100%,6%_64%)]">
+        <Image src="/images/hero-stairs.jpg" alt="" fill preload sizes="(min-width: 1024px) 56vw, 100vw" className="object-cover object-[45%_62%] grayscale" />
+        <div className="absolute inset-0 bg-volt mix-blend-multiply [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night via-night/60 to-transparent" />
       </div>
+
+      {/* Handwritten note with an arrow toward the climber */}
+      <div data-hero-note className={cn(
+          "absolute -rotate-[14deg] font-hand font-semibold text-white [text-shadow:0_2px_14px_rgb(0_0_0/0.7)]",
+          // Line height goes after the font sizes: tailwind-merge drops a leading-* that comes before a text-* size.
+          card ? "left-[13%] top-[60%] text-[30px] xl:text-[34px]" : "left-[9%] top-[56%] text-[22px] sm:left-[12%] sm:text-[28px]",
+          "leading-[0.95]",
+        )}>
+        Better skills,
+        <br />
+        brighter future
+        <svg viewBox="0 0 120 70" className="absolute -right-20 -top-14 h-16 w-28 text-white" fill="none">
+          <motion.path
+            d="M4 62 C 30 60, 70 50, 104 12"
+            stroke="currentColor"
+            strokeWidth={2.4}
+            strokeLinecap="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.9, delay: 1.5, ease: [0.65, 0, 0.35, 1] }}
+          />
+          <motion.path
+            d="M90 10 L105 11 L103 26"
+            stroke="currentColor"
+            strokeWidth={2.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.3, delay: 2.35 }}
+          />
+        </svg>
+      </div>
+
+      {/* Small white card, top right: what a lesson is — no figures */}
+      {card && (
+        <div data-hero-card className="absolute right-[6%] top-[9%] w-[168px] rounded-2xl bg-white p-4 text-night shadow-2xl">
+          <p className="font-heading text-[26px] font-black leading-none tracking-[-0.02em]">1-on-1</p>
+          <p className="mt-1 text-[12.5px] text-slate-500">Private lessons</p>
+          <div className="my-3 h-px bg-slate-200" />
+          <p className="font-heading text-[26px] font-black leading-none tracking-[-0.02em]">Online</p>
+          <p className="mt-1 text-[12.5px] text-slate-500">or in person</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -63,110 +101,75 @@ export function Hero() {
         gsap.set(items, { autoAlpha: 1 });
         return;
       }
-      gsap.fromTo(items, { y: 22, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, ease: "expo.out", stagger: 0.08, delay: 0.55 });
+      const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+      tl.fromTo("[data-hero-slab]", { clipPath: "polygon(26% 0,26% 0,0% 66%,0% 66%,0% 40%)" }, { clipPath: "polygon(26% 0,52% 0,14% 58%,0% 66%,0% 40%)", duration: 1.2 }, 0.15)
+        .fromTo("[data-hero-photo] img", { scale: 1.12, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 1.6 }, 0.1)
+        .fromTo(items, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.08 }, 0.55)
+        .fromTo("[data-hero-note]", { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.8 }, 1.2)
+        .fromTo("[data-hero-card]", { autoAlpha: 0, y: 18, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.9 }, 1.0);
+      gsap.to("[data-hero-card]", { y: -8, duration: 3.2, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 2 });
     },
     { scope: root },
   );
 
   return (
-    <section ref={root} className="relative overflow-hidden border-b border-line bg-surface">
-      {/* Soft blue glow and a faint grid behind the copy */}
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute -left-40 -top-40 size-[640px] rounded-full bg-brand-soft blur-3xl" />
-        <div className="absolute inset-0 bg-line-grid mask-radial opacity-70" />
-      </div>
+    <section ref={root} className="relative isolate overflow-hidden bg-night">
+      <div className="dark">
+        {/* Wide screens: the visual fills the right half, edge to edge */}
+        <StairsVisual className="absolute inset-y-0 right-0 hidden w-[56%] lg:block" />
 
-      <div className="container-page relative grid grid-cols-1 items-center gap-12 pb-12 pt-12 sm:pb-16 sm:pt-16 lg:min-h-[640px] lg:grid-cols-[1.1fr_1fr] lg:gap-12 lg:py-0 xl:gap-20">
-        <div className="text-center lg:py-20 lg:text-left">
-          <div data-hero-in data-reveal className="flex justify-center lg:justify-start">
-            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/80 px-3.5 py-1.5 text-[13.5px] font-semibold text-ink-2 shadow-xs backdrop-blur">
-              <span className="size-2 animate-pulse-dot rounded-full bg-brand" aria-hidden />
-              Private tutoring · online and in person
-            </span>
-          </div>
+        <div className="container-page relative z-10 pb-10 pt-12 sm:pt-16 lg:pb-16 lg:pt-20 xl:pt-24">
+          <div className="max-w-[560px] lg:max-w-[46%]">
+            <p data-hero-in data-reveal className="text-[13px] font-bold uppercase tracking-[0.28em] text-volt">
+              Learn <span className="px-1.5 text-white/40">/</span> Practice <span className="px-1.5 text-white/40">/</span> Grow
+            </p>
 
-          <h1 className="mt-6 font-heading text-[2.6rem] font-bold leading-[1.04] tracking-[-0.035em] text-ink sm:text-[3.5rem] lg:text-[3.9rem] xl:text-[4.4rem]">
-            <WordReveal as="span" className="block" text="Learn with the right tutor." delay={0.1} />
-            <WordReveal as="span" className="block text-brand" text="Grow with every lesson." delay={0.35} />
-          </h1>
+            <h1 className="mt-5 font-heading text-[4.1rem] font-black uppercase leading-[0.86] tracking-[-0.025em] text-white sm:text-[6rem] lg:text-[6rem] xl:text-[7.25rem]">
+              <WordReveal as="span" className="block" text="Build" delay={0.2} />
+              <WordReveal as="span" className="block" text="your" delay={0.3} />
+              <WordReveal as="span" className="block text-volt" text="future" delay={0.4} />
+            </h1>
 
-          <p data-hero-in data-reveal className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18.5px] lg:mx-0">
-            Find a tutor for any subject, at your level and on your schedule &mdash; then learn one-to-one, online or in person.
-          </p>
+            <p data-hero-in data-reveal className="mt-7 max-w-md text-[16.5px] leading-relaxed text-slate-300 sm:text-[17.5px]">
+              Learn with the right tutor. Grow with every lesson. Everything you need to get there, in one place.
+            </p>
 
-          <div data-hero-in data-reveal className="relative z-20 mx-auto mt-8 max-w-xl lg:mx-0">
-            <HeroSearch />
-          </div>
-
-          <div data-hero-in data-reveal className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-            <span className="mr-1 text-[13.5px] font-medium text-muted">Popular:</span>
-            {HERO_POPULAR.map((slug) => (
-              <Link
-                key={slug}
-                href={`/tutors?subject=${slug}`}
-                className="rounded-full border border-line bg-surface px-3 py-1.5 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-brand"
-              >
-                {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+            <div data-hero-in data-reveal className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
+              <Button asChild size="lg" className="h-14 rounded-xl border-volt bg-volt px-7 text-[16px] font-bold text-night hover:border-volt-hover hover:bg-volt-hover active:bg-volt">
+                <Link href="/tutors">
+                  Find a Tutor <ArrowRight />
+                </Link>
+              </Button>
+              <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-white">
+                <span className="grid size-12 place-items-center rounded-full border border-white/30 transition-colors group-hover:border-volt group-hover:text-volt">
+                  <Route className="size-5" aria-hidden />
+                </span>
+                How It Works
               </Link>
-            ))}
-          </div>
-
-          <p data-hero-in data-reveal className="mt-8 text-[14.5px] text-muted">
-            Want to teach?{" "}
-            <Link href="/become-a-tutor" className="group inline-flex items-center gap-1 font-semibold text-ink underline-offset-4 hover:underline">
-              Become a tutor <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
-            </Link>
-          </p>
-        </div>
-
-        {/* Wide screens: two photo columns drifting in opposite directions */}
-        <div data-hero-in data-reveal className="group relative hidden h-[640px] grid-cols-2 gap-4 mask-fade-y lg:grid" aria-hidden>
-          <PhotoColumn photos={HERO_COLUMNS[0]} duration={46} />
-          <div className="-mt-24 h-[calc(100%+6rem)]">
-            <PhotoColumn photos={HERO_COLUMNS[1]} duration={52} reverse />
+            </div>
           </div>
         </div>
 
-        {/* Phones and tablets: one row of photos sliding sideways */}
-        <div data-hero-in data-reveal className="-mx-4 min-w-0 sm:-mx-6 lg:hidden" aria-hidden>
-          <Marquee duration={50}>
-            {[...HERO_COLUMNS[0], ...HERO_COLUMNS[1]].map((src, i) => (
-              <div key={src} className="relative aspect-[4/5] w-36 shrink-0 overflow-hidden rounded-2xl bg-canvas sm:w-44">
-                <Image src={src} alt="" fill loading={i < 3 ? "eager" : "lazy"} sizes="176px" className="object-cover" />
-              </div>
-            ))}
-          </Marquee>
+        {/* Phones and tablets: the visual sits under the copy */}
+        <div data-hero-in data-reveal className="relative h-[380px] sm:h-[480px] lg:hidden">
+          <StairsVisual className="absolute inset-0" card={false} />
         </div>
       </div>
-    </section>
-  );
-}
 
-/* ═══ 2 · Trust bar — only things that are true of the product ═════════════════ */
-
-const TRUST = [
-  { icon: BadgeCheck, title: "Identity-verified tutors", body: "Badges appear only after a check is complete" },
-  { icon: Gift, title: "Free trials with many tutors", body: "Meet first, then decide" },
-  { icon: Wallet, title: "Pay per lesson", body: "No subscription or booking fee for families" },
-  { icon: Lock, title: "Secure payments", body: "Processed by Stripe — card details never touch our servers" },
-];
-
-export function TrustBar() {
-  return (
-    <section className="border-b border-line bg-surface">
-      <Stagger className="container-page grid gap-6 py-8 sm:grid-cols-2 lg:grid-cols-4 lg:py-10" stagger={0.06}>
-        {TRUST.map((t) => (
-          <StaggerItem key={t.title} className="flex items-start gap-3.5">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
-              <t.icon className="size-5" />
-            </span>
-            <span>
-              <span className="block text-[15.5px] font-semibold text-ink">{t.title}</span>
-              <span className="mt-0.5 block text-[14px] leading-snug text-muted">{t.body}</span>
-            </span>
-          </StaggerItem>
-        ))}
-      </Stagger>
+      {/* Feature bar — follows the page theme (white in light mode) */}
+      <div className="container-page relative z-10 -mt-8 pb-8 sm:-mt-12 lg:mt-0 lg:pb-10">
+        <Stagger className="grid grid-cols-1 gap-5 rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:grid-cols-2 sm:p-6 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line lg:px-2 lg:py-6" stagger={0.07}>
+          {HERO_FEATURES.map((f) => (
+            <StaggerItem key={f.title} className="flex items-start gap-3.5 lg:px-6">
+              <f.icon className="mt-0.5 size-6 shrink-0 text-ink" strokeWidth={1.8} aria-hidden />
+              <span>
+                <span className="block text-[15px] font-bold text-ink">{f.title}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-muted">{f.body}</span>
+              </span>
+            </StaggerItem>
+          ))}
+        </Stagger>
+      </div>
     </section>
   );
 }

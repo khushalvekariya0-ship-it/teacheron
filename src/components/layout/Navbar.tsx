@@ -67,7 +67,7 @@ function ActivePill() {
 /**
  * Full-width top bar. At the top of a page it shows every section; once you scroll it condenses
  * into a slim bar (logo · search · theme · ☰ menu) that stays put in both scroll directions.
- * On the homepage it sits on the tinted hero until you scroll.
+ * On the homepage it is black, like the hero under it, until you scroll.
  */
 export function Navbar() {
   const pathname = usePathname();
@@ -108,14 +108,15 @@ export function Navbar() {
       : g.mega === "subjects"
         ? isCurrent(pathname, "/subjects")
         : !!g.links?.some((l) => !l.href.includes("#") && l.href !== "/subjects" && isCurrent(pathname, l.href));
-  const tinted = onBrand && !scrolled && !open;
+  // Over the homepage hero: dark tokens (and dark dropdowns) until the page scrolls.
+  const tinted = onBrand && !scrolled;
 
   return (
     <header
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
       className={cn(
         "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-300",
-        tinted ? "border-transparent bg-brand-soft" : "border-line bg-surface",
+        tinted ? "dark border-transparent bg-night" : "border-line bg-surface",
         compact && "shadow-sm",
       )}
     >
@@ -201,7 +202,7 @@ export function Navbar() {
                 exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 className="hidden items-center gap-2 xl:flex"
               >
-                <AccountArea />
+                <AccountArea onHero={tinted} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -484,7 +485,7 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
   );
 }
 
-function AccountArea() {
+function AccountArea({ onHero }: { onHero?: boolean }) {
   const me = useSession();
   const hydrated = useApp((s) => s.hydrated);
   const unread = useUnreadNotifications();
@@ -500,7 +501,7 @@ function AccountArea() {
         <Button asChild variant="secondary" size="sm" className="h-10 bg-transparent px-4 hover:bg-ink/5">
           <Link href="/login">Log in</Link>
         </Button>
-        <Button asChild size="sm" className="h-10 px-4">
+        <Button asChild size="sm" className={cn("h-10 px-4", onHero && "border-volt bg-volt text-night hover:border-volt-hover hover:bg-volt-hover active:bg-volt")}>
           <Link href="/register">Sign up</Link>
         </Button>
       </>

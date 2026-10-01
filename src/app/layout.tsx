@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Inter, Inter_Tight } from "next/font/google";
+import { Caveat, Geist_Mono, Inter, Inter_Tight } from "next/font/google";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { SITE } from "@/lib/site";
 import { HEAD_INIT_SCRIPT } from "@/lib/theme-script";
@@ -7,7 +7,9 @@ import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
 /** Tight, extra-bold headline face. */
-const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], weight: ["600", "700", "800"], display: "swap" });
+const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], weight: ["600", "700", "800", "900"], display: "swap" });
+/** Handwritten note on the homepage hero. */
+const caveat = Caveat({ variable: "--font-caveat", subsets: ["latin"], weight: ["600"], display: "swap" });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
@@ -31,7 +33,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-US" className={`${inter.variable} ${interTight.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="en-US" className={`${inter.variable} ${interTight.variable} ${geistMono.variable} ${caveat.variable}`} suppressHydrationWarning>
       <head>
         {/* Before first paint: mark JS as available (GSAP reveals start hidden) and apply the saved light/dark theme. */}
         <script dangerouslySetInnerHTML={{ __html: HEAD_INIT_SCRIPT }} />

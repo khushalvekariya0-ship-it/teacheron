@@ -12,6 +12,11 @@
   --font-heading: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: var(--font-heading);
+  --font-hand: var(--font-caveat), "Segoe Print", cursive;
+
+  /* Bold accent for the homepage hero (same in both themes; text on it is always night) */
+  --color-volt: #c6f432;
+  --color-volt-hover: #d6ff52;
 
   /* Surfaces */
   --color-surface: #ffffff;
@@ -108,11 +113,6 @@
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }
   }
-  --animate-marquee-y: marquee-y var(--marquee-duration, 40s) linear infinite;
-  @keyframes marquee-y {
-    from { transform: translateY(0); }
-    to { transform: translateY(-50%); }
-  }
   @keyframes shimmer {
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
@@ -157,7 +157,8 @@
 /* ─── Dark theme ───────────────────────────────────────────────────────────────
    Set by the `dark` class on <html> (toggle in the header; first visit follows the OS).
    Only token values change — components keep their classes. */
-html.dark {
+/* `.dark` on <html> is the site-wide theme; on any other element it scopes the dark tokens to that block. */
+.dark {
   color-scheme: dark;
 
   --color-surface: #0b1120;
@@ -218,10 +219,10 @@ html.dark {
 }
 /* Accent and status colours used as small text need a lighter tint on dark backgrounds
    (the solid fills keep the deeper tone so white text on them stays readable). */
-html.dark .text-brand { color: #8ab4ff; }
-html.dark .text-danger { color: #f87171; }
-html.dark .text-success { color: #4ade80; }
-html.dark .text-warning { color: #fbbf24; }
+.dark .text-brand { color: #8ab4ff; }
+.dark .text-danger { color: #f87171; }
+.dark .text-success { color: #4ade80; }
+.dark .text-warning { color: #fbbf24; }
 
 /* Smooth colour change when switching themes (not on first paint). */
 html.theme-switching,
@@ -422,7 +423,6 @@ html.theme-switching *::after {
 }
 
 @utility mask-fade-b { mask-image: linear-gradient(to bottom, black 55%, transparent); }
-@utility mask-fade-y { mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent); }
 @utility mask-fade-x { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
 @utility mask-radial { mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%); }
 
