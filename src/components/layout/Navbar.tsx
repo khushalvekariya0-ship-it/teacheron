@@ -18,12 +18,13 @@ import { useSession, useUnreadNotifications, useUnreadMessages } from "@/lib/sto
 import { useApp } from "@/lib/store";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { homeFor } from "@/lib/permissions";
+import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { SearchTrigger, openCommandPalette } from "./CommandPalette";
 import { ThemeToggle } from "./ThemeToggle";
 import { setTheme, useTheme } from "@/lib/theme";
 
 type NavLink = { label: string; href: string; description: string; icon: React.ComponentType<{ className?: string }> };
-type NavGroup = { label: string; href?: string; links?: NavLink[]; feature?: { title: string; body: string; href: string; cta: string } };
+type NavGroup = { label: string; href?: string; links?: NavLink[]; feature?: { title: string; body: string; href: string; cta: string }; mega?: "subjects" };
 
 const NAV: NavGroup[] = [
   {
@@ -33,9 +34,11 @@ const NAV: NavGroup[] = [
       { label: "Browse subjects", href: "/subjects", description: "Math, science, test prep, languages and more", icon: BookOpen },
       { label: "Tutors near you", href: "/locations", description: "In-person tutoring by city and ZIP code", icon: MapPin },
       { label: "Compare tutors", href: "/compare", description: "Side-by-side, up to three at a time", icon: GitCompareArrows },
+      { label: "Post a requirement", href: "/post-requirement", description: "Describe what you need and let tutors apply", icon: ClipboardList },
     ],
     feature: { title: "Help me find a tutor", body: "Tell us what you need. We'll show a shortlist and explain exactly why each tutor matches.", href: "/concierge", cta: "Start matching" },
   },
+  { label: "Subjects", mega: "subjects" },
   {
     label: "For tutors",
     links: [
@@ -46,7 +49,6 @@ const NAV: NavGroup[] = [
     ],
     feature: { title: "Teach on your terms", body: "Set your own rates, availability and service area. Get paid through Stripe.", href: "/become-a-tutor", cta: "Learn more" },
   },
-  { label: "Post a requirement", href: "/post-requirement" },
   { label: "How it works", href: "/how-it-works" },
   { label: "Pricing", href: "/pricing" },
 ];
@@ -100,7 +102,12 @@ export function Navbar() {
   const scheduleClose = () => {
     closeTimer.current = setTimeout(() => setOpen(null), 140);
   };
-  const isActive = (g: NavGroup) => (g.href ? isCurrent(pathname, g.href) : !!g.links?.some((l) => !l.href.includes("#") && isCurrent(pathname, l.href)));
+  const isActive = (g: NavGroup) =>
+    g.href
+      ? isCurrent(pathname, g.href)
+      : g.mega === "subjects"
+        ? isCurrent(pathname, "/subjects")
+        : !!g.links?.some((l) => !l.href.includes("#") && l.href !== "/subjects" && isCurrent(pathname, l.href));
   const tinted = onBrand && !scrolled && !open;
 
   return (
@@ -124,17 +131,17 @@ export function Navbar() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6, transition: { duration: 0.15 } }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="hidden lg:block"
+              className="hidden xl:block"
             >
               <ul className="flex items-center gap-1">
                 {NAV.map((g) => (
-                  <li key={g.label} className="relative" onMouseEnter={() => g.links && openMenu(g.label)} onMouseLeave={() => g.links && scheduleClose()}>
+                  <li key={g.label} className="relative" onMouseEnter={() => (g.links || g.mega) && openMenu(g.label)} onMouseLeave={() => (g.links || g.mega) && scheduleClose()}>
                     {g.href ? (
                       <Link
                         href={g.href}
                         aria-current={isActive(g) ? "page" : undefined}
                         className={cn(
-                          "relative inline-flex h-10 items-center rounded-lg px-3.5 text-[15px] transition-colors",
+                          "relative inline-flex h-10 items-center whitespace-nowrap rounded-lg px-3.5 text-[15px] transition-colors",
                           isActive(g) ? "font-semibold text-brand" : "font-medium text-ink hover:bg-ink/5",
                         )}
                       >
@@ -148,7 +155,7 @@ export function Navbar() {
                         aria-haspopup="true"
                         onClick={() => setOpen((o) => (o === g.label ? null : g.label))}
                         className={cn(
-                          "relative inline-flex h-10 items-center gap-1 rounded-lg px-3.5 text-[15px] transition-colors",
+                          "relative inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-lg px-3.5 text-[15px] transition-colors",
                           isActive(g) ? "font-semibold text-brand" : cn("font-medium text-ink hover:bg-ink/5", open === g.label && "bg-ink/5"),
                         )}
                       >
@@ -159,6 +166,7 @@ export function Navbar() {
                     )}
                     <AnimatePresence>
                       {g.links && open === g.label && <MegaMenu group={g} pathname={pathname} />}
+                      {g.mega === "subjects" && open === g.label && <SubjectsMenu pathname={pathname} />}
                     </AnimatePresence>
                   </li>
                 ))}
@@ -191,7 +199,7 @@ export function Navbar() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                className="hidden items-center gap-2 lg:flex"
+                className="hidden items-center gap-2 xl:flex"
               >
                 <AccountArea />
               </motion.div>
@@ -204,7 +212,7 @@ export function Navbar() {
             onClick={() => setMenu(true)}
             className={cn(
               "inline-flex h-10 items-center gap-2 rounded-lg text-[15px] font-semibold text-ink transition-colors",
-              compact ? "border-2 border-ink px-2.5 hover:bg-ink hover:text-on-ink sm:px-3.5" : "px-2 hover:bg-ink/5 lg:hidden",
+              compact ? "border-2 border-ink px-2.5 hover:bg-ink hover:text-on-ink sm:px-3.5" : "px-2 hover:bg-ink/5 xl:hidden",
             )}
           >
             <Menu className="size-5" strokeWidth={2.4} />
@@ -271,6 +279,55 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
   );
 }
 
+/** Wide subjects panel: every subject area with its main subjects. */
+function SubjectsMenu({ pathname }: { pathname: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 4, transition: { duration: 0.12 } }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      className="absolute left-0 top-full z-50 pt-3"
+    >
+      <div className="w-[760px] rounded-xl border border-line bg-surface p-6 shadow-lg">
+        <div className="grid grid-cols-3 gap-x-8 gap-y-6">
+          {SUBJECT_CATEGORIES.map((c, i) => (
+            <motion.div key={c.slug} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 * i, duration: 0.22 }}>
+              <Link href={`/subjects#${c.slug}`} className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-muted transition-colors hover:text-brand">
+                {c.name}
+              </Link>
+              <ul className="mt-2 space-y-1.5">
+                {SUBJECTS.filter((s) => s.category === c.slug)
+                  .slice(0, 4)
+                  .map((s) => {
+                    const current = isCurrent(pathname, `/subjects/${s.slug}`);
+                    return (
+                      <li key={s.slug}>
+                        <Link
+                          href={`/subjects/${s.slug}`}
+                          aria-current={current ? "page" : undefined}
+                          className={cn("text-[14.5px] transition-colors hover:text-brand", current ? "font-semibold text-brand" : "text-ink")}
+                        >
+                          {s.name}
+                        </Link>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </motion.div>
+          ))}
+        </div>
+        <div className="mt-6 flex items-center justify-between border-t border-line pt-4">
+          <p className="text-[14px] text-muted">{SUBJECTS.length} subjects, online and in person</p>
+          <Link href="/subjects" className="group inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand">
+            Browse all subjects <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 type SheetLink = { label: string; href: string; icon: React.ComponentType<{ className?: string }> };
 
 /** Every menu in one place: the ☰ button opens this (full screen on phones, a side panel on larger screens). */
@@ -278,15 +335,14 @@ const SHEET_GROUPS: { title: string; links: SheetLink[] }[] = [
   {
     title: "Find tutors",
     links: [
-      ...NAV[0].links!.map(({ label, href, icon }) => ({ label, href, icon })),
+      ...NAV.find((g) => g.label === "Find tutors")!.links!.map(({ label, href, icon }) => ({ label, href, icon })),
       { label: "Help me find a tutor", href: "/concierge", icon: Compass },
     ],
   },
-  { title: "For tutors", links: NAV[1].links!.map(({ label, href, icon }) => ({ label, href, icon })) },
+  { title: "For tutors", links: NAV.find((g) => g.label === "For tutors")!.links!.map(({ label, href, icon }) => ({ label, href, icon })) },
   {
     title: "More",
     links: [
-      { label: "Post a requirement", href: "/post-requirement", icon: ClipboardList },
       { label: "How it works", href: "/how-it-works", icon: Route },
       { label: "Pricing", href: "/pricing", icon: Tag },
       { label: "For parents", href: "/for-parents", icon: Users },

@@ -490,7 +490,7 @@ export function BecomeTutor() {
 export function HomeFaq() {
   const faqs = FAQS.filter((f) => f.audience !== "tutors").slice(0, 7);
   return (
-    <Section>
+    <Section tone="canvas">
       <div className="grid gap-10 lg:grid-cols-[1fr_1.6fr] lg:gap-20">
         <div className="lg:sticky lg:top-28 lg:self-start">
           <SectionHeading className="mb-6" eyebrow="FAQ" title="Questions? We've got answers." />
