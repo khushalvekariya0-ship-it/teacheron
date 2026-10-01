@@ -1,4 +1,5 @@
 import type { Child, Permission, Role, User } from "@/lib/types";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
  * SAMPLE DATA — demo accounts for the preview build. Authentication in this build is a local
@@ -14,7 +15,7 @@ const ALL_PERMISSIONS: Permission[] = [
 
 export const SUPPORT_PERMISSIONS: Permission[] = ["users.read", "bookings.manage", "reports.moderate", "disputes.manage", "payments.read"];
 
-export const DEMO_USERS: User[] = [
+const ALL_DEMO_USERS: User[] = [
   {
     id: "usr_student", role: "student", firstName: "Jordan", lastName: "Lee", email: "jordan.lee@example.com",
     city: "Chicago", state: "IL", zip: "60614", timezone: "America/Chicago", createdAt: "2026-01-08T15:00:00Z",
@@ -43,7 +44,7 @@ export const DEMO_USERS: User[] = [
 ];
 
 /** Other marketplace members referenced by sample jobs, conversations and the admin panel. */
-export const OTHER_USERS: User[] = [
+const SAMPLE_OTHER_USERS: User[] = [
   ["usr_m01", "parent", "Emily", "Rhodes", "Austin", "TX", "78701", "America/Chicago"],
   ["usr_m02", "student", "Kevin", "Tran", "San Jose", "CA", "95126", "America/Los_Angeles"],
   ["usr_m03", "parent", "Marisol", "Garcia", "Miami", "FL", "33131", "America/New_York"],
@@ -62,11 +63,14 @@ export const OTHER_USERS: User[] = [
   status: i === 7 ? "suspended" : "active",
 }));
 
+/** Demo sign-in accounts. With sample data off only the owner/admin account remains (the admin area needs one). */
+export const DEMO_USERS: User[] = SAMPLE_DATA ? ALL_DEMO_USERS : ALL_DEMO_USERS.filter((u) => u.role === "admin");
+export const OTHER_USERS: User[] = SAMPLE_DATA ? SAMPLE_OTHER_USERS : [];
 export const ALL_USERS: User[] = [...DEMO_USERS, ...OTHER_USERS];
 
 export const USER_BY_ID: Record<string, User> = Object.fromEntries(ALL_USERS.map((u) => [u.id, u]));
 
-export const DEMO_CHILDREN: Child[] = [
+const SAMPLE_CHILDREN: Child[] = [
   {
     id: "chd_noah", parentId: "usr_parent", firstName: "Noah", grade: "7", birthYear: 2013,
     learningGoals: ["Rebuild confidence with pre-algebra", "Finish homework independently"], subjects: ["pre-algebra", "study-skills"],
@@ -77,6 +81,7 @@ export const DEMO_CHILDREN: Child[] = [
     learningGoals: ["Read chapter books independently", "Conversational Spanish"], subjects: ["reading", "spanish"],
   },
 ];
+export const DEMO_CHILDREN: Child[] = SAMPLE_DATA ? SAMPLE_CHILDREN : [];
 
 export const ROLE_LABEL: Record<Role, string> = {
   student: "Student",

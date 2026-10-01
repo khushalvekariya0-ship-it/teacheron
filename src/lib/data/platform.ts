@@ -1,4 +1,5 @@
 import type { Coupon, FeatureFlag } from "@/lib/types";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /**
  * Booking policies. These are DEFAULTS pending product-owner approval — see docs/DECISIONS.md.
@@ -84,8 +85,9 @@ export const DEFAULT_FLAGS: FeatureFlag[] = [
   { key: "featured_tutors", label: "Featured tutors", description: "Show featured placement on the homepage and search.", enabled: true, rolloutPercent: 100 },
 ];
 
-export const SEED_COUPONS: Coupon[] = [
+const SAMPLE_COUPONS: Coupon[] = [
   { id: "cpn_01", code: "WELCOME15", kind: "percent", value: 15, minPurchaseCents: 5000, maxRedemptions: 1000, redemptions: 214, expiresAt: "2026-12-31T23:59:59Z", firstBookingOnly: true, active: true },
   { id: "cpn_02", code: "FALL10", kind: "fixed", value: 1000, minPurchaseCents: 4000, maxRedemptions: 500, redemptions: 92, expiresAt: "2026-11-30T23:59:59Z", firstBookingOnly: false, active: true },
   { id: "cpn_03", code: "SUMMER20", kind: "percent", value: 20, minPurchaseCents: 6000, maxRedemptions: 300, redemptions: 300, expiresAt: "2026-08-31T23:59:59Z", firstBookingOnly: false, active: false },
 ];
+export const SEED_COUPONS: Coupon[] = SAMPLE_DATA ? SAMPLE_COUPONS : [];

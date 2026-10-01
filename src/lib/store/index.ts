@@ -22,7 +22,8 @@ import { resolveLocation } from "@/lib/data/geo";
 import { canTransition, cancellationRefund, STATUS_META } from "@/lib/booking";
 import { actorFor, hasPermission } from "@/lib/permissions";
 import { subjectName } from "@/lib/data/catalog";
-import { createSeed } from "./seed";
+import { createSeed, emptySeed } from "./seed";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
  * Client-side application store for the preview build.
@@ -228,9 +229,12 @@ interface Actions {
 
 export type AppState = Data & Actions & { hydrated: boolean; setHydrated(): void };
 
+/** Browser storage key — separate for sample and empty mode so switching never mixes the two. */
+export const STORE_KEY = SAMPLE_DATA ? "tutorlink-preview" : "tutorlink-clean";
+
 function initialData(): Data {
   const now = Date.now();
-  const seed = createSeed(now);
+  const seed = SAMPLE_DATA ? createSeed(now) : emptySeed();
   const reviews: Review[] = seed.reviewedBookingIds.map((bookingId, i) => {
     const b = seed.bookings.find((x) => x.id === bookingId)!;
     b.reviewId = `rev_local_${i}`;
@@ -248,10 +252,10 @@ function initialData(): Data {
     tutorOverrides: {},
     registeredTutors: [],
     onboarding: {},
-    favorites: { usr_student: ["tut_priya_raman", "tut_leah_goldberg"], usr_parent: ["tut_aisha_rahman", "tut_hannah_weiss", "tut_elena_morales"] },
+    favorites: SAMPLE_DATA ? { usr_student: ["tut_priya_raman", "tut_leah_goldberg"], usr_parent: ["tut_aisha_rahman", "tut_hannah_weiss", "tut_elena_morales"] } : {},
     compare: [],
     savedSearches: seed.savedSearches,
-    savedJobs: { usr_tutor: ["req_005", "req_012"] },
+    savedJobs: SAMPLE_DATA ? { usr_tutor: ["req_005", "req_012"] } : {},
     // Sample jobs and applications are re-anchored so "posted 2 days ago" is relative to now.
     requirements: SEED_REQUIREMENTS.map((r) => ({ ...r, createdAt: shiftIso(r.createdAt, now - REQUIREMENTS_REFERENCE_TIME)!, updatedAt: shiftIso(r.updatedAt, now - REQUIREMENTS_REFERENCE_TIME)!, publishedAt: shiftIso(r.publishedAt, now - REQUIREMENTS_REFERENCE_TIME) })),
     applications: SEED_APPLICATIONS.map((a) => ({ ...a, createdAt: shiftIso(a.createdAt, now - REQUIREMENTS_REFERENCE_TIME)!, updatedAt: shiftIso(a.updatedAt, now - REQUIREMENTS_REFERENCE_TIME)! })),
@@ -268,7 +272,7 @@ function initialData(): Data {
     payments: seed.payments,
     payouts: seed.payouts,
     leadTransactions: seed.leadTransactions,
-    subscriptions: { tut_sarah_chen: { plan: "pro", status: "active", renewsAt: new Date(now + 18 * 86_400_000).toISOString() } },
+    subscriptions: SAMPLE_DATA ? { tut_sarah_chen: { plan: "pro", status: "active", renewsAt: new Date(now + 18 * 86_400_000).toISOString() } } : {},
     reports: seed.reports,
     disputes: seed.disputes,
     verificationRequests: seed.verificationRequests,
@@ -1307,7 +1311,7 @@ export const useApp = create<AppState>()(
       };
     },
     {
-      name: "tutorlink-preview",
+      name: STORE_KEY,
       version: 3,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,

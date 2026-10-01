@@ -7,7 +7,7 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { TooltipProvider } from "@/components/ui/Overlay";
 import { Toaster } from "@/components/ui/Toast";
 import { BackToTop } from "@/components/layout/BackToTop";
-import { useApp } from "@/lib/store";
+import { useApp, STORE_KEY } from "@/lib/store";
 
 /** Rehydrates the persisted store after mount so server and first client render always match. */
 function StoreHydrator() {
@@ -23,7 +23,7 @@ function StoreHydrator() {
     const timer = setInterval(() => useApp.getState().runScheduledJobs(), 60_000);
     // Keep tabs in sync: another tab writing to the store updates this one.
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "tutorlink-preview") useApp.persist.rehydrate();
+      if (e.key === STORE_KEY) useApp.persist.rehydrate();
     };
     window.addEventListener("storage", onStorage);
     return () => {

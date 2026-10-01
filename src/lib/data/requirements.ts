@@ -1,4 +1,5 @@
 import type { Application, Requirement } from "@/lib/types";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /* SAMPLE DATA — fictional tutoring requirements published by sample members. */
 
@@ -127,7 +128,7 @@ const SEEDS: Seed[] = [
   },
 ];
 
-export const SEED_REQUIREMENTS: Requirement[] = SEEDS.map(({ daysAgo, status = "published", languages = ["English"], preferences = "", ...rest }) => {
+const ALL_SAMPLE_REQUIREMENTS: Requirement[] = SEEDS.map(({ daysAgo, status = "published", languages = ["English"], preferences = "", ...rest }) => {
   const created = new Date(NOW - daysAgo * 86_400_000 - 3 * 3_600_000).toISOString();
   return {
     ...rest,
@@ -140,7 +141,13 @@ export const SEED_REQUIREMENTS: Requirement[] = SEEDS.map(({ daysAgo, status = "
   };
 });
 
-export const SEED_APPLICATIONS: Application[] = [
+/** Sample jobs (empty when the sample-data switch is off). */
+export const SEED_REQUIREMENTS: Requirement[] = SAMPLE_DATA ? ALL_SAMPLE_REQUIREMENTS : [];
+
+/** An example job used ONLY inside the illustrative How-it-works mock-up. */
+export const EXAMPLE_JOB: Requirement = ALL_SAMPLE_REQUIREMENTS.find((r) => r.status === "published") ?? ALL_SAMPLE_REQUIREMENTS[0];
+
+const SAMPLE_APPLICATIONS: Application[] = [
   // Applications to the demo student's requirement
   { id: "app_001", requirementId: "req_101", tutorId: "tut_priya_raman", message: "Hi Jordan — equilibrium and acid–base chemistry are where I spend most AP Chem sessions. I'd start with a 30-minute diagnostic (free) and build a plan through May.", proposedRateCents: 11000, status: "shortlisted", createdAt: "2026-09-27T20:00:00Z", updatedAt: "2026-09-28T14:00:00Z" },
   { id: "app_002", requirementId: "req_101", tutorId: "tut_leah_goldberg", message: "I teach AP Chemistry and use a consistent four-step method for equilibrium problems. Tuesday and Thursday evenings work well for me.", proposedRateCents: 9000, status: "viewed", createdAt: "2026-09-28T01:00:00Z", updatedAt: "2026-09-28T13:00:00Z" },
@@ -153,3 +160,5 @@ export const SEED_APPLICATIONS: Application[] = [
   { id: "app_102", requirementId: "req_005", tutorId: "tut_sarah_chen", message: "I teach Digital SAT Math and can coordinate with a reading/writing tutor if helpful.", proposedRateCents: 9500, status: "shortlisted", createdAt: "2026-09-27T15:00:00Z", updatedAt: "2026-09-28T18:00:00Z" },
   { id: "app_103", requirementId: "req_011", tutorId: "tut_sarah_chen", message: "(Withdrawn — outside my subject area.)", proposedRateCents: 9000, status: "withdrawn", createdAt: "2026-09-20T15:00:00Z", updatedAt: "2026-09-20T18:00:00Z" },
 ];
+
+export const SEED_APPLICATIONS: Application[] = SAMPLE_DATA ? SAMPLE_APPLICATIONS : [];

@@ -19,7 +19,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { TutorCard } from "@/components/domain/TutorCard";
 import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
-import { TUTORS } from "@/lib/data/tutors";
+import { EXAMPLE_TUTORS, TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
@@ -185,8 +185,14 @@ export function SubjectTiles() {
                   <ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-1 group-hover:text-brand" />
                 </p>
                 <p className="mt-0.5 text-[13px] text-muted sm:text-[14px]">
-                  {count} {count === 1 ? "tutor" : "tutors"}
-                  {from !== null && <> · from {formatCents(from)}/hr</>}
+                  {count === 0 ? (
+                    "No tutors yet"
+                  ) : (
+                    <>
+                      {count} {count === 1 ? "tutor" : "tutors"}
+                      {from !== null && <> · from {formatCents(from)}/hr</>}
+                    </>
+                  )}
                 </p>
               </Link>
             </StaggerItem>
@@ -232,7 +238,8 @@ export function SubjectTiles() {
 /* ═══ 4 · How it works — three numbered cards ═══════════════════════════════════ */
 
 function StepFind() {
-  const pair = TUTORS.filter((t) => t.featured && t.verification.identity === "verified").slice(0, 2);
+  // Illustration only: example profiles, never real listings.
+  const pair = EXAMPLE_TUTORS.filter((t) => t.featured && t.verification.identity === "verified").slice(0, 2);
   return (
     <div className="relative h-full">
       {pair.map((t, i) => (
@@ -451,13 +458,25 @@ export function FeaturedTutors() {
         description="Experienced, identity-verified tutors. Featured placement never affects search ranking or match scores."
         action={<ArrowLink href="/tutors">Browse all tutors</ArrowLink>}
       />
-      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
-        {featured.map((t) => (
-          <StaggerItem key={t.id}>
-            <TutorCard tutor={t} />
-          </StaggerItem>
-        ))}
-      </Stagger>
+      {featured.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-12 text-center">
+          <p className="text-[17px] font-semibold text-ink">No tutors to show yet</p>
+          <p className="mx-auto mt-2 max-w-md text-[15px] leading-relaxed text-muted">Tutors appear here once they join and complete identity verification.</p>
+          <Button asChild variant="brand" className="mt-6">
+            <Link href="/become-a-tutor">
+              Become a tutor <ArrowRight />
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
+          {featured.map((t) => (
+            <StaggerItem key={t.id}>
+              <TutorCard tutor={t} />
+            </StaggerItem>
+          ))}
+        </Stagger>
+      )}
     </Section>
   );
 }
@@ -518,6 +537,8 @@ export function WhyTutorLink() {
 /* ═══ 8 · Stories (illustrative, clearly labelled) ═══════════════════════════════ */
 
 export function Stories() {
+  // Only real (or, in the demo, clearly labelled) stories — the section hides when there are none.
+  if (SAMPLE_TESTIMONIALS.length === 0) return null;
   return (
     <Section tone="brand">
       <SectionHeading align="center" eyebrow="Stories" title="What families and students tell us" />

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { IS_PREVIEW } from "@/lib/site";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 const KEY = "tl-preview-banner-dismissed";
 
@@ -37,10 +38,17 @@ export function PreviewBanner() {
           <div className="container-page flex min-h-9 items-center justify-center gap-3 py-1.5 text-center text-[12.5px]">
             <span className="size-1.5 shrink-0 animate-pulse-dot rounded-full bg-brand" aria-hidden />
             <p className="text-white/80">
-              <span className="font-medium text-white">Preview build.</span> Tutors, reviews and figures are sample data.{" "}
-              <Link href="/login" className="font-medium text-white underline underline-offset-2">
-                Explore with a demo account
-              </Link>
+              <span className="font-medium text-white">Preview build.</span>{" "}
+              {SAMPLE_DATA ? (
+                <>
+                  Tutors, reviews and figures are sample data.{" "}
+                  <Link href="/login" className="font-medium text-white underline underline-offset-2">
+                    Explore with a demo account
+                  </Link>
+                </>
+              ) : (
+                "No sample data — tutors, reviews and bookings appear as real people sign up."
+              )}
             </p>
             <button
               type="button"

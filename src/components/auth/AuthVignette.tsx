@@ -4,14 +4,14 @@ import * as React from "react";
 import { BadgeCheck, CalendarCheck2, Check, CircleDot, Circle, CreditCard, Lock, Monitor, Star } from "lucide-react";
 import { motion } from "@/components/motion";
 import { Avatar } from "@/components/ui/Avatar";
-import { TUTOR_BY_ID } from "@/lib/data/tutors";
+import { exampleTutor } from "@/lib/data/tutors";
 import { subjectName } from "@/lib/data/catalog";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 /* Illustrative product vignette built from the sample catalog — decorative, hidden from assistive tech. */
-const TUTOR = TUTOR_BY_ID["tut_priya_raman"];
+const TUTOR = exampleTutor("tut_priya_raman");
 const TOPICS: { name: string; status: "completed" | "in_progress" | "not_started" }[] = [
   { name: "Equilibrium constant (K)", status: "completed" },
   { name: "ICE tables", status: "in_progress" },

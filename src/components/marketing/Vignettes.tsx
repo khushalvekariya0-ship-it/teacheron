@@ -13,8 +13,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/Controls";
 import { VERIFICATION_LABEL, VerificationStatusBadge } from "@/components/domain/Badges";
-import { TUTORS, TUTOR_BY_SLUG, tutorShortName } from "@/lib/data/tutors";
-import { SEED_REQUIREMENTS } from "@/lib/data/requirements";
+import { EXAMPLE_TUTORS, exampleTutor, tutorShortName } from "@/lib/data/tutors";
+import { EXAMPLE_JOB } from "@/lib/data/requirements";
 import { subjectName, GRADE_LABEL } from "@/lib/data/catalog";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { rankTutors } from "@/lib/matching";
@@ -77,7 +77,7 @@ function PanelHeader({ title, meta }: { title: React.ReactNode; meta?: React.Rea
 /* ─── Search & match ─────────────────────────────────────────────────────── */
 
 export function SearchVignette() {
-  const results = React.useMemo(() => rankTutors(TUTORS, { subject: "algebra", grade: "8", modes: ["online"], budgetMaxCents: 8000, days: ["Mon", "Tue", "Wed", "Thu", "Fri"], timesOfDay: ["evening"] }).filter((r) => !r.disqualified).slice(0, 3), []);
+  const results = React.useMemo(() => rankTutors(EXAMPLE_TUTORS, { subject: "algebra", grade: "8", modes: ["online"], budgetMaxCents: 8000, days: ["Mon", "Tue", "Wed", "Thu", "Fri"], timesOfDay: ["evening"] }).filter((r) => !r.disqualified).slice(0, 3), []);
   return (
     <VignetteFrame tone="sky" label="Search results for algebra tutors for an 8th grader, online, with match scores">
       <Panel>
@@ -120,7 +120,7 @@ export function SearchVignette() {
 /* ─── Messaging ──────────────────────────────────────────────────────────── */
 
 export function MessageVignette({ variant = "masked" }: { variant?: "masked" | "parent" }) {
-  const tutor = TUTOR_BY_SLUG["hannah-weiss"] ?? TUTORS[0];
+  const tutor = exampleTutor("hannah-weiss");
   return (
     <VignetteFrame tone="violet" label={variant === "parent" ? "A conversation about a child, visible in the parent's account" : "A message thread where a phone number has been automatically hidden"}>
       <Panel>
@@ -228,7 +228,7 @@ export function CalendarVignette() {
 /* ─── Booking & payment ──────────────────────────────────────────────────── */
 
 export function CheckoutVignette() {
-  const tutor = TUTOR_BY_SLUG["james-okafor"] ?? TUTORS[0];
+  const tutor = exampleTutor("james-okafor");
   const price = sessionPrice(tutor.hourlyRateCents, 60);
   const lines = policySummary("regular").slice(0, 3);
   return (
@@ -266,7 +266,7 @@ export function CheckoutVignette() {
 }
 
 export function TrialVignette() {
-  const tutor = TUTOR_BY_SLUG["sarah-chen"] ?? TUTORS[0];
+  const tutor = exampleTutor("sarah-chen");
   return (
     <VignetteFrame tone="yellow" label="A tutor's trial lesson terms, shown on their profile before booking">
       <Panel className="p-4">
@@ -430,7 +430,7 @@ export function ProfileBuilderVignette() {
 }
 
 export function JobVignette() {
-  const job = SEED_REQUIREMENTS.find((r) => r.status === "published") ?? SEED_REQUIREMENTS[0];
+  const job = EXAMPLE_JOB;
   return (
     <VignetteFrame tone="brand" label={`A student job posted by a family: ${job.title}`}>
       <Panel className="p-4">

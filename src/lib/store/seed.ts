@@ -74,6 +74,14 @@ function mkBooking(s: BSeed, now: number): Booking {
   };
 }
 
+/** Activity for an empty marketplace (sample-data switch off). */
+export function emptySeed(): ReturnType<typeof createSeed> {
+  return {
+    bookings: [], conversations: [], messages: [], notifications: [], goals: [], progressNotes: [], homework: [], payments: [], payouts: [],
+    leadTransactions: [], verificationRequests: [], reports: [], disputes: [], savedSearches: [], auditLogs: [], reviewedBookingIds: [],
+  };
+}
+
 export function createSeed(now: number) {
   const CT = "America/Chicago";
   const ET = "America/New_York";

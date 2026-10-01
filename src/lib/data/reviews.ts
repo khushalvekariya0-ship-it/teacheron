@@ -1,4 +1,5 @@
 import type { Review } from "@/lib/types";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
  * SAMPLE DATA — fictional reviews for the preview build. In production, a review can only be
@@ -91,7 +92,7 @@ const RAW: R[] = [
   ["tut_rachel_adams", "Diana M.", "parent", 4, "algebra", "2026-01-22", "Great teacher; slots fill quickly."],
 ];
 
-export const REVIEWS: Review[] = RAW.map(([tutorId, authorName, authorRole, rating, subject, date, body, response], i) => ({
+export const REVIEWS: Review[] = (SAMPLE_DATA ? RAW : []).map(([tutorId, authorName, authorRole, rating, subject, date, body, response], i) => ({
   id: `rev_${String(i + 1).padStart(3, "0")}`,
   tutorId,
   bookingId: `bk_hist_${String(i + 1).padStart(3, "0")}`,
