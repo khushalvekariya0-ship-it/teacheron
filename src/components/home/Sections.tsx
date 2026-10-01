@@ -6,14 +6,14 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, Check, Code, CreditCard, FlaskConical, Gift, GraduationCap, Languages, LineChart,
-  Music, Route, ShieldCheck, Star, Target, UserRound, Wallet,
+  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
+  Music, Route, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
-import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/marketing/Section";
+import { Section, SectionHeading, ArrowLink } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
@@ -375,7 +375,7 @@ function ProgressLayers() {
           className="absolute bottom-6 top-0 right-0 overflow-hidden rounded-lg border-2 border-surface bg-canvas shadow-md"
           style={{ left: i * 22, zIndex: i }}
         >
-          <Image src="/images/online-lesson.jpg" alt="" fill sizes="(min-width: 1024px) 320px, 90vw" className="object-cover object-[30%_45%]" />
+          <Image src="/images/online-class.jpg" alt="" fill sizes="(min-width: 1024px) 320px, 90vw" className="object-cover object-[60%_40%]" />
         </motion.div>
       ))}
     </div>
@@ -427,9 +427,45 @@ export function HowItWorks() {
   );
 }
 
-/* ═══ 5 · Get matched — a short guided start ════════════════════════════════════ */
+/* ═══ 5 · Smart tutor matching — a short guided start on a deep navy stage ═══════════ */
 
-const fieldCls = "h-12 w-full rounded-lg border border-line-strong bg-surface px-3.5 text-[15px] text-ink outline-none transition-colors hover:border-subtle focus:border-brand focus:ring-1 focus:ring-brand";
+const matchField =
+  "h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/[0.03] pl-14 pr-12 text-[16px] text-slate-100 outline-none transition-colors hover:border-white/30 focus:border-[#5b8cff] focus:ring-2 focus:ring-[#5b8cff]/30";
+
+function MatchSelect({
+  icon: Icon,
+  label,
+  error,
+  children,
+  ...props
+}: { icon: LucideIcon; label: string; error?: string } & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const id = React.useId();
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2.5 block text-[16px] font-medium text-white">
+        {label}
+      </label>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-slate-300" aria-hidden />
+        <select
+          id={id}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className={cn(matchField, !props.value && "text-slate-400", error && "border-red-400/70")}
+          {...props}
+        >
+          {children}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-slate-300" aria-hidden />
+      </div>
+      {error && (
+        <p id={`${id}-error`} className="mt-2 text-[13.5px] text-red-300">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function GetMatched() {
   const router = useRouter();
@@ -449,82 +485,109 @@ export function GetMatched() {
   };
 
   return (
-    <Section>
-      <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+    <section aria-labelledby="match-title" className="dark relative isolate overflow-hidden bg-[#0a1030]">
+      {/* Soft light from the top left */}
+      <div className="pointer-events-none absolute -left-40 -top-40 -z-10 size-[620px] rounded-full bg-[#1b2a78]/40 blur-3xl" aria-hidden />
+
+      <div className="container-page grid items-center gap-14 py-20 sm:py-24 lg:grid-cols-[1fr_1.02fr] lg:gap-16 lg:py-28">
         <div>
-          <Eyebrow>Personalized matching</Eyebrow>
-          <WordReveal as="h2" inView text="Tell us what you need. We'll show your best matches." className="mt-5 font-heading text-[2.1rem] font-bold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[2.6rem]" />
+          <Reveal>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#16245f] px-3.5 py-1.5 text-[14px] font-medium text-white">
+              <Zap className="size-4 fill-white" aria-hidden /> Smart tutor matching
+            </span>
+          </Reveal>
+          <h2 id="match-title" className="mt-6 font-heading text-[2.9rem] font-extrabold leading-[1.04] tracking-[-0.02em] text-white sm:text-[3.6rem] lg:text-[4.1rem]">
+            <WordReveal as="span" inView className="block" text="Find a tutor that" delay={0.05} />
+            <Reveal as="span" delay={0.25} className="block">
+              <span className="bg-gradient-to-r from-[#3b82f6] via-[#4f6ef7] to-[#8b5cf6] bg-clip-text pb-1 text-transparent">fits you.</span>
+            </Reveal>
+          </h2>
           <Reveal delay={0.1}>
-            <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-ink-2">
-              Answer a couple of questions and get a shortlist ranked on eight transparent factors — subject, grade, schedule, budget and more — with every score explained.
-            </p>
-            <ul className="mt-6 space-y-2.5 text-[15.5px] text-ink">
-              {["Takes about 2 minutes", "No account needed", "Paid placement never affects the ranking"].map((x) => (
+            <p className="mt-5 text-[18px] text-slate-300 sm:text-[20px]">Tell us a little about what you want to learn.</p>
+            <ul className="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-[15.5px] text-slate-300">
+              {["Takes about 2 minutes", "No account needed"].map((x) => (
                 <li key={x} className="flex items-center gap-2.5">
-                  <Check className="size-5 text-brand" strokeWidth={2.5} /> {x}
+                  <Check className="size-5 text-emerald-400" strokeWidth={2.5} aria-hidden /> {x}
                 </li>
               ))}
             </ul>
           </Reveal>
+
           <Reveal delay={0.2}>
-            <form onSubmit={submit} noValidate className="mt-8 rounded-2xl border border-line bg-surface p-5 shadow-md sm:p-6">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-[14px] font-semibold text-ink">Subject</span>
-                  <select
-                    value={subject}
-                    onChange={(e) => {
-                      setSubject(e.target.value);
-                      setError(false);
-                    }}
-                    aria-invalid={error || undefined}
-                    aria-describedby={error ? "gm-subject-error" : undefined}
-                    className={cn(fieldCls, error && "border-danger")}
-                  >
-                    <option value="">Choose a subject</option>
-                    {SUBJECT_CATEGORIES.map((c) => (
-                      <optgroup key={c.slug} label={c.name}>
-                        {SUBJECTS.filter((s) => s.category === c.slug).map((s) => (
-                          <option key={s.slug} value={s.slug}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  {error && (
-                    <span id="gm-subject-error" className="mt-1.5 block text-[13px] text-danger">
-                      Choose a subject to see matches.
-                    </span>
-                  )}
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-[14px] font-semibold text-ink">
-                    Grade <span className="font-normal text-muted">(optional)</span>
-                  </span>
-                  <select value={grade} onChange={(e) => setGrade(e.target.value)} className={fieldCls}>
-                    <option value="">Any grade</option>
-                    {GRADES.map((g) => (
-                      <option key={g.value} value={g.value}>
-                        {g.label}
+            <form onSubmit={submit} noValidate className="mt-10 max-w-[624px] space-y-6">
+              <MatchSelect
+                icon={BookOpen}
+                label="What do you want to learn?"
+                value={subject}
+                onChange={(e) => {
+                  setSubject(e.target.value);
+                  setError(false);
+                }}
+                error={error ? "Choose a subject to see your matches." : undefined}
+              >
+                <option value="">Choose a subject</option>
+                {SUBJECT_CATEGORIES.map((c) => (
+                  <optgroup key={c.slug} label={c.name}>
+                    {SUBJECTS.filter((s) => s.category === c.slug).map((s) => (
+                      <option key={s.slug} value={s.slug}>
+                        {s.name}
                       </option>
                     ))}
-                  </select>
-                </label>
-              </div>
-              <Button type="submit" variant="brand" size="lg" className="mt-5 w-full">
-                See my matches <ArrowRight />
-              </Button>
+                  </optgroup>
+                ))}
+              </MatchSelect>
+              <MatchSelect icon={ChartNoAxesColumnIncreasing} label="What's your level?" value={grade} onChange={(e) => setGrade(e.target.value)}>
+                <option value="">Select your level</option>
+                {GRADES.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.label}
+                  </option>
+                ))}
+              </MatchSelect>
+              <button
+                type="submit"
+                className="group flex h-16 w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#2f8cff] via-[#4b74fb] to-[#7b5cf5] text-[18px] font-semibold text-white shadow-[0_12px_32px_-12px_rgb(79_110_247/0.8)] transition-[filter,transform] hover:brightness-110 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                Find my matches <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
+              </button>
+              <p className="flex items-start gap-3 text-[15px] leading-snug text-slate-300">
+                <Info className="mt-0.5 size-5 shrink-0" aria-hidden />
+                <span>
+                  Your answers help us find tutors
+                  <br />
+                  that match your goals.
+                </span>
+              </p>
             </form>
+            <p className="mt-8 flex max-w-[624px] items-center gap-3 border-t border-white/10 pt-6 text-[14.5px] text-slate-400">
+              <ShieldCheck className="size-5 shrink-0" aria-hidden /> Paid placement never affects the ranking.
+            </p>
           </Reveal>
         </div>
-        <Reveal delay={0.1} className="relative">
-          <div className="relative aspect-[4/3.4] overflow-hidden rounded-2xl shadow-xl">
-            <Image src="/images/online-lesson.jpg" alt="A student taking notes during an online lesson" fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
+
+        {/* Photo on a blue shape, with a small card about how matches are made */}
+        <Reveal delay={0.15} className="relative mx-auto w-full max-w-[600px] lg:mx-0">
+          <svg className="absolute -right-6 -top-14 -z-10 h-[115%] w-[118%] text-[#1d2c8c] sm:-right-10" viewBox="0 0 600 560" fill="currentColor" aria-hidden>
+            <path d="M462 18c58-14 112 10 124 60 14 58-8 118-2 182 7 72 16 148-26 202-46 59-138 70-222 72-86 2-176-12-236-64C40 418-6 330 30 268c26-45 74-42 112-86 36-42 44-112 96-140 60-32 156 0 224-24z" />
+          </svg>
+          <svg className="absolute -right-3 -top-8 size-12 text-[#7b6cf6] sm:-right-8 sm:-top-10" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" aria-hidden>
+            <path d="M18 6l-3 12M38 12l-10 9M44 30l-12 1" />
+          </svg>
+          <div data-match-photo className="relative aspect-[1.08] overflow-hidden rounded-[28px] shadow-2xl">
+            <Image src="/images/online-lesson.jpg" alt="A student with headphones taking notes during an online lesson" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover object-[58%_40%]" />
+          </div>
+          <div className="absolute -bottom-6 -left-3 flex items-center gap-3.5 rounded-2xl border border-white/15 bg-[#101a45]/90 p-4 pr-6 shadow-2xl backdrop-blur-md sm:-left-10 sm:bottom-6">
+            <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#2f5bff] text-white">
+              <Users className="size-5" aria-hidden />
+            </span>
+            <span>
+              <span className="block text-[15px] font-semibold text-white">Matches in {SUBJECTS.length} subjects</span>
+              <span className="block text-[13.5px] text-slate-300">ranked on 8 clear factors</span>
+            </span>
           </div>
         </Reveal>
       </div>
-    </Section>
+    </section>
   );
 }
 
