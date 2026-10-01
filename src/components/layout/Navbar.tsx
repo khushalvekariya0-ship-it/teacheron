@@ -65,9 +65,9 @@ function ActivePill() {
 }
 
 /**
- * Full-width top bar. At the top of a page it shows every section; once you scroll it condenses
- * into a slim bar (logo · search · theme · ☰ menu) that stays put in both scroll directions.
- * On the homepage it is black, like the hero under it, until you scroll.
+ * Floating framed bar (thin border, frosted glass, crisp corners). At the top of a page it shows every
+ * section; once you scroll it narrows into a slim bar (logo · search · theme · ☰ menu) that stays put
+ * in both scroll directions. On the homepage it sits on the navy hero until you scroll.
  */
 export function Navbar() {
   const pathname = usePathname();
@@ -114,13 +114,15 @@ export function Navbar() {
   return (
     <header
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
-      className={cn(
-        "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-300",
-        tinted ? "dark border-transparent bg-night" : "border-line bg-page/85 backdrop-blur-xl",
-        compact && "shadow-sm",
-      )}
+      className={cn("sticky top-0 z-40 px-2 pt-2 transition-colors duration-300 sm:px-4 sm:pt-3", tinted ? "dark bg-night" : "bg-transparent")}
     >
-      <div className={cn("container-page flex items-center gap-6 transition-[height] duration-300", compact ? "h-14 lg:h-16" : "h-16 lg:h-[72px]")}>
+      <div
+        className={cn(
+          "mx-auto flex items-center gap-6 rounded-xl border pl-4 pr-2 transition-[max-width,height,background-color,border-color,box-shadow] duration-300 sm:pl-5 sm:pr-3",
+          tinted ? "border-white/10 bg-white/[0.03]" : "border-line bg-page/80 shadow-lg backdrop-blur-xl",
+          compact ? "h-14 max-w-[1040px]" : "h-16 max-w-[1248px] lg:h-[68px]",
+        )}
+      >
         <Logo />
 
         <AnimatePresence initial={false}>
@@ -213,7 +215,7 @@ export function Navbar() {
             onClick={() => setMenu(true)}
             className={cn(
               "inline-flex h-10 items-center gap-2 rounded-lg text-[15px] font-semibold text-ink transition-colors",
-              compact ? "border-2 border-ink px-2.5 hover:bg-ink hover:text-on-ink sm:px-3.5" : "px-2 hover:bg-ink/5 xl:hidden",
+              compact ? "border border-line-strong px-2.5 hover:bg-ink hover:text-on-ink sm:px-3.5" : "px-2 hover:bg-ink/5 xl:hidden",
             )}
           >
             <Menu className="size-5" strokeWidth={2.4} />

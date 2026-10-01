@@ -93,15 +93,15 @@ function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSec
                     )}
                   >
                     {active && (
-                      <motion.span layoutId="dash-nav-active" className="absolute inset-0 rounded-lg bg-brand-soft" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />
+                      <motion.span layoutId="dash-nav-active" className="absolute inset-0 rounded-lg bg-ink/[0.06] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-gradient" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />
                     )}
-                    <item.icon className={cn("relative size-[18px] shrink-0", active ? "text-ink [stroke-width:2.25]" : "text-ink-2")} />
+                    <item.icon className={cn("relative size-[18px] shrink-0", active ? "text-brand [stroke-width:2.25]" : "text-ink-2")} />
                     <span className={cn("relative flex-1 truncate", collapsed && "sr-only")}>{item.label}</span>
                     {count > 0 &&
                       (collapsed ? (
                         <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-ink ring-2 ring-surface" />
                       ) : (
-                        <span className="relative rounded-md bg-ink px-1.5 py-px text-[11px] font-semibold tabular-nums text-on-ink">{count}</span>
+                        <span className="relative rounded-md bg-brand-gradient px-1.5 py-px text-[11px] font-semibold tabular-nums text-white">{count}</span>
                       ))}
                   </Link>
                 </li>
@@ -279,7 +279,7 @@ function TopSearch({ role }: { role: Role }) {
         onChange={(e) => setQ(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-muted hover:border-line-strong focus:border-ink focus:ring-1 focus:ring-ink"
+        className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-muted hover:border-line-strong focus:border-brand focus:ring-2 focus:ring-brand/25"
       />
     </form>
   );
@@ -287,7 +287,7 @@ function TopSearch({ role }: { role: Role }) {
 
 function ShellSkeleton() {
   return (
-    <div className="flex min-h-dvh bg-surface">
+    <div className="flex min-h-dvh bg-page">
       <div className="hidden w-[248px] shrink-0 border-r border-line p-4 lg:block">
         <Skeleton className="h-7 w-32" />
         <div className="mt-8 space-y-2">
@@ -322,7 +322,7 @@ export function DashboardShell({ area, children }: { area: "app" | "admin"; chil
 
   if (!user) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-surface px-4">
+      <div className="grid min-h-dvh place-items-center bg-page px-4">
         <div className="w-full max-w-md rounded-2xl border border-line bg-surface">
           <div className="border-b border-line px-6 py-4">
             <Logo />
@@ -336,7 +336,7 @@ export function DashboardShell({ area, children }: { area: "app" | "admin"; chil
   const staff = isStaff(user);
   if ((area === "admin" && !staff) || (area === "app" && staff)) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-surface px-4">
+      <div className="grid min-h-dvh place-items-center bg-page px-4">
         <div className="w-full max-w-md rounded-2xl border border-line bg-surface">
           <div className="border-b border-line px-6 py-4">
             <Logo />
@@ -382,13 +382,13 @@ function ShellLayout({
 }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   return (
-    <div className="min-h-dvh bg-surface">
+    <div className="min-h-dvh bg-page">
       {/* Desktop sidebar: white with a hairline edge, collapsible to an icon rail */}
-      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-surface transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex", collapsed ? "w-[76px]" : "w-[248px]")}>
+      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-page transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex", collapsed ? "w-[76px]" : "w-[248px]")}>
         <div className={cn("flex h-16 shrink-0 items-center gap-2 border-b border-line", collapsed ? "justify-center px-2" : "justify-between pl-5 pr-3")}>
           <span className="flex items-center gap-2">
             <Logo compact={collapsed} href={area === "admin" ? "/admin" : "/dashboard"} />
-            {area === "admin" && !collapsed && <span className="rounded-md bg-ink px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-ink">Admin</span>}
+            {area === "admin" && !collapsed && <span className="rounded-md bg-brand-gradient px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">Admin</span>}
           </span>
           {!collapsed && (
             <button type="button" onClick={toggleCollapsed} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-canvas hover:text-ink" aria-label="Collapse sidebar">
@@ -422,8 +422,8 @@ function ShellLayout({
         </SheetContent>
       </Sheet>
 
-      <div className={cn("relative min-h-dvh bg-surface transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]", collapsed ? "lg:pl-[76px]" : "lg:pl-[248px]")}>
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6 lg:px-8">
+      <div className={cn("relative min-h-dvh bg-page transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]", collapsed ? "lg:pl-[76px]" : "lg:pl-[248px]")}>
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-page/80 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <button type="button" onClick={() => setMobileNav(true)} className="-ml-1 grid size-10 place-items-center rounded-lg text-ink hover:bg-canvas lg:hidden" aria-label="Open navigation">
             <Menu className="size-5" />
           </button>

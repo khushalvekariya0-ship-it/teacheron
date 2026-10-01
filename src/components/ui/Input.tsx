@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const control =
-  "w-full rounded-lg border border-line-strong bg-surface text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-subtle hover:border-subtle focus:border-ink focus:ring-1 focus:ring-ink disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger";
+  "w-full rounded-lg border border-line-strong bg-surface text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-subtle hover:border-subtle focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger";
 
 /* ─── Field: label + control + hint/error, wired for screen readers ─────────── */
 
@@ -89,7 +89,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className
       ref={ref}
       {...props}
       {...field}
-      className={cn(control, "h-10 px-3", (icon || prefixText) && "pl-9", suffix && "pr-10", !icon && !suffix && !prefixText && className)}
+      className={cn(control, "h-11 px-3.5", (icon || prefixText) && "pl-9", suffix && "pr-10", !icon && !suffix && !prefixText && className)}
     />
   );
   if (!icon && !suffix && !prefixText) return input;
@@ -135,7 +135,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(({ classN
   const field = useFieldProps(props);
   return (
     <div className={cn("relative", className)}>
-      <select ref={ref} {...props} {...field} className={cn(control, "h-10 appearance-none pl-3 pr-9", !props.value && placeholder && "text-muted")}>
+      <select ref={ref} {...props} {...field} className={cn(control, "h-11 appearance-none pl-3.5 pr-9", !props.value && placeholder && "text-muted")}>
         {placeholder !== undefined && <option value="">{placeholder}</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value} disabled={o.disabled}>

@@ -110,7 +110,7 @@ export default function BecomeATutorPage() {
             { icon: <Laptop />, title: "A reliable setup", body: "For online lessons: a stable connection, camera and microphone. For in-person lessons: a service area you can reliably cover." },
           ]}
           visual={
-            <div className="rounded-2xl border-2 border-ink bg-surface p-6">
+            <div className="rounded-2xl border border-line-strong bg-surface p-6">
               <p className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">Community standards</p>
               <p className="mt-1 text-sm text-muted">Every tutor agrees to these before teaching.</p>
               <ul className="mt-5 space-y-3">

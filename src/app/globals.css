@@ -385,7 +385,7 @@ html.theme-switching *::after {
 .stagger-children > * > *:nth-child(n + 7) { animation-delay: 0.3s; }
 
 /* ─── Hover emphasis (cards marked data-spotlight) ─────────────────────────────
-   Cards get a crisp black outline on hover instead of a glow. */
+   A crisp 1px blue → violet hairline traces the card on hover. No glow. */
 @media (hover: hover) and (pointer: fine) {
   [data-spotlight] {
     position: relative;
@@ -398,7 +398,11 @@ html.theme-switching *::after {
     z-index: 1;
     pointer-events: none;
     border-radius: inherit;
-    box-shadow: inset 0 0 0 2px var(--color-ink);
+    padding: 1px;
+    background: linear-gradient(135deg, var(--color-grad-from), var(--color-grad-via), var(--color-grad-to));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
     opacity: 0;
     transition: opacity 0.2s ease;
   }

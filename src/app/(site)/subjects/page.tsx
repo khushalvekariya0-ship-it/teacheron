@@ -24,7 +24,7 @@ export default function SubjectsPage() {
           <nav aria-label="Subject areas" className="mt-10 flex flex-wrap gap-2">
             {SUBJECT_CATEGORIES.map((c) => {
               return (
-                <a key={c.slug} href={`#${c.slug}`} className="inline-flex items-center gap-2 rounded-lg border-2 border-ink px-3.5 py-1.5 text-[14px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">
+                <a key={c.slug} href={`#${c.slug}`} className="inline-flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-1.5 text-[14px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">
                   <CategoryIcon slug={c.slug} className="size-3.5" /> {c.name}
                 </a>
               );

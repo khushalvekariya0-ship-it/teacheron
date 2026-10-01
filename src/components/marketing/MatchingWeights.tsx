@@ -101,7 +101,7 @@ export function MatchingWeights() {
       </div>
 
       <div className="flex flex-col gap-5">
-        <div className="rounded-2xl border-2 border-ink bg-surface p-5">
+        <div className="rounded-2xl border border-line-strong bg-surface p-5">
           <p className="flex items-center gap-2 font-heading text-lg font-bold tracking-[-0.02em] text-ink">
             <Ban className="size-[18px] text-ink" /> What never affects ranking
           </p>

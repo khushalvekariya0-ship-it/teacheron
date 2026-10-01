@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Reveal, WordReveal, Magnetic } from "@/components/motion";
+import { Button } from "@/components/ui/Button";
+import { Reveal, WordReveal } from "@/components/motion";
 
 /*
  * Page structure: full-bleed sections stacked on the page colour (deep navy by default, white in light mode). Color blocks (light brand tint,
@@ -17,7 +18,7 @@ type Tone = "default" | "canvas" | "brand" | "dark" | "yellow";
 const TONE: Record<Tone, string> = {
   default: "bg-page",
   canvas: "bg-canvas",
-  brand: "bg-brand-soft",
+  brand: "bg-brand-soft dark:bg-canvas",
   dark: "bg-night text-white",
   yellow: "bg-yellow-soft",
 };
@@ -59,11 +60,11 @@ export function Panel({
   );
 }
 
-/** Small label above a headline: a quiet pill with a brand dot. */
+/** Small label above a headline: crisp uppercase text after a short gradient rule. */
 export function Eyebrow({ children, className, center }: { children: React.ReactNode; className?: string; center?: boolean }) {
   return (
-    <p className={cn("inline-flex w-fit items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-[13px] font-semibold text-ink-2", center && "mx-auto", className)}>
-      <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+    <p className={cn("inline-flex w-fit items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand", center && "mx-auto", className)}>
+      <span className="h-px w-6 bg-brand-gradient" aria-hidden />
       {children}
     </p>
   );
@@ -77,6 +78,7 @@ export function SectionHeading({
   action,
   className,
   dark,
+  accent = 0,
 }: {
   eyebrow?: string;
   title: React.ReactNode;
@@ -85,7 +87,7 @@ export function SectionHeading({
   action?: React.ReactNode;
   className?: string;
   dark?: boolean;
-  /** @deprecated Accent words are no longer styled differently; kept for call-site compatibility. */
+  /** How many of the title's last words get the gradient (0 = none). */
   accent?: number;
 }) {
   const titleCls = cn("font-heading text-[2.1rem] font-bold leading-[1.02] tracking-[-0.025em] sm:text-[2.75rem] lg:text-[3.35rem]", dark ? "text-white" : "text-ink");
@@ -98,7 +100,7 @@ export function SectionHeading({
           </Eyebrow>
         )}
         {typeof title === "string" ? (
-          <WordReveal as="h2" inView text={title} delay={0.05} className={titleCls} />
+          <WordReveal as="h2" inView text={title} accent={accent} delay={0.05} className={titleCls} />
         ) : (
           <h2 className={titleCls}>{title}</h2>
         )}
@@ -134,9 +136,12 @@ export function PageHero({
   size = "default",
   tone = "brand",
   image,
+  accent = 2,
 }: {
   eyebrow?: string;
   title: string;
+  /** How many of the title's last words get the gradient (0 = none). */
+  accent?: number;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   children?: React.ReactNode;
@@ -160,6 +165,7 @@ export function PageHero({
       )}
       <WordReveal
         text={title}
+        accent={accent}
         className={cn(
           "font-heading font-bold text-ink",
           compact
@@ -211,7 +217,7 @@ export function PageHero({
   );
 }
 
-/** Closing call-to-action band in the brand blue. */
+/** Closing call-to-action: a framed card with a gradient hairline along the top. */
 export function CtaBand({
   title,
   description,
@@ -224,41 +230,44 @@ export function CtaBand({
   secondary?: { href: string; label: string };
 }) {
   return (
-    <section className="relative overflow-hidden bg-brand-gradient">
-      <div className="container-page relative flex flex-col items-start gap-8 py-16 sm:py-20 lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-2xl">
-          <WordReveal as="h2" inView text={title} className="font-heading text-[2.1rem] font-bold leading-[1.08] tracking-[-0.025em] text-white sm:text-[2.6rem]" />
-          {description && (
-            <Reveal delay={0.15}>
-              <p className="mt-4 max-w-2xl text-[17px] leading-relaxed text-white/85">{description}</p>
+    <section className="relative">
+      <div className="container-page py-16 sm:py-20">
+        <div className="relative overflow-hidden rounded-2xl border border-line bg-surface px-6 py-12 sm:px-12 sm:py-14">
+          <div className="absolute inset-x-0 top-0 h-px bg-brand-gradient" aria-hidden />
+          <div className="pointer-events-none absolute -right-24 -top-28 hidden size-80 rounded-full bg-[#4b66f5]/20 blur-3xl dark:block" aria-hidden />
+          <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <WordReveal as="h2" inView text={title} accent={2} className="font-heading text-[2rem] font-bold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[2.5rem]" />
+              {description && (
+                <Reveal delay={0.15}>
+                  <p className="mt-4 max-w-2xl text-[17px] leading-relaxed text-ink-2">{description}</p>
+                </Reveal>
+              )}
+            </div>
+            <Reveal delay={0.25} className="flex flex-wrap gap-3">
+              <Button asChild variant="brand" size="lg">
+                <Link href={primary.href}>
+                  {primary.label} <ArrowRight />
+                </Link>
+              </Button>
+              {secondary && (
+                <Button asChild variant="secondary" size="lg">
+                  <Link href={secondary.href}>{secondary.label}</Link>
+                </Button>
+              )}
             </Reveal>
-          )}
+          </div>
         </div>
-        <Reveal delay={0.25} className="flex flex-wrap gap-3">
-          <Magnetic>
-            <Link href={primary.href} className="inline-flex h-14 items-center gap-2 rounded-lg bg-white px-7 text-[16px] font-semibold text-[#1d4ed8] transition-colors hover:bg-white/90">
-              {primary.label} <ArrowRight className="size-5" />
-            </Link>
-          </Magnetic>
-          {secondary && (
-            <Link href={secondary.href} className="inline-flex h-14 items-center rounded-lg border-2 border-white/60 px-7 text-[16px] font-semibold text-white transition-colors hover:border-white hover:bg-white/10">
-              {secondary.label}
-            </Link>
-          )}
-        </Reveal>
       </div>
     </section>
   );
 }
 
-const FEATURE_TINTS = ["bg-brand-soft", "bg-sky-soft", "bg-yellow-soft", "bg-teal-soft", "bg-violet-soft", "bg-peach-soft"];
-
-/** Feature list item with a flat pastel icon tile (tint is picked from the title so it stays stable). */
+/** Feature list item with a crisp outlined icon tile. */
 export function FeatureItem({ icon, title, children, dark }: { icon: React.ReactNode; title: string; children: React.ReactNode; dark?: boolean }) {
-  const tint = FEATURE_TINTS[[...title].reduce((a, c) => a + c.charCodeAt(0), 0) % FEATURE_TINTS.length];
   return (
     <div className="flex gap-4">
-      <span className={cn("grid size-11 shrink-0 place-items-center rounded-lg [&_svg]:size-5", dark ? "bg-white/10 text-white" : cn(tint, "text-ink"))}>{icon}</span>
+      <span className={cn("grid size-11 shrink-0 place-items-center rounded-lg border [&_svg]:size-5", dark ? "border-white/15 bg-white/5 text-white" : "border-line bg-surface text-brand")}>{icon}</span>
       <div>
         <h3 className={cn("text-[16px] font-bold tracking-[-0.01em]", dark ? "text-white" : "text-ink")}>{title}</h3>
         <p className={cn("mt-1 text-[15px] leading-relaxed", dark ? "text-white/70" : "text-ink-2")}>{children}</p>

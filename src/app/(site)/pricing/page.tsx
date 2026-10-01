@@ -44,8 +44,8 @@ export default function PricingPage() {
       >
         <Reveal delay={0.4}>
           <nav aria-label="Pricing sections" className="mt-10 flex justify-center gap-2">
-            <a href="#families" className="rounded-lg border-2 border-ink px-4 py-2 text-[15px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">For families</a>
-            <a href="#tutors" className="rounded-lg border-2 border-ink px-4 py-2 text-[15px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">For tutors</a>
+            <a href="#families" className="rounded-lg border border-line-strong px-4 py-2 text-[15px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">For families</a>
+            <a href="#tutors" className="rounded-lg border border-line-strong px-4 py-2 text-[15px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">For tutors</a>
           </nav>
         </Reveal>
       </PageHero>
@@ -55,7 +55,7 @@ export default function PricingPage() {
           <div>
             <SectionHeading className="mb-8" eyebrow="For families" title="Free to search. Pay per lesson." />
             <Reveal>
-              <div className="rounded-2xl border-2 border-ink bg-surface p-6 sm:p-8">
+              <div className="rounded-2xl border border-line-strong bg-surface p-6 sm:p-8">
                 <p className="flex items-baseline gap-2">
                   <span className="font-heading text-6xl font-bold tracking-[-0.03em] text-ink">$0</span>
                   <span className="text-sm text-muted">to join, search and message</span>

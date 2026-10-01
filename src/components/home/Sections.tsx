@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
+import { Reveal, Stagger, StaggerItem, WordReveal, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
-import { Section, SectionHeading, ArrowLink } from "@/components/marketing/Section";
+import { Section, SectionHeading, ArrowLink, CtaBand } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
@@ -626,46 +626,95 @@ export function FeaturedTutors() {
   );
 }
 
-/* ═══ 7 · Why families choose TutorLink ═════════════════════════════════════════ */
+/* ═══ 7 · Why families choose TutorLink — a bento grid ═══════════════════════════════ */
 
-const WHY = [
-  { icon: ShieldCheck, title: "Tutors you can trust", body: "Identity, education, certification and background checks are shown on every profile — a badge appears only once a check is complete." },
-  { icon: Target, title: "A plan built around your goals", body: "Share the grade, goals and schedule. Tutors shape lessons around them and leave notes after every session." },
-  { icon: CalendarDays, title: "Flexible, online or in person", body: `Book real openings in your time zone and reschedule up to ${DEFAULT_POLICY.rescheduleMinHours} hours before a lesson.` },
-  { icon: LineChart, title: "Progress you can see", body: "Homework, attendance and goal progress in one dashboard — parents see everything about their child's lessons." },
-];
+const CHECK_TYPES = ["Identity", "Education", "Certification", "Background"];
+
+function BentoTile({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <StaggerItem className={cn("h-full", className)}>
+      <div data-spotlight className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-7">
+        {children}
+      </div>
+    </StaggerItem>
+  );
+}
+
+function TileText({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
+  return (
+    <>
+      <span className="grid size-10 place-items-center rounded-lg border border-line text-brand">
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <h3 className="mt-5 font-heading text-[20px] font-bold tracking-[-0.015em] text-ink">{title}</h3>
+      <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{body}</p>
+    </>
+  );
+}
 
 export function WhyTutorLink() {
   return (
     <Section>
-      <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-        <Reveal className="relative order-2 lg:order-1">
-          <div className="relative aspect-[4/3.6] overflow-hidden rounded-2xl shadow-xl">
-            <Image src="/images/family.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 520px, 100vw" className="object-cover" />
+      <SectionHeading align="center" eyebrow="Why TutorLink" title="Why families choose TutorLink" accent={1} />
+      <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 lg:grid-rows-[minmax(250px,auto)_minmax(250px,auto)]" stagger={0.07}>
+        {/* Large photo tile */}
+        <BentoTile className="md:col-span-2 lg:row-span-2">
+          <div className="absolute inset-0" aria-hidden>
+            <Image src="/images/family.jpg" alt="" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-night via-night/70 to-night/5" />
           </div>
-        </Reveal>
-        <div className="order-1 lg:order-2">
-          <SectionHeading className="mb-8 lg:mb-10" eyebrow="Why TutorLink" title="Why families choose TutorLink" />
-          <Stagger className="grid gap-6 sm:grid-cols-2" stagger={0.07}>
-            {WHY.map((w) => (
-              <StaggerItem key={w.title}>
-                <span className="grid size-11 place-items-center rounded-xl bg-brand-soft text-brand">
-                  <w.icon className="size-5" />
-                </span>
-                <h3 className="mt-4 text-[17px] font-semibold text-ink">{w.title}</h3>
-                <p className="mt-1.5 text-[15px] leading-relaxed text-ink-2">{w.body}</p>
-              </StaggerItem>
+          <div className="relative mt-auto pt-48 sm:pt-64 lg:pt-0">
+            <span className="grid size-10 place-items-center rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur">
+              <ShieldCheck className="size-5" aria-hidden />
+            </span>
+            <h3 className="mt-5 font-heading text-[26px] font-bold leading-tight tracking-[-0.02em] text-white sm:text-[30px]">Tutors you can trust</h3>
+            <p className="mt-2 max-w-md text-[15.5px] leading-relaxed text-white/75">
+              Checks are shown on every profile — a badge appears only once a check is complete.
+            </p>
+            <ul className="mt-5 flex flex-wrap gap-2" aria-label="Checks a tutor can complete">
+              {CHECK_TYPES.map((c) => (
+                <li key={c} className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[13px] font-medium text-white backdrop-blur">
+                  <BadgeCheck className="size-3.5" aria-hidden /> {c}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </BentoTile>
+
+        {/* Wide tile: goals → plan */}
+        <BentoTile className="md:col-span-2">
+          <TileText icon={Target} title="A plan built around your goals" body="Share the grade, goals and schedule. Tutors shape lessons around them and leave notes after every session." />
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-6 text-[13px] font-medium" aria-hidden>
+            {["Grade", "Goals", "Schedule"].map((x) => (
+              <span key={x} className="rounded-md border border-line px-2.5 py-1 text-ink-2">
+                {x}
+              </span>
             ))}
-          </Stagger>
-          <Reveal delay={0.2} className="mt-9">
-            <Button asChild size="lg" variant="brand">
-              <Link href="/for-parents">
-                How it works for parents <ArrowRight />
-              </Link>
-            </Button>
-          </Reveal>
-        </div>
-      </div>
+            <ArrowRight className="size-4 text-muted" />
+            <span className="rounded-md bg-brand-gradient px-2.5 py-1 text-white">Your lesson plan</span>
+          </div>
+        </BentoTile>
+
+        <BentoTile>
+          <TileText icon={CalendarDays} title="Online or in person" body={`Book real openings in your time zone. Reschedule up to ${DEFAULT_POLICY.rescheduleMinHours} hours before.`} />
+        </BentoTile>
+
+        <BentoTile>
+          <TileText icon={LineChart} title="Progress you can see" body="Homework, attendance and goals in one dashboard." />
+          <div className="mt-auto flex h-20 items-end gap-1.5 pt-5" aria-hidden>
+            {[30, 42, 38, 55, 64, 80].map((h, i) => (
+              <span key={i} className="flex-1 rounded-sm bg-brand-gradient" style={{ height: `${h}%`, opacity: 0.35 + i * 0.12 }} />
+            ))}
+          </div>
+        </BentoTile>
+      </Stagger>
+      <Reveal delay={0.2} className="mt-10 flex justify-center">
+        <Button asChild size="lg" variant="brand">
+          <Link href="/for-parents">
+            How it works for parents <ArrowRight />
+          </Link>
+        </Button>
+      </Reveal>
     </Section>
   );
 }
@@ -779,25 +828,11 @@ export function HomeFaq() {
 
 export function ClosingCta() {
   return (
-    <section className="bg-brand-gradient">
-      <div className="container-page flex flex-col items-start gap-8 py-16 sm:py-20 lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-2xl">
-          <h2 className="font-heading text-[2.1rem] font-bold leading-[1.08] tracking-[-0.025em] text-white sm:text-[2.6rem]">Start with a trial lesson.</h2>
-          <p className="mt-4 text-[17px] leading-relaxed text-white/85">
-            Search is free. Many tutors offer a free or low-cost trial, so you can find the right fit before you commit.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Magnetic>
-            <Link href="/tutors" className="inline-flex h-14 items-center gap-2 rounded-lg bg-white px-7 text-[16px] font-semibold text-[#1d4ed8] transition-colors hover:bg-white/90">
-              Find a tutor <ArrowRight className="size-5" />
-            </Link>
-          </Magnetic>
-          <Link href="/become-a-tutor" className="inline-flex h-14 items-center rounded-lg border-2 border-white/60 px-7 text-[16px] font-semibold text-white transition-colors hover:border-white hover:bg-white/10">
-            Become a tutor
-          </Link>
-        </div>
-      </div>
-    </section>
+    <CtaBand
+      title="Start with a trial lesson."
+      description="Search is free. Many tutors offer a free or low-cost trial, so you can find the right fit before you commit."
+      primary={{ href: "/tutors", label: "Find a tutor" }}
+      secondary={{ href: "/become-a-tutor", label: "Become a tutor" }}
+    />
   );
 }

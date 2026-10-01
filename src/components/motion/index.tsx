@@ -117,7 +117,7 @@ export function WordReveal({
   as?: "h1" | "h2" | "h3" | "p" | "span";
   inView?: boolean;
   gradient?: boolean;
-  /** Render the last N words in the italic display serif with the aurora gradient. */
+  /** Render the last N words in the signature gradient. */
   accent?: number;
 }) {
   const ref = React.useRef<HTMLElement>(null);
@@ -164,7 +164,7 @@ export function WordReveal({
     <>
       {main}
       {main && " "}
-      <em className="accent pr-[0.06em]">{tail}</em>
+      <em className="accent text-aurora pr-[0.06em]">{tail}</em>
     </>
   ) : (
     text

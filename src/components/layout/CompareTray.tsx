@@ -35,7 +35,7 @@ export function CompareTray() {
           role="region"
           aria-label="Tutors selected for comparison"
         >
-          <div data-fixed-bottom className="flex w-full max-w-xl items-center gap-3 rounded-xl border-2 border-ink bg-surface p-2.5 pl-4 shadow-lg">
+          <div data-fixed-bottom className="flex w-full max-w-xl items-center gap-3 rounded-xl border border-line-strong bg-surface p-2.5 pl-4 shadow-lg">
             <GitCompareArrows className="hidden size-4 shrink-0 text-navy sm:block" />
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <AnimatePresence initial={false}>

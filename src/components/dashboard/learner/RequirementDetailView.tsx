@@ -421,7 +421,7 @@ function Detail({ id }: { id: string }) {
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className="sticky bottom-4 z-10 mt-4"
               >
-                <div data-spotlight className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-ink bg-surface px-4 py-3 shadow-lg">
+                <div data-spotlight className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3 shadow-lg">
                   <p className="flex items-center gap-2 text-[13.5px] text-ink-2">
                     <GitCompareArrows className="size-4 text-ink" aria-hidden />
                     <span>
