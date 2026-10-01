@@ -27,7 +27,7 @@ export function applyPatch(s: TutorSearch, patch: Patch): TutorSearch {
 
 /* ─── Text inputs that commit on blur / Enter (URL writes stay cheap) ───────── */
 
-function KeywordField({ value, onCommit }: { value: string | undefined; onCommit: (q: string | undefined) => void }) {
+export function KeywordField({ value, onCommit, compact }: { value: string | undefined; onCommit: (q: string | undefined) => void; compact?: boolean }) {
   const [text, setText] = React.useState(value ?? "");
   const [prev, setPrev] = React.useState(value);
   if (prev !== value) {
@@ -55,12 +55,12 @@ function KeywordField({ value, onCommit }: { value: string | undefined; onCommit
         commit(text);
       }}
     >
-      <Field label="Keyword">
+      <Field label="Keyword" className={compact ? "space-y-0 [&>label]:sr-only" : undefined}>
         <Input
           type="search"
           icon={<Search />}
           value={text}
-          placeholder="Name, subject or specialty"
+          placeholder={compact ? "Search by name or keyword" : "Name, subject or specialty"}
           enterKeyHint="search"
           onChange={(e) => {
             const t = e.target.value;
@@ -90,7 +90,7 @@ function KeywordField({ value, onCommit }: { value: string | undefined; onCommit
   );
 }
 
-function LocationField({ value, onCommit }: { value: string | undefined; onCommit: (loc: string | undefined) => void }) {
+export function LocationField({ value, onCommit }: { value: string | undefined; onCommit: (loc: string | undefined) => void }) {
   const [text, setText] = React.useState(value ?? "");
   const [prev, setPrev] = React.useState(value);
   const [error, setError] = React.useState<string | undefined>();
@@ -140,7 +140,7 @@ function LocationField({ value, onCommit }: { value: string | undefined; onCommi
   );
 }
 
-function RateFields({ min, max, onCommit }: { min: number | undefined; max: number | undefined; onCommit: (min: number | undefined, max: number | undefined) => void }) {
+export function RateFields({ min, max, onCommit }: { min: number | undefined; max: number | undefined; onCommit: (min: number | undefined, max: number | undefined) => void }) {
   const [minText, setMinText] = React.useState(min ? String(min) : "");
   const [maxText, setMaxText] = React.useState(max ? String(max) : "");
   const [prev, setPrev] = React.useState(`${min}|${max}`);

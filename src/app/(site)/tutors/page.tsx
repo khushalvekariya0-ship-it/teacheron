@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { TutorDirectory } from "@/components/search/TutorDirectory";
 import { DirectorySkeleton } from "@/components/search/DirectorySkeleton";
 import { SITE } from "@/lib/site";
-import { PageHero, Panel } from "@/components/marketing/Section";
+import { Panel } from "@/components/marketing/Section";
 
 export const metadata: Metadata = {
   title: "Find a tutor",
@@ -14,13 +14,7 @@ export const metadata: Metadata = {
 export default function TutorsPage() {
   return (
     <>
-      <PageHero
-        size="compact"
-        eyebrow="Tutor directory"
-        title="Find a tutor"
-        description={<>Filter by subject, grade, schedule, budget and location. Results are ordered by how well each tutor fits your filters &mdash; never by paid placement.</>}
-      />
-      <Panel aria-label="Tutor results">
+      <Panel aria-label="Find a tutor">
         <Suspense fallback={<DirectorySkeleton />}>
           <TutorDirectory />
         </Suspense>

@@ -27,28 +27,28 @@ export function TutorRowSkeleton() {
 /** Suspense fallback for /tutors while search params resolve on the client. */
 export function DirectorySkeleton() {
   return (
-    <div className="container-page pb-24 pt-6 lg:pt-10" role="status" aria-label="Loading tutors">
-      <div className="lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10 xl:gap-14">
-        <div className="hidden space-y-5 lg:block">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-10 w-full" />
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="space-y-2 border-t border-line pt-4">
-              <Skeleton className="h-4 w-36" />
-              {i < 2 && <Skeleton className="h-10 w-full" />}
-            </div>
+    <div className="container-page pb-24 pt-8 sm:pt-10" role="status" aria-label="Loading tutors">
+      <Skeleton className="h-10 w-full max-w-2xl sm:h-12" />
+      <Skeleton className="mt-4 h-4 w-full max-w-xl" />
+      <div className="mt-8 hidden grid-cols-4 gap-3 lg:grid">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[62px] rounded-xl" />
+        ))}
+      </div>
+      <div className="mt-3 hidden gap-2 lg:flex">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-9 w-28 rounded-lg" />
+        ))}
+      </div>
+      <Skeleton className="mt-6 h-9 w-full lg:hidden" />
+      <Skeleton className="mt-8 h-7 w-64" />
+      <div className="mt-6 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-8">
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <TutorRowSkeleton key={i} />
           ))}
         </div>
-        <div>
-          <Skeleton className="mb-5 h-9 w-full lg:hidden" />
-          <Skeleton className="h-7 w-32" />
-          <Skeleton className="mt-2 h-4 w-48" />
-          <div className="mt-6 space-y-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <TutorRowSkeleton key={i} />
-            ))}
-          </div>
-        </div>
+        <Skeleton className="hidden h-[380px] rounded-2xl xl:block" />
       </div>
     </div>
   );

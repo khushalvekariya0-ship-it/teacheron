@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BadgeCheck, CalendarClock, Check, GitCompareArrows, GraduationCap, Heart, MapPin, MessageSquare, Monitor, Star, Users as UsersIcon, Zap } from "lucide-react";
+import { BadgeCheck, CalendarClock, Check, GitCompareArrows, GraduationCap, Heart, Languages, MapPin, MessageSquare, Monitor, Star, Users as UsersIcon, Zap } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
@@ -165,6 +165,12 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
                   {distance != null && tutor.modes.includes("in_person") && <span className="text-muted"> · {distance < 1 ? "<1" : Math.round(distance)} mi</span>}
                 </span>
               </li>
+              {tutor.languages.length > 0 && (
+                <li className="flex items-center gap-2">
+                  <Languages className="size-4 shrink-0" aria-hidden />
+                  <span className="line-clamp-1">Speaks {tutor.languages.join(", ")}</span>
+                </li>
+              )}
             </ul>
             <p className="mt-3 hidden text-[14.5px] leading-relaxed text-ink-2 sm:line-clamp-2">{tutor.bio}</p>
             <div className="mt-3 hidden flex-wrap gap-1.5 sm:flex">
