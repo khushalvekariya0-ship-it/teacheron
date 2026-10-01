@@ -87,7 +87,7 @@ export function EarningsCalculator({ defaultRateCents }: { defaultRateCents: num
   return (
     <div className="grid overflow-hidden rounded-2xl border border-line bg-surface lg:grid-cols-[1fr_1.2fr]">
       <div className="border-b border-line bg-canvas p-6 sm:p-8 lg:border-b-0 lg:border-r">
-        <p className="flex items-center gap-2 font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">
+        <p className="flex items-center gap-2 font-heading text-xl font-bold tracking-[-0.03em] text-ink">
           <Calculator className="size-5 text-ink" /> Earnings estimate
         </p>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-2">Adjust your rate and weekly lessons to compare plans over four weeks of 60-minute lessons.</p>
@@ -111,7 +111,7 @@ export function EarningsCalculator({ defaultRateCents }: { defaultRateCents: num
                     {r.plan.name}
                     {isBest && <Badge tone="accent" size="sm">Best for these numbers</Badge>}
                   </p>
-                  <p className={cn("font-heading text-xl font-extrabold tabular-nums tracking-[-0.03em]", isBest ? "text-ink" : "text-ink-2")}>{formatCents(r.net)}</p>
+                  <p className={cn("font-heading text-xl font-bold tabular-nums tracking-[-0.03em]", isBest ? "text-ink" : "text-ink-2")}>{formatCents(r.net)}</p>
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-sunken" aria-hidden>
                   <motion.div

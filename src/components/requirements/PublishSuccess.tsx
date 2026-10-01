@@ -62,7 +62,7 @@ export function PublishSuccess({ req, outcome, onPostAnother }: { req: Requireme
     <div className="container-page py-14 sm:py-20">
       <div className="mx-auto max-w-3xl text-center" role="status" aria-live="polite">
         <AnimatedCheck />
-        <motion.h1 {...fade(0.35)} className="mt-7 font-heading text-[2.25rem] font-extrabold leading-[1.02] tracking-[-0.035em] text-ink sm:text-5xl">
+        <motion.h1 {...fade(0.35)} className="mt-7 font-heading text-[2.25rem] font-bold leading-[1.02] tracking-[-0.025em] text-ink sm:text-5xl">
           {heading}
         </motion.h1>
         <motion.p {...fade(0.45)} className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-ink-2 sm:text-[17px]">
@@ -93,7 +93,7 @@ export function PublishSuccess({ req, outcome, onPostAnother }: { req: Requireme
         <motion.section {...fade(0.7)} className="mx-auto mt-16 max-w-4xl" aria-labelledby="top-matches">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 id="top-matches" className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">Don&apos;t want to wait? Top matches right now</h2>
+              <h2 id="top-matches" className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink">Don&apos;t want to wait? Top matches right now</h2>
               <p className="mt-0.5 text-sm text-muted">Ranked on the same transparent factors tutors see on your requirement.</p>
             </div>
             <Link href={tutorsHref} className="text-[13.5px] font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">See all</Link>

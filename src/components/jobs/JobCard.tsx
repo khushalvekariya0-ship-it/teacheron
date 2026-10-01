@@ -47,7 +47,7 @@ export function JobCard({ job, ownerRole, applicants, now, applied, saved, onTog
               </Badge>
             )}
           </div>
-          <h3 className="mt-1.5 font-heading text-[19px] font-extrabold leading-snug tracking-[-0.02em] text-ink">
+          <h3 className="mt-1.5 font-heading text-[19px] font-bold leading-snug tracking-[-0.02em] text-ink">
             <Link href={`/tutor-jobs/${job.id}`} className="after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:outline-none group-focus-within:underline group-focus-within:decoration-2 group-focus-within:underline-offset-4">
               {job.title}
             </Link>

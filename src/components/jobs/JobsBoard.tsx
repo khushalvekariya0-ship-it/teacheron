@@ -219,7 +219,7 @@ export function JobsBoard() {
           <div className="sticky top-24 space-y-5">
             <div className="rounded-2xl border border-line bg-surface p-5">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">Filters</h2>
+                <h2 className="font-heading text-lg font-bold tracking-[-0.02em] text-ink">Filters</h2>
                 {count > 0 && (
                   <button type="button" onClick={() => update({ subject: undefined, level: undefined, mode: undefined, location: undefined, radius: undefined, minBudget: undefined, posted: undefined })} className="text-[13px] font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
                     Clear all

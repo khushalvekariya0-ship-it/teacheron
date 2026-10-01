@@ -66,7 +66,7 @@ export function Footer() {
           <div className="max-w-sm">
             <Link href="/" className="inline-flex items-center gap-2" aria-label={`${SITE.name} home`}>
               <LogoMark className="[&_rect]:fill-white [&_path]:stroke-night" />
-              <span className="font-heading text-[22px] font-extrabold tracking-[-0.04em]">{SITE.name}</span>
+              <span className="font-heading text-[22px] font-bold tracking-[-0.03em]">{SITE.name}</span>
             </Link>
             <p className="mt-5 text-[15px] leading-relaxed text-white/70">
               A marketplace connecting students and families across the United States with qualified tutors, online and in person.

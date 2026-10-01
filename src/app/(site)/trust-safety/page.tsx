@@ -80,7 +80,7 @@ export default function TrustSafetyPage() {
         </div>
         <div className="mt-14">
           <Reveal>
-            <h3 className="mb-5 font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">Every state a check can be in</h3>
+            <h3 className="mb-5 font-heading text-2xl font-bold tracking-[-0.025em] text-ink">Every state a check can be in</h3>
           </Reveal>
           <VerificationFlow />
         </div>
@@ -138,7 +138,7 @@ export default function TrustSafetyPage() {
               <div className="h-full rounded-2xl border border-line bg-surface p-5 sm:p-6">
                 <div className="flex items-center justify-between">
                   <span className="grid size-11 place-items-center rounded-lg bg-canvas text-ink [&_svg]:size-5">{s.icon}</span>
-                  <span className="font-heading text-[15px] font-extrabold tabular-nums text-ink">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="font-heading text-[15px] font-bold tabular-nums text-ink">{String(i + 1).padStart(2, "0")}</span>
                 </div>
                 <h3 className="mt-4 text-[17px] font-bold tracking-[-0.01em] text-ink">{s.title}</h3>
                 <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-2">{s.body}</p>

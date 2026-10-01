@@ -93,7 +93,7 @@ export default async function LocationPage({ params }: Props) {
             <div>
               <WordReveal
                 text={`Tutors in ${place}`}
-                className="font-heading text-[2.75rem] font-extrabold leading-[0.98] tracking-[-0.04em] text-ink sm:text-6xl lg:text-[4.4rem]"
+                className="font-heading text-[2.75rem] font-bold leading-[0.98] tracking-[-0.03em] text-ink sm:text-6xl lg:text-[4.4rem]"
               />
               <Reveal delay={0.2}>
                 <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink/80 sm:text-xl">
@@ -120,7 +120,7 @@ export default async function LocationPage({ params }: Props) {
                 {stats.map((s) => (
                   <div key={s.k} className="bg-surface p-5 sm:p-6">
                     <dt className="text-[13px] text-muted">{s.k}</dt>
-                    <dd className="mt-1.5 font-heading text-2xl font-extrabold tracking-[-0.03em] tabular-nums text-ink">{s.v}</dd>
+                    <dd className="mt-1.5 font-heading text-2xl font-bold tracking-[-0.03em] tabular-nums text-ink">{s.v}</dd>
                   </div>
                 ))}
               </dl>
@@ -227,7 +227,7 @@ export default async function LocationPage({ params }: Props) {
               <span className="grid size-10 place-items-center rounded-lg bg-teal-soft text-ink" aria-hidden>
                 <ShieldCheck className="size-5" />
               </span>
-              <h2 className="mt-4 font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">Meeting in person, safely</h2>
+              <h2 className="mt-4 font-heading text-xl font-bold tracking-[-0.03em] text-ink">Meeting in person, safely</h2>
               <ul className="mt-3 space-y-2 text-[15px] leading-relaxed text-ink-2">
                 <li>Tutors share an approximate service area, not an address.</li>
                 <li>Agree on a meeting place in messages — a library or your home, your choice.</li>
@@ -237,7 +237,7 @@ export default async function LocationPage({ params }: Props) {
             </div>
           </Reveal>
           <Reveal delay={0.1}>
-            <h2 className="font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">Nearby cities</h2>
+            <h2 className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">Nearby cities</h2>
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {otherMetros.map(({ m, d, n }) => (
                 <li key={m.slug}>

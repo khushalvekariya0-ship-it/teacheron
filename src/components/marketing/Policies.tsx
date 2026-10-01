@@ -14,7 +14,7 @@ export function PolicyCards({ policy = DEFAULT_POLICY }: { policy?: BookingPolic
       {cards.map((c) => (
         <StaggerItem key={c.title} className="h-full">
           <div className="h-full rounded-2xl border border-line bg-surface p-6">
-            <h3 className="font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">{c.title}</h3>
+            <h3 className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">{c.title}</h3>
             <ul className="mt-4 space-y-2.5">
               {c.lines.map((l) => (
                 <li key={l} className="flex items-start gap-2.5 text-sm leading-relaxed text-ink-2">

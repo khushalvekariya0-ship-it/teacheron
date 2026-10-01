@@ -32,6 +32,7 @@ export default function HowItWorksPage() {
   return (
     <>
       <PageHero
+        image={{ src: "/images/hero-tutoring.jpg", alt: "A tutor helping a student with her notes" }}
         eyebrow="How it works"
         title="A clear path from first search to steady progress."
         description="No subscriptions for families, no hidden ranking, and no surprises at checkout. Here is exactly how TutorLink works — for families and for tutors."

@@ -139,7 +139,7 @@ function NextLessonCard({ booking, tutor, childName, tz }: { booking: Booking | 
           <div className="flex min-w-0 items-start gap-3.5">
             <Avatar name={name} tone={tutor?.tone} size="lg" verified={tutor?.verification.identity === "verified"} />
             <div className="min-w-0">
-              <h2 className="font-heading text-[1.4rem] font-extrabold tracking-[-0.03em] text-ink">
+              <h2 className="font-heading text-[1.4rem] font-bold tracking-[-0.03em] text-ink">
                 {subjectName(booking.subject)}
                 {booking.type === "trial" && <span className="ml-2 align-middle text-[12px] font-medium text-muted">Trial</span>}
               </h2>

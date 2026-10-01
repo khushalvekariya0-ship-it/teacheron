@@ -151,7 +151,7 @@ export function RegisterView() {
         >
           <MailCheck className="size-5" aria-hidden />
         </motion.span>
-        <h1 className="mt-6 font-heading text-[2rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">Verify your email</h1>
+        <h1 className="mt-6 font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Verify your email</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted">
           Welcome to TutorLink, {created.firstName}. We sent a verification link to <span className="font-medium text-ink">{created.email}</span>. You can keep going in the meantime.
         </p>
@@ -193,7 +193,7 @@ export function RegisterView() {
   if (hydrated && me && !isSubmitting) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
-        <h1 className="font-heading text-[2rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">You&apos;re already signed in</h1>
+        <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">You&apos;re already signed in</h1>
         <div className="mt-6 flex items-center gap-3 rounded-xl border border-line bg-canvas p-4">
           <Avatar name={`${me.firstName} ${me.lastName}`} />
           <div className="min-w-0">
@@ -223,7 +223,7 @@ export function RegisterView() {
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
-        <h1 className="font-heading text-[2rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">Create your account</h1>
+        <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Create your account</h1>
         <p className="mt-2 text-[15px] text-muted">
           Already have one?{" "}
           <Link href={signInHref} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">

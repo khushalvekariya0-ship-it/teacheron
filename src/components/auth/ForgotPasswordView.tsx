@@ -42,7 +42,7 @@ export function ForgotPasswordView() {
           >
             <MailCheck className="size-5" aria-hidden />
           </motion.span>
-          <h1 className="mt-6 font-heading text-[2rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">Check your email</h1>
+          <h1 className="mt-6 font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Check your email</h1>
           <p className="mt-2 text-[15px] leading-relaxed text-muted">
             If an account exists for <span className="font-medium text-ink">{sentTo}</span>, you&apos;ll get an email with a link to reset your password. It can take a few minutes — check your spam folder too.
           </p>
@@ -69,7 +69,7 @@ export function ForgotPasswordView() {
           <Link href="/login" className="group mb-6 inline-flex items-center gap-1.5 rounded text-[13px] font-medium text-muted hover:text-ink">
             <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" aria-hidden /> Back to sign in
           </Link>
-          <h1 className="font-heading text-[2rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">Reset your password</h1>
+          <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Reset your password</h1>
           <p className="mt-2 text-[15px] leading-relaxed text-muted">Enter the email you signed up with and we&apos;ll send you a link to choose a new password.</p>
           <form onSubmit={onSubmit} noValidate className="mt-8 space-y-5">
             <Field label="Email" error={errors.email?.message}>

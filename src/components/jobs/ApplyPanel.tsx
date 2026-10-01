@@ -156,7 +156,7 @@ export function ApplyPanel({ job, tutor, existing, now }: { job: Requirement; tu
   return (
     <section id="apply-form" className="rounded-2xl border border-line bg-surface" aria-labelledby="apply-title">
       <div className="border-b border-line px-5 py-4 sm:px-6">
-        <h2 id="apply-title" className="font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">Apply to this job</h2>
+        <h2 id="apply-title" className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">Apply to this job</h2>
         <p className="mt-0.5 text-[13.5px] text-muted">The family sees your profile, message and proposed rate.</p>
       </div>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5 px-5 py-5 sm:px-6">

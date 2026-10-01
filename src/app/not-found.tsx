@@ -29,7 +29,7 @@ export default function NotFound() {
       <div className="container-page relative flex flex-1 flex-col items-center justify-center py-16 text-center">
         <Reveal>
           <p className="font-mono text-sm font-medium tracking-[0.2em] text-muted">404</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.035em] text-ink sm:text-5xl">We couldn&rsquo;t find that page.</h1>
+          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.025em] text-ink sm:text-5xl">We couldn&rsquo;t find that page.</h1>
           <p className="mx-auto mt-4 max-w-md text-[17px] leading-relaxed text-muted">The link may be broken, or the page may have moved. Try a search, or pick up from one of these.</p>
         </Reveal>
 

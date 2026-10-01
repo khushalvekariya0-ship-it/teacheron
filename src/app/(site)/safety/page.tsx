@@ -14,7 +14,7 @@ function GuideCard({ icon, title, intro, items }: { icon: React.ReactNode; title
   return (
     <div className="h-full rounded-2xl border border-line bg-surface p-6 sm:p-8">
       <span className="grid size-11 place-items-center rounded-lg bg-brand-soft text-ink [&_svg]:size-5">{icon}</span>
-      <h2 className="mt-5 font-heading text-[1.75rem] font-extrabold leading-[1.08] tracking-[-0.04em] text-ink">{title}</h2>
+      <h2 className="mt-5 font-heading text-[1.75rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink">{title}</h2>
       <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{intro}</p>
       <ol className="mt-6 space-y-4">
         {items.map((it, i) => (
@@ -107,7 +107,7 @@ export default function SafetyPage() {
           ].map((b) => (
             <StaggerItem key={b.title} className="h-full">
               <div className="h-full rounded-2xl border border-line bg-surface p-6 sm:p-8">
-                <h3 className="flex items-center gap-3 font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">
+                <h3 className="flex items-center gap-3 font-heading text-xl font-bold tracking-[-0.03em] text-ink">
                   <span className="grid size-10 place-items-center rounded-lg bg-sky-soft text-ink [&_svg]:size-5">{b.icon}</span> {b.title}
                 </h3>
                 <ul className="mt-5 space-y-3">
@@ -157,7 +157,7 @@ export default function SafetyPage() {
             <StaggerItem as="li" key={s.t} className="h-full">
               <div className="h-full rounded-2xl border border-line bg-surface p-6">
                 <span className="inline-flex rounded-md bg-ink px-2 py-0.5 text-[12.5px] font-bold tabular-nums text-on-ink">Step {i + 1}</span>
-                <h3 className="mt-3 font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">{s.t}</h3>
+                <h3 className="mt-3 font-heading text-xl font-bold tracking-[-0.03em] text-ink">{s.t}</h3>
                 <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-2">{s.b}</p>
               </div>
             </StaggerItem>

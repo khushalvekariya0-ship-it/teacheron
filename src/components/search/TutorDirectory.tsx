@@ -122,7 +122,7 @@ export function TutorDirectory() {
 
           <div className="flex items-end justify-between gap-4">
             <div className="min-w-0">
-              <h2 id="results-heading" className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink sm:text-[30px]" aria-live="polite">
+              <h2 id="results-heading" className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]" aria-live="polite">
                 <motion.span key={results.length} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }} className="inline-block tabular-nums">
                   {results.length}
                 </motion.span>{" "}

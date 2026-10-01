@@ -466,7 +466,7 @@ export function PayoutVignette({ rateCents, commissionBps, planName }: { rateCen
           <div className="flex justify-between"><dt className="text-muted">Commission ({commissionBps / 100}%)</dt><dd className="tabular-nums text-ink">−{formatCents(fee, { exact: true })}</dd></div>
           <div className="flex items-baseline justify-between border-t border-line pt-2">
             <dt className="font-semibold text-ink">You earn</dt>
-            <dd className="font-heading text-xl font-extrabold tabular-nums tracking-[-0.03em] text-ink">{formatCents(net, { exact: true })}</dd>
+            <dd className="font-heading text-xl font-bold tabular-nums tracking-[-0.03em] text-ink">{formatCents(net, { exact: true })}</dd>
           </div>
         </dl>
         <div className="flex items-center gap-2 border-t border-line px-4 py-2.5 text-[11.5px] text-muted">

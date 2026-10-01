@@ -108,7 +108,7 @@ export function ReviewsSection({ tutor }: { tutor: Tutor }) {
         <>
           <div data-spotlight className="grid gap-6 rounded-xl border border-line p-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-8 sm:p-6">
             <div className="flex flex-row items-center gap-4 sm:flex-col sm:items-start sm:justify-center sm:gap-1">
-              <p className="text-5xl font-semibold tracking-[-0.04em] tabular-nums text-ink">{average!.toFixed(1)}</p>
+              <p className="text-5xl font-semibold tracking-[-0.03em] tabular-nums text-ink">{average!.toFixed(1)}</p>
               <div className="space-y-1">
                 <StarRating rating={average} count={count} showStars size="md" className="[&>span:nth-child(2)]:hidden [&>span:nth-child(3)]:hidden" />
                 <p className="text-[13px] text-muted">

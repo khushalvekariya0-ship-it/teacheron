@@ -36,7 +36,7 @@ export function AuthVignette() {
     <div className="relative flex h-full flex-col justify-between overflow-hidden px-10 py-12 text-ink xl:px-16">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE }} className="relative max-w-md">
         <p className="text-[13px] font-semibold text-ink">For students, parents and tutors</p>
-        <h2 className="mt-3 font-heading text-[2.5rem] font-extrabold leading-[1.02] tracking-[-0.035em] text-ink xl:text-[2.85rem]">
+        <h2 className="mt-3 font-heading text-[2.5rem] font-bold leading-[1.02] tracking-[-0.025em] text-ink xl:text-[2.85rem]">
           Every lesson, message and milestone in one calm place.
         </h2>
         <p className="mt-4 text-[16px] leading-relaxed text-ink/80">Book lessons, keep in touch with your tutor and see progress after every session.</p>

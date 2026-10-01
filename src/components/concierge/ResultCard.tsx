@@ -37,7 +37,7 @@ export function ResultCard({ result, rank, criteria }: { result: MatchResult; ra
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-heading text-[19px] font-extrabold tracking-[-0.02em] text-ink">
+            <h3 className="font-heading text-[19px] font-bold tracking-[-0.02em] text-ink">
               <Link href={`/tutors/${t.slug}`} className="rounded-sm hover:underline hover:decoration-2 hover:underline-offset-4">
                 {name}
               </Link>
@@ -63,7 +63,7 @@ export function ResultCard({ result, rank, criteria }: { result: MatchResult; ra
         </div>
         <MatchRing value={result.percent} size={68} className="hidden sm:block" />
         <div className="shrink-0 text-right sm:hidden">
-          <p className="font-heading text-xl font-extrabold tabular-nums tracking-[-0.03em] text-ink">{result.percent}%</p>
+          <p className="font-heading text-xl font-bold tabular-nums tracking-[-0.03em] text-ink">{result.percent}%</p>
           <p className="text-[11px] text-muted">match</p>
         </div>
       </div>

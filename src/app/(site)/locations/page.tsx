@@ -69,7 +69,7 @@ export default function LocationsPage() {
           {byState.map(([stateName, list]) => (
             <section key={stateName} aria-labelledby={`state-${list[0].state}`}>
               <Reveal>
-                <h2 id={`state-${list[0].state}`} className="border-b-2 border-ink pb-3 font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">
+                <h2 id={`state-${list[0].state}`} className="border-b-2 border-ink pb-3 font-heading text-2xl font-bold tracking-[-0.025em] text-ink">
                   {stateName}
                 </h2>
               </Reveal>

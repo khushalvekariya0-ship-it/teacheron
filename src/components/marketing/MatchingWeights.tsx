@@ -34,7 +34,7 @@ export function MatchingWeights() {
       <div className="rounded-2xl border border-line bg-surface">
         <div className="flex flex-col gap-3 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="flex items-center gap-2 font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">
+            <p className="flex items-center gap-2 font-heading text-lg font-bold tracking-[-0.02em] text-ink">
               <Scale className="size-[18px] text-ink" /> Match score weights
             </p>
             <p className="mt-0.5 text-[13px] text-muted">Default weights, out of 100. Administrators can adjust them; the factors stay visible.</p>
@@ -102,7 +102,7 @@ export function MatchingWeights() {
 
       <div className="flex flex-col gap-5">
         <div className="rounded-2xl border-2 border-ink bg-surface p-5">
-          <p className="flex items-center gap-2 font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">
+          <p className="flex items-center gap-2 font-heading text-lg font-bold tracking-[-0.02em] text-ink">
             <Ban className="size-[18px] text-ink" /> What never affects ranking
           </p>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-ink-2">

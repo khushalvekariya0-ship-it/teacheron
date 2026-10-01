@@ -67,7 +67,7 @@ export function ConsentView() {
                   <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", bounce: 0.4 }} className="mx-auto grid size-12 place-items-center rounded-xl bg-teal-soft text-ink">
                     <CircleCheck className="size-6" />
                   </motion.div>
-                  <h1 className="mt-5 font-heading text-2xl font-extrabold tracking-[-0.035em]">Account approved</h1>
+                  <h1 className="mt-5 font-heading text-2xl font-bold tracking-[-0.025em]">Account approved</h1>
                   <p className="mt-2 text-sm leading-relaxed text-muted">
                     {student.firstName} can now message tutors, book lessons and post requirements. Create a parent account any time to see their lessons and messages in one place.
                   </p>
@@ -79,7 +79,7 @@ export function ConsentView() {
               ) : (
                 <motion.form key="form" onSubmit={submit} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-6 sm:p-8" noValidate>
                   <p className="eyebrow">Parental consent</p>
-                  <h1 className="mt-2 font-heading text-2xl font-extrabold tracking-[-0.035em]">Approve {student.firstName}&rsquo;s TutorLink account</h1>
+                  <h1 className="mt-2 font-heading text-2xl font-bold tracking-[-0.025em]">Approve {student.firstName}&rsquo;s TutorLink account</h1>
                   <p className="mt-2 text-sm leading-relaxed text-muted">
                     {student.firstName} {student.lastName.charAt(0)}. signed up as a student and listed you as their parent or guardian. Students under 18 need your approval before they can message tutors or book lessons.
                   </p>

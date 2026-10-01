@@ -21,12 +21,12 @@ export function PlanCards() {
             )}
           >
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">{p.name}</h3>
+              <h3 className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink">{p.name}</h3>
               {p.highlighted && <Badge tone="solid" size="sm">Recommended</Badge>}
             </div>
             <p className="mt-1.5 min-h-10 text-sm leading-relaxed text-ink-2">{p.description}</p>
             <p className="mt-6 flex items-baseline gap-1">
-              <span className="font-heading text-5xl font-extrabold tracking-[-0.04em] text-ink tabular-nums">{formatCents(p.priceCents)}</span>
+              <span className="font-heading text-5xl font-bold tracking-[-0.03em] text-ink tabular-nums">{formatCents(p.priceCents)}</span>
               <span className="text-sm text-muted">/ month</span>
             </p>
             <dl className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-canvas p-3.5">
@@ -65,7 +65,7 @@ export function CreditPacks() {
     <div className="rounded-2xl border border-line bg-surface">
       <div className="flex flex-col gap-2 border-b border-line p-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="flex items-center gap-2 font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">
+          <h3 className="flex items-center gap-2 font-heading text-xl font-bold tracking-[-0.03em] text-ink">
             <Coins className="size-5 text-ink" /> Credit packs
           </h3>
           <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-ink-2">
@@ -80,7 +80,7 @@ export function CreditPacks() {
           return (
             <li key={pack.id} className="p-6">
               <p className="text-sm text-muted">{pack.credits} credits</p>
-              <p className="mt-1 font-heading text-3xl font-extrabold tracking-[-0.04em] tabular-nums text-ink">{formatCents(pack.priceCents)}</p>
+              <p className="mt-1 font-heading text-3xl font-bold tracking-[-0.03em] tabular-nums text-ink">{formatCents(pack.priceCents)}</p>
               <p className="mt-1 text-[13px] tabular-nums text-muted">
                 {formatCents(per, { exact: true })} per credit
                 {saving > 0 && <span className="ml-1.5 font-semibold text-ink">· {saving}% less than the {base.credits}-pack</span>}

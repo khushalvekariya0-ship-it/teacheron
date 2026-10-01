@@ -95,7 +95,7 @@ export default async function SubjectPage({ params }: Props) {
               </Reveal>
               <WordReveal
                 text={`${subject.name} tutors`}
-                className="mt-6 font-heading text-[2.75rem] font-extrabold leading-[0.98] tracking-[-0.04em] text-ink sm:text-6xl lg:text-[4.4rem]"
+                className="mt-6 font-heading text-[2.75rem] font-bold leading-[0.98] tracking-[-0.03em] text-ink sm:text-6xl lg:text-[4.4rem]"
               />
               <Reveal delay={0.2}>
                 <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink/80 sm:text-xl">{subject.summary}</p>
@@ -118,7 +118,7 @@ export default async function SubjectPage({ params }: Props) {
                 {stats.map((s) => (
                   <div key={s.k} className="bg-surface p-5 sm:p-6">
                     <dt className="text-[13px] text-muted">{s.k}</dt>
-                    <dd className="mt-1.5 font-heading text-2xl font-extrabold tracking-[-0.03em] tabular-nums text-ink">{s.v}</dd>
+                    <dd className="mt-1.5 font-heading text-2xl font-bold tracking-[-0.03em] tabular-nums text-ink">{s.v}</dd>
                   </div>
                 ))}
               </dl>

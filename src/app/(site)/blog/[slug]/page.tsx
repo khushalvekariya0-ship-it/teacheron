@@ -78,7 +78,7 @@ export default async function BlogPostPage({ params }: Props) {
               </Reveal>
               <WordReveal
                 text={post.title}
-                className="mt-6 font-heading text-[2.4rem] font-extrabold leading-[1] tracking-[-0.035em] text-ink sm:text-5xl lg:text-[3.6rem]"
+                className="mt-6 font-heading text-[2.4rem] font-bold leading-[1] tracking-[-0.025em] text-ink sm:text-5xl lg:text-[3.6rem]"
               />
               <Reveal delay={0.2}>
                 <p className="mt-6 text-lg leading-relaxed text-ink/80 sm:text-xl">{post.excerpt}</p>

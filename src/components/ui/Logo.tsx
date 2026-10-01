@@ -18,7 +18,7 @@ export function Logo({ className, href = "/", compact }: { className?: string; h
   return (
     <Link href={href} className={cn("group inline-flex items-center gap-2 rounded-md", className)} aria-label={`${SITE.name} home`}>
       <LogoMark className="transition-transform duration-300 group-hover:rotate-[-6deg]" />
-      {!compact && <span className="font-heading text-[22px] font-extrabold tracking-[-0.04em] text-ink">{SITE.name}</span>}
+      {!compact && <span className="font-heading text-[22px] font-bold tracking-[-0.03em] text-ink">{SITE.name}</span>}
     </Link>
   );
 }

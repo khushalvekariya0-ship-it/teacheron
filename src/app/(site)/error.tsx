@@ -22,7 +22,7 @@ export default function SiteError({ error, retry, reset }: { error: Error & { di
           <span className="grid size-14 place-items-center rounded-2xl bg-danger-50 text-danger">
             <CircleAlert className="size-6" aria-hidden />
           </span>
-          <h1 className="mt-6 font-heading text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.035em] text-ink sm:text-5xl">Something went wrong on this page.</h1>
+          <h1 className="mt-6 font-heading text-[2.2rem] font-bold leading-[1.02] tracking-[-0.025em] text-ink sm:text-5xl">Something went wrong on this page.</h1>
           <p className="mt-4 max-w-md text-[16px] leading-relaxed text-ink-2">
             It&rsquo;s not you — we hit an unexpected error. Try again, and if it keeps happening, let us know.
           </p>

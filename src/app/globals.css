@@ -78,7 +78,7 @@
   --color-danger: #c02637;
   --color-danger-50: #fff0f1;
   --color-danger-200: #fbc5cb;
-  --color-star: #0f172a;
+  --color-star: #f59e0b;
 
   /* Radii — tight and crisp */
   --radius-xs: 3px;
@@ -204,7 +204,7 @@ html.dark {
   --color-warning-200: #713f12;
   --color-danger-50: #2c1014;
   --color-danger-200: #7f1d1d;
-  --color-star: #e2e8f0;
+  --color-star: #fbbf24;
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 10px -4px rgb(0 0 0 / 0.5);
@@ -292,7 +292,7 @@ html.theme-switching *::after {
 /* Headline display type: tight, extra-bold. */
 @utility display {
   font-family: var(--font-heading);
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.035em;
   line-height: 1;
 }

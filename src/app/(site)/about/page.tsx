@@ -22,6 +22,7 @@ export default function AboutPage() {
   return (
     <>
       <PageHero
+        image={{ src: "/images/hero-tutoring-close.jpg", alt: "A tutor and a student working through a lesson together" }}
         eyebrow="About TutorLink"
         title="Tutoring works best when everyone can see how it works."
         description="We're building a tutoring marketplace for families and tutors across the United States — one where rankings are explained, badges are earned, and personal information stays private."
@@ -31,7 +32,7 @@ export default function AboutPage() {
         <div className="grid gap-12 lg:grid-cols-[1fr_1.4fr] lg:gap-20">
           <Reveal>
             <Eyebrow className="mb-5 text-ink">Our mission</Eyebrow>
-            <h2 className="font-heading text-[2rem] font-extrabold leading-[1.04] tracking-[-0.035em] text-ink sm:text-[2.6rem]">Help every learner find the right teacher — and trust the choice.</h2>
+            <h2 className="font-heading text-[2rem] font-bold leading-[1.04] tracking-[-0.025em] text-ink sm:text-[2.6rem]">Help every learner find the right teacher — and trust the choice.</h2>
           </Reveal>
           <Reveal delay={0.1} className="space-y-5 text-[17px] leading-relaxed text-ink-2">
             <p>
@@ -66,7 +67,7 @@ export default function AboutPage() {
           <Reveal className="h-full">
             <div className="h-full rounded-2xl border border-line bg-surface p-6 sm:p-8">
               <Eyebrow className="text-ink">How we make money</Eyebrow>
-              <h2 className="mt-4 font-heading text-[1.75rem] font-extrabold leading-[1.08] tracking-[-0.04em] text-ink">Two sources, both on the pricing page.</h2>
+              <h2 className="mt-4 font-heading text-[1.75rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink">Two sources, both on the pricing page.</h2>
               <ul className="mt-5 space-y-3 text-[15px] leading-relaxed text-ink-2">
                 <li className="border-l-[3px] border-brand pl-3">
                   A commission on paid lessons, deducted from the tutor&rsquo;s earnings: {Math.max(...commissions)}% down to {Math.min(...commissions)}% depending on plan.
@@ -85,7 +86,7 @@ export default function AboutPage() {
             <div className="relative h-full overflow-hidden rounded-2xl bg-yellow-soft p-6 sm:p-8">
               <div className="relative">
                 <Eyebrow className="text-ink">What we cover</Eyebrow>
-                <h2 className="mt-4 font-heading text-[1.75rem] font-extrabold leading-[1.08] tracking-[-0.04em] text-ink">K–12, college and adult learners.</h2>
+                <h2 className="mt-4 font-heading text-[1.75rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink">K–12, college and adult learners.</h2>
                 <Stagger className="mt-6 grid grid-cols-3 gap-3" stagger={0.08}>
                   {[
                     { v: SUBJECT_CATEGORIES.length, k: "subject areas" },
@@ -93,7 +94,7 @@ export default function AboutPage() {
                     { v: metros, k: "city pages" },
                   ].map((s) => (
                     <StaggerItem key={s.k} className="rounded-xl bg-surface p-4">
-                      <p className="font-heading text-3xl font-extrabold tracking-[-0.04em] tabular-nums text-ink">{s.v}</p>
+                      <p className="font-heading text-3xl font-bold tracking-[-0.03em] tabular-nums text-ink">{s.v}</p>
                       <p className="mt-0.5 text-[13px] text-muted">{s.k}</p>
                     </StaggerItem>
                   ))}
@@ -113,7 +114,7 @@ export default function AboutPage() {
         <div className="grid items-center gap-10 lg:grid-cols-[1.4fr_1fr]">
           <Reveal>
             <Eyebrow className="mb-5 text-ink">Get in touch</Eyebrow>
-            <h2 className="font-heading text-[2rem] font-extrabold leading-[1.04] tracking-[-0.035em] text-ink sm:text-[2.4rem]">Questions, feedback or partnership ideas?</h2>
+            <h2 className="font-heading text-[2rem] font-bold leading-[1.04] tracking-[-0.025em] text-ink sm:text-[2.4rem]">Questions, feedback or partnership ideas?</h2>
             <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-ink-2">
               We read every message. Write to{" "}
               <a href={`mailto:${SITE.supportEmail}`} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">

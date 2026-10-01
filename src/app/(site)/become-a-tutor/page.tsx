@@ -40,6 +40,7 @@ export default function BecomeATutorPage() {
   return (
     <>
       <PageHero
+        image={{ src: "/images/become-a-tutor.jpg", alt: "A tutor smiling while working on a laptop" }}
         eyebrow="Become a tutor"
         title="Teach what you know. Build a practice on your terms."
         description="Set your own rates, hours and service area. Families find you through transparent search — and a paid plan never buys a better position."
@@ -109,7 +110,7 @@ export default function BecomeATutorPage() {
           ]}
           visual={
             <div className="rounded-2xl border-2 border-ink bg-surface p-6">
-              <p className="font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">Community standards</p>
+              <p className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">Community standards</p>
               <p className="mt-1 text-sm text-muted">Every tutor agrees to these before teaching.</p>
               <ul className="mt-5 space-y-3">
                 {[

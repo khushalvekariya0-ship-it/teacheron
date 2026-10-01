@@ -359,7 +359,7 @@ function WizardForm({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Eyebrow className="mb-4 text-ink">{live ? "Edit requirement" : "Post a requirement"}</Eyebrow>
-            <h1 className="font-heading text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.035em] text-ink sm:text-5xl">{live ? "Update your requirement" : "Tell tutors what you need"}</h1>
+            <h1 className="font-heading text-[2.2rem] font-bold leading-[1.02] tracking-[-0.025em] text-ink sm:text-5xl">{live ? "Update your requirement" : "Tell tutors what you need"}</h1>
             <p className="mt-3 text-[15px] text-ink-2">{live ? "Changes go live when you save them on the last step." : "About three minutes. Your draft saves as you go."}</p>
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">
@@ -403,7 +403,7 @@ function WizardForm({
                 <p className="mb-1 hidden text-[12.5px] font-medium tabular-nums text-muted lg:block">
                   Step {step + 1} of {STEPS.length}
                 </p>
-                <h2 ref={headingRef} tabIndex={-1} className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink outline-none sm:text-[1.75rem]">
+                <h2 ref={headingRef} tabIndex={-1} className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink outline-none sm:text-[1.75rem]">
                   {STEPS[step].title}
                 </h2>
                 <p className="mt-1 text-sm text-muted">{STEP_INTRO[step]}</p>
@@ -554,7 +554,7 @@ function SignedOutIntro({ next }: { next: string }) {
             <Reveal>
               <Eyebrow className="mb-6 text-ink">Post a requirement</Eyebrow>
             </Reveal>
-            <WordReveal text="Tell tutors what you need. Let them come to you." className="font-heading text-[2.6rem] font-extrabold leading-[0.98] tracking-[-0.04em] text-ink sm:text-6xl lg:text-[4.2rem]" />
+            <WordReveal text="Tell tutors what you need. Let them come to you." className="font-heading text-[2.6rem] font-bold leading-[0.98] tracking-[-0.03em] text-ink sm:text-6xl lg:text-[4.2rem]" />
             <Reveal delay={0.2}>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink/80 sm:text-xl">
                 Describe the learner, goals, schedule and budget. Tutors apply with a short note and a proposed rate — you decide who to message.
@@ -582,7 +582,7 @@ function SignedOutIntro({ next }: { next: string }) {
 
           <Reveal delay={0.15}>
             <div className="rounded-2xl bg-surface p-6 sm:p-8">
-              <p className="font-heading text-xl font-extrabold tracking-[-0.03em] text-ink">How it works</p>
+              <p className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">How it works</p>
               <Stagger as="ol" className="mt-6 space-y-6" stagger={0.08}>
                 {HOW_IT_WORKS.map((s, i) => (
                   <StaggerItem as="li" key={s.title} className="flex gap-4">

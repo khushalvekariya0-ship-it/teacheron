@@ -298,7 +298,7 @@ export function ConciergeFlow() {
           <motion.div key="review" {...panelMotion} className="mx-auto max-w-3xl">
             <form onSubmit={submit} noValidate className="rounded-2xl border border-line bg-surface">
               <div className="border-b border-line px-5 py-5 sm:px-7 sm:py-6">
-                <h2 className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink sm:text-[1.75rem]">{text.trim() ? "Here's what we understood" : "Your answers"}</h2>
+                <h2 className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[1.75rem]">{text.trim() ? "Here's what we understood" : "Your answers"}</h2>
                 {text.trim() ? (
                   <blockquote className="mt-3 border-l-[3px] border-brand pl-3 text-[14.5px] leading-relaxed text-ink-2">“{text.trim()}”</blockquote>
                 ) : (
@@ -431,7 +431,7 @@ function Results({
       <div className="flex flex-col gap-5 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <Eyebrow className="mb-4 text-ink">Your shortlist</Eyebrow>
-          <h2 className="font-heading text-[1.75rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink sm:text-[2.25rem]">
+          <h2 className="font-heading text-[1.75rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink sm:text-[2.25rem]">
             {top.length ? `Top ${top.length === 1 ? "match" : `${top.length} matches`} for ${subjectName(answers.subject)}` : `No ${subjectName(answers.subject)} tutors match yet`}
           </h2>
           <p className="mt-2 text-sm text-muted">
@@ -511,7 +511,7 @@ function Results({
             </motion.div>
           )}
           <div className="rounded-2xl border border-line bg-surface p-5">
-            <p className="font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">Keep going</p>
+            <p className="font-heading text-lg font-bold tracking-[-0.02em] text-ink">Keep going</p>
             <div className="mt-4 flex flex-col gap-2">
               <Button asChild>
                 <Link href={tutorsHref(answers)}>

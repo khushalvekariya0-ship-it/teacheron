@@ -46,7 +46,7 @@ export default function SubjectsPage() {
                       <CategoryIcon slug={c.slug} className="size-6" />
                     </span>
                     <div>
-                      <h2 id={`${c.slug}-title`} className="font-heading text-[1.9rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">
+                      <h2 id={`${c.slug}-title`} className="font-heading text-[1.9rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">
                         {c.name}
                       </h2>
                       <p className="mt-1.5 text-[15px] text-ink-2">{c.description}</p>
@@ -70,7 +70,7 @@ export default function SubjectsPage() {
           <Reveal>
             <div className="flex flex-col items-start justify-between gap-4 rounded-2xl bg-yellow-soft p-6 sm:flex-row sm:items-center sm:p-8">
               <div>
-                <h2 className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">Don&rsquo;t see your subject?</h2>
+                <h2 className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink">Don&rsquo;t see your subject?</h2>
                 <p className="mt-1.5 text-[15px] text-ink-2">Post a requirement describing what you need, and tutors who teach it can apply.</p>
               </div>
               <ArrowLink href="/post-requirement" className="shrink-0">

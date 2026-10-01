@@ -89,7 +89,7 @@ export function JobPosting({
           <Badge tone="neutral">{GRADE_LABEL[job.grade]}</Badge>
           {statusBadge}
         </div>
-        <Title className={cn("mt-4 font-heading font-extrabold tracking-[-0.035em] text-ink", headingLevel === "h1" ? "text-[2rem] leading-[1.05] sm:text-[2.75rem]" : "text-2xl sm:text-3xl")}>
+        <Title className={cn("mt-4 font-heading font-bold tracking-[-0.025em] text-ink", headingLevel === "h1" ? "text-[2rem] leading-[1.05] sm:text-[2.75rem]" : "text-2xl sm:text-3xl")}>
           {job.title || "Untitled requirement"}
         </Title>
         <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
@@ -114,7 +114,7 @@ export function JobPosting({
 
       <div className="mt-10 space-y-10">
         <section>
-          <Section className="font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">Learning objectives</Section>
+          <Section className="font-heading text-lg font-bold tracking-[-0.02em] text-ink">Learning objectives</Section>
           <p className="mt-2.5 whitespace-pre-line text-[15px] leading-relaxed text-ink-2">{job.objectives || "No objectives written yet."}</p>
           {support.length > 0 && (
             <div className="mt-4">
@@ -131,7 +131,7 @@ export function JobPosting({
         </section>
 
         <section>
-          <Section className="font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">Schedule</Section>
+          <Section className="font-heading text-lg font-bold tracking-[-0.02em] text-ink">Schedule</Section>
           <p className="mt-1 text-sm text-muted">{scheduleSummary(job)} · {pluralize(job.sessionsPerWeek, "session")} per week</p>
           <WeekStrip days={job.days} className="mt-4 max-w-md" />
           <ul className="mt-3 flex flex-wrap gap-2">
@@ -151,7 +151,7 @@ export function JobPosting({
         </section>
 
         <section>
-          <Section className="font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">Tutor preferences</Section>
+          <Section className="font-heading text-lg font-bold tracking-[-0.02em] text-ink">Tutor preferences</Section>
           <dl className="mt-3 divide-y divide-line rounded-2xl border border-line">
             <div className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
               <dt className="flex items-center gap-2 text-muted"><GraduationCap className="size-4 text-subtle" aria-hidden /> Minimum experience</dt>
@@ -173,7 +173,7 @@ export function JobPosting({
 
         {(job.details.trim() || attachments.length > 0) && (
           <section>
-            <Section className="font-heading text-lg font-extrabold tracking-[-0.02em] text-ink">Additional details</Section>
+            <Section className="font-heading text-lg font-bold tracking-[-0.02em] text-ink">Additional details</Section>
             {job.details.trim() && <p className="mt-2.5 whitespace-pre-line text-[15px] leading-relaxed text-ink-2">{job.details}</p>}
             {attachments.length > 0 && (
               <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-[13px] text-ink-2">

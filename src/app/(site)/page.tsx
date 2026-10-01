@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Hero, Facts, SubjectGrid, HowItWorks, TrialPromise, BecomeTutor, FamilyBanner, HomeFaq } from "@/components/home/Sections";
+import { Hero, TrustBar, SubjectTiles, HowItWorks, GetMatched, FeaturedTutors, WhyTutorLink, Stories, BecomeTutor, HomeFaq, ClosingCta } from "@/components/home/Sections";
 import { FAQS } from "@/lib/data/content";
 import { SITE } from "@/lib/site";
 
@@ -36,13 +36,16 @@ export default function HomePage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <Hero />
-      <Facts />
-      <SubjectGrid />
+      <TrustBar />
+      <SubjectTiles />
       <HowItWorks />
-      <TrialPromise />
+      <GetMatched />
+      <FeaturedTutors />
+      <WhyTutorLink />
+      <Stories />
       <BecomeTutor />
-      <FamilyBanner />
       <HomeFaq />
+      <ClosingCta />
     </>
   );
 }

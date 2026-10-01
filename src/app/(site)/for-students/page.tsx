@@ -29,6 +29,7 @@ export default function ForStudentsPage() {
   return (
     <>
       <PageHero
+        image={{ src: "/images/online-lesson.jpg", alt: "A student taking notes during an online lesson" }}
         eyebrow="For students"
         title="Help that fits your classes, your goals and your week."
         description="Whether it's a unit test on Friday, an AP exam in May or a career change into software, find a tutor who teaches exactly what you're working on."
@@ -119,7 +120,7 @@ export default function ForStudentsPage() {
               <span className="grid size-11 place-items-center rounded-lg bg-sky-soft text-ink">
                 <GraduationCap className="size-5" />
               </span>
-              <h2 className="mt-5 font-heading text-[1.75rem] font-extrabold leading-[1.08] tracking-[-0.04em] text-ink">College students and adult learners</h2>
+              <h2 className="mt-5 font-heading text-[1.75rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink">College students and adult learners</h2>
               <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
                 Book and pay on your own account. Filter for tutors who work with college students or adults — useful for gateway courses, graduate admissions tests or learning to code.
               </p>
@@ -131,7 +132,7 @@ export default function ForStudentsPage() {
                 ].map((s) => (
                   <div key={s.k} className="rounded-xl bg-canvas p-3">
                     <dt className="text-[12px] text-muted">{s.k}</dt>
-                    <dd className="mt-0.5 font-heading text-xl font-extrabold tracking-[-0.03em] tabular-nums text-ink">
+                    <dd className="mt-0.5 font-heading text-xl font-bold tracking-[-0.03em] tabular-nums text-ink">
                       {s.v} <span className="text-[12px] font-normal text-muted">tutors</span>
                     </dd>
                   </div>
@@ -152,7 +153,7 @@ export default function ForStudentsPage() {
               <span className="grid size-11 place-items-center rounded-lg bg-surface text-ink">
                 <UserRound className="size-5" />
               </span>
-              <h2 className="mt-5 font-heading text-[1.75rem] font-extrabold leading-[1.08] tracking-[-0.04em] text-ink">Under 18?</h2>
+              <h2 className="mt-5 font-heading text-[1.75rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink">Under 18?</h2>
               <ul className="mt-4 space-y-3 text-[15px] leading-relaxed text-ink-2">
                 <li className="border-l-[3px] border-brand pl-3">
                   <span className="font-semibold text-ink">13 to 17:</span> you need a parent or guardian&rsquo;s permission to use TutorLink. Many families have a parent handle bookings and payments.

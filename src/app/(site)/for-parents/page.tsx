@@ -25,6 +25,7 @@ export default function ForParentsPage() {
   return (
     <>
       <PageHero
+        image={{ src: "/images/family.jpg", alt: "A parent and her daughter reviewing schoolwork together" }}
         eyebrow="For parents"
         title="Full visibility into your child's tutoring."
         description="One parent account for every child — with the oversight you'd expect when your kids are learning with someone new."

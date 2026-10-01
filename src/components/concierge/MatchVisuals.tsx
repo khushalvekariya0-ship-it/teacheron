@@ -47,7 +47,7 @@ export function MatchRing({ value, size = 64, stroke = 5, className, label }: { 
           transition={{ duration: 1.1, ease: EASE }}
         />
       </svg>
-      <span className={cn("absolute inset-0 grid place-items-center font-heading font-extrabold tracking-[-0.03em] text-ink", size >= 72 ? "text-lg" : "text-[13.5px]")} aria-hidden>
+      <span className={cn("absolute inset-0 grid place-items-center font-heading font-bold tracking-[-0.03em] text-ink", size >= 72 ? "text-lg" : "text-[13.5px]")} aria-hidden>
         <CountUp value={v} format={pct} duration={1.1} />
       </span>
     </div>

@@ -21,7 +21,7 @@ export default function ContactPage() {
         <div className="grid gap-10 lg:grid-cols-[1.5fr_1fr] lg:gap-14">
           <Reveal>
             <div className="rounded-2xl border border-line bg-surface p-5 sm:p-8">
-              <h2 className="font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">Send a message</h2>
+              <h2 className="font-heading text-2xl font-bold tracking-[-0.025em] text-ink">Send a message</h2>
               <p className="mb-6 mt-1 text-sm text-muted">We use what you send only to answer your request.</p>
               <ContactForm />
             </div>

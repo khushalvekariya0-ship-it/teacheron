@@ -110,7 +110,7 @@ export function HowItWorksView() {
       <Reveal className="mb-12 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between lg:mb-16">
         <div>
           <Eyebrow className="mb-4 text-ink">Step by step</Eyebrow>
-          <h2 className="font-heading text-[2.1rem] font-extrabold leading-[1.02] tracking-[-0.035em] text-ink sm:text-[2.75rem]">{audience === "families" ? "For families and students" : "For tutors"}</h2>
+          <h2 className="font-heading text-[2.1rem] font-bold leading-[1.02] tracking-[-0.025em] text-ink sm:text-[2.75rem]">{audience === "families" ? "For families and students" : "For tutors"}</h2>
         </div>
         <Segmented
           label="Show steps for"
@@ -135,10 +135,10 @@ export function HowItWorksView() {
           {steps.map((s, i) => (
             <li key={s.title} className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
               <Reveal className={i % 2 === 1 ? "lg:order-2" : undefined}>
-                <span className="grid size-10 place-items-center rounded-lg bg-ink font-heading text-[15px] font-extrabold tabular-nums text-on-ink">
+                <span className="grid size-10 place-items-center rounded-lg bg-ink font-heading text-[15px] font-bold tabular-nums text-on-ink">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <h3 className="mt-5 font-heading text-[1.75rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink sm:text-[2.1rem]">{s.title}</h3>
+                <h3 className="mt-5 font-heading text-[1.75rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink sm:text-[2.1rem]">{s.title}</h3>
                 <p className="mt-3 max-w-lg text-[15.5px] leading-relaxed text-ink-2 sm:text-[17px]">{s.body}</p>
                 <ul className="mt-6 space-y-2.5">
                   {s.points.map((p) => (

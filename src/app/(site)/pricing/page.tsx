@@ -57,7 +57,7 @@ export default function PricingPage() {
             <Reveal>
               <div className="rounded-2xl border-2 border-ink bg-surface p-6 sm:p-8">
                 <p className="flex items-baseline gap-2">
-                  <span className="font-heading text-6xl font-extrabold tracking-[-0.04em] text-ink">$0</span>
+                  <span className="font-heading text-6xl font-bold tracking-[-0.03em] text-ink">$0</span>
                   <span className="text-sm text-muted">to join, search and message</span>
                 </p>
                 <ul className="mt-6 space-y-3">
@@ -94,7 +94,7 @@ export default function PricingPage() {
           </Reveal>
         </div>
         <div className="mt-16">
-          <h3 className="mb-6 font-heading text-2xl font-extrabold tracking-[-0.035em] text-ink">Cancellation and refunds</h3>
+          <h3 className="mb-6 font-heading text-2xl font-bold tracking-[-0.025em] text-ink">Cancellation and refunds</h3>
           <PolicyCards />
           <p className="mt-4 text-[13px] text-muted">
             Our current defaults. The exact policy for your booking is shown before you pay. A confirmed tutor no-show is always refunded in full; problems can be reported within {DEFAULT_POLICY.disputeWindowDays} days.

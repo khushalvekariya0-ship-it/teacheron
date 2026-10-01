@@ -70,7 +70,7 @@ export function ProfileHeader({ tutor, instant }: { tutor: Tutor; instant: boole
             )}
             <Badge tone="outline">{TUTOR_CATEGORY_LABEL[tutor.category]}</Badge>
           </motion.div>
-          <motion.h1 {...fade(0.1)} className="mt-3 font-heading text-[2.4rem] font-extrabold leading-[1] tracking-[-0.035em] text-ink sm:text-5xl lg:text-[3.4rem]">
+          <motion.h1 {...fade(0.1)} className="mt-3 font-heading text-[2.4rem] font-bold leading-[1] tracking-[-0.025em] text-ink sm:text-5xl lg:text-[3.4rem]">
             {name}
           </motion.h1>
           <motion.p {...fade(0.16)} className="mt-2 text-lg leading-snug text-ink-2 sm:text-xl">

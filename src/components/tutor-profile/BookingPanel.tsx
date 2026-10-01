@@ -44,7 +44,7 @@ export function BookingPanel({ tutor, instant, trialOffered, onBook }: { tutor: 
     >
       <div className="flex items-start justify-between gap-3">
         <p className="text-ink">
-          <span className="font-heading text-[2rem] font-extrabold tracking-[-0.04em] tabular-nums">{formatCents(tutor.hourlyRateCents)}</span>
+          <span className="font-heading text-[2rem] font-bold tracking-[-0.03em] tabular-nums">{formatCents(tutor.hourlyRateCents)}</span>
           <span className="text-sm text-muted"> / hour</span>
         </p>
         <StarRating rating={tutor.rating} count={tutor.reviewCount} showStars={false} className="mt-2 shrink-0" />

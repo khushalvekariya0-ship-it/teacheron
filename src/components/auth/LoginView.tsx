@@ -74,7 +74,7 @@ export function LoginView() {
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
-        <h1 className="font-heading text-[2rem] font-extrabold leading-[1.05] tracking-[-0.04em] text-ink">Sign in to TutorLink</h1>
+        <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Sign in to TutorLink</h1>
         <p className="mt-2 text-[15px] text-muted">
           New here?{" "}
           <Link href={registerHref} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">

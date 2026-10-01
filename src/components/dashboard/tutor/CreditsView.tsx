@@ -78,7 +78,7 @@ export function CreditsView() {
             <p className="flex items-center gap-2 text-[13px] font-medium text-muted">
               <Coins className="size-4" aria-hidden /> Available balance
             </p>
-            <p className="mt-3 text-5xl font-semibold tracking-[-0.04em] text-ink" aria-live="polite">
+            <p className="mt-3 text-5xl font-semibold tracking-[-0.03em] text-ink" aria-live="polite">
               <AnimatedNumber value={balance} />
               <span className="ml-2 text-base font-medium tracking-normal text-muted">{balance === 1 ? "credit" : "credits"}</span>
             </p>

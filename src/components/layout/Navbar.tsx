@@ -259,7 +259,7 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
         {g.feature && (
           <Link href={g.feature.href} className="group flex flex-col rounded-lg bg-brand-soft p-5 text-ink">
             <Compass className="size-6" />
-            <p className="mt-auto pt-10 font-heading text-[22px] font-extrabold leading-tight tracking-[-0.03em]">{g.feature.title}</p>
+            <p className="mt-auto pt-10 font-heading text-[22px] font-bold leading-tight tracking-[-0.03em]">{g.feature.title}</p>
             <p className="mt-1.5 text-[13px] leading-snug text-ink/80">{g.feature.body}</p>
             <span className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold underline decoration-2 underline-offset-4">
               {g.feature.cta} <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />

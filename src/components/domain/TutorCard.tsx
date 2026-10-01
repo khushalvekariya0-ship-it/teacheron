@@ -96,7 +96,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
   const reviews = `${tutor.reviewCount} ${tutor.reviewCount === 1 ? "review" : "reviews"}`;
   const rating = (
     <span className="inline-flex items-center gap-1 text-ink">
-      <Star className="size-4 fill-ink" aria-hidden />
+      <Star className="size-4 fill-star text-star" aria-hidden />
       {tutor.rating !== null ? (
         <>
           <span className="font-heading text-[19px] font-bold">{tutor.rating.toFixed(1)}</span>
@@ -140,7 +140,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
                   {name}
                 </Link>
               </h3>
-              {tutor.verification.identity === "verified" && <BadgeCheck className="size-5 fill-ink text-surface" aria-label="Identity verified" />}
+              {tutor.verification.identity === "verified" && <BadgeCheck className="size-5 fill-brand text-surface" aria-label="Identity verified" />}
             </div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               <VerifiedBadge tutor={tutor} size="sm" />
@@ -250,7 +250,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
             {name}
           </Link>
         </h3>
-        {tutor.verification.identity === "verified" && <BadgeCheck className="size-[18px] fill-ink text-surface" aria-label="Identity verified" />}
+        {tutor.verification.identity === "verified" && <BadgeCheck className="size-[18px] fill-brand text-surface" aria-label="Identity verified" />}
       </div>
       <p className="mt-1 line-clamp-2 text-[14px] leading-snug text-ink-2">{tutor.headline}</p>
       <p className="mt-2 flex items-center gap-1.5 text-[13px] text-muted">
