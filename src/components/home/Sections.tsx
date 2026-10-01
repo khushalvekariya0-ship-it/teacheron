@@ -6,8 +6,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarCheck2, CalendarDays, Check, Code, CreditCard, FlaskConical, Gift, Languages, LineChart,
-  Music, Route, Search, ShieldCheck, Target, Wallet,
+  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, Check, Code, CreditCard, FlaskConical, Gift, GraduationCap, Languages, LineChart,
+  Music, Route, ShieldCheck, Star, Target, UserRound, Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,8 +17,9 @@ import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/market
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
+import { Avatar } from "@/components/ui/Avatar";
 import { SubjectSearch } from "./SubjectSearch";
-import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
@@ -268,30 +269,156 @@ export function SubjectTiles() {
   );
 }
 
-/* ═══ 4 · How it works — three numbered cards ═══════════════════════════════════ */
+/* ═══ 4 · How it works — three bordered cards: number, promise, short text, picture ═══ */
 
-const STEPS = [
-  { title: "Find your tutor", body: "Search by subject, grade, schedule, budget and ZIP. Every match shows why it fits — never paid placement.", icon: Search },
-  { title: "Book a trial lesson", body: "Pick a real opening in your time zone. Many tutors offer a free or low-cost trial so you can check the fit.", icon: CalendarCheck2 },
-  { title: "Make progress every week", body: "Lesson notes, homework and goals in one place — and parents see it all for their kids.", icon: LineChart },
+/** Stacked tutor cards. Real tutors when there are any; otherwise neutral placeholders (no made-up names or ratings). */
+function TutorStack() {
+  const tutors = useTutors();
+  const top = React.useMemo(() => [...tutors].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || b.reviewCount - a.reviewCount).slice(0, 3), [tutors]);
+  return (
+    <div className="relative h-full" aria-hidden>
+      {[0, 1, 2].map((i) => {
+        const t = top[i];
+        return (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.15 + i * 0.12 }}
+            className="absolute flex w-[calc(100%-2rem)] gap-3.5 rounded-lg border border-ink/20 bg-surface p-3 shadow-md"
+            style={{ left: i * 16, top: i * 92, zIndex: 3 - i }}
+          >
+            {t ? (
+              <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="xl" square className="shrink-0" />
+            ) : (
+              <span className="grid size-16 shrink-0 place-items-center rounded-lg bg-canvas text-subtle">
+                <UserRound className="size-7" />
+              </span>
+            )}
+            <div className="min-w-0 flex-1 pt-0.5">
+              {t ? (
+                <>
+                  <p className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[15.5px] font-bold text-ink">
+                      {t.firstName} {t.lastName.charAt(0)}.
+                    </span>
+                    {t.rating !== null && (
+                      <span className="flex shrink-0 items-center gap-1 text-[14px] font-semibold text-ink">
+                        <Star className="size-3.5 fill-ink" /> {t.rating.toFixed(1)}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] text-ink-2">
+                    <GraduationCap className="size-3.5 shrink-0" /> {SUBJECT_BY_SLUG[t.subjects[0]]?.name ?? "Subject"} tutor
+                  </p>
+                  <p className="mt-0.5 flex items-start gap-1.5 text-[13px] leading-snug text-ink-2">
+                    <Languages className="mt-0.5 size-3.5 shrink-0" />
+                    <span className="line-clamp-2">
+                      Speaks {t.languages.slice(0, 2).join(", ")}
+                      {t.languages.length > 2 && ` +${t.languages.length - 2}`}
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-2.5 pt-1">
+                  <span className="block h-3 w-2/5 rounded-full bg-line-strong" />
+                  <span className="block h-2.5 w-3/5 rounded-full bg-line" />
+                  <span className="block h-2.5 w-4/5 rounded-full bg-line" />
+                </div>
+              )}
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A lesson on a video call: the tutor large, the learner in a smaller tile. Photos only. */
+function VideoCall() {
+  return (
+    <div className="relative h-full" aria-hidden>
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-40px" }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+        className="absolute bottom-0 left-0 h-[94%] w-[78%] overflow-hidden rounded-t-lg border border-b-0 border-ink/20 bg-canvas"
+      >
+        <Image src="/images/become-a-tutor.jpg" alt="" fill sizes="(min-width: 1024px) 300px, 78vw" className="object-cover object-[82%_30%]" />
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true, margin: "-40px" }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
+        className="absolute right-0 top-[10%] aspect-[4/5] w-[40%] overflow-hidden rounded-lg border-2 border-surface bg-canvas shadow-xl"
+      >
+        <Image src="/images/hero-tutoring-close.jpg" alt="" fill sizes="(min-width: 1024px) 160px, 40vw" className="object-cover object-[28%_40%]" />
+      </motion.div>
+    </div>
+  );
+}
+
+/** One photo with earlier "weeks" layered behind it. */
+function ProgressLayers() {
+  return (
+    <div className="relative h-full" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <motion.div
+          key={i}
+          initial={{ x: (2 - i) * 22, opacity: i === 2 ? 0 : 0.6 }}
+          whileInView={{ x: 0, opacity: 1 }}
+          viewport={{ once: true, margin: "-40px" }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.15 + (2 - i) * 0.08 }}
+          className="absolute bottom-6 top-0 right-0 overflow-hidden rounded-lg border-2 border-surface bg-canvas shadow-md"
+          style={{ left: i * 22, zIndex: i }}
+        >
+          <Image src="/images/online-lesson.jpg" alt="" fill sizes="(min-width: 1024px) 320px, 90vw" className="object-cover object-[30%_45%]" />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+const STEPS: { title: string; body: string; badge: string; visual: React.ComponentType }[] = [
+  {
+    title: "Find your tutor.",
+    body: "Search by subject, grade, schedule and budget. Every result shows why the tutor is a good fit — never paid placement.",
+    badge: "bg-[#86d9c9]",
+    visual: TutorStack,
+  },
+  {
+    title: "Start learning.",
+    body: "Book a trial at a real opening in your time zone. Your tutor shapes every lesson around your goals from day one.",
+    badge: "bg-volt",
+    visual: VideoCall,
+  },
+  {
+    title: "Grow with every lesson.",
+    body: "Choose how often you meet, keep notes and goals in one place, and watch your confidence build week by week.",
+    badge: "bg-[#7cb2ff]",
+    visual: ProgressLayers,
+  },
 ];
 
 export function HowItWorks() {
   return (
-    <Section tone="canvas">
-      <SectionHeading align="center" eyebrow="How it works" title="Start learning in three simple steps" />
+    <Section>
+      <SectionHeading title="How TutorLink works:" className="mb-8 lg:mb-10" />
       <Stagger className="grid gap-5 lg:grid-cols-3" stagger={0.1}>
         {STEPS.map((s, i) => (
-          <StaggerItem key={s.title}>
-            <article className="group flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-sm transition-shadow hover:shadow-lg">
-              <div className="flex items-center justify-between">
-                <span className="grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand transition-colors duration-300 group-hover:bg-brand group-hover:text-white">
-                  <s.icon className="size-7" aria-hidden />
-                </span>
-                <span className="font-heading text-[40px] font-bold leading-none text-line-strong">{i + 1}</span>
+          <StaggerItem key={s.title} className="h-full">
+            <article className="flex h-full flex-col overflow-hidden rounded-lg border border-ink/25 bg-surface">
+              <div className="px-6 pt-7 sm:px-8 sm:pt-8">
+                <span className={cn("grid size-10 place-items-center rounded-md font-heading text-[22px] font-bold text-night", s.badge)}>{i + 1}</span>
+                <h3 className="mt-6 font-heading text-[30px] font-bold leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">{s.title}</h3>
+                <p className="mt-4 max-w-md text-[15.5px] leading-relaxed text-ink-2">{s.body}</p>
               </div>
-              <h3 className="mt-6 font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{s.title}</h3>
-              <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">{s.body}</p>
+              <div className="mt-auto h-[270px] px-6 pt-8 sm:px-8">
+                <s.visual />
+              </div>
             </article>
           </StaggerItem>
         ))}
