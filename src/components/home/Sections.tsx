@@ -24,7 +24,7 @@ import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 
-/* ═══ 1 · Hero — bold: light stage, huge type, the blue → violet gradient, a learner climbing the stairs ═══ */
+/* ═══ 1 · Hero — the promise, two actions, and a real tutoring moment ═══════════════════ */
 
 const HERO_FEATURES = [
   { icon: BadgeCheck, title: "Identity Checks", body: "Badge shown once verified" },
@@ -33,34 +33,44 @@ const HERO_FEATURES = [
   { icon: Wallet, title: "Pay Per Lesson", body: "No subscription for families" },
 ];
 
-/** The photo, the gradient beam and the handwritten note. Photo only — no example data. */
-function StairsVisual({ className, card = true }: { className?: string; card?: boolean }) {
+/** A tutor helping a student, on a crisp gradient block, with two small fact cards. Photo only — no example data. */
+function TutoringVisual({ className }: { className?: string }) {
   return (
-    <div className={cn("pointer-events-none", className)} aria-hidden>
-      {/* Gradient slab behind the photo */}
-      <div data-hero-slab className="absolute inset-0 bg-[linear-gradient(160deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
-      {/* Photo, cut on a diagonal, with the gradient light multiplied into the sunlit wall */}
-      <div data-hero-photo className="absolute inset-0 [clip-path:polygon(34%_0,100%_0,100%_100%,6%_100%,6%_64%)]">
-        <Image src="/images/hero-stairs.jpg" alt="" fill preload sizes="(min-width: 1024px) 56vw, 100vw" className="object-cover object-[45%_62%] grayscale" />
-        <div className="absolute inset-0 bg-[linear-gradient(160deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] mix-blend-multiply [clip-path:polygon(26%_0,52%_0,14%_58%,0_66%,0_40%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-page to-transparent" />
+    <div className={cn("relative", className)} aria-hidden>
+      {/* Gradient block offset behind the photo */}
+      <div data-hero-slab className="absolute -right-3 -top-3 h-[78%] w-[72%] rounded-2xl bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] sm:-right-5 sm:-top-5" />
+      {/* Fine dot grid peeking out bottom-left */}
+      <div className="absolute -bottom-6 -left-6 hidden size-32 bg-dot-grid opacity-70 sm:block" />
+
+      <div data-hero-photo className="relative aspect-[5/5.4] overflow-hidden rounded-2xl border border-line bg-canvas shadow-2xl sm:aspect-[5/4.6]">
+        <Image src="/images/hero-tutoring.jpg" alt="" fill preload sizes="(min-width: 1024px) 560px, 100vw" className="object-cover object-[64%_50%]" />
       </div>
 
-      {/* Handwritten note with an arrow toward the climber */}
-      <div data-hero-note className={cn(
-          "absolute -rotate-[14deg] font-hand font-semibold text-white [text-shadow:0_2px_14px_rgb(0_0_0/0.7)]",
-          // Line height goes after the font sizes: tailwind-merge drops a leading-* that comes before a text-* size.
-          card ? "left-[13%] top-[60%] text-[30px] xl:text-[34px]" : "left-[9%] top-[56%] text-[22px] sm:left-[12%] sm:text-[28px]",
-          "leading-[0.95]",
-        )}>
-        Better skills,
-        <br />
-        brighter future
-        <svg viewBox="0 0 120 70" className="absolute -right-20 -top-14 h-16 w-28 text-white" fill="none">
+      {/* Fact card, top left */}
+      <div data-hero-card className="absolute -left-3 top-[8%] w-[176px] rounded-xl border border-line bg-white/95 p-4 text-ink shadow-xl backdrop-blur-md sm:-left-8">
+        <p className="font-heading text-[24px] font-extrabold leading-none tracking-[-0.02em]">1-on-1</p>
+        <p className="mt-1 text-[12.5px] text-muted">Private lessons, online or in person</p>
+      </div>
+
+      {/* Fact card, bottom right */}
+      <div data-hero-card className="absolute -bottom-5 right-4 flex items-center gap-3 rounded-xl border border-line bg-white/95 p-3 pr-5 shadow-xl backdrop-blur-md sm:-right-6">
+        <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+          <BookOpen className="size-5" />
+        </span>
+        <span>
+          <span className="block text-[15px] font-bold text-ink">{SUBJECTS.length} subjects</span>
+          <span className="block text-[12.5px] text-muted">From reading to AP Calculus</span>
+        </span>
+      </div>
+
+      {/* Handwritten note with an arrow toward the lesson */}
+      <div data-hero-note className="absolute bottom-[5%] hidden -rotate-[10deg] font-hand text-[30px] font-semibold leading-none text-ink xl:-left-48 xl:block">
+        Help that clicks!
+        <svg viewBox="0 0 120 70" className="absolute -right-14 -top-12 h-14 w-24 text-brand" fill="none">
           <motion.path
             d="M4 62 C 30 60, 70 50, 104 12"
             stroke="currentColor"
-            strokeWidth={2.4}
+            strokeWidth={2.6}
             strokeLinecap="round"
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
@@ -69,7 +79,7 @@ function StairsVisual({ className, card = true }: { className?: string; card?: b
           <motion.path
             d="M90 10 L105 11 L103 26"
             stroke="currentColor"
-            strokeWidth={2.4}
+            strokeWidth={2.6}
             strokeLinecap="round"
             strokeLinejoin="round"
             initial={{ pathLength: 0 }}
@@ -78,17 +88,6 @@ function StairsVisual({ className, card = true }: { className?: string; card?: b
           />
         </svg>
       </div>
-
-      {/* Small glass card, top right: what a lesson is — no figures */}
-      {card && (
-        <div data-hero-card className="absolute right-[6%] top-[9%] w-[168px] rounded-xl border border-line bg-white/95 p-4 text-ink shadow-xl backdrop-blur-md">
-          <p className="font-heading text-[26px] font-extrabold leading-none tracking-[-0.02em]">1-on-1</p>
-          <p className="mt-1 text-[12.5px] text-muted">Private lessons</p>
-          <div className="my-3 h-px bg-line" />
-          <p className="font-heading text-[26px] font-extrabold leading-none tracking-[-0.02em]">Online</p>
-          <p className="mt-1 text-[12.5px] text-muted">or in person</p>
-        </div>
-      )}
     </div>
   );
 }
@@ -103,66 +102,59 @@ export function Hero() {
         return;
       }
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
-      tl.fromTo("[data-hero-slab]", { clipPath: "polygon(26% 0,26% 0,0% 66%,0% 66%,0% 40%)" }, { clipPath: "polygon(26% 0,52% 0,14% 58%,0% 66%,0% 40%)", duration: 1.2 }, 0.15)
-        .fromTo("[data-hero-photo] img", { scale: 1.12, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 1.6 }, 0.1)
-        .fromTo(items, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.08 }, 0.55)
-        .fromTo("[data-hero-note]", { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.8 }, 1.2)
-        .fromTo("[data-hero-card]", { autoAlpha: 0, y: 18, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.9 }, 1.0);
-      gsap.to("[data-hero-card]", { y: -8, duration: 3.2, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 2 });
+      tl.fromTo("[data-hero-slab]", { scale: 0.85, autoAlpha: 0, transformOrigin: "100% 0%" }, { scale: 1, autoAlpha: 1, duration: 1.2 }, 0.15)
+        .fromTo("[data-hero-photo]", { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.2 }, 0.25)
+        .fromTo("[data-hero-photo] img", { scale: 1.1 }, { scale: 1, duration: 1.6 }, 0.25)
+        .fromTo(items, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.08 }, 0.5)
+        .fromTo("[data-hero-card]", { autoAlpha: 0, y: 18, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.9, stagger: 0.15 }, 0.9)
+        .fromTo("[data-hero-note]", { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.8 }, 1.2);
+      gsap.to("[data-hero-card]", { y: -7, duration: 3.2, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 2, stagger: 0.6 });
     },
     { scope: root },
   );
 
   return (
     <section ref={root} className="relative isolate overflow-hidden bg-gradient-to-b from-brand-50 to-page">
-      <div>
-        {/* Wide screens: the visual fills the right half, edge to edge */}
-        <StairsVisual className="absolute inset-y-0 right-0 hidden w-[56%] lg:block" />
+      <div className="container-page grid items-center gap-14 pb-16 pt-12 sm:pt-16 lg:grid-cols-[1.08fr_1fr] lg:gap-16 lg:pb-20 lg:pt-20">
+        <div>
+          <p data-hero-in data-reveal className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+            <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+            1-on-1 tutoring · online &amp; in person
+          </p>
 
-        <div className="container-page relative z-10 pb-10 pt-12 sm:pt-16 lg:pb-16 lg:pt-20 xl:pt-24">
-          <div className="max-w-[560px] lg:max-w-[46%]">
-            <p data-hero-in data-reveal className="text-[13px] font-bold uppercase tracking-[0.28em] text-brand">
-              Learn <span className="px-1.5 text-subtle">/</span> Practice <span className="px-1.5 text-subtle">/</span> Grow
-            </p>
+          <h1 className="mt-6 text-balance font-heading text-[2.75rem] font-extrabold leading-[1.03] tracking-[-0.035em] text-ink sm:text-[3.6rem] xl:text-[4.15rem]">
+            <WordReveal as="span" className="block" text="Learn with the right tutor." delay={0.15} />
+            <WordReveal as="span" className="block" gradient text="Grow with every lesson." delay={0.35} />
+          </h1>
 
-            <h1 className="mt-5 font-heading text-[4.1rem] font-extrabold uppercase leading-[0.86] tracking-[-0.025em] text-ink sm:text-[6rem] lg:text-[6rem] xl:text-[7.25rem]">
-              <WordReveal as="span" className="block" text="Build" delay={0.2} />
-              <WordReveal as="span" className="block" text="your" delay={0.3} />
-              <WordReveal as="span" className="block" gradient text="future" delay={0.4} />
-            </h1>
+          <p data-hero-in data-reveal className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18px]">
+            Private tutoring for school subjects, test prep, languages and more. Search for free, compare tutors and book your first lesson — online or near you.
+          </p>
 
-            <p data-hero-in data-reveal className="mt-7 max-w-md text-[16.5px] leading-relaxed text-ink-2 sm:text-[17.5px]">
-              Learn with the right tutor. Grow with every lesson. Everything you need to get there, in one place.
-            </p>
-
-            <div data-hero-in data-reveal className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
-              <Button asChild variant="brand" size="lg" className="h-14 rounded-xl px-7 text-[16px] font-bold">
-                <Link href="/tutors">
-                  Find a Tutor <ArrowRight />
-                </Link>
-              </Button>
-              <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-ink">
-                <span className="grid size-12 place-items-center rounded-full border border-line-strong transition-colors group-hover:border-brand group-hover:text-brand">
-                  <Route className="size-5" aria-hidden />
-                </span>
-                How It Works
+          <div data-hero-in data-reveal className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
+            <Button asChild variant="brand" size="lg" className="h-14 rounded-xl px-7 text-[16px] font-bold">
+              <Link href="/tutors">
+                Find a tutor <ArrowRight />
               </Link>
-            </div>
+            </Button>
+            <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-ink">
+              <span className="grid size-12 place-items-center rounded-full border border-line-strong transition-colors group-hover:border-brand group-hover:text-brand">
+                <Route className="size-5" aria-hidden />
+              </span>
+              How it works
+            </Link>
           </div>
         </div>
 
-        {/* Phones and tablets: the visual sits under the copy */}
-        <div data-hero-in data-reveal className="relative h-[380px] sm:h-[480px] lg:hidden">
-          <StairsVisual className="absolute inset-0" card={false} />
-        </div>
+        <TutoringVisual className="mx-auto w-full max-w-[560px] lg:mr-0" />
       </div>
 
-      {/* Feature bar — follows the page theme (white in light mode) */}
-      <div className="container-page relative z-10 -mt-8 pb-8 sm:-mt-12 lg:mt-0 lg:pb-10">
-        <Stagger className="grid grid-cols-1 gap-5 rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:grid-cols-2 sm:p-6 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line lg:px-2 lg:py-6" stagger={0.07}>
+      {/* Feature bar */}
+      <div className="container-page relative z-10 pb-8 lg:pb-10">
+        <Stagger className="grid grid-cols-1 gap-5 rounded-2xl border border-line bg-surface p-5 shadow-xl sm:grid-cols-2 sm:p-6 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line lg:px-2 lg:py-6" stagger={0.07}>
           {HERO_FEATURES.map((f) => (
             <StaggerItem key={f.title} className="flex items-start gap-3.5 lg:px-6">
-              <f.icon className="mt-0.5 size-6 shrink-0 text-ink" strokeWidth={1.8} aria-hidden />
+              <f.icon className="mt-0.5 size-6 shrink-0 text-brand" strokeWidth={1.8} aria-hidden />
               <span>
                 <span className="block text-[15px] font-bold text-ink">{f.title}</span>
                 <span className="mt-0.5 block text-[13px] leading-snug text-muted">{f.body}</span>
