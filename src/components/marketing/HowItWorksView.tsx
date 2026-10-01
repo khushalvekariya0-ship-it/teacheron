@@ -6,9 +6,8 @@ import { Check } from "lucide-react";
 import { EASE, Reveal } from "@/components/motion";
 import { Segmented } from "@/components/ui/Controls";
 import { TUTOR_PLANS } from "@/lib/data/platform";
-import { medianRate } from "@/components/content/insights";
 import {
-  CalendarVignette, CheckoutVignette, JobVignette, MessageVignette, PayoutVignette, ProfileBuilderVignette, ProgressVignette, SearchVignette,
+  CalendarVignette, CheckoutVignette, GetPaidVignette, JobVignette, MessageVignette, ProfileBuilderVignette, ProgressVignette, SearchVignette,
   SlotVignette, VerificationVignette,
 } from "./Vignettes";
 import { ArrowLink, Eyebrow } from "./Section";
@@ -24,8 +23,6 @@ interface Step {
 }
 
 function buildSteps(): Record<Audience, Step[]> {
-  const pro = TUTOR_PLANS.find((p) => p.highlighted) ?? TUTOR_PLANS[0];
-  const rate = medianRate();
   const commissions = TUTOR_PLANS.map((p) => p.commissionBps / 100);
   const maxCommission = Math.max(...commissions);
   const minCommission = Math.min(...commissions);
@@ -95,7 +92,7 @@ function buildSteps(): Record<Audience, Step[]> {
         title: "Teach and get paid",
         body: "Run lessons, post notes and homework, and get paid through Stripe Connect. Commission depends on your plan and is shown before you choose one.",
         points: ["Earnings available after the dispute window", `Commission from ${maxCommission}% down to ${minCommission}% by plan`, "Reviews from completed lessons build your reputation"],
-        visual: <PayoutVignette rateCents={rate} commissionBps={pro.commissionBps} planName={pro.name} />,
+        visual: <GetPaidVignette />,
         link: { href: "/pricing#tutors", label: "Compare plans" },
       },
     ],

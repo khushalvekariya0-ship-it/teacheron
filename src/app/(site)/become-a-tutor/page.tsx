@@ -6,7 +6,7 @@ import {
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
 import { CardGrid, Split } from "@/components/marketing/Split";
-import { PayoutVignette, ProfileBuilderVignette } from "@/components/marketing/Vignettes";
+import { GetPaidVignette, ProfileBuilderVignette } from "@/components/marketing/Vignettes";
 import { VerificationFlow } from "@/components/marketing/Verification";
 import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
 import { medianRate } from "@/components/content/insights";
@@ -33,8 +33,9 @@ const ONBOARDING = [
 ];
 
 export default function BecomeATutorPage() {
-  const rate = medianRate();
-  const recommended = TUTOR_PLANS.find((p) => p.highlighted) ?? TUTOR_PLANS[0];
+  // The median listed rate when tutors exist; otherwise a round example rate for the commission table.
+  const median = medianRate();
+  const rate = median || 5000;
   const tutorFaqs = FAQS.filter((f) => f.audience === "tutors");
 
   return (
@@ -158,7 +159,7 @@ export default function BecomeATutorPage() {
               <div className="overflow-hidden rounded-2xl border border-line bg-surface">
                 <table className="w-full text-left text-sm">
                   <caption className="border-b border-line bg-canvas px-4 py-3 text-left text-[13px] text-muted">
-                    You keep, on a {formatCents(rate)} one-hour lesson (the median rate listed today)
+                    You keep, on a {formatCents(rate)} one-hour lesson{median ? " (the median rate listed today)" : ""}
                   </caption>
                   <thead>
                     <tr className="border-b border-line text-[12.5px] text-muted">
@@ -187,7 +188,7 @@ export default function BecomeATutorPage() {
           </div>
           <Reveal delay={0.1}>
             <div className="mx-auto max-w-md lg:max-w-none">
-              <PayoutVignette rateCents={rate} commissionBps={recommended.commissionBps} planName={recommended.name} />
+              <GetPaidVignette />
             </div>
           </Reveal>
         </div>

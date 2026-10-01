@@ -6,20 +6,19 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock, ShieldCheck,
-  Sparkles, Star, Target, Users, Wallet,
+  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock, Search, ShieldCheck,
+  Target, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
 import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
-import { Avatar } from "@/components/ui/Avatar";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
-import { EXAMPLE_TUTORS, TUTORS } from "@/lib/data/tutors";
+import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
@@ -39,13 +38,9 @@ export function Hero() {
         return;
       }
       gsap.fromTo(items, { y: 20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.85, ease: "expo.out", stagger: 0.08, delay: 0.25 });
-      gsap.utils.toArray<HTMLElement>("[data-float]").forEach((el, i) => {
-        gsap.to(el, { y: i % 2 ? 6 : -6, duration: 3.2 + i * 0.4, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 1.2 });
-      });
     },
     { scope: root },
   );
-  const pop = (delay: number) => ({ initial: { opacity: 0, y: 16, scale: 0.96 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as const, delay } });
 
   return (
     <section ref={root} className="relative overflow-hidden bg-brand-soft">
@@ -88,37 +83,6 @@ export function Hero() {
           <div className="relative aspect-[4/3.6] overflow-hidden rounded-2xl shadow-xl">
             <Image src="/images/hero-tutoring.jpg" alt="A tutor helping a student with her notes" fill priority sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
           </div>
-          <motion.div {...pop(0.6)} className="absolute -left-3 top-6 sm:-left-8">
-            <span data-float className="inline-flex items-center gap-2 rounded-xl bg-surface px-3.5 py-2.5 text-[13.5px] font-semibold text-ink shadow-lg ring-1 ring-line">
-              <ShieldCheck className="size-5 text-brand" /> ID-verified tutors
-            </span>
-          </motion.div>
-          <motion.div {...pop(0.8)} className="absolute -right-3 top-[38%] hidden w-[230px] sm:-right-8 sm:block">
-            <div data-float className="rounded-xl bg-surface p-3.5 shadow-lg ring-1 ring-line">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Why this match</p>
-              <ul className="mt-2 space-y-1.5 text-[13.5px] text-ink">
-                {["Teaches Algebra · 8th grade", "Free on weekday evenings", "Within your budget"].map((x) => (
-                  <li key={x} className="flex items-center gap-2">
-                    <span className="grid size-4 place-items-center rounded-full bg-brand text-white">
-                      <Check className="size-3" strokeWidth={3} />
-                    </span>
-                    {x}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </motion.div>
-          <motion.div {...pop(1)} className="absolute -bottom-5 left-6 sm:left-10">
-            <div data-float className="flex items-center gap-3 rounded-xl bg-surface p-3 pr-4 shadow-lg ring-1 ring-line">
-              <span className="grid size-10 place-items-center rounded-lg bg-brand-soft text-brand">
-                <CalendarCheck2 className="size-5" />
-              </span>
-              <span>
-                <span className="block text-[13.5px] font-semibold text-ink">Trial lesson booked</span>
-                <span className="block text-[12.5px] text-muted">Thursday · 4:30 PM</span>
-              </span>
-            </div>
-          </motion.div>
         </div>
       </div>
     </section>
@@ -237,84 +201,10 @@ export function SubjectTiles() {
 
 /* ═══ 4 · How it works — three numbered cards ═══════════════════════════════════ */
 
-function StepFind() {
-  // Illustration only: example profiles, never real listings.
-  const pair = EXAMPLE_TUTORS.filter((t) => t.featured && t.verification.identity === "verified").slice(0, 2);
-  return (
-    <div className="relative h-full">
-      {pair.map((t, i) => (
-        <div
-          key={t.id}
-          className={cn(
-            "absolute inset-x-5 rounded-xl border border-line bg-surface p-3.5 transition-transform duration-500",
-            i === 0 ? "top-5 -rotate-1 group-hover:-rotate-2" : "top-[4.9rem] rotate-1 shadow-md group-hover:rotate-2",
-          )}
-        >
-          <div className="flex items-center gap-3">
-            <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="lg" />
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1 truncate text-[14px] font-semibold text-ink">
-                {t.firstName} {t.lastName.charAt(0)}. <BadgeCheck className="size-4 shrink-0 fill-brand text-surface" />
-              </p>
-              <p className="truncate text-[12.5px] text-muted">{SUBJECT_BY_SLUG[t.subjects[0]]?.name} tutor</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[14px] font-semibold text-ink">{formatCents(t.hourlyRateCents)}</p>
-              {t.rating !== null && (
-                <p className="flex items-center justify-end gap-0.5 text-[12px] text-ink">
-                  <Star className="size-3 fill-star text-star" /> {t.rating.toFixed(1)}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StepBook() {
-  const slots = ["4:00 PM", "4:30 PM", "5:00 PM", "6:00 PM", "6:30 PM", "7:00 PM"];
-  return (
-    <div className="absolute inset-x-5 top-5 rounded-xl border border-line bg-surface p-3.5">
-      <div className="flex items-center justify-between text-[12.5px]">
-        <span className="font-semibold text-ink">Thu, Oct 2</span>
-        <span className="text-muted">Your time zone</span>
-      </div>
-      <div className="mt-2.5 grid grid-cols-3 gap-1.5">
-        {slots.map((s, i) => (
-          <span key={s} className={cn("rounded-md border py-1.5 text-center text-[12px] font-semibold transition-colors", i === 4 ? "border-brand bg-brand text-white" : "border-line text-ink group-hover:border-line-strong")}>
-            {s}
-          </span>
-        ))}
-      </div>
-      <p className="mt-2.5 rounded-md bg-brand-soft px-2.5 py-1.5 text-[12px] font-medium text-ink">Trial lesson · 30 min</p>
-    </div>
-  );
-}
-
-function StepProgress() {
-  const weeks = [30, 42, 38, 55, 61, 72, 80];
-  return (
-    <div className="absolute inset-x-5 top-5 rounded-xl border border-line bg-surface p-3.5">
-      <div className="flex items-center justify-between text-[12.5px]">
-        <span className="font-semibold text-ink">Goal progress</span>
-        <span className="font-semibold text-ink">80%</span>
-      </div>
-      <div className="mt-3 flex h-[5.5rem] items-end gap-1.5">
-        {weeks.map((h, i) => (
-          <span key={i} className={cn("flex-1 origin-bottom rounded-t-md transition-transform duration-500 group-hover:scale-y-105", i === weeks.length - 1 ? "bg-brand" : "bg-brand/15")} style={{ height: `${h}%` }} />
-        ))}
-      </div>
-      <p className="mt-2 text-[12px] text-muted">Weekly notes, homework and topics mastered</p>
-    </div>
-  );
-}
-
 const STEPS = [
-  { title: "Find your tutor", body: "Search by subject, grade, schedule, budget and ZIP. Every match shows why it fits — never paid placement.", Visual: StepFind },
-  { title: "Book a trial lesson", body: "Pick a real opening in your time zone. Many tutors offer a free or low-cost trial so you can check the fit.", Visual: StepBook },
-  { title: "Make progress every week", body: "Lesson notes, homework and goals in one place — and parents see it all for their kids.", Visual: StepProgress },
+  { title: "Find your tutor", body: "Search by subject, grade, schedule, budget and ZIP. Every match shows why it fits — never paid placement.", icon: Search },
+  { title: "Book a trial lesson", body: "Pick a real opening in your time zone. Many tutors offer a free or low-cost trial so you can check the fit.", icon: CalendarCheck2 },
+  { title: "Make progress every week", body: "Lesson notes, homework and goals in one place — and parents see it all for their kids.", icon: LineChart },
 ];
 
 export function HowItWorks() {
@@ -325,12 +215,14 @@ export function HowItWorks() {
         {STEPS.map((s, i) => (
           <StaggerItem key={s.title}>
             <article className="group flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-sm transition-shadow hover:shadow-lg">
-              <span className="grid size-10 place-items-center rounded-full bg-brand font-heading text-[17px] font-bold text-white">{i + 1}</span>
-              <h3 className="mt-5 font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{s.title}</h3>
-              <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">{s.body}</p>
-              <div className="relative mt-6 h-52 overflow-hidden rounded-xl bg-brand-soft" aria-hidden>
-                <s.Visual />
+              <div className="flex items-center justify-between">
+                <span className="grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand transition-colors duration-300 group-hover:bg-brand group-hover:text-white">
+                  <s.icon className="size-7" aria-hidden />
+                </span>
+                <span className="font-heading text-[40px] font-bold leading-none text-line-strong">{i + 1}</span>
               </div>
+              <h3 className="mt-6 font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{s.title}</h3>
+              <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">{s.body}</p>
             </article>
           </StaggerItem>
         ))}
@@ -434,12 +326,6 @@ export function GetMatched() {
           <div className="relative aspect-[4/3.4] overflow-hidden rounded-2xl shadow-xl">
             <Image src="/images/online-lesson.jpg" alt="A student taking notes during an online lesson" fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
           </div>
-          <div className="absolute -bottom-6 right-4 max-w-[260px] rounded-xl bg-surface p-4 shadow-lg ring-1 ring-line sm:right-8">
-            <p className="flex items-center gap-2 text-[14px] font-semibold text-ink">
-              <Sparkles className="size-4 text-brand" /> Your shortlist
-            </p>
-            <p className="mt-1 text-[13px] leading-snug text-muted">Ranked by fit, with the reasons shown for every tutor.</p>
-          </div>
         </Reveal>
       </div>
     </Section>
@@ -497,15 +383,6 @@ export function WhyTutorLink() {
         <Reveal className="relative order-2 lg:order-1">
           <div className="relative aspect-[4/3.6] overflow-hidden rounded-2xl shadow-xl">
             <Image src="/images/family.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 520px, 100vw" className="object-cover" />
-          </div>
-          <div className="absolute -bottom-5 left-5 flex items-center gap-3 rounded-xl bg-surface p-3 pr-4 shadow-lg ring-1 ring-line sm:left-8">
-            <span className="grid size-10 place-items-center rounded-lg bg-brand-soft text-brand">
-              <Users className="size-5" />
-            </span>
-            <span>
-              <span className="block text-[13.5px] font-semibold text-ink">One family account</span>
-              <span className="block text-[12.5px] text-muted">A profile for each child</span>
-            </span>
           </div>
         </Reveal>
         <div className="order-1 lg:order-2">
@@ -601,10 +478,6 @@ export function BecomeTutor() {
         <Reveal delay={0.1} className="relative">
           <div className="relative aspect-[4/3.4] overflow-hidden rounded-2xl shadow-xl">
             <Image src="/images/become-a-tutor.jpg" alt="A tutor smiling while working on a laptop" fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
-          </div>
-          <div className="absolute -bottom-5 left-5 rounded-xl bg-surface p-3.5 shadow-lg ring-1 ring-line sm:left-8">
-            <p className="text-[12.5px] text-muted">New student request</p>
-            <p className="mt-0.5 text-[14px] font-semibold text-ink">Algebra · 8th grade · Weekday evenings</p>
           </div>
         </Reveal>
       </div>

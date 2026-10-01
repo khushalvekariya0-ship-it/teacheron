@@ -517,16 +517,8 @@ function build(seed: Seed): Tutor {
   };
 }
 
-/** Example profiles used ONLY inside illustrative product mock-ups (How it works, sign-in preview). Never listed or searchable. */
-export const EXAMPLE_TUTORS: Tutor[] = SEEDS.map(build);
-
 /** Sample tutors (empty when the sample-data switch is off). */
-export const TUTORS: Tutor[] = SAMPLE_DATA ? EXAMPLE_TUTORS : [];
-
-/** An example profile for a mock-up, by slug (falls back to the first example). */
-export function exampleTutor(slugOrId: string): Tutor {
-  return EXAMPLE_TUTORS.find((t) => t.slug === slugOrId || t.id === slugOrId) ?? EXAMPLE_TUTORS[0];
-}
+export const TUTORS: Tutor[] = SAMPLE_DATA ? SEEDS.map(build) : [];
 
 export const TUTOR_BY_ID: Record<string, Tutor> = Object.fromEntries(TUTORS.map((t) => [t.id, t]));
 export const TUTOR_BY_SLUG: Record<string, Tutor> = Object.fromEntries(TUTORS.map((t) => [t.slug, t]));

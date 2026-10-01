@@ -94,6 +94,7 @@ export default function HowItWorksPage() {
                 </StaggerItem>
               ))}
             </Stagger>
+            {TUTORS.length > 0 && (
             <Reveal delay={0.1}>
               <p className="mt-8 rounded-xl bg-canvas px-4 py-3 text-sm text-ink-2">
                 <span className="font-semibold tabular-nums text-ink">{trials.offering}</span> of the <span className="tabular-nums">{TUTORS.length}</span> tutors listed today offer a trial —{" "}
@@ -103,6 +104,7 @@ export default function HowItWorksPage() {
                 </Link>
               </p>
             </Reveal>
+            )}
           </div>
           <Reveal delay={0.1}>
             <div className="mx-auto max-w-md">

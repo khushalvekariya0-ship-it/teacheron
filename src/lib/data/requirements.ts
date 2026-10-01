@@ -144,9 +144,6 @@ const ALL_SAMPLE_REQUIREMENTS: Requirement[] = SEEDS.map(({ daysAgo, status = "p
 /** Sample jobs (empty when the sample-data switch is off). */
 export const SEED_REQUIREMENTS: Requirement[] = SAMPLE_DATA ? ALL_SAMPLE_REQUIREMENTS : [];
 
-/** An example job used ONLY inside the illustrative How-it-works mock-up. */
-export const EXAMPLE_JOB: Requirement = ALL_SAMPLE_REQUIREMENTS.find((r) => r.status === "published") ?? ALL_SAMPLE_REQUIREMENTS[0];
-
 const SAMPLE_APPLICATIONS: Application[] = [
   // Applications to the demo student's requirement
   { id: "app_001", requirementId: "req_101", tutorId: "tut_priya_raman", message: "Hi Jordan — equilibrium and acid–base chemistry are where I spend most AP Chem sessions. I'd start with a 30-minute diagnostic (free) and build a plan through May.", proposedRateCents: 11000, status: "shortlisted", createdAt: "2026-09-27T20:00:00Z", updatedAt: "2026-09-28T14:00:00Z" },

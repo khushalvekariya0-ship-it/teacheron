@@ -123,7 +123,7 @@ export default function PricingPage() {
         </div>
         <div id="calculator" className="mt-14 scroll-mt-24">
           <Reveal>
-            <EarningsCalculator defaultRateCents={median} />
+            <EarningsCalculator defaultRateCents={median || 5000} />
           </Reveal>
         </div>
       </Section>
