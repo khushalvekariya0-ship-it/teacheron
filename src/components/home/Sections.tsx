@@ -6,8 +6,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock, Search, ShieldCheck,
-  Target, Wallet,
+  ArrowRight, BadgeCheck, Briefcase, CalendarCheck2, CalendarDays, Check, ChevronDown, CreditCard, Gift, LineChart, Lock, Mic, PhoneOff, Repeat2,
+  Search, ShieldCheck, Signal, Target, Video, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem, WordReveal, Magnetic, gsap, useGSAP } from "@/components/motion";
@@ -16,17 +16,49 @@ import { Section, SectionHeading, ArrowLink, Eyebrow } from "@/components/market
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
-import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { useTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
-import { HeroSearch } from "./HeroSearch";
 
-/* ═══ 1 · Hero — search first, with a real photo ═════════════════════════════════ */
+/* ═══ 1 · Hero — Preply-style: badge, big promise, video-lesson picture, one action ═══ */
 
-const POPULAR = ["algebra", "sat", "chemistry", "spanish", "reading", "python"];
+/** A lesson on a video call: the learner large, the tutor in a corner tile. Photos only — no example data. */
+function VideoLesson() {
+  const pop = (delay: number) => ({
+    initial: { opacity: 0, y: 18, scale: 0.96 },
+    animate: { opacity: 1, y: 0, scale: 1 },
+    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] as const, delay },
+  });
+  return (
+    <div className="relative mx-auto aspect-[10/9] w-full max-w-[560px]" aria-hidden>
+      <motion.div {...pop(0.35)} className="absolute bottom-0 left-0 h-[86%] w-[80%] overflow-hidden rounded-2xl shadow-xl">
+        <Image src="/images/online-lesson.jpg" alt="" fill priority sizes="(min-width: 1024px) 450px, 80vw" className="object-cover" />
+        <span className="absolute left-3 top-3 rounded-md bg-night/55 px-2 py-1 text-[12px] font-semibold text-white backdrop-blur-sm">Learner</span>
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-night/60 p-1.5 backdrop-blur-sm">
+          <span className="grid size-9 place-items-center rounded-full bg-white/15 text-white">
+            <Mic className="size-4" />
+          </span>
+          <span className="grid size-9 place-items-center rounded-full bg-white/15 text-white">
+            <Video className="size-4" />
+          </span>
+          <span className="grid size-9 place-items-center rounded-full bg-danger text-white">
+            <PhoneOff className="size-4" />
+          </span>
+        </div>
+      </motion.div>
+      <motion.div {...pop(0.55)} className="absolute right-0 top-0 w-[40%]">
+        <div data-float className="relative aspect-[4/5] overflow-hidden rounded-xl border-4 border-brand-soft shadow-lg">
+          <Image src="/images/become-a-tutor.jpg" alt="" fill sizes="(min-width: 1024px) 230px, 40vw" className="object-cover" />
+          <span className="absolute left-2 top-2 rounded-md bg-night/55 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">Tutor</span>
+          <Signal className="absolute right-2 top-2 size-3.5 text-white drop-shadow" />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 export function Hero() {
   const root = React.useRef<HTMLElement>(null);
@@ -37,53 +69,44 @@ export function Hero() {
         gsap.set(items, { autoAlpha: 1 });
         return;
       }
-      gsap.fromTo(items, { y: 20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.85, ease: "expo.out", stagger: 0.08, delay: 0.25 });
+      gsap.fromTo(items, { y: 20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.85, ease: "expo.out", stagger: 0.09, delay: 0.25 });
+      gsap.to("[data-float]", { y: -8, duration: 3.4, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 1.4 });
     },
     { scope: root },
   );
 
+  const cta = (className?: string) => (
+    <Button asChild variant="brand" size="lg" className={cn("h-16 px-10 text-[17px]", className)}>
+      <Link href="/tutors">
+        Find your tutor <ArrowRight />
+      </Link>
+    </Button>
+  );
+
   return (
     <section ref={root} className="relative overflow-hidden bg-brand-soft">
-      <div className="container-page grid items-center gap-12 pb-14 pt-10 sm:pb-16 sm:pt-14 lg:grid-cols-[1.1fr_1fr] lg:gap-14 lg:pb-20 lg:pt-16">
-        <div>
-          <div data-hero-in data-reveal>
-            <Eyebrow>1-to-1 tutoring · online and in person</Eyebrow>
+      <div className="container-page grid items-center gap-10 pb-12 pt-10 sm:pb-16 sm:pt-14 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:pb-20 lg:pt-16">
+        <div className="text-center lg:text-left">
+          <div data-hero-in data-reveal className="flex justify-center lg:justify-start">
+            <span className="inline-flex items-center gap-2 rounded-lg border-2 border-ink px-3.5 py-1.5 font-heading text-[17px] font-bold tracking-[-0.01em] text-ink sm:text-[18px]">
+              <Repeat2 className="size-5" strokeWidth={2.4} aria-hidden />
+              Real progress, together
+            </span>
           </div>
-          <h1 className="mt-6 max-w-[17ch] font-heading text-[2.5rem] font-bold leading-[1.06] tracking-[-0.025em] text-ink sm:text-[3.2rem] lg:text-[3.5rem]">
-            <WordReveal as="span" text="Find the right tutor." className="block" delay={0.1} />
-            <WordReveal as="span" text="Learn with confidence." className="block text-brand" delay={0.25} />
+          <h1 className="mx-auto mt-6 max-w-[16ch] font-heading text-[2.6rem] font-bold leading-[1.04] tracking-[-0.03em] text-ink sm:text-[3.4rem] lg:mx-0 lg:text-[4rem]">
+            <WordReveal as="span" text="Learn with a tutor who makes every lesson count." delay={0.1} />
           </h1>
-          <p data-hero-in data-reveal className="mt-5 max-w-xl text-lg leading-relaxed text-ink-2 sm:text-xl">
-            Connect with qualified tutors for personalized online and in-person learning.
-          </p>
-          <div data-hero-in data-reveal className="mt-8">
-            <HeroSearch />
+          <div data-hero-in data-reveal className="mt-9 hidden lg:block">
+            <Magnetic>{cta()}</Magnetic>
           </div>
-          <div data-hero-in data-reveal className="mt-5 flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-[14px] font-semibold text-ink-2">Popular:</span>
-            {POPULAR.map((slug) => (
-              <Link
-                key={slug}
-                href={`/tutors?subject=${slug}`}
-                className="rounded-full border border-line bg-surface px-3 py-1.5 text-[13.5px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
-              >
-                {SUBJECT_BY_SLUG[slug]?.name}
-              </Link>
-            ))}
-          </div>
-          <p data-hero-in data-reveal className="mt-6 text-[15px] text-ink-2">
-            Not sure what you need?{" "}
-            <Link href="/concierge" className="group inline-flex items-center gap-1 font-semibold text-brand underline-offset-4 hover:underline">
-              Get matched in 2 minutes <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </p>
         </div>
 
-        <div data-hero-in data-reveal className="relative mx-auto w-full max-w-[560px]">
-          <div className="relative aspect-[4/3.6] overflow-hidden rounded-2xl shadow-xl">
-            <Image src="/images/hero-tutoring.jpg" alt="A tutor helping a student with her notes" fill priority sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
-          </div>
+        <div data-hero-in data-reveal>
+          <VideoLesson />
         </div>
+
+        {/* Phones and tablets: the button sits under the picture, full width (as on Preply) */}
+        <div data-hero-in data-reveal className="lg:hidden">{cta("w-full")}</div>
       </div>
     </section>
   );
