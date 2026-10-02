@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, CalendarCheck, Check, Eye, Gift, GitCompareArrows, Handshake, LineChart, MessageSquareLock, Search, Star, Video, type LucideIcon } from "lucide-react";
+import { ArrowRight, BadgeCheck, CalendarCheck, Check, Eye, Flag, Gift, GitCompareArrows, Handshake, LineChart, Link2, Lock, MessageSquareLock, Search, ShieldCheck, Star, Video, Wallet, type LucideIcon } from "lucide-react";
 import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
 import { AreaNav } from "@/components/content/AreaNav";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,36 @@ const TRIAL_VS_REGULAR = [
   { label: "Free cancellation", trial: `Up to ${DEFAULT_POLICY.trialFreeCancellationHours} hours before`, regular: `Up to ${DEFAULT_POLICY.freeCancellationHours} hours before` },
   { label: "How many", trial: "One with each tutor", regular: "As many as you like" },
   { label: "Commitment", trial: "None", regular: "Pay per lesson — no subscription" },
+];
+
+const SAFETY_STAGES: { title: string; items: { icon: LucideIcon; title: string; body: string }[] }[] = [
+  {
+    title: "Before you book",
+    items: [
+      { icon: BadgeCheck, title: "Verified before badged", body: "Identity, education, certification and background checks show a badge only once our team completes them." },
+      { icon: Star, title: "Reviews from real lessons", body: "Only a family with a completed lesson can review that tutor." },
+    ],
+  },
+  {
+    title: "While you talk",
+    items: [
+      { icon: MessageSquareLock, title: "Protected messaging", body: "Phone numbers and emails are masked. Conversations can be reported or blocked at any time." },
+    ],
+  },
+  {
+    title: "During lessons",
+    items: [
+      { icon: Link2, title: "Private lesson links", body: `The meeting link appears on the lesson page ${DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} minutes before the start — never posted publicly.` },
+      { icon: Eye, title: "Oversight for minors", body: "Parents manage child profiles and see messages, lessons and progress notes about their children." },
+    ],
+  },
+  {
+    title: "After the lesson",
+    items: [
+      { icon: Flag, title: "Report a problem", body: `Open a dispute from the lesson page within ${DEFAULT_POLICY.disputeWindowDays} days. Our team reviews both sides.` },
+      { icon: Wallet, title: "Refund if a tutor doesn't show", body: "A confirmed tutor no-show is refunded in full." },
+    ],
+  },
 ];
 
 const JOURNEY: { icon: LucideIcon; title: string; body: string }[] = [
@@ -268,24 +298,77 @@ export default function HowItWorksPage() {
         <SectionHeading
           eyebrow="Safety"
           title="Safeguards built into every step."
-          action={<ArrowLink href="/trust-safety">Trust & safety in detail</ArrowLink>}
+          accent={3}
+          description="From the first search to the last lesson, protections are part of how TutorLink works — not an add-on."
+          action={<ArrowLink href="/trust-safety">Trust &amp; safety in detail</ArrowLink>}
         />
-        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.08}>
-          {[
-            { icon: <BadgeCheck />, t: "Verified before badged", b: "Identity, education, certification and background checks each show a badge only once our team has completed them." },
-            { icon: <Star />, t: "Reviews from real lessons", b: "Only a family with a completed booking can review that tutor, so every review is tied to a lesson that happened." },
-            { icon: <MessageSquareLock />, t: "Protected messaging", b: "Phone numbers and emails are masked in messages. Conversations can be reported or blocked at any time." },
-            { icon: <Eye />, t: "Oversight for minors", b: "Parents manage child profiles and can see messages, lessons and progress notes about their children." },
-          ].map((it) => (
-            <StaggerItem key={it.t} className="h-full">
-              <div className="h-full rounded-2xl border border-line bg-surface p-5 sm:p-6">
-                <span className="grid size-11 place-items-center rounded-lg bg-canvas text-ink [&_svg]:size-5">{it.icon}</span>
-                <h3 className="mt-4 text-[17px] font-bold tracking-[-0.01em] text-ink">{it.t}</h3>
-                <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-2">{it.b}</p>
+
+        <div className="relative">
+          <span className="absolute left-[22px] right-[calc(25%-34px)] top-[22px] hidden h-px bg-[linear-gradient(to_right,var(--color-grad-from),var(--color-grad-to))] lg:block" aria-hidden />
+          <Stagger as="ol" className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.1}>
+            {SAFETY_STAGES.map((stage, i) => (
+              <StaggerItem as="li" key={stage.title} className="h-full">
+                <div className="flex justify-center lg:justify-start">
+                  <span className="relative grid size-11 place-items-center rounded-full bg-brand-gradient text-white shadow-md ring-8 ring-page">
+                    <ShieldCheck className="size-5" aria-hidden />
+                  </span>
+                </div>
+                <div className="mt-4 flex h-[calc(100%-3.75rem)] flex-col rounded-2xl border border-line bg-surface p-5 sm:p-6">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-brand">
+                    0{i + 1} · {stage.title}
+                  </p>
+                  <ul className="mt-4 space-y-4">
+                    {stage.items.map((it) => (
+                      <li key={it.title} className="flex gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-line text-brand">
+                          <it.icon className="size-[18px]" aria-hidden />
+                        </span>
+                        <span>
+                          <span className="block text-[15px] font-semibold text-ink">{it.title}</span>
+                          <span className="mt-0.5 block text-[13.5px] leading-relaxed text-ink-2">{it.body}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {i === 1 && (
+                    <div className="mt-auto pt-5" aria-hidden>
+                      <div className="rounded-xl bg-canvas p-3">
+                        <div className="w-fit max-w-full rounded-2xl rounded-bl-md bg-surface px-3 py-2 text-[12.5px] text-ink-2 ring-1 ring-line">
+                          Text me at <span className="rounded bg-line px-1 font-mono tracking-widest text-muted">•••••••</span>
+                        </div>
+                        <p className="mt-2 flex items-center gap-1.5 text-[11.5px] font-medium text-muted">
+                          <Lock className="size-3" /> Contact details hidden automatically
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </div>
+
+        <Reveal className="mt-6">
+          <div className="flex flex-col gap-4 rounded-2xl border border-line bg-canvas p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="flex items-start gap-3.5">
+              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-surface text-brand ring-1 ring-line">
+                <Flag className="size-5" aria-hidden />
+              </span>
+              <div>
+                <p className="text-[16px] font-semibold text-ink">Something feel wrong?</p>
+                <p className="mt-0.5 text-[14.5px] leading-relaxed text-ink-2">Report a message, a profile or a lesson from the page it&rsquo;s on. Our team reviews every report.</p>
               </div>
-            </StaggerItem>
-          ))}
-        </Stagger>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/safety">Safety guidelines</Link>
+              </Button>
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/contact">Contact support</Link>
+              </Button>
+            </div>
+          </div>
+        </Reveal>
       </Section>
 
       <CtaBand
