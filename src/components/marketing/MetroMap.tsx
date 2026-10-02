@@ -19,6 +19,15 @@ export interface MapMetro {
 const LNG: [number, number] = [-125, -66];
 const LAT: [number, number] = [24, 50];
 
+/** Approximate time-zone bands by longitude (the real borders zig-zag; this is a guide, not a boundary map). */
+const ZONE_BANDS: { label: string; from: number; to: number }[] = [
+  { label: "Pacific", from: -125, to: -114 },
+  { label: "Mountain", from: -114, to: -101 },
+  { label: "Central", from: -101, to: -86 },
+  { label: "Eastern", from: -86, to: -66 },
+];
+const lngToX = (lng: number) => ((lng - LNG[0]) / (LNG[1] - LNG[0])) * 100;
+
 function project(m: MapMetro): { x: number; y: number } {
   return { x: ((m.lng - LNG[0]) / (LNG[1] - LNG[0])) * 100, y: ((LAT[1] - m.lat) / (LAT[1] - LAT[0])) * 100 };
 }
@@ -42,8 +51,23 @@ export function MetroMap({ metros }: { metros: MapMetro[] }) {
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-sky-soft">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-line bg-canvas">
+      <div className="pointer-events-none absolute inset-0 bg-dot-grid opacity-60" aria-hidden />
       <div className="relative mx-auto aspect-[16/9] w-full max-w-5xl sm:aspect-[2/1]">
+        {/* Time-zone bands */}
+        {ZONE_BANDS.map((z, i) => (
+          <div
+            key={z.label}
+            aria-hidden
+            className={cn("absolute inset-y-0 border-line", i > 0 && "border-l border-dashed", i % 2 ? "bg-brand/[0.03]" : "")}
+            style={{ left: `${lngToX(z.from)}%`, width: `${lngToX(z.to) - lngToX(z.from)}%` }}
+          >
+            <span className="absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted sm:text-[11.5px]">
+              <span className="sm:hidden">{z.label.charAt(0)}T</span>
+              <span className="hidden sm:inline">{z.label}</span>
+            </span>
+          </div>
+        ))}
         {placed.map(({ m, x, y }, i) => {
           const ring = m.inPerson > 0 ? 18 + m.inPerson * 10 : 0;
           const labelLeft = x > 80;
@@ -58,7 +82,7 @@ export function MetroMap({ metros }: { metros: MapMetro[] }) {
               {ring > 0 && (
                 <motion.span
                   aria-hidden
-                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand bg-brand/25"
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-brand/40 bg-brand/15"
                   style={{ width: ring, height: ring }}
                   initial={{ scale: 0, opacity: 0 }}
                   whileInView={{ scale: 1, opacity: 1 }}
@@ -68,7 +92,7 @@ export function MetroMap({ metros }: { metros: MapMetro[] }) {
               )}
               <motion.span
                 aria-hidden
-                className={cn("relative block size-2.5 rounded-full ring-4 transition-transform duration-200 group-hover:scale-125 group-focus-visible:scale-125", m.inPerson > 0 ? "bg-ink ring-brand" : "bg-subtle ring-surface")}
+                className={cn("relative block size-2.5 rounded-full ring-4 transition-transform duration-200 group-hover:scale-125 group-focus-visible:scale-125", m.inPerson > 0 ? "bg-brand-gradient ring-white shadow-md" : "bg-subtle ring-white")}
                 initial={{ scale: 0 }}
                 whileInView={{ scale: 1 }}
                 viewport={{ once: true }}
@@ -87,14 +111,14 @@ export function MetroMap({ metros }: { metros: MapMetro[] }) {
           );
         })}
       </div>
-      <div className="relative flex flex-wrap items-center gap-x-5 gap-y-2 bg-surface px-4 py-3 text-[12.5px] text-ink-2">
+      <div className="relative flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line bg-surface px-4 py-3 text-[12.5px] text-ink-2">
         <span className="inline-flex items-center gap-2">
-          <span className="size-2.5 rounded-full bg-ink ring-4 ring-brand" aria-hidden /> In-person tutors available
+          <span className="size-2.5 rounded-full bg-brand-gradient ring-4 ring-brand/20" aria-hidden /> In-person tutors available
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="size-2.5 rounded-full bg-subtle ring-4 ring-sunken" aria-hidden /> Online only for now
+          <span className="size-2.5 rounded-full bg-subtle ring-4 ring-line" aria-hidden /> Online only for now
         </span>
-        <span>Larger rings mean more in-person tutors. Hover or focus a city for details.</span>
+        <span>Larger rings mean more in-person tutors. Time-zone bands are approximate. Hover or focus a city for details.</span>
       </div>
     </div>
   );
