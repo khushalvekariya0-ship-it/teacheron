@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { ArrowRight, Check, GraduationCap, Receipt, Scale, ShieldCheck, Users } from "lucide-react";
-import { Reveal, WordReveal } from "@/components/motion";
+import { ArrowRight, Ban, CalendarCheck, Check, GraduationCap, Receipt, Scale, Search, ShieldCheck, Users, X, type LucideIcon } from "lucide-react";
+import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
+import { RefundTimeline } from "@/components/marketing/RefundTimeline";
+import { cn } from "@/lib/utils";
 import { AreaNav } from "@/components/content/AreaNav";
 import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
-import { CheckoutVignette } from "@/components/marketing/Vignettes";
-import { PolicyCards } from "@/components/marketing/Policies";
 import { CreditPacks, PlanCards } from "@/components/marketing/Pricing";
 import { EarningsCalculator } from "@/components/marketing/EarningsCalculator";
 import { medianRate, rateRange } from "@/components/content/insights";
@@ -20,6 +20,38 @@ export const metadata: Metadata = {
     "Families pay per lesson with no subscription and no booking fee. Tutors choose Starter, Professional or Premium — see monthly prices, commission, job credits and credit packs.",
   alternates: { canonical: "/pricing" },
 };
+
+const FAMILY_COLUMNS: { icon: LucideIcon; price: string; title: string; caption: string; items: string[]; featured?: boolean; never?: boolean }[] = [
+  {
+    icon: Search,
+    price: "$0",
+    title: "Always free",
+    caption: "Everything before you book",
+    items: ["Search and compare tutors", "Message tutors with your questions", "Post a requirement and let tutors apply", "Get a matched shortlist"],
+  },
+  {
+    icon: CalendarCheck,
+    price: "Per lesson",
+    title: "You pay",
+    caption: "Only for lessons you book",
+    items: ["The tutor's listed hourly rate", "Trials free or reduced, set by each tutor", "Total shown before you confirm", "Promo codes applied at checkout"],
+    featured: true,
+  },
+  {
+    icon: Ban,
+    price: "$0",
+    title: "Never charged",
+    caption: "No extras on your bill",
+    items: ["No subscription", "No membership", "No booking fee", "No commission added to your price"],
+    never: true,
+  },
+];
+
+const PAY_STEPS = [
+  { title: "See the total first", body: "The price and the cancellation policy are shown before you confirm." },
+  { title: "Pay securely", body: "Payments are processed by Stripe — card details never touch our servers." },
+  { title: "Charged when it's confirmed", body: "With a booking request, your card is held and charged once the tutor accepts." },
+];
 
 const PRICING_SECTIONS = [
   { slug: "families", name: "For families" },
@@ -143,55 +175,106 @@ export default function PricingPage() {
       <AreaNav areas={PRICING_SECTIONS} icons={false} label="On this page" />
 
       <Section id="families" className="scroll-mt-36">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          <div>
-            <SectionHeading className="mb-8" eyebrow="For families" title="Free to search. Pay per lesson." />
-            <Reveal>
-              <div className="rounded-2xl border border-line-strong bg-surface p-6 sm:p-8">
-                <p className="flex items-baseline gap-2">
-                  <span className="font-heading text-6xl font-bold tracking-[-0.03em] text-ink">$0</span>
-                  <span className="text-sm text-muted">to join, search and message</span>
-                </p>
-                <ul className="mt-6 space-y-3">
-                  {[
-                    "Search, compare and message tutors for free",
-                    "Post a requirement and let tutors apply",
-                    "Pay per lesson at the tutor's listed rate",
-                    "No subscription, no membership, no booking fee",
-                    "Promo codes can be applied at checkout",
-                    "Payments processed securely by Stripe",
-                  ].map((t) => (
-                    <li key={t} className="flex items-start gap-2.5 text-[15px] text-ink-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-ink" strokeWidth={2.6} aria-hidden /> {t}
+        <div className="mb-10 flex flex-col gap-6 lg:mb-12 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeading
+            className="mb-0 lg:mb-0"
+            eyebrow="For families"
+            title="Free to search. Pay per lesson."
+            accent={3}
+            description="Everything you need to find the right tutor costs nothing. You pay only for the lessons you book, at the price you see before you confirm."
+          />
+          <Reveal delay={0.1} className="shrink-0">
+            <ArrowLink href="/tutors">Browse tutors and rates</ArrowLink>
+          </Reveal>
+        </div>
+
+        {/* Free / pay / never */}
+        <Stagger className="grid gap-4 lg:grid-cols-3" stagger={0.08}>
+          {FAMILY_COLUMNS.map((col) => (
+            <StaggerItem key={col.title} className="h-full">
+              <div className={cn("flex h-full flex-col rounded-2xl border p-6 sm:p-7", col.featured ? "border-brand/30 bg-brand-50" : "border-line bg-surface")}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className={cn("grid size-10 place-items-center rounded-lg", col.featured ? "bg-brand-gradient text-white" : "border border-line text-brand")}>
+                    <col.icon className="size-5" aria-hidden />
+                  </span>
+                  <span className="font-heading text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink">{col.price}</span>
+                </div>
+                <p className="mt-5 font-heading text-[19px] font-bold tracking-[-0.015em] text-ink">{col.title}</p>
+                <p className="mt-1 text-[14px] text-muted">{col.caption}</p>
+                <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
+                  {col.items.map((t) => (
+                    <li key={t} className="flex items-start gap-2.5 text-[14.5px] leading-snug text-ink-2">
+                      {col.never ? (
+                        <X className="mt-0.5 size-4 shrink-0 text-muted" strokeWidth={2.6} aria-hidden />
+                      ) : (
+                        <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.6} aria-hidden />
+                      )}
+                      {t}
                     </li>
                   ))}
                 </ul>
-                {range && (
-                  <p className="mt-6 rounded-xl bg-canvas px-4 py-3 text-sm text-ink-2">
-                    Tutor rates listed today run from <span className="font-semibold tabular-nums text-ink">{formatCents(range.min)}</span> to{" "}
-                    <span className="font-semibold tabular-nums text-ink">{formatCents(range.max)}</span> an hour, with a median of{" "}
-                    <span className="font-semibold tabular-nums text-ink">{formatCents(median)}</span>.
-                  </p>
-                )}
-                <ArrowLink href="/tutors" className="mt-6">
-                  Browse tutors and rates
-                </ArrowLink>
               </div>
-            </Reveal>
-          </div>
-          <Reveal delay={0.1}>
-            <div className="mx-auto max-w-md">
-              <CheckoutVignette />
+            </StaggerItem>
+          ))}
+        </Stagger>
+
+        {/* How paying works */}
+        <Reveal className="mt-4">
+          <ol className="grid overflow-hidden rounded-2xl border border-line bg-surface sm:grid-cols-3">
+            {PAY_STEPS.map((s, i) => (
+              <li key={s.title} className={cn("flex gap-4 p-5 sm:p-6", i > 0 && "border-t border-line sm:border-l sm:border-t-0")}>
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-white">{i + 1}</span>
+                <span>
+                  <span className="block text-[15.5px] font-semibold text-ink">{s.title}</span>
+                  <span className="mt-1 block text-[14px] leading-relaxed text-ink-2">{s.body}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </Reveal>
+
+        {/* Rates listed today (only when tutors are listed) */}
+        {range && (
+          <Reveal className="mt-4">
+            <div className="rounded-2xl border border-line bg-surface p-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-[15.5px] font-semibold text-ink">Hourly rates listed today</p>
+                <p className="text-[13px] text-muted">Each tutor sets their own rate</p>
+              </div>
+              <div className="relative mt-8 h-2 rounded-full bg-brand-gradient" aria-hidden>
+                <span
+                  className="absolute -top-7 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-0.5 text-[12px] font-semibold text-on-ink"
+                  style={{ left: `${((median - range.min) / Math.max(1, range.max - range.min)) * 100}%` }}
+                >
+                  Median {formatCents(median)}
+                </span>
+                <span
+                  className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-ink"
+                  style={{ left: `${((median - range.min) / Math.max(1, range.max - range.min)) * 100}%` }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-[13px] font-semibold tabular-nums text-ink-2">
+                <span>{formatCents(range.min)}</span>
+                <span>{formatCents(range.max)}</span>
+              </div>
+              <p className="sr-only">
+                Rates range from {formatCents(range.min)} to {formatCents(range.max)} an hour, with a median of {formatCents(median)}.
+              </p>
             </div>
           </Reveal>
-        </div>
-        <div className="mt-16">
-          <h3 className="mb-6 font-heading text-2xl font-bold tracking-[-0.025em] text-ink">Cancellation and refunds</h3>
-          <PolicyCards />
-          <p className="mt-4 text-[13px] text-muted">
-            Our current defaults. The exact policy for your booking is shown before you pay. A confirmed tutor no-show is always refunded in full; problems can be reported within {DEFAULT_POLICY.disputeWindowDays} days.
-          </p>
-        </div>
+        )}
+
+        {/* Cancellation and refunds */}
+        <p className="mb-5 mt-12 flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+          <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+          Cancellation and refunds
+        </p>
+        <Reveal>
+          <RefundTimeline />
+        </Reveal>
+        <p className="mt-4 text-[13px] text-muted">
+          Our current defaults. The exact policy for your booking is shown before you pay. A confirmed tutor no-show is always refunded in full; problems can be reported within {DEFAULT_POLICY.disputeWindowDays} days.
+        </p>
       </Section>
 
       <Section id="tutors" tone="canvas" className="scroll-mt-36">
