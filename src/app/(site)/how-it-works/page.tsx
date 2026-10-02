@@ -149,7 +149,7 @@ export default function HowItWorksPage() {
           eyebrow="How matching works"
           title="A score you can read, not a black box."
           accent={4}
-          description="Every tutor gets a match score from eight weighted factors. Explore them below — the same factors and weights appear, with reasons, next to every result."
+          description="Every tutor gets a match score from eight weighted factors. Change the example tutor below and watch the score add up — the same rules score every real result, with the reasons shown next to it."
         />
         <MatchingWeights />
       </Section>
