@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import type * as React from "react";
 import Link from "next/link";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarDays, Check, IdCard, Landmark, Laptop, MessageSquare, NotebookPen, Scale, ShieldCheck, UserRound, Wallet,
+  ArrowRight, BadgeCheck, Briefcase, CalendarDays, Check, Handshake, Landmark, Laptop, Lock, MessageSquare, NotebookPen, Scale, ShieldCheck, UserRound, Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
-import { Split } from "@/components/marketing/Split";
 import { GetPaidVignette } from "@/components/marketing/Vignettes";
 import { VerificationFlow } from "@/components/marketing/Verification";
+import { ReadyChecklist } from "@/components/marketing/ReadyChecklist";
 import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
 import { medianRate } from "@/components/content/insights";
 import { Button } from "@/components/ui/Button";
@@ -314,40 +314,56 @@ export default function BecomeATutorPage() {
       </Section>
 
       <Section>
-        <Split
+        <SectionHeading
           eyebrow="Requirements"
           title="What you'll need."
-          description="We keep the bar clear and the same for everyone."
-          features={[
-            { icon: <UserRound />, title: "Be 18 or older", body: "Tutors must be adults, and you'll confirm your legal name during identity verification." },
-            { icon: <IdCard />, title: "A government-issued photo ID", body: "Used only to verify your identity. It is never shown to families." },
-            { icon: <BadgeCheck />, title: "Real expertise in what you teach", body: "A degree, a teaching certification, or demonstrable experience in each subject you list. Only verified credentials earn badges." },
-            { icon: <ShieldCheck />, title: "Consent to background screening", body: "Where applicable — for example if you work with minors — you'll be asked to complete a background screening." },
-            { icon: <Laptop />, title: "A reliable setup", body: "For online lessons: a stable connection, camera and microphone. For in-person lessons: a service area you can reliably cover." },
-          ]}
-          visual={
-            <div className="rounded-2xl border border-line-strong bg-surface p-6">
-              <p className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">Community standards</p>
-              <p className="mt-1 text-sm text-muted">Every tutor agrees to these before teaching.</p>
-              <ul className="mt-5 space-y-3">
+          accent={2}
+          description="We keep the bar clear and the same for everyone — most tutors already have everything on this list."
+        />
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-8">
+          <Reveal>
+            <ReadyChecklist signupHref={TUTOR_SIGNUP_HREF} />
+          </Reveal>
+
+          <Reveal delay={0.1} className="space-y-4 lg:sticky lg:top-28">
+            <div className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-7">
+              <div className="absolute inset-x-0 top-0 h-1 bg-brand-gradient" aria-hidden />
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+                  <Handshake className="size-5" aria-hidden />
+                </span>
+                <div>
+                  <p className="font-heading text-[19px] font-bold tracking-[-0.015em] text-ink">Community standards</p>
+                  <p className="text-[13.5px] text-muted">Every tutor agrees to these before teaching.</p>
+                </div>
+              </div>
+              <ol className="mt-6 space-y-3.5">
                 {[
                   "Keep communication and payment on TutorLink",
                   "Never share or ask for personal contact details before a booking",
                   "Show up on time, and cancel early if you must",
                   "Follow the safeguards for lessons with minors",
                   "List only qualifications you can verify",
-                ].map((t) => (
-                  <li key={t} className="flex items-start gap-2.5 text-sm text-ink-2">
-                    <Check className="mt-0.5 size-4 shrink-0 text-ink" strokeWidth={2.6} aria-hidden /> {t}
+                ].map((t, i) => (
+                  <li key={t} className="flex items-start gap-3 text-[14.5px] leading-snug text-ink-2">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-md bg-brand-soft text-[12px] font-bold tabular-nums text-brand">{i + 1}</span>
+                    <span className="pt-0.5">{t}</span>
                   </li>
                 ))}
-              </ul>
+              </ol>
               <ArrowLink href="/safety" className="mt-6">
                 Read the safety guidelines
               </ArrowLink>
             </div>
-          }
-        />
+
+            <div className="flex items-start gap-3 rounded-2xl border border-line bg-canvas p-5">
+              <Lock className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden />
+              <p className="text-[14px] leading-relaxed text-ink-2">
+                <span className="font-semibold text-ink">Your documents stay private.</span> IDs and certificates are used only to verify you — families see a badge, never the document.
+              </p>
+            </div>
+          </Reveal>
+        </div>
       </Section>
 
       <Section id="verification" tone="canvas" className="scroll-mt-16">
