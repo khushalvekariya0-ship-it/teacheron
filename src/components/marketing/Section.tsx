@@ -186,7 +186,7 @@ export function PageHero({
     </div>
   );
   return (
-    <section className={cn("relative overflow-hidden", tone === "brand" ? "bg-brand-soft" : tone === "yellow" ? "bg-yellow-soft" : "bg-canvas")}>
+    <section className={cn("relative", tone === "brand" ? "bg-brand-soft" : tone === "yellow" ? "bg-yellow-soft" : "bg-canvas")}>
       <div
         className={cn(
           "container-page relative",
