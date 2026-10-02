@@ -3,8 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Check, Clock, Code, CreditCard, GraduationCap, Languages, Lock, MapPin, Mic, Monitor, Music,
   NotebookPen, PhoneOff, Search, ShieldCheck, Sparkles, Target, Users, Video,
@@ -414,100 +412,118 @@ export function LessonModes() {
   );
 }
 
-/* ═══ Built for every learner — audience tabs (Varsity Tutors / Chegg) ═══════════ */
+/* ═══ Built for every learner — three persona cards, side by side ══════════════════════ */
 
-const AUDIENCES = [
+type Learner = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  points: string[];
+  startWith: string[];
+  image: string;
+  alt: string;
+  cta: { href: string; label: string };
+};
+
+const LEARNERS: Learner[] = [
   {
     id: "parents",
-    tab: "Parents",
+    label: "For parents",
     icon: Users,
     title: "Stay involved without hovering",
-    body: "One parent account covers every child. You choose the tutor, book and pay — and you can see how each lesson went.",
-    points: ["A profile for each child with grade and goals", "See every message about your child", "Notes, homework and attendance after each lesson", "Parental consent built in for younger learners"],
+    body: "One parent account covers every child. You choose the tutor, book and pay — and see how each lesson went.",
+    points: ["A profile for each child with grade and goals", "See every message about your child", "Notes, homework and attendance after each lesson"],
+    startWith: ["reading", "pre-algebra", "study-skills"],
     image: "/images/family-reading.jpg",
     alt: "A father and his son reading and writing together",
     cta: { href: "/for-parents", label: "Tutoring for your kids" },
   },
   {
     id: "students",
-    tab: "Students",
+    label: "For students",
     icon: GraduationCap,
     title: "Help that fits your classes and your week",
-    body: "Find a tutor for your exact course or exam, book around practice and work, and keep track of what you've mastered.",
-    points: ["Tutors for your specific class or test", "Lessons that fit around school and activities", "Free or low-cost trials with many tutors", "Topics mastered, tracked over time"],
+    body: "Find a tutor for your exact course or exam, and book around practice, work and everything else.",
+    points: ["Tutors for your specific class or test", "Lessons that fit around school and activities", "Topics you've mastered, tracked over time"],
+    startWith: ["algebra", "chemistry", "sat"],
     image: "/images/hero-tutoring-close.jpg",
     alt: "A tutor and a student working through a lesson together",
     cta: { href: "/for-students", label: "Tutoring for students" },
   },
   {
     id: "adults",
-    tab: "Adult learners",
+    label: "For adult learners",
     icon: Clock,
     title: "Learn something new, on your schedule",
-    body: "Pick up a language, learn to code or prepare for a professional exam — with evening and weekend lessons online or nearby.",
-    points: ["Languages for travel, work or family", "Coding and career skills", "GRE, LSAT and other graduate exams", "Evening and weekend availability"],
+    body: "Pick up a language, learn to code or prepare for a graduate exam — with evening and weekend lessons.",
+    points: ["Evening and weekend availability", "Learn online from anywhere in the U.S.", "Go at your own pace, lesson by lesson"],
+    startWith: ["spanish", "python", "gre"],
     image: "/images/adult-learner.jpg",
     alt: "An adult learner in an online lesson",
     cta: { href: "/tutors", label: "Browse tutors" },
   },
 ];
 
+function LearnerCard({ learner: l }: { learner: Learner }) {
+  return (
+    <article data-spotlight className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+      <div className="relative aspect-[4/3] overflow-hidden bg-canvas">
+        <Image src={l.image} alt={l.alt} fill sizes="(min-width: 1024px) 400px, 100vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.04]" />
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night/50 to-transparent" aria-hidden />
+        <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-[13px] font-semibold text-ink shadow-md backdrop-blur">
+          <l.icon className="size-4 text-brand" aria-hidden /> {l.label}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col p-6 sm:p-7">
+        <h3 className="font-heading text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink">{l.title}</h3>
+        <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{l.body}</p>
+        <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
+          {l.points.map((p) => (
+            <li key={p} className="flex items-start gap-3 text-[14.5px] leading-snug text-ink">
+              <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.6} aria-hidden /> {p}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-6 text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Start with</p>
+        <ul className="mt-2.5 flex flex-wrap gap-1.5">
+          {l.startWith.map((slug) => (
+            <li key={slug}>
+              <Link
+                href={`/tutors?subject=${slug}`}
+                className="inline-flex rounded-md border border-line px-2.5 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
+              >
+                {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <Link href={l.cta.href} className="group/cta mt-auto inline-flex items-center gap-1.5 pt-7 text-[15px] font-semibold text-brand">
+          {l.cta.label} <ArrowRight className="size-4 transition-transform duration-300 group-hover/cta:translate-x-1" aria-hidden />
+        </Link>
+      </div>
+    </article>
+  );
+}
+
 export function Audiences() {
-  const [tab, setTab] = React.useState(AUDIENCES[0].id);
-  const current = AUDIENCES.find((a) => a.id === tab) ?? AUDIENCES[0];
   return (
     <Section tone="brand">
-      <SectionHeading align="center" eyebrow="Built for every learner" title="Tutoring for families, students and adults" />
-      <TabsPrimitive.Root value={tab} onValueChange={setTab}>
-        <TabsPrimitive.List aria-label="Who is learning?" className="mx-auto mb-10 flex w-fit flex-wrap justify-center gap-1 rounded-xl border border-line bg-surface p-1.5 shadow-sm">
-          {AUDIENCES.map((a) => (
-            <TabsPrimitive.Trigger
-              key={a.id}
-              value={a.id}
-              className={cn("relative inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[15px] font-semibold transition-colors sm:px-5", tab === a.id ? "text-white" : "text-ink-2 hover:text-ink")}
-            >
-              {tab === a.id && <motion.span layoutId="audience-pill" className="absolute inset-0 rounded-lg bg-brand-gradient" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
-              <a.icon className="relative size-4.5" aria-hidden />
-              <span className="relative">{a.tab}</span>
-            </TabsPrimitive.Trigger>
-          ))}
-        </TabsPrimitive.List>
-        <TabsPrimitive.Content value={current.id} forceMount className="outline-none">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={current.id}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              className="grid items-center gap-10 rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:p-10"
-            >
-              <div>
-                <h3 className="font-heading text-[1.75rem] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[2rem]">{current.title}</h3>
-                <p className="mt-4 text-[16.5px] leading-relaxed text-ink-2">{current.body}</p>
-                <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-                  {current.points.map((p) => (
-                    <li key={p} className="flex items-start gap-2.5 text-[15px] leading-snug text-ink">
-                      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">
-                        <Check className="size-3.5" strokeWidth={3} aria-hidden />
-                      </span>
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-                <Button asChild variant="brand" size="lg" className="mt-8">
-                  <Link href={current.cta.href}>
-                    {current.cta.label} <ArrowRight />
-                  </Link>
-                </Button>
-              </div>
-              <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
-                <Image src={current.image} alt={current.alt} fill sizes="(min-width: 1024px) 520px, 100vw" className="object-cover" />
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </TabsPrimitive.Content>
-      </TabsPrimitive.Root>
+      <SectionHeading
+        align="center"
+        eyebrow="Built for every learner"
+        title="Made for kids, teens and grown-ups"
+        accent={1}
+        description="Parents stay in the loop, students get help that fits their week, and adults learn at their own pace."
+      />
+      <Stagger className="grid gap-5 md:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
+        {LEARNERS.map((l, i) => (
+          <StaggerItem key={l.id} className={cn("h-full", i === 2 && "md:col-span-2 lg:col-span-1")}>
+            <LearnerCard learner={l} />
+          </StaggerItem>
+        ))}
+      </Stagger>
     </Section>
   );
 }
