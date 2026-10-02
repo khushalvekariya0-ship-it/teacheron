@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, CalendarCheck, Check, Eye, GitCompareArrows, LineChart, MessageSquareLock, Search, Star, type LucideIcon } from "lucide-react";
+import { ArrowRight, BadgeCheck, CalendarCheck, Check, Eye, Gift, GitCompareArrows, Handshake, LineChart, MessageSquareLock, Search, Star, Video, type LucideIcon } from "lucide-react";
 import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
 import { AreaNav } from "@/components/content/AreaNav";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/Button";
 import { HowItWorksView } from "@/components/marketing/HowItWorksView";
 import { MatchingWeights } from "@/components/marketing/MatchingWeights";
 import { PolicyCards, PolicyDetails } from "@/components/marketing/Policies";
-import { TrialVignette } from "@/components/marketing/Vignettes";
 import { trialStats } from "@/components/content/insights";
 import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
@@ -27,6 +26,34 @@ const JUMP_LINKS = [
   { slug: "trials", name: "Trial lessons" },
   { slug: "policies", name: "Booking & policies" },
   { slug: "safety", name: "Safety" },
+];
+
+const TRIAL_STORY: { stage: string; icon: LucideIcon; title: string; points: string[] }[] = [
+  {
+    stage: "Before",
+    icon: CalendarCheck,
+    title: "Book and share your goals",
+    points: ["Pick a real opening in your time zone", "See the trial's length and price up front", "Tell the tutor what you'd like help with"],
+  },
+  {
+    stage: "During",
+    icon: Video,
+    title: "Get to know each other",
+    points: ["Talk through goals and current level", "Try a short piece of real work together", "Ask how lessons and homework would run"],
+  },
+  {
+    stage: "After",
+    icon: Handshake,
+    title: "Decide — no strings attached",
+    points: ["Book regular lessons if it's a fit", "Or try another tutor — there's no obligation", "Leave a review once the lesson is complete"],
+  },
+];
+
+const TRIAL_VS_REGULAR = [
+  { label: "Price", trial: "Free or reduced — set by each tutor", regular: "The tutor's hourly rate" },
+  { label: "Free cancellation", trial: `Up to ${DEFAULT_POLICY.trialFreeCancellationHours} hours before`, regular: `Up to ${DEFAULT_POLICY.freeCancellationHours} hours before` },
+  { label: "How many", trial: "One with each tutor", regular: "As many as you like" },
+  { label: "Commitment", trial: "None", regular: "Pay per lesson — no subscription" },
 ];
 
 const JOURNEY: { icon: LucideIcon; title: string; body: string }[] = [
@@ -127,44 +154,96 @@ export default function HowItWorksPage() {
       </Section>
 
       <Section id="trials" className="scroll-mt-36">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          <div>
-            <SectionHeading
-              className="mb-8 lg:mb-10"
-              eyebrow="Trial lessons"
-              title="Try the fit before you commit."
-              description="A trial is a short first lesson — free or at a reduced price — so the student and tutor can get to know each other and agree on a plan."
-            />
-            <Stagger className="space-y-5" stagger={0.08}>
-              {[
-                { t: "Terms set by each tutor", b: "Length, price and anything to bring are shown on the tutor's profile before you book." },
-                { t: "One trial per tutor", b: "Each student can book one trial with each tutor. After that, you book regular lessons." },
-                { t: `Free cancellation up to ${DEFAULT_POLICY.trialFreeCancellationHours} hours before`, b: `Plans change. Trials have a shorter free-cancellation window than regular lessons (${DEFAULT_POLICY.freeCancellationHours} hours).` },
-              ].map((it) => (
-                <StaggerItem key={it.t} className="border-l-[3px] border-brand pl-4">
-                  <h3 className="text-[16px] font-bold text-ink">{it.t}</h3>
-                  <p className="mt-1 text-[14.5px] leading-relaxed text-ink-2">{it.b}</p>
-                </StaggerItem>
-              ))}
-            </Stagger>
-            {TUTORS.length > 0 && (
-            <Reveal delay={0.1}>
-              <p className="mt-8 rounded-xl bg-canvas px-4 py-3 text-sm text-ink-2">
-                <span className="font-semibold tabular-nums text-ink">{trials.offering}</span> of the <span className="tabular-nums">{TUTORS.length}</span> tutors listed today offer a trial —{" "}
-                <span className="font-semibold tabular-nums text-ink">{trials.free}</span> of them for free.{" "}
-                <Link href="/tutors?trial=1" className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
-                  See tutors with trials
-                </Link>
-              </p>
-            </Reveal>
-            )}
-          </div>
-          <Reveal delay={0.1}>
-            <div className="mx-auto max-w-md">
-              <TrialVignette />
-            </div>
+        <div className="mb-10 flex flex-col gap-6 lg:mb-12 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeading
+            className="mb-0 lg:mb-0"
+            eyebrow="Trial lessons"
+            title="Try the fit before you commit."
+            accent={2}
+            description="A trial is a short first lesson — free or at a reduced price — so the student and tutor can get to know each other and agree on a plan."
+          />
+          <Reveal delay={0.1} className="shrink-0">
+            <Button asChild variant="brand">
+              <Link href="/tutors?trial=1">
+                Find tutors with trials <ArrowRight />
+              </Link>
+            </Button>
           </Reveal>
         </div>
+
+        {/* Before / during / after */}
+        <Stagger as="ol" className="grid gap-4 md:grid-cols-3" stagger={0.1}>
+          {TRIAL_STORY.map((s, i) => (
+            <StaggerItem as="li" key={s.stage} className="h-full">
+              <div className="relative flex h-full flex-col rounded-2xl border border-line bg-surface p-6">
+                <div className="flex items-center justify-between">
+                  <span className="grid size-11 place-items-center rounded-xl bg-brand-gradient text-white">
+                    <s.icon className="size-5" aria-hidden />
+                  </span>
+                  <span className="font-heading text-[13px] font-bold uppercase tracking-[0.16em] text-brand">{s.stage}</span>
+                </div>
+                <h3 className="mt-5 font-heading text-[19px] font-bold tracking-[-0.015em] text-ink">{s.title}</h3>
+                <ul className="mt-3 space-y-2">
+                  {s.points.map((p) => (
+                    <li key={p} className="flex items-start gap-2.5 text-[14.5px] leading-snug text-ink-2">
+                      <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.6} aria-hidden /> {p}
+                    </li>
+                  ))}
+                </ul>
+                {i < TRIAL_STORY.length - 1 && (
+                  <span className="absolute -right-3 top-1/2 z-10 hidden size-6 -translate-y-1/2 place-items-center rounded-full border border-line bg-page text-muted md:grid" aria-hidden>
+                    <ArrowRight className="size-3.5" />
+                  </span>
+                )}
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
+
+        {/* Trial vs regular lesson */}
+        <Reveal className="mt-6">
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+            <table className="w-full text-left text-[13.5px] sm:text-[14.5px]">
+              <caption className="sr-only">How a trial lesson differs from a regular lesson</caption>
+              <thead>
+                <tr className="border-b border-line bg-canvas text-[12.5px] uppercase tracking-[0.12em] text-muted">
+                  <th scope="col" className="px-5 py-3 font-semibold sm:px-6">
+                    <span className="sr-only">Detail</span>
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-semibold text-brand">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Gift className="size-4" aria-hidden /> Trial lesson
+                    </span>
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-semibold sm:px-6">Regular lesson</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {TRIAL_VS_REGULAR.map((r) => (
+                  <tr key={r.label}>
+                    <th scope="row" className="px-3.5 py-3.5 font-semibold text-ink sm:px-6">{r.label}</th>
+                    <td className="bg-brand-50/60 px-3 py-3.5 text-ink sm:px-4">{r.trial}</td>
+                    <td className="px-3 py-3.5 text-ink-2 sm:px-6">{r.regular}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Reveal>
+
+        {TUTORS.length > 0 && (
+          <Reveal delay={0.1}>
+            <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-canvas px-5 py-3.5 text-[14.5px] text-ink-2">
+              <span>
+                <span className="font-semibold tabular-nums text-ink">{trials.offering}</span> of the <span className="tabular-nums">{TUTORS.length}</span> tutors listed today offer a trial —{" "}
+                <span className="font-semibold tabular-nums text-ink">{trials.free}</span> of them for free.
+              </span>
+              <Link href="/tutors?trial=1" className="font-semibold text-brand underline-offset-4 hover:underline">
+                See tutors with trials &rarr;
+              </Link>
+            </p>
+          </Reveal>
+        )}
       </Section>
 
       <Section id="policies" tone="canvas" className="scroll-mt-36">
