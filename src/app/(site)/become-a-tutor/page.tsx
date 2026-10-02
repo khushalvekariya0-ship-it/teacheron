@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import type * as React from "react";
 import Link from "next/link";
 import {
   ArrowRight, BadgeCheck, Briefcase, CalendarDays, Check, IdCard, Laptop, MessageSquare, NotebookPen, Scale, ShieldCheck, UserRound, Wallet,
 } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
-import { CardGrid, Split } from "@/components/marketing/Split";
+import { Split } from "@/components/marketing/Split";
 import { GetPaidVignette, ProfileBuilderVignette } from "@/components/marketing/Vignettes";
 import { VerificationFlow } from "@/components/marketing/Verification";
 import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
@@ -15,6 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { FAQS } from "@/lib/data/content";
 import { CREDITS_PER_APPLICATION, DEFAULT_POLICY, TUTOR_PLANS } from "@/lib/data/platform";
 import { applyBps, formatCents } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Become a tutor",
@@ -31,6 +33,156 @@ const ONBOARDING = [
   { title: "Submit verification", body: "Upload documents for identity, education and certifications, and complete background screening where applicable." },
   { title: "Connect payouts", body: "Link a bank account through Stripe Connect so earnings from completed lessons can be paid out." },
 ];
+
+/* ─── Why TutorLink (for tutors): a bento of the tools, each with a small picture ─── */
+
+function ToolTile({ icon, title, body, className, children }: { icon: React.ReactNode; title: string; body: string; className?: string; children?: React.ReactNode }) {
+  return (
+    <StaggerItem className={cn("h-full", className)}>
+      <div data-spotlight className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 sm:p-7">
+        <span className="grid size-10 place-items-center rounded-lg border border-line text-brand [&_svg]:size-5">{icon}</span>
+        <h3 className="mt-5 font-heading text-[20px] font-bold tracking-[-0.015em] text-ink">{title}</h3>
+        <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{body}</p>
+        {children && (
+          <div className="mt-auto pt-6" aria-hidden>
+            {children}
+          </div>
+        )}
+      </div>
+    </StaggerItem>
+  );
+}
+
+const WEEK_BLOCKS = [
+  [1, 1, 0, 1, 1],
+  [0, 1, 1, 0, 1],
+  [1, 0, 1, 1, 0],
+];
+
+function TutorWhy() {
+  return (
+    <Section>
+      <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
+        <SectionHeading
+          className="mb-0 lg:mb-0"
+          eyebrow="Why TutorLink"
+          title="The tools of a practice, without the overhead."
+          accent={3}
+          description="Profile, calendar, bookings, lesson notes and payouts — everything you need to teach and get paid, in one place."
+        />
+        <Reveal delay={0.1} className="shrink-0">
+          <ArrowLink href="/pricing#tutors">See plans &amp; commission</ArrowLink>
+        </Reveal>
+      </div>
+
+      <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-5" stagger={0.06}>
+        {/* Rates */}
+        <ToolTile className="md:col-span-2" icon={<Wallet />} title="Your rates, your rules" body="Choose your hourly rate, lesson lengths and trial terms — and change them whenever you like.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-line bg-page p-4">
+              <p className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted">Hourly rate</p>
+              <p className="mt-2 font-heading text-[22px] font-bold text-ink">You decide</p>
+            </div>
+            <div className="rounded-xl border border-line bg-page p-4">
+              <p className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted">Lesson lengths</p>
+              <p className="mt-2.5 flex flex-wrap gap-1.5">
+                {[30, 45, 60, 90].map((m, i) => (
+                  <span key={m} className={cn("rounded-md px-2 py-0.5 text-[12.5px] font-semibold", i === 2 ? "bg-brand-gradient text-white" : "border border-line text-ink-2")}>
+                    {m}m
+                  </span>
+                ))}
+              </p>
+            </div>
+            <div className="rounded-xl border border-line bg-page p-4">
+              <p className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted">Trial lesson</p>
+              <p className="mt-2.5 flex gap-1.5 text-[12.5px] font-semibold">
+                <span className="rounded-md border border-line px-2 py-0.5 text-ink-2">Free</span>
+                <span className="rounded-md border border-line px-2 py-0.5 text-ink-2">Reduced</span>
+                <span className="rounded-md border border-line px-2 py-0.5 text-ink-2">Off</span>
+              </p>
+            </div>
+          </div>
+        </ToolTile>
+
+        {/* Families come to you */}
+        <ToolTile icon={<MessageSquare />} title="Families come to you" body="Families find you in search and message you directly. Being contacted never costs credits.">
+          <div className="space-y-2">
+            <div className="w-[85%] rounded-2xl rounded-bl-md bg-canvas px-3.5 py-2.5 text-[13px] text-ink-2">Hi! Are you available for weekly lessons?</div>
+            <div className="ml-auto w-[70%] rounded-2xl rounded-br-md bg-brand-gradient px-3.5 py-2.5 text-[13px] text-white">Yes — let&rsquo;s book a trial.</div>
+          </div>
+        </ToolTile>
+
+        {/* Calendar */}
+        <ToolTile icon={<CalendarDays />} title="A calendar that protects you" body="Weekly hours, buffers and minimum notice. Families only see times you're actually free.">
+          <div className="rounded-xl border border-line bg-page p-3">
+            <div className="grid grid-cols-5 gap-1 text-center text-[10.5px] font-medium text-muted">
+              {["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
+                <span key={d}>{d}</span>
+              ))}
+            </div>
+            <div className="mt-1.5 grid grid-cols-5 gap-1">
+              {WEEK_BLOCKS.flatMap((row, r) =>
+                row.map((on, c) => <span key={`${r}-${c}`} className={cn("h-5 rounded", on ? "bg-brand-gradient opacity-90" : "bg-canvas")} />),
+              )}
+            </div>
+            <p className="mt-2.5 flex flex-wrap gap-1.5 text-[11.5px] font-medium text-ink-2">
+              <span className="rounded border border-line px-1.5 py-0.5">Buffers</span>
+              <span className="rounded border border-line px-1.5 py-0.5">Min. notice</span>
+              <span className="rounded border border-line px-1.5 py-0.5">Instant or approve</span>
+            </p>
+          </div>
+        </ToolTile>
+
+        {/* Student jobs */}
+        <ToolTile icon={<Briefcase />} title="Student jobs" body="Browse requirements posted by families and apply with a personal note.">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-page p-3.5">
+            <span className="min-w-0">
+              <span className="block h-2 w-24 rounded-full bg-line-strong" />
+              <span className="mt-2 block h-2 w-32 rounded-full bg-line" />
+            </span>
+            <span className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-[12px] font-semibold text-white">
+              Apply · {CREDITS_PER_APPLICATION} credit
+            </span>
+          </div>
+        </ToolTile>
+
+        {/* Fair ranking */}
+        <ToolTile icon={<Scale />} title="Fair ranking" body="Search order and match scores use the same open factors for everyone. Plans and featured placement never change them.">
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-page px-3.5 py-3 text-[13px] font-semibold text-ink">
+            <BadgeCheck className="size-4 text-success" /> Same rules for every tutor
+          </div>
+        </ToolTile>
+
+        {/* Lesson page */}
+        <ToolTile className="md:col-span-2" icon={<NotebookPen />} title="Built-in teaching tools" body="Every lesson gets its own page with the meeting link, notes, homework and attendance — so families see progress without extra admin.">
+          <div className="grid gap-2 sm:grid-cols-4">
+            {[
+              { icon: <Laptop className="size-4" />, label: "Meeting link" },
+              { icon: <NotebookPen className="size-4" />, label: "Lesson notes" },
+              { icon: <Check className="size-4" />, label: "Homework" },
+              { icon: <CalendarDays className="size-4" />, label: "Attendance" },
+            ].map((x) => (
+              <span key={x.label} className="flex items-center gap-2 rounded-lg border border-line bg-page px-3 py-2.5 text-[13px] font-medium text-ink-2">
+                <span className="text-brand">{x.icon}</span> {x.label}
+              </span>
+            ))}
+          </div>
+        </ToolTile>
+
+        {/* Payouts */}
+        <ToolTile icon={<ShieldCheck />} title="Get paid securely" body="Families pay through Stripe when they book. Earnings from completed lessons are paid out to your bank through Stripe Connect.">
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-page px-3.5 py-3 text-[13px] text-ink-2">
+            <span className="font-semibold text-ink">Booked</span>
+            <ArrowRight className="size-3.5 text-muted" />
+            <span className="font-semibold text-ink">Taught</span>
+            <ArrowRight className="size-3.5 text-muted" />
+            <span className="rounded-md bg-brand-gradient px-2 py-0.5 font-semibold text-white">Paid out</span>
+          </div>
+        </ToolTile>
+      </Stagger>
+    </Section>
+  );
+}
 
 export default function BecomeATutorPage() {
   // The median listed rate when tutors exist; otherwise a round example rate for the commission table.
@@ -59,19 +211,7 @@ export default function BecomeATutorPage() {
         }
       />
 
-      <Section>
-        <SectionHeading eyebrow="Why TutorLink" title="The tools of a practice, without the overhead." description="Everything you need to run lessons and get paid, in one place." />
-        <CardGrid
-          items={[
-            { icon: <Wallet />, title: "Your rates, your rules", body: "Choose your hourly rate, lesson lengths and trial terms. Change them whenever you like." },
-            { icon: <CalendarDays />, title: "A calendar that protects you", body: "Weekly availability, buffers and minimum notice. Families only see times you're actually free." },
-            { icon: <MessageSquare />, title: "Families come to you", body: "Families find you in search and message you directly. Being contacted never costs you credits." },
-            { icon: <Briefcase />, title: "Student jobs", body: `Browse requirements posted by families and apply with a personal note. Each application uses ${CREDITS_PER_APPLICATION} credit.` },
-            { icon: <Scale />, title: "Fair ranking", body: "Search order and match scores use the same transparent factors for everyone. Plans and featured placement never change them." },
-            { icon: <NotebookPen />, title: "Built-in teaching tools", body: "A page for every lesson with the meeting link, notes, homework and attendance." },
-          ]}
-        />
-      </Section>
+      <TutorWhy />
 
       <Section tone="canvas">
         <div className="grid items-start gap-12 lg:grid-cols-2 lg:gap-20">
@@ -80,7 +220,7 @@ export default function BecomeATutorPage() {
             <Stagger as="ol" className="relative space-y-6 border-l border-line pl-8" stagger={0.07}>
               {ONBOARDING.map((s, i) => (
                 <StaggerItem as="li" key={s.title} className="relative">
-                  <span className="absolute -left-[45px] top-0 grid size-7 place-items-center rounded-md bg-ink text-[12.5px] font-bold tabular-nums text-on-ink">
+                  <span className="absolute -left-[45px] top-0 grid size-7 place-items-center rounded-md bg-brand-gradient text-[12.5px] font-bold tabular-nums text-white">
                     {i + 1}
                   </span>
                   <h3 className="text-[16px] font-bold text-ink">{s.title}</h3>
