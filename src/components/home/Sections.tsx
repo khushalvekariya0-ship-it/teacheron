@@ -9,6 +9,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
   Music, Route, Search, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
+  Lock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -899,94 +900,118 @@ export function FeaturedTutors() {
   );
 }
 
-/* ═══ 7 · Why families choose TutorLink — a bento grid ═══════════════════════════════ */
+/* ═══ 7 · Why families choose TutorLink — our promises, in numbers ══════════════════════ */
 
-const CHECK_TYPES = ["Identity", "Education", "Certification", "Background"];
+/** Each number is a rule of the platform (from the booking policy and matching settings), not a usage statistic. */
+const PROMISES: { value: string; title: string; body: string; icon: LucideIcon }[] = [
+  {
+    value: "0",
+    title: "paid spots in your results",
+    body: `Matches are ranked on ${Object.keys(DEFAULT_WEIGHTS).length} open factors. No tutor can pay to rank higher.`,
+    icon: Target,
+  },
+  {
+    value: "$0",
+    title: "subscription or booking fee",
+    body: "Families pay per lesson and see the full price before booking.",
+    icon: Wallet,
+  },
+  {
+    value: `${DEFAULT_POLICY.freeCancellationHours}h`,
+    title: "free cancellation window",
+    body: `Cancel up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson and get a full refund.`,
+    icon: CalendarDays,
+  },
+  {
+    value: `${DEFAULT_POLICY.tutorNoShowRefundPercent}%`,
+    title: "refund if a tutor doesn't show",
+    body: "If your tutor misses a lesson, you get your money back in full.",
+    icon: ShieldCheck,
+  },
+  {
+    value: "4",
+    title: "kinds of checks on profiles",
+    body: "Identity, education, certification and background — each badge appears only once its check is complete.",
+    icon: BadgeCheck,
+  },
+  {
+    value: "1",
+    title: "parent account for every child",
+    body: "See each child's bookings, messages and progress, with consent built in for younger learners.",
+    icon: Users,
+  },
+];
 
-function BentoTile({ className, children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <StaggerItem className={cn("h-full", className)}>
-      <div data-spotlight className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-7">
-        {children}
-      </div>
-    </StaggerItem>
-  );
-}
-
-function TileText({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
-  return (
-    <>
-      <span className="grid size-10 place-items-center rounded-lg border border-line text-brand">
-        <Icon className="size-5" aria-hidden />
-      </span>
-      <h3 className="mt-5 font-heading text-[20px] font-bold tracking-[-0.015em] text-ink">{title}</h3>
-      <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{body}</p>
-    </>
-  );
-}
+const ALSO_INCLUDED = [
+  { icon: Lock, text: "Phone numbers and emails are hidden in messages automatically" },
+  { icon: Star, text: "Reviews come only from completed lessons" },
+  { icon: LineChart, text: "Notes, homework and goals saved after every lesson" },
+];
 
 export function WhyTutorLink() {
   return (
     <Section>
-      <SectionHeading align="center" eyebrow="Why TutorLink" title="Why families choose TutorLink" accent={1} />
-      <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 lg:grid-rows-[minmax(250px,auto)_minmax(250px,auto)]" stagger={0.07}>
-        {/* Large photo tile */}
-        <BentoTile className="md:col-span-2 lg:row-span-2">
-          <div className="absolute inset-0" aria-hidden>
-            <Image src="/images/family.jpg" alt="" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-night via-night/70 to-night/5" />
+      <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
+        <SectionHeading
+          className="mb-0 lg:mb-0"
+          eyebrow="Why TutorLink"
+          title="Built on trust, not fine print"
+          accent={3}
+          description="Clear rules, real reviews and checks you can see — so you can stop worrying about the details and focus on learning."
+        />
+        <Reveal delay={0.1} className="shrink-0">
+          <ArrowLink href="/trust-safety">See our trust &amp; safety rules</ArrowLink>
+        </Reveal>
+      </div>
+
+      {/* Promises, in numbers */}
+      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
+        {PROMISES.map((p) => (
+          <StaggerItem key={p.title} className="h-full">
+            <div data-spotlight className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 sm:p-7">
+              <div className="flex items-start justify-between gap-4">
+                <span className="font-heading text-[56px] font-extrabold leading-none tracking-[-0.04em] text-gradient">{p.value}</span>
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line text-brand">
+                  <p.icon className="size-5" aria-hidden />
+                </span>
+              </div>
+              <h3 className="mt-4 text-[17px] font-bold text-ink">{p.title}</h3>
+              <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-2">{p.body}</p>
+            </div>
+          </StaggerItem>
+        ))}
+      </Stagger>
+
+      {/* Photo band: everything else that comes with every lesson */}
+      <Reveal className="mt-4">
+        <div className="grid overflow-hidden rounded-2xl border border-line bg-surface lg:grid-cols-[1fr_1.1fr]">
+          <div className="relative min-h-[260px] lg:min-h-[340px]">
+            <Image src="/images/family.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover" />
           </div>
-          <div className="relative mt-auto pt-48 sm:pt-64 lg:pt-0">
-            <span className="grid size-10 place-items-center rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur">
-              <ShieldCheck className="size-5" aria-hidden />
-            </span>
-            <h3 className="mt-5 font-heading text-[26px] font-bold leading-tight tracking-[-0.02em] text-white sm:text-[30px]">Tutors you can trust</h3>
-            <p className="mt-2 max-w-md text-[15.5px] leading-relaxed text-white/75">
-              Checks are shown on every profile — a badge appears only once a check is complete.
-            </p>
-            <ul className="mt-5 flex flex-wrap gap-2" aria-label="Checks a tutor can complete">
-              {CHECK_TYPES.map((c) => (
-                <li key={c} className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[13px] font-medium text-white backdrop-blur">
-                  <BadgeCheck className="size-3.5" aria-hidden /> {c}
+          <div className="flex flex-col justify-center p-6 sm:p-10">
+            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-brand">Also with every lesson</p>
+            <ul className="mt-5 space-y-4">
+              {ALSO_INCLUDED.map((x) => (
+                <li key={x.text} className="flex items-start gap-3.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+                    <x.icon className="size-[18px]" aria-hidden />
+                  </span>
+                  <span className="pt-1.5 text-[16px] leading-snug text-ink">{x.text}</span>
                 </li>
               ))}
             </ul>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button asChild variant="brand">
+                <Link href="/for-parents">
+                  How it works for parents <ArrowRight />
+                </Link>
+              </Button>
+              <Button asChild variant="secondary">
+                <Link href="/tutors">Find a tutor</Link>
+              </Button>
+            </div>
           </div>
-        </BentoTile>
-
-        {/* Wide tile: goals → plan */}
-        <BentoTile className="md:col-span-2">
-          <TileText icon={Target} title="A plan built around your goals" body="Share the grade, goals and schedule. Tutors shape lessons around them and leave notes after every session." />
-          <div className="mt-auto flex flex-wrap items-center gap-2 pt-6 text-[13px] font-medium" aria-hidden>
-            {["Grade", "Goals", "Schedule"].map((x) => (
-              <span key={x} className="rounded-md border border-line px-2.5 py-1 text-ink-2">
-                {x}
-              </span>
-            ))}
-            <ArrowRight className="size-4 text-muted" />
-            <span className="rounded-md bg-brand-gradient px-2.5 py-1 text-white">Your lesson plan</span>
-          </div>
-        </BentoTile>
-
-        <BentoTile>
-          <TileText icon={CalendarDays} title="Online or in person" body={`Book real openings in your time zone. Reschedule up to ${DEFAULT_POLICY.rescheduleMinHours} hours before.`} />
-        </BentoTile>
-
-        <BentoTile>
-          <TileText icon={LineChart} title="Progress you can see" body="Homework, attendance and goals in one dashboard." />
-          <div className="mt-auto flex h-20 items-end gap-1.5 pt-5" aria-hidden>
-            {[30, 42, 38, 55, 64, 80].map((h, i) => (
-              <span key={i} className="flex-1 rounded-sm bg-brand-gradient" style={{ height: `${h}%`, opacity: 0.35 + i * 0.12 }} />
-            ))}
-          </div>
-        </BentoTile>
-      </Stagger>
-      <Reveal delay={0.2} className="mt-10 flex justify-center">
-        <Button asChild size="lg" variant="brand">
-          <Link href="/for-parents">
-            How it works for parents <ArrowRight />
-          </Link>
-        </Button>
+        </div>
       </Reveal>
     </Section>
   );
