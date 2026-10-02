@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormProvider, useForm } from "react-hook-form";
 import {
-  ArrowLeft, ArrowRight, Briefcase, CalendarDays, Check, CircleAlert, ClipboardList, Cloud, Eye, FileX2, Inbox, Loader2, Lock, Send, ShieldCheck,
+  ArrowLeft, ArrowRight, Briefcase, CalendarDays, Check, CircleAlert, ClipboardList, Cloud, Eye, FileX2, Gift, Inbox, Loader2, Lock, MapPin, Monitor, Send,
+  ShieldCheck, Wallet,
 } from "lucide-react";
 import type { Child, Requirement, User } from "@/lib/types";
 import { useApp } from "@/lib/store";
@@ -358,7 +359,7 @@ function WizardForm({
       <div ref={topRef} className="container-page scroll-mt-20 pb-32 pt-8 sm:pt-12 lg:pb-24">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Eyebrow className="mb-4 text-ink">{live ? "Edit requirement" : "Post a requirement"}</Eyebrow>
+            <Eyebrow className="mb-4">{live ? "Edit requirement" : "Post a requirement"}</Eyebrow>
             <h1 className="font-heading text-[2.2rem] font-bold leading-[1.02] tracking-[-0.025em] text-ink sm:text-5xl">{live ? "Update your requirement" : "Tell tutors what you need"}</h1>
             <p className="mt-3 text-[15px] text-ink-2">{live ? "Changes go live when you save them on the last step." : "About three minutes. Your draft saves as you go."}</p>
           </div>
@@ -381,7 +382,7 @@ function WizardForm({
             <div className="sticky top-24 space-y-6">
               <VerticalStepper step={step} maxReached={maxReached} onSelect={goTo} />
               <p className="flex gap-2.5 rounded-xl bg-canvas p-4 text-[12.5px] leading-relaxed text-ink-2">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
                 Tutors never see your name, email, phone number or address.
               </p>
             </div>
@@ -438,7 +439,7 @@ function WizardForm({
                 <Button type="button" variant="ghost" onClick={() => void goTo(step - 1)} disabled={step === 0}>
                   <ArrowLeft /> Back
                 </Button>
-                <Button type="submit" size="lg" loading={publishing}>
+                <Button type="submit" variant="brand" size="lg" loading={publishing}>
                   {isPreview ? <Send /> : null}
                   {primaryLabel}
                   {!isPreview && <ArrowRight />}
@@ -454,7 +455,7 @@ function WizardForm({
             <Button type="button" variant="secondary" size="icon" onClick={() => void goTo(step - 1)} disabled={step === 0} aria-label="Previous step" className="size-12">
               <ArrowLeft />
             </Button>
-            <Button type="submit" form="req-form" size="lg" className="flex-1" loading={publishing}>
+            <Button type="submit" form="req-form" variant="brand" size="lg" className="flex-1" loading={publishing}>
               {isPreview ? <Send /> : null}
               {primaryLabel}
               {!isPreview && <ArrowRight />}
@@ -545,67 +546,171 @@ const HOW_IT_WORKS = [
   { icon: Inbox, title: "Review applications", body: "Compare tutors' notes and proposed rates, then message the ones you like." },
 ];
 
+const WHY_POST = [
+  { icon: Gift, title: "Free for families", body: "Posting a requirement and receiving applications costs nothing." },
+  { icon: Inbox, title: "Tutors come to you", body: "Each application has a personal note and a proposed rate — no cold messages." },
+  { icon: Lock, title: "Your details stay private", body: "Tutors see your city and ZIP only — never your name, email, phone or address." },
+];
+
+/** What a posted requirement looks like to tutors — an illustration of the layout, not a real listing. */
+function RequirementPreview() {
+  return (
+    <div className="relative" aria-hidden>
+      <div className="absolute -right-3 -top-3 h-[70%] w-[70%] rounded-2xl bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] sm:-right-5 sm:-top-5" />
+      <div className="relative overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_24px_60px_-30px_rgb(15_23_42/0.5)]">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">What tutors see</span>
+          <span className="rounded-md bg-canvas px-2 py-0.5 text-[11.5px] font-semibold text-muted">Example layout</span>
+        </div>
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold">
+            <span className="rounded-md bg-brand-soft px-2 py-1 text-brand">Algebra</span>
+            <span className="rounded-md bg-canvas px-2 py-1 text-ink-2">9th grade</span>
+          </div>
+          <p className="mt-3 font-heading text-[19px] font-bold leading-snug tracking-[-0.01em] text-ink">Help building confidence before the next unit test</p>
+          <div className="mt-3 space-y-2">
+            <span className="block h-2 w-full rounded-full bg-line" />
+            <span className="block h-2 w-4/5 rounded-full bg-line" />
+          </div>
+          <ul className="mt-5 grid grid-cols-2 gap-2 text-[13px]">
+            {[
+              { icon: Monitor, text: "Online" },
+              { icon: CalendarDays, text: "Weekday evenings" },
+              { icon: Wallet, text: "Your hourly range" },
+              { icon: MapPin, text: "Your city & ZIP" },
+            ].map((x) => (
+              <li key={x.text} className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-2 text-ink-2">
+                <x.icon className="size-4 shrink-0 text-brand" /> {x.text}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-5 rounded-xl bg-canvas p-4">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted">Applications</p>
+            {[0, 1].map((i) => (
+              <div key={i} className="mt-3 flex items-center gap-3">
+                <span className="size-9 shrink-0 rounded-lg bg-line-strong/60" />
+                <span className="flex-1 space-y-1.5">
+                  <span className="block h-2 w-1/3 rounded-full bg-line-strong" />
+                  <span className="block h-2 w-3/4 rounded-full bg-line" />
+                </span>
+                <span className="text-[12px] text-muted">Note &amp; rate</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SignedOutIntro({ next }: { next: string }) {
   return (
-    <section className="relative overflow-hidden bg-brand-soft">
-      <div className="container-page relative py-14 sm:py-20 lg:py-24">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+    <>
+      <section className="relative bg-gradient-to-b from-brand-50 to-page">
+        <div className="container-page grid items-center gap-14 pb-14 pt-12 sm:pt-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-20 lg:pt-20">
           <div>
             <Reveal>
-              <Eyebrow className="mb-6 text-ink">Post a requirement</Eyebrow>
+              <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+                <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+                Post a requirement
+              </p>
             </Reveal>
-            <WordReveal text="Tell tutors what you need. Let them come to you." className="font-heading text-[2.6rem] font-bold leading-[0.98] tracking-[-0.03em] text-ink sm:text-6xl lg:text-[4.2rem]" />
+            <WordReveal
+              text="Tell tutors what you need. Let them come to you."
+              accent={5}
+              className="mt-5 font-heading text-[2.5rem] font-bold leading-[1.04] tracking-[-0.03em] text-ink sm:text-[3.2rem] lg:text-[3.6rem]"
+            />
             <Reveal delay={0.2}>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink/80 sm:text-xl">
-                Describe the learner, goals, schedule and budget. Tutors apply with a short note and a proposed rate — you decide who to message.
+              <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2">
+                Describe the learner, goals, schedule and budget in about three minutes. Tutors who teach it apply with a short note and a proposed rate — you decide who to message.
               </p>
             </Reveal>
             <Reveal delay={0.3} className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg">
+              <Button asChild variant="brand" size="lg">
                 <Link href={`/login?next=${encodeURIComponent(next)}`}>
                   Sign in to post <ArrowRight />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="secondary">
-                <Link href={`/register?next=${encodeURIComponent(next)}`}>Create account</Link>
+                <Link href={`/register?next=${encodeURIComponent(next)}`}>Create a free account</Link>
               </Button>
             </Reveal>
             <Reveal delay={0.35}>
-              <p className="mt-6 text-[14px] text-ink/80">
-                Posting is free for families. Want suggestions right away?{" "}
-                <Link href="/concierge" className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
-                  Help me find a tutor
-                </Link>
-              </p>
+              <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[14.5px] font-medium text-ink-2">
+                {["Free for families", "About 3 minutes", "Draft saves as you go"].map((x) => (
+                  <li key={x} className="inline-flex items-center gap-2">
+                    <Check className="size-4 text-success" strokeWidth={2.6} aria-hidden /> {x}
+                  </li>
+                ))}
+              </ul>
             </Reveal>
           </div>
 
-          <Reveal delay={0.15}>
-            <div className="rounded-2xl bg-surface p-6 sm:p-8">
-              <p className="font-heading text-xl font-bold tracking-[-0.03em] text-ink">How it works</p>
-              <Stagger as="ol" className="mt-6 space-y-6" stagger={0.08}>
-                {HOW_IT_WORKS.map((s, i) => (
-                  <StaggerItem as="li" key={s.title} className="flex gap-4">
-                    <span className="relative grid size-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-ink">
-                      <s.icon className="size-[18px]" aria-hidden />
-                      <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-md bg-ink text-[10.5px] font-bold tabular-nums text-on-ink">{i + 1}</span>
-                    </span>
-                    <div>
-                      <h3 className="text-[16px] font-bold text-ink">{s.title}</h3>
-                      <p className="mt-0.5 text-sm leading-relaxed text-ink-2">{s.body}</p>
-                    </div>
-                  </StaggerItem>
-                ))}
-              </Stagger>
-              <p className="mt-7 flex items-start gap-2.5 border-t border-line pt-5 text-[13px] leading-relaxed text-ink-2">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
-                Tutors only see your city and ZIP code — never your name, email, phone number or street address.
+          <Reveal delay={0.15} className="mx-auto w-full max-w-[520px] lg:mr-0">
+            <RequirementPreview />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* How it works — four steps in a row */}
+      <section className="bg-page">
+        <div className="container-page py-16 sm:py-20">
+          <Reveal>
+            <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+              <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+              How it works
+            </p>
+            <h2 className="mt-4 font-heading text-[2rem] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[2.5rem]">From a few questions to the right tutor</h2>
+          </Reveal>
+          <Stagger as="ol" className="relative mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4" stagger={0.08}>
+            <span className="absolute left-[12%] right-[12%] top-6 hidden h-px bg-line lg:block" aria-hidden />
+            {HOW_IT_WORKS.map((s, i) => (
+              <StaggerItem as="li" key={s.title} className="relative">
+                <span className="relative grid size-12 place-items-center rounded-xl bg-brand-gradient text-white shadow-md ring-8 ring-page">
+                  <s.icon className="size-5" aria-hidden />
+                </span>
+                <p className="mt-5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Step {i + 1}</p>
+                <h3 className="mt-1 text-[17px] font-bold text-ink">{s.title}</h3>
+                <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-2">{s.body}</p>
+              </StaggerItem>
+            ))}
+          </Stagger>
+
+          {/* Why post */}
+          <Stagger className="mt-14 grid gap-4 md:grid-cols-3" stagger={0.06}>
+            {WHY_POST.map((w) => (
+              <StaggerItem key={w.title} className="h-full">
+                <div data-spotlight className="flex h-full items-start gap-4 rounded-2xl border border-line bg-surface p-6">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line text-brand">
+                    <w.icon className="size-5" aria-hidden />
+                  </span>
+                  <span>
+                    <span className="block text-[16px] font-bold text-ink">{w.title}</span>
+                    <span className="mt-1 block text-[14.5px] leading-relaxed text-ink-2">{w.body}</span>
+                  </span>
+                </div>
+              </StaggerItem>
+            ))}
+          </Stagger>
+
+          <Reveal className="mt-6">
+            <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-dashed border-line-strong px-6 py-5 sm:flex-row sm:items-center">
+              <p className="text-[15px] text-ink-2">
+                <span className="font-semibold text-ink">Prefer to choose yourself?</span> Search tutors directly, or get a shortlist in two minutes.
               </p>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="secondary" size="sm">
+                  <Link href="/tutors">Find a tutor</Link>
+                </Button>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href="/concierge">Help me find a tutor</Link>
+                </Button>
+              </div>
             </div>
           </Reveal>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 

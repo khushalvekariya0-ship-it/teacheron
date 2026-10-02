@@ -7,7 +7,7 @@ import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 
 /** Mirrors the UI kit's control styling (tokens only) for native selects that need <optgroup>. */
 export const selectControl =
-  "h-10 w-full appearance-none rounded-md border border-line-strong bg-surface pl-3 pr-9 text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 hover:border-subtle focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger";
+  "h-11 w-full appearance-none rounded-lg border border-line-strong bg-surface pl-3.5 pr-9 text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 hover:border-subtle focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger";
 
 /** aria-describedby value matching the ids `Field` renders for its hint and error. */
 export function fieldDescribedBy(id: string, error?: string, hint?: React.ReactNode): string | undefined {

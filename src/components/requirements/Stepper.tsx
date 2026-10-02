@@ -13,7 +13,7 @@ export function VerticalStepper({ step, maxReached, onSelect }: { step: number; 
   return (
     <nav aria-label="Requirement steps" className="relative">
       <div className="absolute bottom-5 left-[19px] top-5 w-px bg-line" aria-hidden>
-        <motion.div className="w-px bg-ink" initial={false} animate={{ height: `${pct}%` }} transition={{ duration: 0.6, ease: EASE }} />
+        <motion.div className="w-px bg-brand-gradient" initial={false} animate={{ height: `${pct}%` }} transition={{ duration: 0.6, ease: EASE }} />
       </div>
       <ol className="relative space-y-1">
         {STEPS.map((s, i) => {
@@ -36,8 +36,8 @@ export function VerticalStepper({ step, maxReached, onSelect }: { step: number; 
                 <span
                   className={cn(
                     "relative mt-0.5 grid size-[26px] shrink-0 place-items-center rounded-md border text-[12px] font-bold tabular-nums transition-colors duration-300",
-                    state === "current" && "border-ink bg-ink text-on-ink",
-                    state === "done" && "border-ink bg-surface text-ink",
+                    state === "current" && "border-transparent bg-brand-gradient text-white shadow-sm",
+                    state === "done" && "border-brand/40 bg-brand-50 text-brand",
                     state === "reachable" && "border-line-strong bg-surface text-ink-2",
                     state === "locked" && "border-line bg-surface text-subtle",
                   )}
