@@ -6,7 +6,8 @@ import Image from "next/image";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight, BookOpenText, Brain, Calculator, Check, Clock, Code, GraduationCap, Languages, MapPin, Monitor, Music, Sparkles, Target, Users,
+  ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Check, Clock, Code, CreditCard, GraduationCap, Languages, Lock, MapPin, Mic, Monitor, Music,
+  NotebookPen, PhoneOff, Search, ShieldCheck, Sparkles, Target, Users, Video,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -249,70 +250,166 @@ export function Programs() {
   );
 }
 
-/* ═══ Online or in person (Skooli / Tutor.com / Wyzant) ═════════════════════════ */
+/* ═══ Online or in person — two mode cards, an "or" between them, and what stays the same ═══ */
 
-const MODES = [
+type Mode = {
+  key: "online" | "in_person";
+  icon: LucideIcon;
+  title: string;
+  bestFor: string;
+  image: string;
+  alt: string;
+  points: string[];
+  cta: { href: string; label: string };
+};
+
+const MODES: Mode[] = [
   {
+    key: "online",
     icon: Monitor,
     title: "Online lessons",
+    bestFor: "Best for busy schedules, test prep and learning with a tutor anywhere in the U.S.",
     image: "/images/online-class.jpg",
     alt: "A student following a tutor on a video call",
     points: [
       "Join from a laptop or tablet with a secure video link",
-      `The link appears ${DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} minutes before each lesson`,
       "Notes, homework and files kept in one place",
-      "Learn with a tutor anywhere in the U.S.",
+      "No travel time — lessons fit around school and work",
     ],
     cta: { href: "/tutors?mode=online", label: "Find online tutors" },
   },
   {
+    key: "in_person",
     icon: MapPin,
     title: "In-person lessons",
+    bestFor: "Best for younger learners, hands-on subjects and focused time at the same table.",
     image: "/images/in-person.jpg",
     alt: "A tutor and a student working together at a table",
     points: [
-      "Search by ZIP code and distance",
-      "Tutors share an approximate area — never a home address",
+      "Search by ZIP code and how far you're happy to travel",
       "Meet at home, a library or another place you agree on",
-      "Same booking, payment and cancellation rules as online",
+      "Tutors share an approximate area — never a home address",
     ],
     cta: { href: "/tutors?mode=in_person", label: "Find tutors near you" },
   },
 ];
 
+const SAME_EITHER_WAY: { icon: LucideIcon; title: string; body: string }[] = [
+  { icon: CalendarCheck, title: "Same booking", body: "Real openings shown in your time zone" },
+  { icon: CreditCard, title: "Same secure payment", body: "Pay per lesson — no subscription for families" },
+  { icon: ShieldCheck, title: "Same cancellation rules", body: `Free up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson` },
+  { icon: NotebookPen, title: "Same lesson record", body: "Notes and homework saved after every lesson" },
+];
+
+/** Small UI touches on each photo — what the experience looks like, not example data. */
+function ModeOverlay({ mode }: { mode: Mode["key"] }) {
+  if (mode === "online") {
+    return (
+      <>
+        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
+          <Lock className="size-3.5 text-brand" /> Secure link · opens {DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} min before
+        </span>
+        <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-night/70 p-1.5 backdrop-blur">
+          {[Mic, Video].map((I, i) => (
+            <span key={i} className="grid size-8 place-items-center rounded-full bg-white/15 text-white">
+              <I className="size-4" />
+            </span>
+          ))}
+          <span className="grid size-8 place-items-center rounded-full bg-danger text-white">
+            <PhoneOff className="size-4" />
+          </span>
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
+        <MapPin className="size-3.5 text-brand" /> Approximate area only
+      </span>
+      <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
+        <Search className="size-3.5 text-brand" /> Search by ZIP &amp; distance
+      </span>
+    </>
+  );
+}
+
+function ModeCard({ mode }: { mode: Mode }) {
+  return (
+    <article data-spotlight className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+      <div className="relative aspect-[16/9] overflow-hidden bg-canvas" aria-hidden={false}>
+        <Image src={mode.image} alt={mode.alt} fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.04]" />
+        <div aria-hidden>
+          <ModeOverlay mode={mode.key} />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col p-6 sm:p-7">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+            <mode.icon className="size-5" aria-hidden />
+          </span>
+          <h3 className="font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{mode.title}</h3>
+        </div>
+        <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{mode.bestFor}</p>
+        <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
+          {mode.points.map((p) => (
+            <li key={p} className="flex items-start gap-3 text-[15px] leading-snug text-ink">
+              <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.6} aria-hidden /> {p}
+            </li>
+          ))}
+        </ul>
+        <Button asChild variant="secondary" className="mt-7 w-full">
+          <Link href={mode.cta.href}>
+            {mode.cta.label} <ArrowRight />
+          </Link>
+        </Button>
+      </div>
+    </article>
+  );
+}
+
 export function LessonModes() {
   return (
     <Section>
-      <SectionHeading eyebrow="Online or in person" title="Learn the way that works for you" description="Every tutor sets where they teach. Filter for online, in person, or both — the booking experience is the same." />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <SectionHeading
+        align="center"
+        eyebrow="Online or in person"
+        title="Learn where you learn best"
+        accent={2}
+        description="Every tutor sets where they teach. Filter for online, in person or both — many tutors offer both."
+      />
+
+      <div className="relative grid gap-6 lg:grid-cols-2 lg:gap-10">
         {MODES.map((m, i) => (
-          <Reveal key={m.title} delay={i * 0.1}>
-            <article className="group h-full overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-shadow duration-300 hover:shadow-lg">
-              <div className="relative aspect-[16/7] overflow-hidden">
-                <Image src={m.image} alt={m.alt} fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover transition-transform duration-700 group-hover:scale-105" />
-              </div>
-              <div className="p-6 sm:p-7">
-                <h3 className="flex items-center gap-3 text-[21px] font-semibold text-ink">
-                  <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand">
-                    <m.icon className="size-5" aria-hidden />
-                  </span>
-                  {m.title}
-                </h3>
-                <ul className="mt-5 space-y-2.5">
-                  {m.points.map((p) => (
-                    <li key={p} className="flex items-start gap-3 text-[15px] leading-snug text-ink-2">
-                      <Check className="mt-0.5 size-4.5 shrink-0 text-brand" strokeWidth={2.6} aria-hidden /> {p}
-                    </li>
-                  ))}
-                </ul>
-                <ArrowLink href={m.cta.href} className="mt-6">
-                  {m.cta.label}
-                </ArrowLink>
-              </div>
-            </article>
+          <Reveal key={m.key} delay={i * 0.1} className="h-full">
+            <ModeCard mode={m} />
           </Reveal>
         ))}
+        {/* The "or" between the two cards */}
+        <span
+          className="absolute left-1/2 top-[22%] z-10 hidden size-14 -translate-x-1/2 place-items-center rounded-full border border-line bg-page font-heading text-[15px] font-bold uppercase tracking-[0.08em] text-ink shadow-lg lg:grid"
+          aria-hidden
+        >
+          or
+        </span>
       </div>
+
+      <Reveal delay={0.1} className="mt-8 rounded-2xl border border-line bg-canvas p-5 sm:p-6">
+        <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">The same rules either way</p>
+        <ul className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {SAME_EITHER_WAY.map((x) => (
+            <li key={x.title} className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-surface text-brand">
+                <x.icon className="size-5" aria-hidden />
+              </span>
+              <span>
+                <span className="block text-[15px] font-semibold text-ink">{x.title}</span>
+                <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">{x.body}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Reveal>
     </Section>
   );
 }
