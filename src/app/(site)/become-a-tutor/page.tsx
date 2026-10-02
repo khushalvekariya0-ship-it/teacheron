@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import type * as React from "react";
 import Link from "next/link";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CalendarDays, Check, IdCard, Laptop, MessageSquare, NotebookPen, Scale, ShieldCheck, UserRound, Wallet,
+  ArrowRight, BadgeCheck, Briefcase, CalendarDays, Check, IdCard, Landmark, Laptop, MessageSquare, NotebookPen, Scale, ShieldCheck, UserRound, Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
 import { Split } from "@/components/marketing/Split";
-import { GetPaidVignette, ProfileBuilderVignette } from "@/components/marketing/Vignettes";
+import { GetPaidVignette } from "@/components/marketing/Vignettes";
 import { VerificationFlow } from "@/components/marketing/Verification";
 import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
 import { medianRate } from "@/components/content/insights";
@@ -25,13 +26,28 @@ export const metadata: Metadata = {
   alternates: { canonical: "/become-a-tutor" },
 };
 
-const ONBOARDING = [
-  { title: "Create your account", body: "Sign up as a tutor. It takes a minute and you can save progress at any point." },
-  { title: "Build your profile", body: "Subjects and levels, teaching experience, education and your approach — in your own words." },
-  { title: "Set pricing and a trial", body: "Your hourly rate, lesson lengths, and whether you offer a free or reduced-price trial." },
-  { title: "Publish availability", body: "Weekly hours, buffers between lessons, minimum notice, and manual approval or instant booking." },
-  { title: "Submit verification", body: "Upload documents for identity, education and certifications, and complete background screening where applicable." },
-  { title: "Connect payouts", body: "Link a bank account through Stripe Connect so earnings from completed lessons can be paid out." },
+const ONBOARDING_PHASES: { title: string; steps: { icon: LucideIcon; title: string; body: string }[] }[] = [
+  {
+    title: "Set up",
+    steps: [
+      { icon: UserRound, title: "Create your account", body: "Sign up as a tutor. It takes a minute and you can save progress at any point." },
+      { icon: NotebookPen, title: "Build your profile", body: "Subjects and levels, teaching experience, education and your approach — in your own words." },
+    ],
+  },
+  {
+    title: "Get ready",
+    steps: [
+      { icon: Wallet, title: "Set pricing and a trial", body: "Your hourly rate, lesson lengths, and whether you offer a free or reduced-price trial." },
+      { icon: CalendarDays, title: "Publish availability", body: "Weekly hours, buffers between lessons, minimum notice, and manual approval or instant booking." },
+    ],
+  },
+  {
+    title: "Go live",
+    steps: [
+      { icon: BadgeCheck, title: "Submit verification", body: "Upload documents for identity, education and certifications, and complete background screening where applicable." },
+      { icon: Landmark, title: "Connect payouts", body: "Link a bank account through Stripe Connect so earnings from completed lessons can be paid out." },
+    ],
+  },
 ];
 
 /* ─── Why TutorLink (for tutors): a bento of the tools, each with a small picture ─── */
@@ -214,27 +230,87 @@ export default function BecomeATutorPage() {
       <TutorWhy />
 
       <Section tone="canvas">
-        <div className="grid items-start gap-12 lg:grid-cols-2 lg:gap-20">
-          <div>
-            <SectionHeading className="mb-8 lg:mb-10" eyebrow="Onboarding" title="Six steps to your first lesson." description="Guided, saved as you go, and clear about what's still missing." />
-            <Stagger as="ol" className="relative space-y-6 border-l border-line pl-8" stagger={0.07}>
-              {ONBOARDING.map((s, i) => (
-                <StaggerItem as="li" key={s.title} className="relative">
-                  <span className="absolute -left-[45px] top-0 grid size-7 place-items-center rounded-md bg-brand-gradient text-[12.5px] font-bold tabular-nums text-white">
-                    {i + 1}
-                  </span>
-                  <h3 className="text-[16px] font-bold text-ink">{s.title}</h3>
-                  <p className="mt-1 text-[14.5px] leading-relaxed text-ink-2">{s.body}</p>
-                </StaggerItem>
-              ))}
-            </Stagger>
-          </div>
-          <Reveal delay={0.1} className="lg:sticky lg:top-28">
-            <div className="mx-auto max-w-md lg:max-w-none">
-              <ProfileBuilderVignette />
-            </div>
+        <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeading
+            className="mb-0 lg:mb-0"
+            eyebrow="Onboarding"
+            title="Six steps to your first lesson."
+            accent={3}
+            description="Guided, saved as you go, and clear about what's still missing — so you always know what's left before families can book you."
+          />
+          <Reveal delay={0.1} className="shrink-0">
+            <Button asChild variant="brand" size="lg">
+              <Link href={TUTOR_SIGNUP_HREF}>
+                Start step one <ArrowRight />
+              </Link>
+            </Button>
           </Reveal>
         </div>
+
+        {/* Three phases, two steps each */}
+        <Stagger className="grid gap-5 lg:grid-cols-3" stagger={0.1}>
+          {ONBOARDING_PHASES.map((phase, p) => (
+            <StaggerItem key={phase.title} className="h-full">
+              <div className="relative flex h-full flex-col rounded-2xl border border-line bg-surface">
+                <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-4">
+                  <span>
+                    <span className="block text-[12px] font-semibold uppercase tracking-[0.14em] text-brand">Phase {p + 1}</span>
+                    <span className="mt-0.5 block font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">{phase.title}</span>
+                  </span>
+                  <span className="flex gap-1" aria-hidden>
+                    {ONBOARDING_PHASES.map((_, i) => (
+                      <span key={i} className={cn("h-1.5 rounded-full", i <= p ? "w-5 bg-brand-gradient" : "w-1.5 bg-line-strong")} />
+                    ))}
+                  </span>
+                </div>
+                <ol className="flex flex-1 flex-col gap-5 p-6" start={p * 2 + 1}>
+                  {phase.steps.map((s, i) => (
+                    <li key={s.title} className="flex gap-4">
+                      <span className="relative flex flex-col items-center">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white shadow-sm">
+                          <s.icon className="size-5" aria-hidden />
+                        </span>
+                        {i === 0 && <span className="mt-2 w-px flex-1 bg-line" aria-hidden />}
+                      </span>
+                      <span className="min-w-0 pb-1">
+                        <span className="block text-[12px] font-semibold tabular-nums text-muted">Step {p * 2 + i + 1}</span>
+                        <span className="mt-0.5 block text-[16px] font-bold text-ink">{s.title}</span>
+                        <span className="mt-1 block text-[14.5px] leading-relaxed text-ink-2">{s.body}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
+
+        {/* Finish line */}
+        <Reveal className="mt-5">
+          <div className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-7">
+            <div className="absolute inset-y-0 left-0 w-1 bg-brand-gradient" aria-hidden />
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-gradient text-white">
+                  <Check className="size-6" strokeWidth={2.6} aria-hidden />
+                </span>
+                <div>
+                  <p className="font-heading text-[20px] font-bold tracking-[-0.015em] text-ink">You&rsquo;re live</p>
+                  <p className="mt-1 max-w-2xl text-[15px] leading-relaxed text-ink-2">
+                    Families can find and book you. Each lesson gets its own page with the meeting link, notes and homework — and your dashboard shows what&rsquo;s next.
+                  </p>
+                </div>
+              </div>
+              <ul className="flex shrink-0 flex-wrap gap-2 text-[13px] font-medium text-ink-2">
+                {["Saved as you go", "Change anything later"].map((x) => (
+                  <li key={x} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
+                    <Check className="size-3.5 text-success" strokeWidth={2.6} aria-hidden /> {x}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Reveal>
       </Section>
 
       <Section>
