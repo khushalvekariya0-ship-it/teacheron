@@ -120,7 +120,8 @@ export default function HowItWorksPage() {
         <SectionHeading
           eyebrow="How matching works"
           title="A score you can read, not a black box."
-          description="When you search or use Help Me Find a Tutor, each tutor gets a match score from eight weighted factors. You see every factor, how it was scored and why — next to every result."
+          accent={4}
+          description="Every tutor gets a match score from eight weighted factors. Explore them below — the same factors and weights appear, with reasons, next to every result."
         />
         <MatchingWeights />
       </Section>

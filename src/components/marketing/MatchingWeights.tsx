@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, useInView } from "framer-motion";
-import { Ban, Scale, SlidersHorizontal } from "lucide-react";
+import { Ban, ListOrdered, ShieldAlert, SlidersHorizontal } from "lucide-react";
 import { DEFAULT_WEIGHTS, type FactorKey } from "@/lib/matching";
 import { cn } from "@/lib/utils";
 import { EASE } from "@/components/motion";
@@ -18,104 +18,181 @@ const FACTORS: { key: FactorKey; label: string; detail: string }[] = [
   { key: "support", label: "Learning support", detail: "Lists experience with the needs you share, such as ADHD, dyslexia or test anxiety." },
 ];
 
+/** One blue → violet step per factor, heaviest first; slices are separated by a gap and always labelled in the list. */
+const COLORS = ["#1d4ed8", "#2f7bff", "#4b66f5", "#6366f1", "#7552f0", "#8b5cf6", "#a78bfa", "#c4b5fd"];
+const COLOR: Record<FactorKey, string> = Object.fromEntries(FACTORS.map((f, i) => [f.key, COLORS[i]])) as Record<FactorKey, string>;
+
+const R = 92;
+const C = 2 * Math.PI * R;
+const GAP = 3;
+
 /**
- * Visualizes DEFAULT_WEIGHTS. Criteria you don't specify are excluded and the remaining weights are
- * re-normalized — exactly what scoreTutor() does — so the toggles show the real effective share.
+ * Visualizes DEFAULT_WEIGHTS as a score ring. Criteria you don't specify are excluded and the remaining
+ * weights are re-normalized — exactly what scoreTutor() does — so the ring shows the real effective share.
  */
 export function MatchingWeights() {
   const [active, setActive] = React.useState<FactorKey[]>(FACTORS.map((f) => f.key));
+  const [focus, setFocus] = React.useState<FactorKey>("subject");
+  const ringRef = React.useRef<HTMLDivElement>(null);
+  const seen = useInView(ringRef, { once: true, amount: 0.3 });
+
   const total = active.reduce((s, k) => s + DEFAULT_WEIGHTS[k], 0);
-  const listRef = React.useRef<HTMLUListElement>(null);
-  const seen = useInView(listRef, { once: true, amount: 0.25 });
-  const toggle = (k: FactorKey) => setActive((a) => (a.includes(k) ? (a.length > 1 ? a.filter((x) => x !== k) : a) : [...a, k]));
+  const share = (k: FactorKey) => (active.includes(k) && total ? (DEFAULT_WEIGHTS[k] / total) * 100 : 0);
+  const toggle = (k: FactorKey) => {
+    const next = active.includes(k) ? (active.length > 1 ? active.filter((x) => x !== k) : active) : [...active, k];
+    setActive(next);
+    if (!next.includes(focus)) setFocus(next[0]);
+  };
+
+  // Slices in factor order, each starting where the previous one ended.
+  const lengths = FACTORS.filter((f) => active.includes(f.key)).map((f) => ({ key: f.key, len: (share(f.key) / 100) * C }));
+  const slices = lengths.map((l, i) => ({
+    key: l.key,
+    len: Math.max(0, l.len - GAP),
+    offset: lengths.slice(0, i).reduce((sum, x) => sum + x.len, 0),
+  }));
+  const focused = FACTORS.find((f) => f.key === focus)!;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr]">
-      <div className="rounded-2xl border border-line bg-surface">
-        <div className="flex flex-col gap-3 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="flex items-center gap-2 font-heading text-lg font-bold tracking-[-0.02em] text-ink">
-              <Scale className="size-[18px] text-ink" /> Match score weights
-            </p>
-            <p className="mt-0.5 text-[13px] text-muted">Default weights, out of 100. Administrators can adjust them; the factors stay visible.</p>
+    <div className="space-y-5">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          {/* Ring + criteria toggles */}
+          <div className="flex flex-col items-center border-b border-line p-6 sm:p-8 lg:border-b-0 lg:border-r">
+            <div ref={ringRef} className="relative size-[240px] sm:size-[260px]">
+              <svg viewBox="0 0 220 220" className="size-full -rotate-90" role="img" aria-label={`Match score weights: ${FACTORS.filter((f) => active.includes(f.key)).map((f) => `${f.label} ${Math.round(share(f.key))}%`).join(", ")}`}>
+                <circle cx="110" cy="110" r={R} fill="none" stroke="var(--color-line)" strokeWidth="22" />
+                {slices.map((s) => (
+                  <circle
+                    key={s.key}
+                    cx="110"
+                    cy="110"
+                    r={R}
+                    fill="none"
+                    stroke={COLOR[s.key]}
+                    strokeWidth={s.key === focus ? 28 : 22}
+                    strokeDasharray={`${seen ? s.len : 0} ${C}`}
+                    strokeDashoffset={-s.offset}
+                    className="cursor-pointer transition-[stroke-dasharray,stroke-dashoffset,stroke-width,opacity] duration-700 ease-out"
+                    style={{ opacity: s.key === focus ? 1 : 0.85 }}
+                    onMouseEnter={() => setFocus(s.key)}
+                  />
+                ))}
+              </svg>
+              <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                <motion.div key={focus + total} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: EASE }}>
+                  <p className="font-heading text-[44px] font-extrabold leading-none tracking-[-0.03em] text-ink tabular-nums">{Math.round(share(focus))}%</p>
+                  <p className="mt-1.5 text-[13.5px] font-semibold text-ink-2">{focused.label}</p>
+                  <p className="text-[12px] text-muted">of the match score</p>
+                </motion.div>
+              </div>
+            </div>
+
+            <fieldset className="mt-7 w-full">
+              <legend className="mb-2.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-2">
+                <SlidersHorizontal className="size-3.5 text-brand" aria-hidden /> Criteria you&rsquo;ve set — switch one off to see the rest re-balance
+              </legend>
+              <div className="flex flex-wrap gap-1.5">
+                {FACTORS.map((f) => {
+                  const on = active.includes(f.key);
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggle(f.key)}
+                      className={cn(
+                        "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12.5px] font-semibold transition-colors",
+                        on ? "border-brand/30 bg-brand-50 text-ink" : "border-line bg-surface text-muted line-through decoration-muted/50 hover:text-ink",
+                      )}
+                    >
+                      <span className="size-2 rounded-full" style={{ background: on ? COLOR[f.key] : "var(--color-line-strong)" }} aria-hidden />
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
           </div>
-        </div>
-        <fieldset className="border-b border-line px-5 py-4">
-          <legend className="sr-only">Criteria you have set</legend>
-          <p className="mb-2.5 flex items-center gap-1.5 text-[12.5px] font-medium text-ink-2">
-            <SlidersHorizontal className="size-3.5 text-ink" /> Criteria you&rsquo;ve set — toggle to see how the weights re-balance
-          </p>
-          <div className="flex flex-wrap gap-1.5">
+
+          {/* Factor list: hover or focus a row to read how it's scored */}
+          <ul className="divide-y divide-line">
             {FACTORS.map((f) => {
               const on = active.includes(f.key);
+              const pct = Math.round(share(f.key));
+              const isFocus = f.key === focus && on;
               return (
-                <button
-                  key={f.key}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => toggle(f.key)}
-                  className={cn(
-                    "inline-flex h-8 items-center rounded-lg border-2 px-3 text-[12.5px] font-semibold transition-colors",
-                    on ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-muted hover:border-ink hover:text-ink",
-                  )}
-                >
-                  {f.label}
-                </button>
+                <li key={f.key}>
+                  <button
+                    type="button"
+                    onMouseEnter={() => on && setFocus(f.key)}
+                    onFocus={() => on && setFocus(f.key)}
+                    onClick={() => on && setFocus(f.key)}
+                    aria-expanded={isFocus}
+                    className={cn("w-full px-5 py-3.5 text-left transition-colors sm:px-6", isFocus ? "bg-brand-50" : on ? "hover:bg-canvas" : "")}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: on ? COLOR[f.key] : "var(--color-line-strong)" }} aria-hidden />
+                      <span className={cn("flex-1 text-[15px] font-semibold", on ? "text-ink" : "text-muted")}>{f.label}</span>
+                      <span className="shrink-0 text-[13px] tabular-nums text-muted">
+                        {on ? (
+                          <>
+                            <span className="font-bold text-ink">{pct}%</span>
+                            {pct !== DEFAULT_WEIGHTS[f.key] && <span className="ml-1.5 text-subtle">(default {DEFAULT_WEIGHTS[f.key]})</span>}
+                          </>
+                        ) : (
+                          "Not set — excluded"
+                        )}
+                      </span>
+                    </span>
+                    <span className="ml-[22px] mt-2 block h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
+                      <motion.span className="block h-full rounded-full" style={{ background: COLOR[f.key] }} initial={false} animate={{ width: `${on ? pct : 0}%` }} transition={{ duration: 0.6, ease: EASE }} />
+                    </span>
+                    {isFocus && (
+                      <motion.span initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="ml-[22px] mt-2 block overflow-hidden text-[13.5px] leading-relaxed text-ink-2">
+                        {f.detail}
+                      </motion.span>
+                    )}
+                  </button>
+                </li>
               );
             })}
-          </div>
-        </fieldset>
-        <ul ref={listRef} className="divide-y divide-line">
-          {FACTORS.map((f, i) => {
-            const on = active.includes(f.key);
-            const weight = DEFAULT_WEIGHTS[f.key];
-            const share = on && total ? Math.round((weight / total) * 100) : 0;
-            return (
-              <li key={f.key} className="px-5 py-3.5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className={cn("text-sm font-semibold", on ? "text-ink" : "text-muted")}>{f.label}</p>
-                  <p className="shrink-0 text-[13px] tabular-nums text-muted">
-                    {on ? (
-                      <>
-                        <span className="font-bold text-ink">{share}%</span> of score
-                        {share !== weight && <span className="ml-1.5 text-subtle">(default {weight})</span>}
-                      </>
-                    ) : (
-                      "Not set — excluded"
-                    )}
-                  </p>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-sunken" aria-hidden>
-                  <motion.div
-                    className="h-full rounded-full bg-brand-gradient"
-                    initial={{ width: 0 }}
-                    animate={{ width: seen ? `${share}%` : 0 }}
-                    transition={{ duration: 0.8, ease: EASE, delay: seen ? 0.05 * i : 0 }}
-                  />
-                </div>
-                <p className="mt-2 text-[13px] leading-relaxed text-muted">{f.detail}</p>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      <div className="flex flex-col gap-5">
-        <div className="rounded-2xl border border-line-strong bg-surface p-5">
-          <p className="flex items-center gap-2 font-heading text-lg font-bold tracking-[-0.02em] text-ink">
-            <Ban className="size-[18px] text-ink" /> What never affects ranking
-          </p>
-          <ul className="mt-4 space-y-3 text-sm leading-relaxed text-ink-2">
-            <li className="border-l-[3px] border-brand pl-3">Featured placement. Featured tutors may appear in highlighted spots, but their match score and search position are calculated the same way as everyone else&rsquo;s.</li>
-            <li className="border-l-[3px] border-brand pl-3">A tutor&rsquo;s subscription plan. Starter, Professional and Premium tutors are ranked by the same factors.</li>
-            <li className="border-l-[3px] border-brand pl-3">Anything you can&rsquo;t see. Every factor and its weight is shown next to each result.</li>
           </ul>
         </div>
-        <div className="rounded-2xl bg-yellow-soft p-5">
-          <p className="text-[16px] font-bold text-ink">How ties are broken</p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-2">When two tutors have the same score, the one with more completed lessons comes first, then alphabetical order by last name.</p>
-          <p className="mt-4 text-[16px] font-bold text-ink">Hard requirements</p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-2">A tutor who doesn&rsquo;t teach your subject, or who teaches only in person when you want online (or the reverse), is left out of shortlists rather than ranked low.</p>
+        <p className="border-t border-line bg-canvas px-5 py-3 text-[12.5px] text-muted sm:px-6">Default weights out of 100. Administrators can adjust them; the factors and their weights always stay visible.</p>
+      </div>
+
+      {/* The rules around the score */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+            <Ban className="size-5" aria-hidden />
+          </span>
+          <p className="mt-4 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">Never affects ranking</p>
+          <ul className="mt-3 space-y-2.5 text-[14px] leading-relaxed text-ink-2">
+            <li className="border-l-2 border-brand pl-3"><span className="font-semibold text-ink">Featured placement.</span> Featured tutors may appear in highlighted spots, but their score and position are calculated like everyone else&rsquo;s.</li>
+            <li className="border-l-2 border-brand pl-3"><span className="font-semibold text-ink">A tutor&rsquo;s plan.</span> Starter, Professional and Premium tutors are ranked by the same factors.</li>
+            <li className="border-l-2 border-brand pl-3"><span className="font-semibold text-ink">Anything hidden.</span> Every factor and its weight is shown next to each result.</li>
+          </ul>
+        </div>
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+            <ShieldAlert className="size-5" aria-hidden />
+          </span>
+          <p className="mt-4 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">Hard requirements</p>
+          <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
+            A tutor who doesn&rsquo;t teach your subject, or who teaches only in person when you want online (or the reverse), is left out of shortlists rather than ranked low.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+            <ListOrdered className="size-5" aria-hidden />
+          </span>
+          <p className="mt-4 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">How ties are broken</p>
+          <ol className="mt-3 space-y-2 text-[14px] leading-relaxed text-ink-2">
+            <li className="flex gap-2.5"><span className="grid size-5 shrink-0 place-items-center rounded bg-brand-soft text-[11px] font-bold text-brand">1</span> More completed lessons comes first</li>
+            <li className="flex gap-2.5"><span className="grid size-5 shrink-0 place-items-center rounded bg-brand-soft text-[11px] font-bold text-brand">2</span> Then alphabetical order by last name</li>
+          </ol>
         </div>
       </div>
     </div>
