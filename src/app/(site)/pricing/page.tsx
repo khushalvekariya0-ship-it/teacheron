@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowRight, Ban, CalendarCheck, Check, GraduationCap, Receipt, Scale, Search, ShieldCheck, Users, X, type LucideIcon } from "lucide-react";
 import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
-import { RefundTimeline } from "@/components/marketing/RefundTimeline";
+import { RefundCalculator } from "@/components/marketing/RefundCalculator";
 import { cn } from "@/lib/utils";
 import { AreaNav } from "@/components/content/AreaNav";
 import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
@@ -11,7 +11,7 @@ import { medianRate, rateRange } from "@/components/content/insights";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { FAQS } from "@/lib/data/content";
 import { TUTORS } from "@/lib/data/tutors";
-import { CREDITS_PER_APPLICATION, DEFAULT_POLICY, TUTOR_PLANS } from "@/lib/data/platform";
+import { CREDITS_PER_APPLICATION, TUTOR_PLANS } from "@/lib/data/platform";
 import { applyBps, formatCents } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -269,11 +269,14 @@ export default function PricingPage() {
           <span className="h-px w-6 bg-brand-gradient" aria-hidden />
           Cancellation and refunds
         </p>
+        <h3 className="mb-6 max-w-2xl font-heading text-[26px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[30px]">
+          Plans change. <span className="text-gradient">Here&rsquo;s what you get back.</span>
+        </h3>
         <Reveal>
-          <RefundTimeline />
+          <RefundCalculator exampleCents={exampleRate} />
         </Reveal>
         <p className="mt-4 text-[13px] text-muted">
-          Our current defaults. The exact policy for your booking is shown before you pay. A confirmed tutor no-show is always refunded in full; problems can be reported within {DEFAULT_POLICY.disputeWindowDays} days.
+          These are our current defaults. The exact policy for your booking is always shown before you pay.
         </p>
       </Section>
 
