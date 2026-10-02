@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { BookOpen, CalendarClock, Check, ChevronDown, Monitor, Wallet, type LucideIcon } from "lucide-react";
 import type { Grade, Level, TutorCategory } from "@/lib/types";
 import { RADIUS_OPTIONS, type TutorSearch } from "@/lib/search";
 import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, LEVELS, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
@@ -24,12 +24,14 @@ function FilterBox({
   label,
   value,
   active,
+  icon: Icon,
   panelClassName,
   children,
 }: {
   label: string;
   value: string;
   active: boolean;
+  icon: LucideIcon;
   panelClassName?: string;
   children: (close: () => void) => React.ReactNode;
 }) {
@@ -38,15 +40,18 @@ function FilterBox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={cn(
-          "group flex h-16 w-full min-w-0 items-center justify-between gap-3 rounded-xl border-2 bg-surface px-4 text-left transition-colors",
-          open ? "border-ink" : active ? "border-brand/60" : "border-line hover:border-line-strong",
+          "group flex h-16 w-full min-w-0 items-center gap-3 rounded-xl px-3.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/40",
+          open ? "bg-brand-50" : "hover:bg-canvas",
         )}
       >
-        <span className="min-w-0">
+        <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", active ? "bg-brand-gradient text-white" : "bg-canvas text-ink-2")}>
+          <Icon className="size-[18px]" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
           <span className="block text-[12.5px] text-muted">{label}</span>
           <span className={cn("block truncate text-[16px] font-semibold", active ? "text-ink" : "text-ink-2")}>{value}</span>
         </span>
-        <ChevronDown className={cn("size-5 shrink-0 text-ink transition-transform duration-200", open && "rotate-180")} aria-hidden />
+        <ChevronDown className={cn("size-5 shrink-0 text-muted transition-transform duration-200", open && "rotate-180")} aria-hidden />
       </PopoverTrigger>
       <PopoverContent className={cn("w-[340px] p-4", panelClassName)}>{children(() => setOpen(false))}</PopoverContent>
     </Popover>
@@ -135,9 +140,9 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
 
   return (
     <div className="space-y-3" role="search" aria-label="Filter tutors">
-      {/* Row 1 — the four big boxes */}
-      <div className="grid grid-cols-4 gap-3">
-        <FilterBox label="I want to learn" value={value.subject ? SUBJECT_BY_SLUG[value.subject]?.name ?? "Any subject" : "Any subject"} active={!!value.subject} panelClassName="w-[380px] p-2">
+      {/* Row 1 — the four main filters in one connected console */}
+      <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-line-strong bg-surface p-1.5 shadow-[0_18px_40px_-28px_rgb(15_23_42/0.45)]">
+        <FilterBox icon={BookOpen} label="I want to learn" value={value.subject ? SUBJECT_BY_SLUG[value.subject]?.name ?? "Any subject" : "Any subject"} active={!!value.subject} panelClassName="w-[380px] p-2">
           {(close) => (
             <div className="max-h-96 overflow-y-auto" data-lenis-prevent>
               <button
@@ -177,7 +182,7 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
           )}
         </FilterBox>
 
-        <FilterBox label="Price per hour" value={priceLabel(value.minRate, value.maxRate)} active={!!(value.minRate || value.maxRate)}>
+        <FilterBox icon={Wallet} label="Price per hour" value={priceLabel(value.minRate, value.maxRate)} active={!!(value.minRate || value.maxRate)}>
           {(close) => (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -204,7 +209,7 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
           )}
         </FilterBox>
 
-        <FilterBox label="Lesson type" value={lessonLabel(value)} active={!!(value.mode || value.location)} panelClassName="w-[360px]">
+        <FilterBox icon={Monitor} label="Lesson type" value={lessonLabel(value)} active={!!(value.mode || value.location)} panelClassName="w-[360px]">
           {() => (
             <div className="space-y-4 text-sm">
               <Segmented
@@ -232,7 +237,7 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
           )}
         </FilterBox>
 
-        <FilterBox label="I'm available" value={availabilityLabel(value)} active={schedule.days.length > 0 || schedule.times.length > 0} panelClassName="w-[360px]">
+        <FilterBox icon={CalendarClock} label="I'm available" value={availabilityLabel(value)} active={schedule.days.length > 0 || schedule.times.length > 0} panelClassName="w-[360px]">
           {() => (
             <div className="space-y-4 text-sm">
               <div>
