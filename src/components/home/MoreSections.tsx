@@ -6,7 +6,7 @@ import Image from "next/image";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight, BookOpenText, Brain, Calculator, Check, Clock, Code, GraduationCap, Languages, MapPin, Monitor, PenLine, Target, Users,
+  ArrowRight, BookOpenText, Brain, Calculator, Check, Clock, Code, GraduationCap, Languages, MapPin, Monitor, Music, Sparkles, Target, Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -43,47 +43,207 @@ export function SubjectMarquee() {
   );
 }
 
-/* ═══ Tutoring for every goal (Varsity Tutors / Chegg / Brainfuse) ════════════════ */
+/* ═══ Tutoring for every goal — a bento grid of goals, each with a small picture ══════════ */
 
-const PROGRAMS: { icon: LucideIcon; title: string; body: string; subjects: string[]; href: string }[] = [
-  { icon: Calculator, title: "Homework help", body: "Get unstuck on tonight's assignment — and understand the why, not just the answer.", subjects: ["algebra", "biology", "chemistry"], href: "/tutors" },
-  { icon: Target, title: "Test prep", body: "Structured plans for the SAT, ACT, AP exams, GRE and LSAT, with practice tests reviewed together.", subjects: ["sat", "act", "ap-exams"], href: "/subjects#test-prep" },
-  { icon: PenLine, title: "Reading & writing", body: "Build fluent readers and confident writers — from early reading to college essays.", subjects: ["reading", "writing", "college-essays"], href: "/subjects#english" },
-  { icon: Brain, title: "Learning support", body: "Patient, specialized help with dyslexia, executive function and study skills.", subjects: ["dyslexia-support", "executive-function", "study-skills"], href: "/subjects#learning-support" },
-  { icon: Languages, title: "World languages", body: "Conversation-first lessons in Spanish, French, Mandarin and English as a second language.", subjects: ["spanish", "french", "esl"], href: "/subjects#languages" },
-  { icon: Code, title: "Coding & computer science", body: "Python, Java and web development — from first lines of code to AP Computer Science.", subjects: ["python", "java", "web-development"], href: "/subjects#computer-science" },
+type Goal = { icon: LucideIcon; title: string; body: string; subjects: string[]; href: string; wide?: boolean; visual?: React.ReactNode };
+
+/** Step 1 → 3 of a typical test-prep plan. Illustrative — each tutor shapes their own plan. */
+function PlanTimeline() {
+  const steps = ["Diagnostic test", "Weekly practice", "Full practice test"];
+  return (
+    <div className="rounded-xl border border-line bg-page p-4" aria-hidden>
+      <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-muted">How a plan can look</p>
+      <ol className="relative mt-4 grid grid-cols-3 gap-2">
+        <span className="absolute left-[16%] right-[16%] top-3.5 h-px bg-brand-gradient" />
+        {steps.map((s, i) => (
+          <li key={s} className="relative flex flex-col items-center text-center">
+            <span className="grid size-7 place-items-center rounded-full bg-brand-gradient text-[12px] font-bold text-white ring-4 ring-page">{i + 1}</span>
+            <span className="mt-2 text-[12.5px] font-medium leading-tight text-ink">{s}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function PacePath() {
+  return (
+    <div className="flex items-center gap-1.5 text-[12.5px] font-medium" aria-hidden>
+      <span className="rounded-md border border-line bg-page px-2 py-1 text-ink-2">Fill gaps</span>
+      <ArrowRight className="size-3.5 text-muted" />
+      <span className="rounded-md border border-line bg-page px-2 py-1 text-ink-2">On track</span>
+      <ArrowRight className="size-3.5 text-muted" />
+      <span className="rounded-md bg-brand-gradient px-2 py-1 text-white">Ahead</span>
+    </div>
+  );
+}
+
+function Greetings() {
+  const hello = [
+    { word: "Hola", lang: "Spanish" },
+    { word: "Bonjour", lang: "French" },
+    { word: "你好", lang: "Mandarin" },
+    { word: "Hello", lang: "English" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-2" aria-hidden>
+      {hello.map((h) => (
+        <span key={h.word} className="rounded-lg border border-line bg-page px-2.5 py-1.5 leading-none">
+          <span className="block font-heading text-[15px] font-bold text-ink">{h.word}</span>
+          <span className="mt-1 block text-[11px] text-muted">{h.lang}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SkillSnippets() {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2" aria-hidden>
+      <div className="rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90">
+        <span className="text-[#8fb2ff]">for</span> step <span className="text-[#8fb2ff]">in</span> plan:
+        <br />
+        &nbsp;&nbsp;learn(step)
+        <br />
+        <span className="text-[#b9a6ff]">print</span>(<span className="text-[#7ee2b8]">&quot;Done!&quot;</span>)
+      </div>
+      <div className="flex items-center gap-3 rounded-xl border border-line bg-page p-4">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-white">
+          <Music className="size-5" />
+        </span>
+        <span className="text-[13px] leading-snug text-ink-2">
+          <span className="block font-semibold text-ink">Piano &amp; guitar</span>
+          From first chords to your first song
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const GOALS: Goal[] = [
+  {
+    icon: Target,
+    title: "Ace a big test",
+    body: "A clear plan for the SAT, ACT, AP exams, GRE or LSAT — with practice tests reviewed together, question by question.",
+    subjects: ["sat", "act", "ap-exams", "gre", "lsat"],
+    href: "/subjects#test-prep",
+    wide: true,
+    visual: <PlanTimeline />,
+  },
+  {
+    icon: BookOpenText,
+    title: "Keep up with homework",
+    body: "Get unstuck on tonight's assignment — and understand the why, not just the answer.",
+    subjects: ["algebra", "biology", "chemistry", "writing"],
+    href: "/tutors",
+  },
+  {
+    icon: Calculator,
+    title: "Catch up or get ahead",
+    body: "Close gaps from last year, or move ahead of the class at your own pace.",
+    subjects: ["pre-algebra", "geometry", "reading"],
+    href: "/subjects#math",
+    visual: <PacePath />,
+  },
+  {
+    icon: Brain,
+    title: "Learn in a way that works for you",
+    body: "Patient, specialised help with dyslexia, focus and organisation.",
+    subjects: ["dyslexia-support", "executive-function", "study-skills"],
+    href: "/subjects#learning-support",
+  },
+  {
+    icon: Languages,
+    title: "Speak a new language",
+    body: "Conversation-first lessons that get you talking from day one.",
+    subjects: ["spanish", "french", "mandarin", "esl"],
+    href: "/subjects#languages",
+    visual: <Greetings />,
+  },
+  {
+    icon: Code,
+    title: "Build a new skill",
+    body: "Write your first program, build a website, or learn the songs you love — for school, a career or just for fun.",
+    subjects: ["python", "web-development", "piano", "guitar"],
+    href: "/subjects#computer-science",
+    wide: true,
+    visual: <SkillSnippets />,
+  },
 ];
+
+function GoalCard({ goal }: { goal: Goal }) {
+  return (
+    <article data-spotlight className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 sm:p-7">
+      <div className={cn("flex flex-1 flex-col gap-6", goal.wide && "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-8")}>
+        <div className="flex flex-col">
+          <span className="grid size-11 place-items-center rounded-xl border border-line text-brand">
+            <goal.icon className="size-5" aria-hidden />
+          </span>
+          <h3 className="mt-5 font-heading text-[21px] font-bold leading-tight tracking-[-0.02em] text-ink">{goal.title}</h3>
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{goal.body}</p>
+          <ul className="mt-5 flex flex-wrap gap-1.5">
+            {goal.subjects.map((slug) => (
+              <li key={slug}>
+                <Link
+                  href={`/tutors?subject=${slug}`}
+                  className="inline-flex rounded-md border border-line px-2.5 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
+                >
+                  {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {/* Small cards: the picture sits under the topics. Wide cards show it in their own column. */}
+          {goal.visual && <div className={cn("mt-5", goal.wide && "lg:hidden")}>{goal.visual}</div>}
+          <Link href={goal.href} className="group mt-auto inline-flex items-center gap-1.5 pt-6 text-[14.5px] font-semibold text-brand">
+            Explore <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+          </Link>
+        </div>
+        {goal.visual && goal.wide && <div className="hidden self-center lg:block">{goal.visual}</div>}
+      </div>
+    </article>
+  );
+}
 
 export function Programs() {
   return (
     <Section tone="canvas">
-      <SectionHeading align="center" eyebrow="Tutoring for every goal" title="Whatever you're working toward, there's a tutor for it" />
-      <Stagger className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
-        {PROGRAMS.map((p) => (
-          <StaggerItem key={p.title}>
-            <article className="group relative flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
-              <span className="grid size-12 place-items-center rounded-xl bg-brand-soft text-brand transition-colors duration-300 group-hover:bg-brand group-hover:text-white">
-                <p.icon className="size-6" aria-hidden />
-              </span>
-              <h3 className="mt-5 text-[19px] font-semibold text-ink">
-                <Link href={p.href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">
-                  {p.title}
-                </Link>
-              </h3>
-              <p className="mt-2 flex-1 text-[15px] leading-relaxed text-ink-2">{p.body}</p>
-              <div className="mt-5 flex flex-wrap gap-1.5">
-                {p.subjects.map((s) => (
-                  <span key={s} className="rounded-md bg-canvas px-2.5 py-1 text-[12.5px] font-medium text-ink-2">
-                    {SUBJECT_BY_SLUG[s]?.name}
-                  </span>
-                ))}
-              </div>
-              <span className="mt-5 inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand">
-                Explore <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
-              </span>
-            </article>
+      <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
+        <SectionHeading
+          className="mb-0 lg:mb-0"
+          eyebrow="Tutoring for every goal"
+          title="Start with your goal"
+          accent={2}
+          description="Homework help tonight, a big test next month or a brand-new skill — tell us what you're working toward and find a tutor who teaches it."
+        />
+        <Reveal delay={0.1} className="shrink-0">
+          <ArrowLink href="/subjects">Browse all subjects</ArrowLink>
+        </Reveal>
+      </div>
+
+      <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-5" stagger={0.06}>
+        {GOALS.map((g) => (
+          <StaggerItem key={g.title} className={cn("h-full", g.wide && "md:col-span-2")}>
+            <GoalCard goal={g} />
           </StaggerItem>
         ))}
+        <StaggerItem className="h-full">
+          <Link
+            href="/concierge"
+            className="group flex h-full flex-col justify-between gap-6 rounded-2xl border border-dashed border-line-strong p-6 transition-colors hover:border-brand/50 hover:bg-surface sm:p-7"
+          >
+            <span>
+              <span className="grid size-11 place-items-center rounded-xl bg-brand-gradient text-white">
+                <Sparkles className="size-5" aria-hidden />
+              </span>
+              <span className="mt-5 block font-heading text-[21px] font-bold leading-tight tracking-[-0.02em] text-ink">Not sure yet?</span>
+              <span className="mt-2 block text-[15px] leading-relaxed text-ink-2">Answer two quick questions and get a shortlist of tutors, with the reasons each one fits.</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand">
+              Help me find a tutor <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </span>
+          </Link>
+        </StaggerItem>
       </Stagger>
     </Section>
   );
