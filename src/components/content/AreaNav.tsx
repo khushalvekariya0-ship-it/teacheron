@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 import { CategoryIcon } from "./icons";
 
 /**
- * Sticky bar of subject areas under the navbar. The area you're reading is highlighted
- * (an IntersectionObserver watches each area section by its id).
+ * Sticky bar of page sections under the navbar (subject areas by default). The section you're reading
+ * is highlighted (an IntersectionObserver watches each section by its id).
  */
-export function AreaNav({ areas }: { areas: { slug: string; name: string }[] }) {
+export function AreaNav({ areas, icons = true, label = "Subject areas" }: { areas: { slug: string; name: string }[]; icons?: boolean; label?: string }) {
   const [active, setActive] = React.useState(areas[0]?.slug);
 
   React.useEffect(() => {
@@ -24,7 +24,7 @@ export function AreaNav({ areas }: { areas: { slug: string; name: string }[] }) 
   }, [areas]);
 
   return (
-    <nav aria-label="Subject areas" className="sticky top-[72px] z-30 border-y border-line bg-page/90 backdrop-blur-xl sm:top-[80px]">
+    <nav aria-label={label} className="sticky top-[72px] z-30 border-y border-line bg-page/90 backdrop-blur-xl sm:top-[80px]">
       <div className="container-page">
         <ul className="scrollbar-none -mx-1 flex gap-1 overflow-x-auto px-1 py-2.5">
           {areas.map((a) => {
@@ -40,7 +40,7 @@ export function AreaNav({ areas }: { areas: { slug: string; name: string }[] }) 
                   )}
                 >
                   {/* Icon only on the current area, so all nine areas fit on one line */}
-                  {on && <CategoryIcon slug={a.slug} className="size-4" />}
+                  {on && icons && <CategoryIcon slug={a.slug} className="size-4" />}
                   {a.name}
                 </a>
               </li>

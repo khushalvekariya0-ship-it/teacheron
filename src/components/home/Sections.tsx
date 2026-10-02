@@ -118,7 +118,7 @@ export function Hero() {
 
   return (
     <section ref={root} className="relative isolate overflow-hidden bg-gradient-to-b from-brand-50 to-page">
-      <div className="container-page grid items-center gap-14 pb-16 pt-12 sm:pt-16 lg:grid-cols-[1.08fr_1fr] lg:gap-16 lg:pb-20 lg:pt-20">
+      <div className="container-page grid grid-cols-1 items-center gap-14 pb-16 pt-12 sm:pt-16 lg:grid-cols-[1.08fr_1fr] lg:gap-16 lg:pb-20 lg:pt-20">
         <div>
           <p data-hero-in data-reveal className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
             <span className="h-px w-6 bg-brand-gradient" aria-hidden />

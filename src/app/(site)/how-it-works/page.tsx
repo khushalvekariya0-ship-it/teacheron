@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, Eye, MessageSquareLock, Star } from "lucide-react";
-import { Reveal, Stagger, StaggerItem } from "@/components/motion";
-import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
+import { ArrowRight, BadgeCheck, CalendarCheck, Check, Eye, GitCompareArrows, LineChart, MessageSquareLock, Search, Star, type LucideIcon } from "lucide-react";
+import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
+import { AreaNav } from "@/components/content/AreaNav";
+import { cn } from "@/lib/utils";
+import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
 import { HowItWorksView } from "@/components/marketing/HowItWorksView";
 import { MatchingWeights } from "@/components/marketing/MatchingWeights";
@@ -20,51 +22,101 @@ export const metadata: Metadata = {
 };
 
 const JUMP_LINKS = [
-  { href: "#steps", label: "Step by step" },
-  { href: "#matching", label: "How matching works" },
-  { href: "#trials", label: "Trial lessons" },
-  { href: "#policies", label: "Booking & policies" },
-  { href: "#safety", label: "Safety" },
+  { slug: "steps", name: "Step by step" },
+  { slug: "matching", name: "How matching works" },
+  { slug: "trials", name: "Trial lessons" },
+  { slug: "policies", name: "Booking & policies" },
+  { slug: "safety", name: "Safety" },
+];
+
+const JOURNEY: { icon: LucideIcon; title: string; body: string }[] = [
+  { icon: Search, title: "Search", body: "Filter by subject, grade, schedule and budget" },
+  { icon: GitCompareArrows, title: "Compare", body: "Profiles, completed checks and real reviews" },
+  { icon: MessageSquareLock, title: "Message", body: "Ask questions — contact details stay private" },
+  { icon: CalendarCheck, title: "Book a trial", body: "A real opening, shown in your time zone" },
+  { icon: LineChart, title: "Learn and grow", body: "Notes, homework and goals after every lesson" },
 ];
 
 export default function HowItWorksPage() {
   const trials = trialStats();
   return (
     <>
-      <PageHero
-        image={{ src: "/images/hero-tutoring.jpg", alt: "A tutor helping a student with her notes" }}
-        eyebrow="How it works"
-        title="A clear path from first search to steady progress."
-        description="No subscriptions for families, no hidden ranking, and no surprises at checkout. Here is exactly how TutorLink works — for families and for tutors."
-        actions={
-          <>
-            <Button asChild size="lg">
-              <Link href="/tutors">
-                Find a tutor <ArrowRight />
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="secondary">
-              <Link href="/become-a-tutor">Become a tutor</Link>
-            </Button>
-          </>
-        }
-      >
-        <Reveal delay={0.4}>
-          <nav aria-label="On this page" className="mt-12 flex flex-wrap gap-2">
-            {JUMP_LINKS.map((l) => (
-              <a key={l.href} href={l.href} className="rounded-lg border border-line-strong px-3.5 py-1.5 text-[14px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">
-                {l.label}
-              </a>
-            ))}
-          </nav>
-        </Reveal>
-      </PageHero>
+      <section className="relative bg-gradient-to-b from-brand-50 to-page">
+        <div className="container-page grid grid-cols-1 items-center gap-14 pb-14 pt-12 sm:pt-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-16 lg:pb-20 lg:pt-20">
+          <div>
+            <Reveal>
+              <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+                <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+                How it works
+              </p>
+            </Reveal>
+            <WordReveal
+              text="A clear path from first search to steady progress."
+              accent={2}
+              className="mt-5 font-heading text-[2.5rem] font-bold leading-[1.04] tracking-[-0.03em] text-ink sm:text-[3.2rem] lg:text-[3.6rem]"
+            />
+            <Reveal delay={0.2}>
+              <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2">
+                Here is exactly how TutorLink works — for families and for tutors. No subscriptions for families, no hidden ranking and no surprises at checkout.
+              </p>
+            </Reveal>
+            <Reveal delay={0.3} className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button asChild variant="brand" size="lg">
+                <Link href="/tutors">
+                  Find a tutor <ArrowRight />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
+                <Link href="/become-a-tutor">Become a tutor</Link>
+              </Button>
+            </Reveal>
+            <Reveal delay={0.4}>
+              <ul className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-[14.5px] font-medium text-ink-2">
+                {["No subscription for families", "No paid ranking", `Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours}h before`].map((x) => (
+                  <li key={x} className="inline-flex items-center gap-2">
+                    <Check className="size-4 text-success" strokeWidth={2.6} aria-hidden /> {x}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </div>
 
-      <Section id="steps" className="scroll-mt-16">
+          {/* Your path: five milestones joined by a gradient line */}
+          <Reveal delay={0.15} className="mx-auto w-full max-w-[520px] lg:mr-0">
+            <div className="rounded-2xl border border-line bg-surface p-6 shadow-[0_24px_60px_-34px_rgb(15_23_42/0.45)] sm:p-7">
+              <div className="flex items-center justify-between">
+                <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Your path</p>
+                <span className="rounded-md bg-brand-soft px-2 py-0.5 text-[12px] font-semibold text-brand">5 steps</span>
+              </div>
+              <Stagger as="ol" className="relative mt-6 space-y-4" stagger={0.1}>
+                <span className="absolute bottom-6 left-5 top-6 w-px bg-[linear-gradient(to_bottom,var(--color-grad-from),var(--color-grad-to))]" aria-hidden />
+                {JOURNEY.map((j, i) => (
+                  <StaggerItem as="li" key={j.title} className="relative flex items-center gap-4">
+                    <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-brand-gradient text-white shadow-md ring-4 ring-surface">
+                      <j.icon className="size-[18px]" aria-hidden />
+                    </span>
+                    <span className={cn("flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border border-line px-4 py-3", i === JOURNEY.length - 1 ? "bg-brand-50" : "bg-page")}>
+                      <span className="min-w-0">
+                        <span className="block text-[15px] font-semibold text-ink">{j.title}</span>
+                        <span className="block truncate text-[13px] text-muted">{j.body}</span>
+                      </span>
+                      <span className="shrink-0 text-[12px] font-semibold tabular-nums text-subtle">0{i + 1}</span>
+                    </span>
+                  </StaggerItem>
+                ))}
+              </Stagger>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      <AreaNav areas={JUMP_LINKS} icons={false} label="On this page" />
+
+      <Section id="steps" className="scroll-mt-36">
         <HowItWorksView />
       </Section>
 
-      <Section id="matching" tone="canvas" className="scroll-mt-16">
+      <Section id="matching" tone="canvas" className="scroll-mt-36">
         <SectionHeading
           eyebrow="How matching works"
           title="A score you can read, not a black box."
@@ -73,7 +125,7 @@ export default function HowItWorksPage() {
         <MatchingWeights />
       </Section>
 
-      <Section id="trials" className="scroll-mt-16">
+      <Section id="trials" className="scroll-mt-36">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
           <div>
             <SectionHeading
@@ -114,7 +166,7 @@ export default function HowItWorksPage() {
         </div>
       </Section>
 
-      <Section id="policies" tone="canvas" className="scroll-mt-16">
+      <Section id="policies" tone="canvas" className="scroll-mt-36">
         <SectionHeading
           eyebrow="Booking & policies"
           title="The rules, before you pay."
@@ -126,7 +178,7 @@ export default function HowItWorksPage() {
         </div>
       </Section>
 
-      <Section id="safety" className="scroll-mt-16">
+      <Section id="safety" className="scroll-mt-36">
         <SectionHeading
           eyebrow="Safety"
           title="Safeguards built into every step."

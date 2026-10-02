@@ -607,7 +607,7 @@ function SignedOutIntro({ next }: { next: string }) {
   return (
     <>
       <section className="relative bg-gradient-to-b from-brand-50 to-page">
-        <div className="container-page grid items-center gap-14 pb-14 pt-12 sm:pt-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-20 lg:pt-20">
+        <div className="container-page grid grid-cols-1 items-center gap-14 pb-14 pt-12 sm:pt-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-20 lg:pt-20">
           <div>
             <Reveal>
               <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
