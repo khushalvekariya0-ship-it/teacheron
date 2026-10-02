@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
-import { GetPaidVignette } from "@/components/marketing/Vignettes";
+import { EarningsSplit } from "@/components/marketing/EarningsSplit";
 import { VerificationFlow } from "@/components/marketing/Verification";
 import { ReadyChecklist } from "@/components/marketing/ReadyChecklist";
 import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
@@ -15,8 +15,7 @@ import { medianRate } from "@/components/content/insights";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { FAQS } from "@/lib/data/content";
-import { CREDITS_PER_APPLICATION, DEFAULT_POLICY, TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents } from "@/lib/format";
+import { CREDITS_PER_APPLICATION } from "@/lib/data/platform";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -379,51 +378,21 @@ export default function BecomeATutorPage() {
       </Section>
 
       <Section>
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          <div>
-            <SectionHeading
-              className="mb-8"
-              eyebrow="Earnings"
-              title="You set the rate. The commission is on the page."
-              description={`Families pay your listed rate. TutorLink's commission is deducted from each paid lesson, and it's lower on paid plans. Earnings become available after the ${DEFAULT_POLICY.disputeWindowDays}-day dispute window and are paid through Stripe Connect.`}
-            />
-            <Reveal>
-              <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-                <table className="w-full text-left text-sm">
-                  <caption className="border-b border-line bg-canvas px-4 py-3 text-left text-[13px] text-muted">
-                    You keep, on a {formatCents(rate)} one-hour lesson{median ? " (the median rate listed today)" : ""}
-                  </caption>
-                  <thead>
-                    <tr className="border-b border-line text-[12.5px] text-muted">
-                      <th scope="col" className="px-4 py-2.5 font-medium">Plan</th>
-                      <th scope="col" className="px-4 py-2.5 font-medium">Monthly</th>
-                      <th scope="col" className="px-4 py-2.5 font-medium">Commission</th>
-                      <th scope="col" className="px-4 py-2.5 text-right font-medium">You keep</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {TUTOR_PLANS.map((p) => (
-                      <tr key={p.id} className={p.highlighted ? "bg-brand-50" : undefined}>
-                        <th scope="row" className="px-4 py-3 font-semibold text-ink">{p.name}</th>
-                        <td className="px-4 py-3 tabular-nums text-ink-2">{formatCents(p.priceCents)}</td>
-                        <td className="px-4 py-3 tabular-nums text-ink-2">{p.commissionBps / 100}%</td>
-                        <td className="px-4 py-3 text-right font-bold tabular-nums text-ink">{formatCents(rate - applyBps(rate, p.commissionBps), { exact: true })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Reveal>
-            <Reveal delay={0.1} className="mt-6">
-              <ArrowLink href="/pricing#calculator">Estimate your monthly earnings</ArrowLink>
-            </Reveal>
-          </div>
-          <Reveal delay={0.1}>
-            <div className="mx-auto max-w-md lg:max-w-none">
-              <GetPaidVignette />
-            </div>
+        <div className="mb-10 flex flex-col gap-6 lg:mb-12 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeading
+            className="mb-0 lg:mb-0"
+            eyebrow="Earnings"
+            title="You set the rate. The commission is on the page."
+            accent={3}
+            description="Families pay your listed rate. TutorLink's commission comes out of each paid lesson — and it's lower on paid plans. Try your own numbers."
+          />
+          <Reveal delay={0.1} className="shrink-0">
+            <ArrowLink href="/pricing#calculator">Estimate your monthly earnings</ArrowLink>
           </Reveal>
         </div>
+        <Reveal>
+          <EarningsSplit initialRateCents={rate} isMedian={!!median} />
+        </Reveal>
       </Section>
 
       <Section tone="canvas">
