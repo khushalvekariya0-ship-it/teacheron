@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
-  Music, Route, Search, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
+  Music, Route, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
   Lock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -21,10 +21,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { SubjectSearch } from "./SubjectSearch";
+import { QuickMatch } from "./QuickMatch";
 import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
-import { DEFAULT_WEIGHTS, FACTOR_LABEL } from "@/lib/matching";
+import { DEFAULT_WEIGHTS } from "@/lib/matching";
 import { useTutors } from "@/lib/store/hooks";
 
 /* ═══ 1 · Hero — the promise, two actions, and a real tutoring moment ═══════════════════ */
@@ -449,42 +450,6 @@ function VideoCall() {
   );
 }
 
-/** Step 1 picture: a search with filters, and the real weights used to rank matches. */
-function SearchMock() {
-  const factors = (Object.keys(DEFAULT_WEIGHTS) as (keyof typeof DEFAULT_WEIGHTS)[]).slice(0, 5);
-  return (
-    <div className="flex h-full flex-col gap-4" aria-hidden>
-      <div className="flex items-center gap-3 rounded-xl border border-line bg-surface p-2.5 pl-4 shadow-sm">
-        <Search className="size-5 shrink-0 text-muted" />
-        <span className="flex-1 text-[15px] font-medium text-ink">Algebra</span>
-        <span className="rounded-lg bg-brand-gradient px-3.5 py-2 text-[13px] font-semibold text-white">Search</span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {["9th grade", "Online", "Weekday evenings", "Budget set"].map((c) => (
-          <span key={c} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand-50 px-2.5 py-1.5 text-[13px] font-medium text-brand">
-            <Check className="size-3.5" /> {c}
-          </span>
-        ))}
-      </div>
-      <div className="mt-auto rounded-xl border border-line bg-surface p-5 shadow-sm">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">How matches are ranked</p>
-        <ul className="mt-4 space-y-2.5">
-          {factors.map((k) => (
-            <li key={k} className="flex items-center gap-3 text-[13px]">
-              <span className="w-28 shrink-0 text-ink-2">{FACTOR_LABEL[k]}</span>
-              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-line">
-                <span className="block h-full rounded-full bg-brand-gradient" style={{ width: `${(DEFAULT_WEIGHTS[k] / 30) * 100}%` }} />
-              </span>
-              <span className="w-9 text-right tabular-nums text-muted">{DEFAULT_WEIGHTS[k]}%</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-[12.5px] text-muted">+ 3 more factors · paid placement is never one of them</p>
-      </div>
-    </div>
-  );
-}
-
 const SLOT_PATTERN = [
   [true, false, true],
   [false, true, true],
@@ -561,8 +526,8 @@ const HOW_STEPS: { label: string; title: string; body: string; points: string[];
     title: "Tell us what you need",
     body: "Search by subject, grade, schedule and budget — or answer two quick questions and get a ranked shortlist with the reasons each tutor fits.",
     points: ["Free to search, no account needed", "Ranked on 8 open factors — never paid placement"],
-    visual: SearchMock,
-    mobileHeight: "h-[440px]",
+    visual: QuickMatch,
+    mobileHeight: "",
   },
   {
     label: "Compare",
@@ -673,7 +638,7 @@ export function HowItWorks() {
                   ))}
                 </span>
               </div>
-              <div className="relative h-[460px] bg-canvas/60">
+              <div className="relative h-[500px] bg-canvas/60">
                 {HOW_STEPS.map((s, i) => (
                   <div
                     key={s.title}
