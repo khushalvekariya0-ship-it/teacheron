@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "framer-motion";
@@ -10,6 +11,7 @@ import {
   LogOut, Mail, MapPin, Menu, MessagesSquare, Newspaper, Route, Search, ShieldCheck, Sparkles, Tag, UserRound, Users, Wallet, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CategoryIcon } from "@/components/content/icons";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
@@ -274,8 +276,16 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
   );
 }
 
-/** Wide subjects panel: every subject area with its main subjects. */
+/** Areas that have a photo; the rest get a gradient panel with their icon. */
+const AREA_PHOTOS = new Set(["math", "science", "english", "test-prep", "languages", "computer-science", "arts", "learning-support"]);
+const POPULAR_SUBJECTS = SUBJECTS.filter((s) => s.popular).slice(0, 6);
+
+/** Subjects mega menu: hover an area on the left to see its subjects and a picture. */
 function SubjectsMenu({ pathname }: { pathname: string }) {
+  const [area, setArea] = React.useState(SUBJECT_CATEGORIES[0].slug);
+  const cat = SUBJECT_CATEGORIES.find((c) => c.slug === area) ?? SUBJECT_CATEGORIES[0];
+  const subjects = SUBJECTS.filter((s) => s.category === cat.slug);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -284,38 +294,102 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       className="absolute left-0 top-full z-50 pt-3"
     >
-      <div className="w-[760px] rounded-xl border border-line bg-surface p-6 shadow-lg">
-        <div className="grid grid-cols-3 gap-x-8 gap-y-6">
-          {SUBJECT_CATEGORIES.map((c, i) => (
-            <motion.div key={c.slug} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 * i, duration: 0.22 }}>
-              <Link href={`/subjects#${c.slug}`} className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-muted transition-colors hover:text-brand">
-                {c.name}
-              </Link>
-              <ul className="mt-2 space-y-1.5">
-                {SUBJECTS.filter((s) => s.category === c.slug)
-                  .slice(0, 4)
-                  .map((s) => {
-                    const current = isCurrent(pathname, `/subjects/${s.slug}`);
-                    return (
-                      <li key={s.slug}>
-                        <Link
-                          href={`/subjects/${s.slug}`}
-                          aria-current={current ? "page" : undefined}
-                          className={cn("text-[14.5px] transition-colors hover:text-brand", current ? "font-semibold text-brand" : "text-ink")}
-                        >
-                          {s.name}
-                        </Link>
-                      </li>
-                    );
-                  })}
+      <div className="w-[920px] overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_28px_70px_-30px_rgb(15_23_42/0.45)]">
+        <div className="grid grid-cols-[262px_minmax(0,1fr)_210px]">
+          {/* Areas */}
+          <ul className="space-y-0.5 border-r border-line bg-canvas p-2.5" aria-label="Subject areas">
+            {SUBJECT_CATEGORIES.map((c) => {
+              const on = c.slug === area;
+              return (
+                <li key={c.slug}>
+                  <Link
+                    href={`/subjects#${c.slug}`}
+                    onMouseEnter={() => setArea(c.slug)}
+                    onFocus={() => setArea(c.slug)}
+                    className={cn("group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] transition-colors", on ? "bg-surface font-semibold text-ink shadow-sm ring-1 ring-line" : "text-ink-2 hover:text-ink")}
+                  >
+                    <span className={cn("grid size-7 shrink-0 place-items-center rounded-md transition-colors", on ? "bg-brand-gradient text-white" : "bg-surface text-ink-2 ring-1 ring-line")}>
+                      <CategoryIcon slug={c.slug} className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                    <ChevronRight className={cn("size-4 shrink-0 transition-opacity", on ? "text-brand opacity-100" : "opacity-0")} aria-hidden />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Subjects in the hovered area */}
+          <div className="p-6">
+            <motion.div key={cat.slug} initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-brand">{subjects.length} subjects</p>
+              <p className="mt-1 font-heading text-[20px] font-bold tracking-[-0.02em] text-ink">{cat.name}</p>
+              <p className="mt-1 text-[13.5px] leading-snug text-muted">{cat.description}</p>
+              <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1">
+                {subjects.map((s) => {
+                  const current = isCurrent(pathname, `/subjects/${s.slug}`);
+                  return (
+                    <li key={s.slug}>
+                      <Link
+                        href={`/subjects/${s.slug}`}
+                        aria-current={current ? "page" : undefined}
+                        className={cn(
+                          "group flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[14.5px] transition-colors hover:bg-brand-50 hover:text-brand",
+                          current ? "font-semibold text-brand" : "text-ink",
+                        )}
+                      >
+                        <span className="truncate">{s.name}</span>
+                        {s.popular && <span className="shrink-0 rounded bg-brand-soft px-1 text-[10.5px] font-semibold text-brand">Popular</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
+              <Link href={`/subjects#${cat.slug}`} className="group mt-4 inline-flex items-center gap-1.5 px-2 text-[14px] font-semibold text-brand">
+                All {cat.name} subjects <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
             </motion.div>
-          ))}
+          </div>
+
+          {/* Picture + quick actions */}
+          <div className="flex flex-col gap-3 border-l border-line p-4">
+            <div className="relative aspect-[4/3.6] overflow-hidden rounded-xl bg-canvas">
+              {AREA_PHOTOS.has(cat.slug) ? (
+                <Image key={cat.slug} src={`/images/subjects/${cat.slug}.jpg`} alt="" fill sizes="200px" className="object-cover" />
+              ) : (
+                <div className="absolute inset-0 grid place-items-center bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-to))]">
+                  <CategoryIcon slug={cat.slug} className="size-12 text-white/90" />
+                </div>
+              )}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night/80 to-transparent p-3 pt-10">
+                <span className="text-[13px] font-semibold text-white">{cat.name}</span>
+              </div>
+            </div>
+            <Link href="/concierge" className="group rounded-xl border border-line p-3 transition-colors hover:border-brand/40 hover:bg-brand-50">
+              <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
+                <Sparkles className="size-4 text-brand" aria-hidden /> Not sure what you need?
+              </span>
+              <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">Get a shortlist of tutors in two minutes.</span>
+            </Link>
+          </div>
         </div>
-        <div className="mt-6 flex items-center justify-between border-t border-line pt-4">
-          <p className="text-[14px] text-muted">{SUBJECTS.length} subjects, online and in person</p>
-          <Link href="/subjects" className="group inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand">
-            Browse all subjects <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+
+        {/* Popular subjects + browse all */}
+        <div className="flex items-center justify-between gap-4 border-t border-line px-5 py-3.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-[12.5px] font-medium text-muted">Popular:</span>
+            <ul className="flex min-w-0 gap-1.5 overflow-hidden">
+              {POPULAR_SUBJECTS.map((s) => (
+                <li key={s.slug} className="shrink-0">
+                  <Link href={`/tutors?subject=${s.slug}`} className="inline-flex rounded-md border border-line px-2 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:text-brand">
+                    {s.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <Link href="/subjects" className="group inline-flex shrink-0 items-center gap-1.5 text-[14px] font-semibold text-brand">
+            Browse all {SUBJECTS.length} subjects <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
       </div>
