@@ -8,7 +8,8 @@ import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/market
 import { Button } from "@/components/ui/Button";
 import { HowItWorksView } from "@/components/marketing/HowItWorksView";
 import { MatchingWeights } from "@/components/marketing/MatchingWeights";
-import { PolicyCards, PolicyDetails } from "@/components/marketing/Policies";
+import { PolicyDetails } from "@/components/marketing/Policies";
+import { RefundTimeline } from "@/components/marketing/RefundTimeline";
 import { trialStats } from "@/components/content/insights";
 import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
@@ -250,12 +251,17 @@ export default function HowItWorksPage() {
         <SectionHeading
           eyebrow="Booking & policies"
           title="The rules, before you pay."
-          description="The same policy is shown at checkout and on every lesson page. These are our current defaults; the exact terms for your booking always appear before you confirm."
+          accent={3}
+          description="The same policy appears at checkout and on every lesson page. These are our current defaults — the exact terms for your booking are always shown before you confirm."
         />
-        <PolicyCards />
-        <div className="mt-14 border-t border-line pt-14">
-          <PolicyDetails />
-        </div>
+        <Reveal>
+          <RefundTimeline />
+        </Reveal>
+        <p className="mb-5 mt-12 flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+          <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+          If something doesn&rsquo;t go to plan
+        </p>
+        <PolicyDetails />
       </Section>
 
       <Section id="safety" className="scroll-mt-36">
