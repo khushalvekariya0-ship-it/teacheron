@@ -179,7 +179,7 @@ export function FilterSelect<T extends string>({ label, value, onChange, options
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      <Select id={id} value={value} onChange={(e) => onChange(e.target.value as T)} options={options} className="[&_select]:h-9 [&_select]:text-sm sm:[&_select]:min-w-40" />
+      <Select id={id} value={value} onChange={(e) => onChange(e.target.value as T)} options={options} size="sm" className="sm:min-w-40" />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Check, ChevronDown, Search } from "lucide-react";
+import { BookOpen, Check, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GRADES, SUBJECTS, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, FACTOR_LABEL, type FactorKey } from "@/lib/matching";
@@ -10,24 +10,39 @@ import { SCHEDULE_PRESETS, searchTutors, toQueryString, type SchedulePreset, typ
 import type { Grade, TeachingMode } from "@/lib/types";
 import { useHydrated, useTutors } from "@/lib/store/hooks";
 import { motion } from "@/components/motion";
+import { SelectMenu, type SelectOption } from "@/components/ui/SelectMenu";
 
 const BUDGETS = [40, 60, 80, 100];
 const SHOWN: FactorKey[] = ["subject", "grade", "schedule", "budget", "location"];
 
-/** A select styled as a chip: shows a check and the brand tint when a value is chosen. */
-function ChipSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+/** A dropdown styled as a chip: shows a check and the brand tint when a value is chosen. */
+function ChipSelect({ label, value, onChange, placeholder, options }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; options: SelectOption[] }) {
   const set = value !== "";
   return (
-    <label className={cn("relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[13.5px] font-medium transition-colors focus-within:ring-2 focus-within:ring-brand/30", set ? "border-brand/30 bg-brand-50 text-brand" : "border-line bg-surface text-ink-2 hover:border-line-strong")}>
-      {set && <Check className="size-3.5 shrink-0" strokeWidth={2.8} aria-hidden />}
-      <span className="pointer-events-none whitespace-nowrap">{label}</span>
-      <ChevronDown className="size-3.5 shrink-0 opacity-60" aria-hidden />
-      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} className="absolute inset-0 cursor-pointer appearance-none opacity-0">
-        {children}
-      </select>
-    </label>
+    <SelectMenu
+      variant="bare"
+      aria-label={label}
+      value={value}
+      onValueChange={onChange}
+      placeholder={placeholder}
+      options={options}
+      leading={set ? <Check className="size-3.5 shrink-0" strokeWidth={2.8} aria-hidden /> : undefined}
+      renderValue={(o) => <span className="whitespace-nowrap">{o?.label ?? placeholder}</span>}
+      className={cn(
+        "h-9 w-auto gap-1.5 rounded-lg border px-2.5 text-[13.5px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand/30",
+        set ? "border-brand/30 bg-brand-50 text-brand" : "border-line bg-surface text-ink-2 hover:border-line-strong",
+      )}
+    />
   );
 }
+
+const GRADE_OPTIONS: SelectOption[] = GRADES.map((g) => ({ value: g.value, label: g.label }));
+const MODE_OPTIONS: SelectOption[] = [
+  { value: "online", label: "Online" },
+  { value: "in_person", label: "In person" },
+];
+const SCHEDULE_OPTIONS: SelectOption[] = SCHEDULE_PRESETS.map((p) => ({ value: p.value, label: p.label }));
+const BUDGET_OPTIONS: SelectOption[] = BUDGETS.map((b) => ({ value: String(b), label: `Up to $${b}/hr` }));
 
 /**
  * Step 1 of "How it works", working for real: type a subject, set grade / lesson type / time / budget,
@@ -164,35 +179,10 @@ export function QuickMatch() {
       </form>
 
       <div className="flex flex-wrap gap-2">
-        <ChipSelect label={grade ? (GRADES.find((g) => g.value === grade)?.label ?? "Grade") : "Any grade"} value={grade} onChange={(v) => setGrade(v as Grade | "")}>
-          <option value="">Any grade</option>
-          {GRADES.map((g) => (
-            <option key={g.value} value={g.value}>
-              {g.label}
-            </option>
-          ))}
-        </ChipSelect>
-        <ChipSelect label={mode === "online" ? "Online" : mode === "in_person" ? "In person" : "Online or in person"} value={mode} onChange={(v) => setMode(v as TeachingMode | "")}>
-          <option value="">Online or in person</option>
-          <option value="online">Online</option>
-          <option value="in_person">In person</option>
-        </ChipSelect>
-        <ChipSelect label={schedule ? (SCHEDULE_PRESETS.find((p) => p.value === schedule)?.label ?? "Time") : "Any time"} value={schedule} onChange={(v) => setSchedule(v as SchedulePreset | "")}>
-          <option value="">Any time</option>
-          {SCHEDULE_PRESETS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </ChipSelect>
-        <ChipSelect label={budget ? `Up to $${budget}/hr` : "Any budget"} value={budget === "" ? "" : String(budget)} onChange={(v) => setBudget(v ? Number(v) : "")}>
-          <option value="">Any budget</option>
-          {BUDGETS.map((b) => (
-            <option key={b} value={b}>
-              Up to ${b}/hr
-            </option>
-          ))}
-        </ChipSelect>
+        <ChipSelect label="Grade" placeholder="Any grade" options={GRADE_OPTIONS} value={grade} onChange={(v) => setGrade(v as Grade | "")} />
+        <ChipSelect label="Lesson type" placeholder="Online or in person" options={MODE_OPTIONS} value={mode} onChange={(v) => setMode(v as TeachingMode | "")} />
+        <ChipSelect label="When" placeholder="Any time" options={SCHEDULE_OPTIONS} value={schedule} onChange={(v) => setSchedule(v as SchedulePreset | "")} />
+        <ChipSelect label="Budget" placeholder="Any budget" options={BUDGET_OPTIONS} value={budget === "" ? "" : String(budget)} onChange={(v) => setBudget(v ? Number(v) : "")} />
       </div>
 
       <p className="-mt-1 text-[13px] text-ink-2" aria-live="polite">

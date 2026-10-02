@@ -220,7 +220,7 @@ function Inner({ me }: { me: User }) {
                         value={s.frequency}
                         onChange={(e) => setFrequency(s, e.target.value as AlertFrequency)}
                         options={FREQUENCY_OPTIONS}
-                        className="w-40 [&_select]:h-9 [&_select]:text-sm"
+                        size="sm" className="w-40"
                       />
                     </label>
                     <Button asChild size="sm">

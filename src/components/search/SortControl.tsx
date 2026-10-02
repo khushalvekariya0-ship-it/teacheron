@@ -66,7 +66,7 @@ export function SortControl({ value, onChange, className, showLabel = true }: { 
         value={value ?? "match"}
         onChange={(e) => onChange(e.target.value === "match" ? undefined : (e.target.value as SortKey))}
         options={SORT_OPTIONS}
-        className="min-w-0 flex-1 sm:w-48 sm:flex-none [&_select]:h-9 [&_select]:text-sm"
+        size="sm" className="min-w-0 flex-1 sm:w-48 sm:flex-none"
       />
       <RankingInfo />
     </div>

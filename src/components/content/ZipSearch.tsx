@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronDown, MapPin } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { SelectMenu } from "@/components/ui/SelectMenu";
 
 const RADII = [5, 10, 25];
 
@@ -51,24 +52,14 @@ export function ZipSearch({ className }: { className?: string }) {
           />
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor={`${id}-radius`} className="sr-only">
-            Distance
-          </label>
-          <div className="relative flex-1 sm:flex-none">
-            <select
-              id={`${id}-radius`}
-              value={radius}
-              onChange={(e) => setRadius(Number(e.target.value))}
-              className="h-12 w-full appearance-none rounded-xl border border-line bg-canvas pl-3.5 pr-9 text-[15px] font-medium text-ink outline-none focus:border-brand sm:h-14"
-            >
-              {RADII.map((r) => (
-                <option key={r} value={r}>
-                  Within {r} miles
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-          </div>
+          <SelectMenu
+            aria-label="Distance"
+            variant="bare"
+            value={String(radius)}
+            onValueChange={(v) => setRadius(Number(v))}
+            options={RADII.map((r) => ({ value: String(r), label: `Within ${r} miles` }))}
+            className="h-12 flex-1 justify-between rounded-xl border border-line bg-canvas px-3.5 text-[15px] font-medium text-ink transition-colors hover:border-line-strong focus-visible:border-brand data-[state=open]:border-brand sm:h-14 sm:w-[170px] sm:flex-none"
+          />
           <Button type="submit" variant="brand" size="lg" className="h-12 shrink-0 px-5 sm:h-14 sm:px-7">
             Search <ArrowRight />
           </Button>

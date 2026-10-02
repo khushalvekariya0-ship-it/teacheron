@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
-  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
+  ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
   Music, Route, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
   Lock,
 } from "lucide-react";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Avatar } from "@/components/ui/Avatar";
+import { SelectMenu, type SelectGroup, type SelectOption } from "@/components/ui/SelectMenu";
 import { SubjectSearch } from "./SubjectSearch";
 import { QuickMatch } from "./QuickMatch";
 import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
@@ -668,37 +669,48 @@ export function HowItWorks() {
 
 /* ═══ 5 · Smart tutor matching — a short guided start on a deep navy stage ═══════════ */
 
-const matchField =
-  "h-14 w-full appearance-none rounded-xl border border-line-strong bg-surface pl-14 pr-12 text-[16px] text-ink outline-none transition-colors hover:border-ink/40 focus:border-[#5b8cff] focus:ring-2 focus:ring-[#5b8cff]/30";
+const MATCH_SUBJECT_GROUPS: SelectGroup[] = SUBJECT_CATEGORIES.map((c) => ({
+  label: c.name,
+  options: SUBJECTS.filter((s) => s.category === c.slug).map((s) => ({ value: s.slug, label: s.name })),
+}));
+const MATCH_GRADE_OPTIONS: SelectOption[] = GRADES.map((g) => ({ value: g.value, label: g.label }));
 
 function MatchSelect({
   icon: Icon,
   label,
   error,
-  children,
-  ...props
-}: { icon: LucideIcon; label: string; error?: string } & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  value,
+  onChange,
+  placeholder,
+  options,
+  groups,
+}: { icon: LucideIcon; label: string; error?: string; value: string; onChange: (v: string) => void; placeholder: string; options?: SelectOption[]; groups?: SelectGroup[] }) {
   const id = React.useId();
   return (
     <div>
       <label htmlFor={id} className="mb-2.5 block text-[16px] font-semibold text-ink">
         {label}
       </label>
-      <div className="relative">
-        <Icon className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden />
-        <select
-          id={id}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${id}-error` : undefined}
-          className={cn(matchField, !props.value && "text-muted", error && "border-danger")}
-          {...props}
-        >
-          {children}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden />
-      </div>
+      <SelectMenu
+        id={id}
+        variant="bare"
+        value={value}
+        onValueChange={onChange}
+        placeholder={placeholder}
+        options={options}
+        groups={groups}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        leading={<Icon className="size-5 shrink-0 text-muted" aria-hidden />}
+        renderValue={(o) => <span className={cn(!o && "text-muted")}>{o?.label ?? placeholder}</span>}
+        className={cn(
+          "h-14 w-full gap-3.5 rounded-xl border bg-surface px-5 text-[16px] text-ink transition-[border-color,box-shadow] hover:border-ink/40",
+          "focus-visible:border-[#5b8cff] focus-visible:ring-2 focus-visible:ring-[#5b8cff]/30 data-[state=open]:border-[#5b8cff] data-[state=open]:ring-2 data-[state=open]:ring-[#5b8cff]/30",
+          error ? "border-danger" : "border-line-strong",
+        )}
+      />
       {error && (
-        <p id={`${id}-error`} className="mt-2 text-[13.5px] text-red-300">
+        <p id={`${id}-error`} className="mt-2 text-[13.5px] text-danger">
           {error}
         </p>
       )}
@@ -758,31 +770,15 @@ export function GetMatched() {
                 icon={BookOpen}
                 label="What do you want to learn?"
                 value={subject}
-                onChange={(e) => {
-                  setSubject(e.target.value);
+                onChange={(v) => {
+                  setSubject(v);
                   setError(false);
                 }}
+                placeholder="Choose a subject"
+                groups={MATCH_SUBJECT_GROUPS}
                 error={error ? "Choose a subject to see your matches." : undefined}
-              >
-                <option value="">Choose a subject</option>
-                {SUBJECT_CATEGORIES.map((c) => (
-                  <optgroup key={c.slug} label={c.name}>
-                    {SUBJECTS.filter((s) => s.category === c.slug).map((s) => (
-                      <option key={s.slug} value={s.slug}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </MatchSelect>
-              <MatchSelect icon={ChartNoAxesColumnIncreasing} label="What's your level?" value={grade} onChange={(e) => setGrade(e.target.value)}>
-                <option value="">Select your level</option>
-                {GRADES.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {g.label}
-                  </option>
-                ))}
-              </MatchSelect>
+              />
+              <MatchSelect icon={ChartNoAxesColumnIncreasing} label="What's your level?" value={grade} onChange={setGrade} placeholder="Select your level" options={MATCH_GRADE_OPTIONS} />
               <button
                 type="submit"
                 className="group flex h-16 w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#2f8cff] via-[#4b74fb] to-[#7b5cf5] text-[18px] font-semibold text-white shadow-[0_12px_32px_-12px_rgb(79_110_247/0.8)] transition-[filter,transform] hover:brightness-110 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"

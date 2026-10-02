@@ -111,7 +111,7 @@ function Inner({ me }: { me: User }) {
                 setLimit(PAGE);
               }}
               options={[{ value: "all", label: "All types" }, ...NOTIFICATION_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))]}
-              className="sm:w-60 [&_select]:h-9 [&_select]:text-sm"
+              size="sm" className="sm:w-60"
             />
           </div>
 

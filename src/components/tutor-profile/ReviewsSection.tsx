@@ -163,7 +163,7 @@ export function ReviewsSection({ tutor }: { tutor: Tutor }) {
                   { value: "highest", label: "Highest rated" },
                   { value: "lowest", label: "Lowest rated" },
                 ]}
-                className="w-40 [&_select]:h-9 [&_select]:text-sm"
+                size="sm" className="w-40"
               />
             </label>
           </div>

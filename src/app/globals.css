@@ -139,6 +139,8 @@
   --animate-accordion-up: accordion-up 200ms var(--ease-out-quint);
 
   @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+  --animate-select-in: select-in 170ms var(--ease-out-quint) both;
+  @keyframes select-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
   @keyframes overlay-out { from { opacity: 1; } to { opacity: 0; } }
   @keyframes dialog-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)) scale(0.98); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
   @keyframes dialog-out { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, calc(-50% + 6px)) scale(0.99); } }
