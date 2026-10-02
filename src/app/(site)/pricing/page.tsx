@@ -5,7 +5,7 @@ import { RefundCalculator } from "@/components/marketing/RefundCalculator";
 import { cn } from "@/lib/utils";
 import { AreaNav } from "@/components/content/AreaNav";
 import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
-import { CreditPacks, PlanCards } from "@/components/marketing/Pricing";
+import { CreditPacks, PlanCards, PlanComparison } from "@/components/marketing/Pricing";
 import { EarningsCalculator } from "@/components/marketing/EarningsCalculator";
 import { medianRate, rateRange } from "@/components/content/insights";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
@@ -281,24 +281,31 @@ export default function PricingPage() {
       </Section>
 
       <Section id="tutors" tone="canvas" className="scroll-mt-36">
-        <SectionHeading
-          eyebrow="For tutors"
-          title="Plans for every stage of your practice."
-          description="Start free. Move to a paid plan when a lower commission and more job credits pay for themselves — the calculator below shows exactly when."
-          align="center"
-        />
-        <PlanCards />
-        <Reveal>
-          <p className="mx-auto mt-8 flex max-w-2xl items-start justify-center gap-2 text-center text-sm leading-relaxed text-muted">
-            <Scale className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
-            Plans never change your position in search or your match score. Every tutor is ranked by the same transparent factors.
-          </p>
-        </Reveal>
-        <div className="mt-14">
-          <Reveal>
-            <CreditPacks />
+        <div className="mb-10 flex flex-col gap-6 lg:mb-12 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeading
+            className="mb-0 lg:mb-0"
+            eyebrow="For tutors"
+            title="Plans for every stage of your practice."
+            accent={4}
+            description="Start free. Move to a paid plan when a lower commission and more job credits pay for themselves — the calculator below shows exactly when."
+          />
+          <Reveal delay={0.1} className="shrink-0">
+            <ArrowLink href="#calculator">Estimate your earnings</ArrowLink>
           </Reveal>
         </div>
+        <PlanCards exampleCents={exampleRate} />
+        <Reveal>
+          <p className="mt-6 flex items-start justify-center gap-2 text-center text-[14px] leading-relaxed text-ink-2">
+            <Scale className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+            Plans never change your position in search or your match score — every tutor is ranked by the same factors.
+          </p>
+        </Reveal>
+        <Reveal className="mt-12">
+          <PlanComparison exampleCents={exampleRate} />
+        </Reveal>
+        <Reveal className="mt-6">
+          <CreditPacks />
+        </Reveal>
         <div id="calculator" className="mt-14 scroll-mt-40">
           <Reveal>
             <EarningsCalculator defaultRateCents={median || 5000} />
