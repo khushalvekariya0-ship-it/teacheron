@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
-  Music, Route, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
+  Music, Route, Search, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ import { SubjectSearch } from "./SubjectSearch";
 import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
+import { DEFAULT_WEIGHTS, FACTOR_LABEL } from "@/lib/matching";
 import { useTutors } from "@/lib/store/hooks";
 
 /* ═══ 1 · Hero — the promise, two actions, and a real tutoring moment ═══════════════════ */
@@ -355,7 +356,7 @@ export function SubjectTiles() {
   );
 }
 
-/* ═══ 4 · How it works — three bordered cards: number, promise, short text, picture ═══ */
+/* ═══ 4 · How it works — a scroll story: four steps, one pinned picture ════════════ */
 
 /** Stacked tutor cards. Real tutors when there are any; otherwise neutral placeholders (no made-up names or ratings). */
 function TutorStack() {
@@ -447,68 +448,254 @@ function VideoCall() {
   );
 }
 
-/** One photo with earlier "weeks" layered behind it. */
-function ProgressLayers() {
+/** Step 1 picture: a search with filters, and the real weights used to rank matches. */
+function SearchMock() {
+  const factors = (Object.keys(DEFAULT_WEIGHTS) as (keyof typeof DEFAULT_WEIGHTS)[]).slice(0, 5);
   return (
-    <div className="relative h-full" aria-hidden>
-      {[0, 1, 2].map((i) => (
-        <motion.div
-          key={i}
-          initial={{ x: (2 - i) * 22, opacity: i === 2 ? 0 : 0.6 }}
-          whileInView={{ x: 0, opacity: 1 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.15 + (2 - i) * 0.08 }}
-          className="absolute bottom-6 top-0 right-0 overflow-hidden rounded-lg border-2 border-surface bg-canvas shadow-md"
-          style={{ left: i * 22, zIndex: i }}
-        >
-          <Image src="/images/online-class.jpg" alt="" fill sizes="(min-width: 1024px) 320px, 90vw" className="object-cover object-[60%_40%]" />
-        </motion.div>
-      ))}
+    <div className="flex h-full flex-col gap-4" aria-hidden>
+      <div className="flex items-center gap-3 rounded-xl border border-line bg-surface p-2.5 pl-4 shadow-sm">
+        <Search className="size-5 shrink-0 text-muted" />
+        <span className="flex-1 text-[15px] font-medium text-ink">Algebra</span>
+        <span className="rounded-lg bg-brand-gradient px-3.5 py-2 text-[13px] font-semibold text-white">Search</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {["9th grade", "Online", "Weekday evenings", "Budget set"].map((c) => (
+          <span key={c} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand-50 px-2.5 py-1.5 text-[13px] font-medium text-brand">
+            <Check className="size-3.5" /> {c}
+          </span>
+        ))}
+      </div>
+      <div className="mt-auto rounded-xl border border-line bg-surface p-5 shadow-sm">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">How matches are ranked</p>
+        <ul className="mt-4 space-y-2.5">
+          {factors.map((k) => (
+            <li key={k} className="flex items-center gap-3 text-[13px]">
+              <span className="w-28 shrink-0 text-ink-2">{FACTOR_LABEL[k]}</span>
+              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-line">
+                <span className="block h-full rounded-full bg-brand-gradient" style={{ width: `${(DEFAULT_WEIGHTS[k] / 30) * 100}%` }} />
+              </span>
+              <span className="w-9 text-right tabular-nums text-muted">{DEFAULT_WEIGHTS[k]}%</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-[12.5px] text-muted">+ 3 more factors · paid placement is never one of them</p>
+      </div>
     </div>
   );
 }
 
-const STEPS: { title: string; body: string; badge: string; visual: React.ComponentType }[] = [
+const SLOT_PATTERN = [
+  [true, false, true],
+  [false, true, true],
+  [true, true, false],
+  [false, true, true],
+  [true, false, true],
+];
+
+/** Step 3 picture: open times in a week grid (no real times or prices) and the trial / cancellation facts. */
+function BookingMock() {
+  return (
+    <div className="flex h-full flex-col gap-4" aria-hidden>
+      <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[15px] font-semibold text-ink">Pick a time</p>
+          <span className="text-[12px] text-muted">Shown in your time zone</span>
+        </div>
+        <div className="mt-4 grid grid-cols-[auto_repeat(5,minmax(0,1fr))] gap-1.5 text-center">
+          <span />
+          {["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
+            <span key={d} className="pb-1 text-[12px] font-medium text-muted">
+              {d}
+            </span>
+          ))}
+          {["Morning", "Afternoon", "Evening"].map((band, j) => (
+            <React.Fragment key={band}>
+              <span className="pr-2 text-left text-[11.5px] leading-8 text-muted">{band}</span>
+              {SLOT_PATTERN.map((day, i) => {
+                const picked = i === 3 && j === 1;
+                return <span key={i} className={cn("h-8 rounded-md", picked ? "bg-brand-gradient shadow-sm" : day[j] ? "border border-brand/25 bg-brand-50" : "bg-canvas")} />;
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      <div className="mt-auto grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+          <Gift className="size-5 text-brand" />
+          <p className="mt-3 text-[14.5px] font-semibold text-ink">Trial lesson</p>
+          <p className="mt-0.5 text-[12.5px] leading-snug text-muted">Free or low-cost with many tutors</p>
+        </div>
+        <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+          <ShieldCheck className="size-5 text-brand" />
+          <p className="mt-3 text-[14.5px] font-semibold text-ink">Free cancellation</p>
+          <p className="mt-0.5 text-[12.5px] leading-snug text-muted">Up to {DEFAULT_POLICY.freeCancellationHours} hours before</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Step 4 picture: the lesson on a video call, and what's kept after it. */
+function LearnMock() {
+  return (
+    <div className="relative h-full" aria-hidden>
+      <VideoCall />
+      <div className="absolute left-0 top-0 z-10 rounded-xl border border-line bg-surface/95 p-4 shadow-lg backdrop-blur">
+        <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-muted">After every lesson</p>
+        <ul className="mt-2.5 space-y-1.5 text-[13.5px] font-medium text-ink">
+          {["Lesson notes", "Homework", "Goal progress"].map((x) => (
+            <li key={x} className="flex items-center gap-2">
+              <Check className="size-4 text-success" /> {x}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+const HOW_STEPS: { label: string; title: string; body: string; points: string[]; visual: React.ComponentType; mobileHeight: string }[] = [
   {
-    title: "Find your tutor.",
-    body: "Search by subject, grade, schedule and budget. Every result shows why the tutor is a good fit — never paid placement.",
-    badge: "bg-[#2f7bff]",
+    label: "Search",
+    title: "Tell us what you need",
+    body: "Search by subject, grade, schedule and budget — or answer two quick questions and get a ranked shortlist with the reasons each tutor fits.",
+    points: ["Free to search, no account needed", "Ranked on 8 open factors — never paid placement"],
+    visual: SearchMock,
+    mobileHeight: "h-[440px]",
+  },
+  {
+    label: "Compare",
+    title: "Compare real profiles",
+    body: "See each tutor's experience, rate, availability and reviews, and send a message with your questions before you book.",
+    points: ["Badges appear only once a check is complete", "Reviews come only from completed lessons"],
     visual: TutorStack,
+    mobileHeight: "h-[330px]",
   },
   {
-    title: "Start learning.",
-    body: "Book a trial at a real opening in your time zone. Your tutor shapes every lesson around your goals from day one.",
-    badge: "bg-[#4b66f5]",
-    visual: VideoCall,
+    label: "Book",
+    title: "Book a trial lesson",
+    body: "Pick a real opening in your time zone. Many tutors offer a free or low-cost first lesson, so you can check the fit before you commit.",
+    points: [`Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours} hours before`, "Pay per lesson — no subscription for families"],
+    visual: BookingMock,
+    mobileHeight: "h-[460px]",
   },
   {
-    title: "Grow with every lesson.",
-    body: "Choose how often you meet, keep notes and goals in one place, and watch your confidence build week by week.",
-    badge: "bg-[#7552f0]",
-    visual: ProgressLayers,
+    label: "Learn",
+    title: "Learn and see progress",
+    body: "Meet online with a secure video link or in person. Notes, homework and goals stay in your dashboard after every lesson.",
+    points: [`Reschedule up to ${DEFAULT_POLICY.rescheduleMinHours} hours before a lesson`, "Parents see their child's lessons and progress"],
+    visual: LearnMock,
+    mobileHeight: "h-[340px]",
   },
 ];
 
 export function HowItWorks() {
+  const [active, setActive] = React.useState(0);
+  const step = HOW_STEPS[active];
   return (
     <Section>
-      <SectionHeading title="How TutorLink works:" className="mb-8 lg:mb-10" />
-      <Stagger className="grid gap-5 lg:grid-cols-3" stagger={0.1}>
-        {STEPS.map((s, i) => (
-          <StaggerItem key={s.title} className="h-full">
-            <article className="flex h-full flex-col overflow-hidden rounded-lg border border-ink/25 bg-surface">
-              <div className="px-6 pt-7 sm:px-8 sm:pt-8">
-                <span className={cn("grid size-10 place-items-center rounded-md font-heading text-[22px] font-bold text-white", s.badge)}>{i + 1}</span>
-                <h3 className="mt-6 font-heading text-[30px] font-bold leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">{s.title}</h3>
-                <p className="mt-4 max-w-md text-[15.5px] leading-relaxed text-ink-2">{s.body}</p>
+      <div className="mb-12 flex flex-col gap-6 lg:mb-16 lg:flex-row lg:items-end lg:justify-between">
+        <SectionHeading
+          className="mb-0 lg:mb-0"
+          eyebrow="How it works"
+          title="From first search to real progress"
+          accent={2}
+          description="Four simple steps — and you stay in control at every one of them."
+        />
+        <Reveal delay={0.1} className="shrink-0">
+          <ArrowLink href="/how-it-works">Read the full guide</ArrowLink>
+        </Reveal>
+      </div>
+
+      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
+        {/* Steps — the rail fills as you scroll and the current step lights up */}
+        <ol className="relative">
+          <div className="absolute bottom-[24vh] left-5 top-[24vh] hidden w-px bg-line lg:block" aria-hidden>
+            <motion.div
+              className="w-full rounded-full bg-brand-gradient"
+              animate={{ height: `${(active / (HOW_STEPS.length - 1)) * 100}%` }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </div>
+          {HOW_STEPS.map((s, i) => {
+            const on = i === active;
+            return (
+              <motion.li
+                key={s.title}
+                onViewportEnter={() => setActive(i)}
+                viewport={{ margin: "-45% 0px -45% 0px" }}
+                className="relative pb-16 last:pb-0 lg:flex lg:min-h-[48vh] lg:flex-col lg:justify-center lg:pb-0 lg:pl-16"
+              >
+                <span
+                  className={cn(
+                    "absolute left-0 top-1/2 hidden size-10 -translate-y-1/2 place-items-center rounded-full border font-heading text-[15px] font-bold transition-colors duration-300 lg:grid",
+                    i <= active ? "border-transparent bg-brand-gradient text-white shadow-md" : "border-line-strong bg-surface text-muted",
+                  )}
+                  aria-hidden
+                >
+                  {i + 1}
+                </span>
+                <p className="text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
+                  Step {i + 1} · {s.label}
+                </p>
+                <h3 className={cn("mt-2 font-heading text-[26px] font-bold leading-tight tracking-[-0.025em] transition-colors duration-300 sm:text-[30px]", on ? "text-ink" : "text-ink lg:text-ink/40")}>
+                  {s.title}
+                </h3>
+                <p className={cn("mt-3 max-w-lg text-[16px] leading-relaxed transition-colors duration-300", on ? "text-ink-2" : "text-ink-2 lg:text-ink-2/50")}>{s.body}</p>
+                <ul className="mt-5 space-y-2">
+                  {s.points.map((p) => (
+                    <li key={p} className={cn("flex items-start gap-2.5 text-[14.5px] transition-opacity duration-300", on ? "opacity-100" : "lg:opacity-50")}>
+                      <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.5} aria-hidden /> <span className="text-ink">{p}</span>
+                    </li>
+                  ))}
+                </ul>
+                {/* Phones and tablets: the picture sits under each step */}
+                <div className={cn("mt-8 rounded-2xl border border-line bg-canvas p-5 lg:hidden", s.mobileHeight)}>
+                  <s.visual />
+                </div>
+              </motion.li>
+            );
+          })}
+        </ol>
+
+        {/* Wide screens: one pinned panel whose picture follows the step you're reading */}
+        <div className="hidden lg:block">
+          <div className="sticky top-28">
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_24px_60px_-32px_rgb(15_23_42/0.35)]">
+              <div className="flex items-center justify-between border-b border-line px-6 py-4">
+                <p className="text-[13.5px] font-semibold text-ink">
+                  Step {active + 1} of {HOW_STEPS.length} <span className="font-normal text-muted">· {step.title}</span>
+                </p>
+                <span className="flex gap-1.5" aria-hidden>
+                  {HOW_STEPS.map((s, i) => (
+                    <span key={s.title} className={cn("h-1.5 rounded-full transition-all duration-300", i === active ? "w-6 bg-brand-gradient" : "w-1.5 bg-line-strong")} />
+                  ))}
+                </span>
               </div>
-              <div className="mt-auto h-[270px] px-6 pt-8 sm:px-8">
-                <s.visual />
+              <div className="relative h-[460px] bg-canvas/60">
+                {HOW_STEPS.map((s, i) => (
+                  <div
+                    key={s.title}
+                    className={cn("absolute inset-7 transition-[opacity,transform] duration-500 ease-out", i === active ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0")}
+                    aria-hidden={i !== active}
+                  >
+                    <s.visual />
+                  </div>
+                ))}
               </div>
-            </article>
-          </StaggerItem>
-        ))}
-      </Stagger>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Reveal className="mt-14 flex flex-col items-center gap-3 text-center lg:mt-20">
+        <Button asChild variant="brand" size="lg">
+          <Link href="/tutors">
+            Start with step one <ArrowRight />
+          </Link>
+        </Button>
+        <p className="text-[13.5px] text-muted">Free to search · No account needed to browse</p>
+      </Reveal>
     </Section>
   );
 }
