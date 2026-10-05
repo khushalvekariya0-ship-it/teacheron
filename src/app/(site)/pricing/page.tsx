@@ -82,6 +82,7 @@ export default function PricingPage() {
   return (
     <>
       <section className="relative isolate border-b border-line bg-page">
+        <div className="page-glow pointer-events-none absolute inset-0 -z-10" aria-hidden />
         <div className="pointer-events-none absolute inset-0 -z-10 bg-line-grid [mask-image:radial-gradient(ellipse_80%_70%_at_50%_0%,black_20%,transparent_75%)]" aria-hidden />
         <div className="container-page grid grid-cols-1 items-center gap-12 pb-14 pt-12 sm:pt-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-20 lg:pt-20">
           <div>

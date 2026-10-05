@@ -569,7 +569,7 @@ export function ProfileStep({
         <div className="flex items-center gap-2">
           <label
             htmlFor="photo-input"
-            className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink shadow-xs transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-navy hover:bg-canvas"
+            className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-full border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink shadow-xs transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-navy hover:bg-canvas"
           >
             <ImageUp className="size-3.5" aria-hidden /> {photoName ? "Replace" : "Upload photo"}
             <input

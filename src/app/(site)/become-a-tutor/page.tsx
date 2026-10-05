@@ -111,9 +111,9 @@ function TutorWhy() {
             <div className="rounded-xl border border-line bg-page p-4">
               <p className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted">Trial lesson</p>
               <p className="mt-2.5 flex gap-1.5 text-[12.5px] font-semibold">
-                <span className="rounded-md border border-line px-2 py-0.5 text-ink-2">Free</span>
-                <span className="rounded-md border border-line px-2 py-0.5 text-ink-2">Reduced</span>
-                <span className="rounded-md border border-line px-2 py-0.5 text-ink-2">Off</span>
+                <span className="rounded-full border border-line px-2 py-0.5 text-ink-2">Free</span>
+                <span className="rounded-full border border-line px-2 py-0.5 text-ink-2">Reduced</span>
+                <span className="rounded-full border border-line px-2 py-0.5 text-ink-2">Off</span>
               </p>
             </div>
           </div>

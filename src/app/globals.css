@@ -54,6 +54,8 @@
   --color-brand-press: #3730a3;
   --color-brand-soft: #eef0ff;
   --color-brand-50: #f6f7ff;
+  /* Deep indigo for the one bold brand band on a page (white text 14:1). */
+  --color-brand-deep: #1e1b4b;
 
   /* "navy" is the interactive neutral across the app (primary buttons, selected states). It is ink. */
   --color-navy: #09090b;
@@ -261,6 +263,21 @@
   color: var(--color-ink-soft);
 }
 
+/* Soft brand light from the top of a hero: indigo in the middle, a touch of sky and violet at the sides.
+   Paint it on an absolutely positioned layer behind the content. */
+@utility hero-glow {
+  background-image:
+    radial-gradient(ellipse 45% 60% at 50% -8%, rgb(99 102 241 / 0.2), transparent 70%),
+    radial-gradient(ellipse 30% 45% at 10% 0%, rgb(56 189 248 / 0.14), transparent 70%),
+    radial-gradient(ellipse 30% 45% at 90% 4%, rgb(167 139 250 / 0.16), transparent 70%);
+}
+/* The same light, quieter, for inner page heroes (text sits on the left). */
+@utility page-glow {
+  background-image:
+    radial-gradient(ellipse 45% 70% at 18% -10%, rgb(99 102 241 / 0.13), transparent 70%),
+    radial-gradient(ellipse 35% 60% at 92% 0%, rgb(56 189 248 / 0.1), transparent 70%);
+}
+
 /* Small pill label above a headline: hairline border, accent dot, quiet text. */
 @utility kicker {
   display: inline-flex;
@@ -362,6 +379,24 @@
 }
 
 @utility tabular { font-variant-numeric: tabular-nums; }
+
+/* Phone only: a row of cards you swipe sideways (snapping card by card, the next one peeking in).
+   From 640px up the element's own grid classes take over. */
+@utility swipe-row {
+  @media (width < 640px) {
+    display: flex !important;
+    gap: 0.875rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+    padding-bottom: 0.25rem;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+    & > * { flex: 0 0 84%; min-width: 0; scroll-snap-align: start; scroll-margin-inline: 1rem; }
+  }
+}
 
 @utility eyebrow {
   font-size: 0.8125rem;

@@ -211,18 +211,19 @@ export function TutorDirectory() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: EASE }}
-            className="mt-4 text-balance font-heading text-[2.1rem] font-bold leading-[1.06] tracking-[-0.03em] text-ink sm:text-[2.6rem] lg:text-[3rem]"
+            className="mt-4 text-balance font-heading text-[2.1rem] font-bold leading-[1.05] tracking-[-0.04em] text-ink sm:text-[2.6rem] lg:text-[3rem]"
           >
-            {title.replace(/private lessons$/, "")}
+            {/* Non-breaking hyphen so "in-person" never splits across lines */}
+            {title.replace(/private lessons$/, "").replace("in-person", "in\u2011person")}
             <span className="text-gradient">private lessons</span>
           </motion.h1>
-          <p className="mt-4 max-w-2xl text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
+          <p className="mt-4 max-w-2xl text-[16px] leading-relaxed text-muted sm:text-[17px]">
             Choose a tutor who teaches your subject at your level, on your schedule. Results are ordered by how well each tutor fits your filters.
           </p>
         </div>
         <ul className="flex flex-wrap gap-2 lg:max-w-[480px] lg:shrink-0 lg:justify-end" aria-label="How search works">
           {TRUST_TAGS.map((t) => (
-            <li key={t.label} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-2">
+            <li key={t.label} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-2 shadow-xs">
               <t.icon className="size-4 text-brand" aria-hidden /> {t.label}
             </li>
           ))}

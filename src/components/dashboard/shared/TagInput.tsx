@@ -61,7 +61,7 @@ export function TagInput({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
-            className="inline-flex max-w-full items-center gap-1 rounded-md border border-line bg-canvas py-0.5 pl-2 pr-0.5 text-[13px] text-ink-2"
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-canvas py-0.5 pl-2 pr-0.5 text-[13px] text-ink-2"
           >
             <span className="truncate">{tag}</span>
             <button

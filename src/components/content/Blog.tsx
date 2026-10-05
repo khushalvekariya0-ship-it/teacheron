@@ -21,10 +21,10 @@ export function PostCover({ post, size = "md", className }: { post: BlogPost; si
   const style = CATEGORY_STYLE[post.category];
   const Icon = style.icon;
   return (
-    <div className={cn("relative overflow-hidden border-b border-line bg-canvas", size === "lg" ? "aspect-[16/10] lg:aspect-auto lg:h-full lg:border-b-0 lg:border-r" : "aspect-[16/9]", className)} aria-hidden>
+    <div className={cn("relative overflow-hidden border-b border-line bg-brand-50", size === "lg" ? "aspect-[16/10] lg:aspect-auto lg:h-full lg:border-b-0 lg:border-r" : "aspect-[16/9]", className)} aria-hidden>
       <div className={cn("absolute inset-0 opacity-90 mask-radial transition-transform duration-700 ease-out group-hover:scale-[1.04]", style.texture)} />
       <div className="absolute inset-0 grid place-items-center">
-        <span className={cn("grid place-items-center rounded-2xl border border-line bg-surface text-navy shadow-sm transition-transform duration-500 group-hover:-translate-y-1", size === "lg" ? "size-20" : "size-14")}>
+        <span className={cn("grid place-items-center rounded-2xl border border-line bg-surface text-brand shadow-md transition-transform duration-500 group-hover:-translate-y-1", size === "lg" ? "size-20" : "size-14")}>
           <Icon className={size === "lg" ? "size-8" : "size-6"} strokeWidth={1.5} />
         </span>
       </div>
@@ -45,7 +45,7 @@ export function PostMeta({ post, className }: { post: BlogPost; className?: stri
 
 export function PostCard({ post }: { post: BlogPost }) {
   return (
-    <article data-spotlight className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xs transition-[border-color,box-shadow] duration-300 hover:border-line-strong hover:shadow-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-navy has-[:focus-visible]:ring-offset-2">
+    <article data-spotlight className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-xs transition-[border-color,box-shadow] duration-300 hover:border-line-strong hover:shadow-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-navy has-[:focus-visible]:ring-offset-2">
       <PostCover post={post} />
       <div className="flex flex-1 flex-col p-5">
         <PostMeta post={post} />

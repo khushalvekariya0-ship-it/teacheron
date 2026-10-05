@@ -195,7 +195,7 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
         {groups.map((g) => (
           <section key={g.day} aria-label={dayLabel(g.day)}>
             <div className="sticky top-0 z-10 flex justify-center pb-2 pt-3">
-              <span className="rounded-md border border-line bg-surface px-3 py-0.5 text-[11.5px] font-semibold text-ink-2">{dayLabel(g.day)}</span>
+              <span className="rounded-full border border-line bg-surface px-3 py-0.5 text-[11.5px] font-semibold text-ink-2">{dayLabel(g.day)}</span>
             </div>
             <ul className="space-y-1.5">
               <AnimatePresence initial={false}>

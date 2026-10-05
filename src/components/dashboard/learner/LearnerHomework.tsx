@@ -179,7 +179,7 @@ function HomeworkInner({ me }: { me: User }) {
                                 </p>
                                 {h.submission.body && <p className="mt-1 whitespace-pre-line text-[13.5px] text-ink-2">{h.submission.body}</p>}
                                 {h.submission.fileName && (
-                                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-[12.5px] text-ink-2">
+                                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[12.5px] text-ink-2">
                                     <FileText className="size-3.5 text-subtle" aria-hidden /> {h.submission.fileName}
                                   </p>
                                 )}
@@ -326,7 +326,7 @@ function SubmitForm({ homework, onDone, onSubmitted }: { homework: Homework; onD
           />
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {fileName ? (
-              <span className="inline-flex max-w-full items-center gap-2 rounded-md border border-line bg-surface py-1 pl-2.5 pr-1 text-[13px] text-ink-2">
+              <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-surface py-1 pl-2.5 pr-1 text-[13px] text-ink-2">
                 <Paperclip className="size-3.5 shrink-0 text-subtle" aria-hidden />
                 <span className="truncate">{fileName}</span>
                 <button type="button" onClick={() => form.setValue("fileName", undefined, { shouldValidate: true })} className="grid size-6 place-items-center rounded text-muted hover:bg-sunken hover:text-ink" aria-label={`Remove ${fileName}`}>

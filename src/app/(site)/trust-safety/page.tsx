@@ -45,7 +45,7 @@ export default function TrustSafetyPage() {
         <Reveal delay={0.4}>
           <nav aria-label="On this page" className="mt-10 flex flex-wrap gap-2">
             {JUMP.map((l) => (
-              <a key={l.href} href={l.href} className="rounded-lg border border-line-strong px-3.5 py-1.5 text-[14px] font-semibold text-ink transition-colors hover:bg-ink hover:text-on-ink">
+              <a key={l.href} href={l.href} className="rounded-full border border-line-strong bg-surface px-4 py-1.5 text-[14px] font-medium text-ink shadow-xs transition-colors hover:border-ink">
                 {l.label}
               </a>
             ))}

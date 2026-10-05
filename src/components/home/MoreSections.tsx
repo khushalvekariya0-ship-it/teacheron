@@ -9,38 +9,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Marquee, Reveal, Stagger, StaggerItem } from "@/components/motion";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Section, SectionHeading, ArrowLink } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
-import { SUBJECTS, SUBJECT_BY_SLUG } from "@/lib/data/catalog";
+import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
 import { BLOG_POSTS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
-
-/* ═══ Subject strip — a moving band of every subject (Superprof / Chegg) ═════════ */
-
-export function SubjectMarquee() {
-  const half = Math.ceil(SUBJECTS.length / 2);
-  const rows = [SUBJECTS.slice(0, half), SUBJECTS.slice(half)];
-  return (
-    <section aria-label="Subjects taught on TutorLink" className="border-b border-line bg-surface py-6">
-      <div className="space-y-3">
-        {rows.map((row, r) => (
-          <Marquee key={r} duration={r === 0 ? 70 : 80} reverse={r === 1}>
-            {row.map((s) => (
-              <Link
-                key={s.slug}
-                href={`/subjects/${s.slug}`}
-                className="whitespace-nowrap rounded-full border border-line bg-surface px-4 py-2 text-[14px] font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-brand"
-              >
-                {s.name}
-              </Link>
-            ))}
-          </Marquee>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 /* ═══ Tutoring for every goal — a bento grid of goals, each with a small picture ══════════ */
 
@@ -68,9 +42,9 @@ function PlanTimeline() {
 function PacePath() {
   return (
     <div className="flex items-center gap-1.5 text-[12.5px] font-medium" aria-hidden>
-      <span className="rounded-md border border-line bg-page px-2 py-1 text-ink-2">Fill gaps</span>
+      <span className="rounded-full border border-line bg-page px-2 py-1 text-ink-2">Fill gaps</span>
       <ArrowRight className="size-3.5 text-muted" />
-      <span className="rounded-md border border-line bg-page px-2 py-1 text-ink-2">On track</span>
+      <span className="rounded-full border border-line bg-page px-2 py-1 text-ink-2">On track</span>
       <ArrowRight className="size-3.5 text-muted" />
       <span className="rounded-md bg-brand-gradient px-2 py-1 text-white">Ahead</span>
     </div>
@@ -185,7 +159,7 @@ function GoalCard({ goal }: { goal: Goal }) {
               <li key={slug}>
                 <Link
                   href={`/tutors?subject=${slug}`}
-                  className="inline-flex rounded-md border border-line px-2.5 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
+                  className="inline-flex rounded-full border border-line px-2.5 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
                 >
                   {SUBJECT_BY_SLUG[slug]?.name ?? slug}
                 </Link>
@@ -206,7 +180,7 @@ function GoalCard({ goal }: { goal: Goal }) {
 
 export function Programs() {
   return (
-    <Section tone="canvas">
+    <Section>
       <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
         <SectionHeading
           className="mb-0 lg:mb-0"
@@ -220,7 +194,7 @@ export function Programs() {
         </Reveal>
       </div>
 
-      <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-5" stagger={0.06}>
+      <Stagger className="swipe-row grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-5" stagger={0.06}>
         {GOALS.map((g) => (
           <StaggerItem key={g.title} className={cn("h-full", g.wide && "md:col-span-2")}>
             <GoalCard goal={g} />
@@ -368,7 +342,7 @@ function ModeCard({ mode }: { mode: Mode }) {
 
 export function LessonModes() {
   return (
-    <Section>
+    <Section tone="canvas">
       <SectionHeading
         align="center"
         eyebrow="Online or in person"
@@ -492,7 +466,7 @@ function LearnerCard({ learner: l }: { learner: Learner }) {
             <li key={slug}>
               <Link
                 href={`/tutors?subject=${slug}`}
-                className="inline-flex rounded-md border border-line px-2.5 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
+                className="inline-flex rounded-full border border-line px-2.5 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
               >
                 {SUBJECT_BY_SLUG[slug]?.name ?? slug}
               </Link>
@@ -509,7 +483,7 @@ function LearnerCard({ learner: l }: { learner: Learner }) {
 
 export function Audiences() {
   return (
-    <Section tone="brand">
+    <Section>
       <SectionHeading
         align="center"
         eyebrow="Built for every learner"
@@ -517,7 +491,7 @@ export function Audiences() {
         accent={1}
         description="Parents stay in the loop, students get help that fits their week, and adults learn at their own pace."
       />
-      <Stagger className="grid gap-5 md:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
+      <Stagger className="swipe-row grid gap-5 md:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
         {LEARNERS.map((l, i) => (
           <StaggerItem key={l.id} className={cn("h-full", i === 2 && "md:col-span-2 lg:col-span-1")}>
             <LearnerCard learner={l} />
@@ -541,14 +515,14 @@ export function Resources() {
   const posts = [...BLOG_POSTS].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   if (posts.length === 0) return null;
   return (
-    <Section>
+    <Section tone="canvas">
       <SectionHeading eyebrow="Learning resources" title="Guides for parents and students" description="Practical advice on choosing a tutor, preparing for exams and building good study habits." action={<ArrowLink href="/blog">All articles</ArrowLink>} />
-      <Stagger className="grid gap-5 md:grid-cols-3" stagger={0.08}>
+      <Stagger className="swipe-row grid gap-5 md:grid-cols-3" stagger={0.08}>
         {posts.map((p) => (
           <StaggerItem key={p.slug}>
             <article className="group relative flex h-full flex-col rounded-2xl border border-line bg-surface p-6 transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-lg">
               <div className="flex items-center justify-between">
-                <span className={cn("rounded-md px-2.5 py-1 text-[12.5px] font-semibold", CATEGORY_TINT[p.category] ?? "bg-canvas text-ink-2")}>{p.category}</span>
+                <span className={cn("rounded-full px-2.5 py-1 text-[12.5px] font-medium", CATEGORY_TINT[p.category] ?? "bg-canvas text-ink-2")}>{p.category}</span>
                 <span className="inline-flex items-center gap-1.5 text-[13px] text-muted">
                   <BookOpenText className="size-4" aria-hidden /> {p.readMinutes} min read
                 </span>
@@ -558,8 +532,8 @@ export function Resources() {
                   {p.title}
                 </Link>
               </h3>
-              <p className="mt-2 flex-1 text-[15px] leading-relaxed text-ink-2">{p.excerpt}</p>
-              <span className="mt-5 inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand">
+              <p className="mt-2 flex-1 text-[15px] leading-relaxed text-muted">{p.excerpt}</p>
+              <span className="mt-5 inline-flex items-center gap-1.5 text-[14.5px] font-medium text-brand">
                 Read the guide <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
               </span>
             </article>

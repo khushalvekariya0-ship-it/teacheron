@@ -187,6 +187,7 @@ export function PageHero({
   );
   return (
     <section className={cn("relative isolate border-b border-line", tone === "canvas" ? "bg-canvas" : "bg-page")}>
+      <div className="page-glow pointer-events-none absolute inset-0 -z-10" aria-hidden />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-line-grid [mask-image:radial-gradient(ellipse_80%_70%_at_50%_0%,black_20%,transparent_75%)]" aria-hidden />
       <div
         className={cn(

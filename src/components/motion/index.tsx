@@ -122,7 +122,8 @@ export function WordReveal({
 }) {
   const ref = React.useRef<HTMLElement>(null);
   const words = text.split(" ");
-  const n = Math.min(accent, words.length);
+  // Always keep at least one word in ink, so a short title never turns fully grey.
+  const n = Math.min(accent, Math.max(words.length - 1, 0));
   const main = words.slice(0, words.length - n).join(" ");
   const tail = words.slice(words.length - n).join(" ");
   useGSAP(
@@ -169,7 +170,7 @@ export function WordReveal({
   ) : (
     text
   );
-  return React.createElement(as, { key: `${text}|${n}`, ref, "data-split": "", className }, content);
+  return React.createElement(as, { key: `${text}|${n}`, ref, "data-split": "", className: cn(className, gradient && "text-aurora") }, content);
 }
 
 /** Counts up to a number when it first enters the viewport. Use only for real, verifiable values. */

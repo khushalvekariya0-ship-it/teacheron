@@ -9,7 +9,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
   Music, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
-  Lock,
+  Lock, MessagesSquare, Search,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,22 +29,25 @@ import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
 import { useTutors } from "@/lib/store/hooks";
 
-/* ═══ 1 · Hero — the promise, two actions, and a real tutoring moment ═══════════════════ */
-
-const HERO_FEATURES = [
-  { icon: BadgeCheck, title: "Identity checks", body: "Badge shown once verified" },
-  { icon: CalendarDays, title: "Flexible times", body: "Book times that suit you" },
-  { icon: Gift, title: "Free trials", body: "Offered by many tutors" },
-  { icon: Wallet, title: "Pay per lesson", body: "No subscription for families" },
-];
+/* ═══ 1 · Hero — what TutorLink is, a search to start, and the four steps that follow ═══ */
 
 const HERO_POPULAR = SUBJECTS.filter((s) => s.popular).slice(0, 6);
+
+const HERO_PROMISES = ["Free to search", "No subscription for families", "Badges only after checks"];
 
 /** Three real-life lesson photos: online, one-on-one at a table, and in person. Photos only — no example data. */
 const HERO_PHOTOS = [
   { src: "/images/online-lesson.jpg", label: "Online", pos: "object-[60%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
   { src: "/images/hero-tutoring.jpg", label: "1-on-1, at your pace", pos: "object-[64%_40%]", cls: "col-span-12 md:col-span-6 aspect-[4/3] sm:aspect-[16/11]" },
   { src: "/images/in-person.jpg", label: "In person", pos: "object-[70%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
+];
+
+/** What a visitor does on TutorLink, in order. Each step gets its own soft colour. */
+const HERO_STEPS = [
+  { icon: Search, title: "Search", body: "Pick a subject, grade, schedule and budget. Searching is free.", tint: "bg-brand-soft text-brand" },
+  { icon: MessagesSquare, title: "Compare & message", body: "Read profiles, reviews from real lessons and open times. Ask questions first.", tint: "bg-sky-soft text-sky" },
+  { icon: CalendarDays, title: "Book a lesson", body: "Choose a time that suits you. Many tutors offer a free trial.", tint: "bg-violet-soft text-violet" },
+  { icon: LineChart, title: "Learn & grow", body: "Online or in person, with notes and progress after every lesson.", tint: "bg-teal-soft text-teal" },
 ];
 
 export function Hero() {
@@ -66,7 +69,8 @@ export function Hero() {
 
   return (
     <section ref={root} className="relative isolate overflow-clip bg-page">
-      {/* Faint grid fading out from the top */}
+      {/* Soft brand light from the top, over a faint grid */}
+      <div className="hero-glow pointer-events-none absolute inset-x-0 top-0 -z-10 h-[860px]" aria-hidden />
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[720px] bg-line-grid [mask-image:radial-gradient(ellipse_70%_75%_at_50%_0%,black_25%,transparent_75%)]" aria-hidden />
 
       <div className="container-page flex flex-col items-center pt-14 text-center sm:pt-20 lg:pt-24">
@@ -75,7 +79,7 @@ export function Hero() {
             <span className="absolute inset-0 animate-ping rounded-full bg-brand/60" />
             <span className="relative size-1.5 rounded-full bg-brand" />
           </span>
-          1-on-1 tutoring · online &amp; in person
+          Tutoring marketplace · online &amp; in person
         </p>
 
         <h1 className="mt-7 max-w-4xl text-balance font-heading text-[2.8rem] font-bold leading-[1] tracking-[-0.05em] text-ink sm:text-[4rem] lg:text-[4.85rem]">
@@ -84,7 +88,7 @@ export function Hero() {
         </h1>
 
         <p data-hero-in data-reveal className="mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-          Private tutoring for school subjects, test prep, languages and more. Search for free, compare tutors and book your first lesson — online or near you.
+          TutorLink connects students and families with private tutors for school subjects, test prep, languages and more. Search for free, compare tutors and book your first lesson.
         </p>
 
         <div data-hero-in data-reveal className="mt-9 w-full max-w-2xl">
@@ -97,20 +101,23 @@ export function Hero() {
             <Link
               key={s.slug}
               href={`/tutors?subject=${s.slug}`}
-              className="rounded-full border border-line bg-surface px-3 py-1 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:text-ink"
+              className="rounded-full border border-line bg-surface/80 px-3 py-1 text-[13.5px] font-medium text-ink-2 backdrop-blur transition-colors hover:border-line-strong hover:text-ink"
             >
               {s.name}
             </Link>
           ))}
         </div>
 
-        <div data-hero-in data-reveal className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14.5px]">
-          <Link href="/concierge" className="group inline-flex items-center gap-1.5 font-medium text-ink transition-colors hover:text-brand">
-            Not sure? Get matched <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
-          </Link>
-          <span className="hidden h-4 w-px bg-line-strong sm:block" aria-hidden />
-          <Link href="/how-it-works" className="group inline-flex items-center gap-1.5 font-medium text-ink transition-colors hover:text-brand">
-            How it works <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+        <div data-hero-in data-reveal className="mt-7 flex flex-col items-center gap-3">
+          <ul className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-[14px] text-ink-2">
+            {HERO_PROMISES.map((p) => (
+              <li key={p} className="inline-flex items-center gap-1.5">
+                <Check className="size-4 text-success" strokeWidth={2.6} aria-hidden /> {p}
+              </li>
+            ))}
+          </ul>
+          <Link href="/concierge" className="group inline-flex items-center gap-1.5 text-[14.5px] font-medium text-brand">
+            Not sure what you need? Get matched <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
           </Link>
         </div>
       </div>
@@ -125,21 +132,35 @@ export function Hero() {
         ))}
       </div>
 
-      {/* Feature row */}
-      <div className="container-page pb-16 pt-12 sm:pb-20">
-        <Stagger className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line" stagger={0.07}>
-          {HERO_FEATURES.map((f) => (
-            <StaggerItem key={f.title} className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:justify-center lg:px-6">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-brand shadow-xs">
-                <f.icon className="size-[18px]" strokeWidth={2} aria-hidden />
-              </span>
-              <span className="text-left">
-                <span className="block text-[15px] font-semibold tracking-[-0.01em] text-ink">{f.title}</span>
-                <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">{f.body}</span>
-              </span>
-            </StaggerItem>
-          ))}
-        </Stagger>
+      {/* How it works, at a glance: what to do, in order */}
+      <div className="container-page pb-16 pt-12 sm:pb-24 sm:pt-16">
+        <Reveal>
+          <div className="rounded-3xl border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(9_9_11/0.04),0_28px_56px_-32px_rgb(9_9_11/0.22)] sm:p-8 lg:p-10">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[13.5px] font-medium text-brand">How TutorLink works</p>
+                <h2 className="mt-1.5 font-heading text-[1.6rem] font-bold leading-tight tracking-[-0.035em] text-ink sm:text-[2rem]">From search to your first lesson in four steps</h2>
+              </div>
+              <ArrowLink href="/how-it-works" className="shrink-0">
+                See every step
+              </ArrowLink>
+            </div>
+            <Stagger as="ol" className="mt-8 grid gap-7 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0" stagger={0.08}>
+              {HERO_STEPS.map((step, i) => (
+                <StaggerItem key={step.title} className="relative lg:border-l lg:border-line lg:px-7 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0">
+                  <div className="flex items-center gap-3">
+                    <span className={cn("grid size-11 place-items-center rounded-xl", step.tint)}>
+                      <step.icon className="size-5" aria-hidden />
+                    </span>
+                    <span className="text-[12.5px] font-medium text-muted">Step {i + 1}</span>
+                  </div>
+                  <h3 className="mt-4 text-[17px] font-semibold tracking-[-0.02em] text-ink">{step.title}</h3>
+                  <p className="mt-1.5 text-[14.5px] leading-relaxed text-muted">{step.body}</p>
+                </StaggerItem>
+              ))}
+            </Stagger>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -248,10 +269,10 @@ function SubjectExplorer() {
                     <li key={s.slug}>
                       <Link
                         href={`/tutors?subject=${s.slug}`}
-                        className="group inline-flex items-center gap-2 rounded-lg border border-line bg-page px-3.5 py-2 text-[14.5px] font-medium text-ink transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
+                        className="group inline-flex items-center gap-2 rounded-full border border-line bg-page px-3.5 py-1.5 text-[14.5px] font-medium text-ink transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
                       >
                         {s.name}
-                        {n > 0 && <span className="rounded-md bg-canvas px-1.5 text-[12px] tabular-nums text-muted">{n}</span>}
+                        {n > 0 && <span className="rounded-full bg-sunken px-1.5 text-[12px] tabular-nums text-muted">{n}</span>}
                         <ArrowRight className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
                       </Link>
                     </li>
@@ -701,30 +722,33 @@ export function GetMatched() {
   };
 
   return (
-    <section aria-labelledby="match-title" className="relative isolate overflow-clip bg-canvas">
+    <section aria-labelledby="match-title" className="relative isolate overflow-clip bg-brand-deep text-white">
+      {/* Indigo light from the top right and a faint grid */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_55%_70%_at_85%_0%,rgb(99_102_241/0.45),transparent_70%),radial-gradient(ellipse_40%_60%_at_0%_100%,rgb(56_189_248/0.16),transparent_70%)]" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgb(255_255_255/0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.05)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_80%_80%_at_70%_20%,black,transparent_75%)]" aria-hidden />
       <div className="container-page grid items-center gap-12 py-16 sm:py-24 lg:grid-cols-[1fr_minmax(0,540px)] lg:gap-20 lg:py-28">
         <div>
           <Reveal>
-            <p className="kicker">
-              <Zap className="size-3.5 fill-brand text-brand" aria-hidden /> Smart tutor matching
+            <p className="kicker border-white/15 bg-white/10 text-white/85 shadow-none">
+              <Zap className="size-3.5 fill-[#a5b4fc] text-[#a5b4fc]" aria-hidden /> Smart tutor matching
             </p>
           </Reveal>
-          <h2 id="match-title" className="mt-6 font-heading text-[2.4rem] font-bold leading-[1.02] tracking-[-0.045em] text-ink sm:text-[3.25rem] lg:text-[3.75rem]">
+          <h2 id="match-title" className="mt-6 font-heading text-[2.4rem] font-bold leading-[1.02] tracking-[-0.045em] text-white sm:text-[3.25rem] lg:text-[3.75rem] [&_.text-aurora]:text-[#a5b4fc]">
             <WordReveal as="span" inView className="block" text="Find a tutor" delay={0.05} />
             <WordReveal as="span" inView gradient className="block" text="that fits you." delay={0.2} />
           </h2>
           <Reveal delay={0.1}>
-            <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-muted sm:text-[18px]">
+            <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-white/70 sm:text-[18px]">
               Answer two quick questions. We&rsquo;ll show a shortlist of tutors and explain exactly why each one matches.
             </p>
-            <ul className="mt-8 grid max-w-lg gap-3.5 text-[15.5px] text-ink-2">
+            <ul className="mt-8 grid max-w-lg gap-3.5 text-[15.5px] text-white/85">
               {[
                 { icon: Zap, text: "Takes about 2 minutes" },
                 { icon: Lock, text: "No account needed to see matches" },
                 { icon: ShieldCheck, text: "Paid placement never affects the ranking" },
               ].map((x) => (
                 <li key={x.text} className="flex items-center gap-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink shadow-xs">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/10 text-white">
                     <x.icon className="size-4" aria-hidden />
                   </span>
                   {x.text}
@@ -735,7 +759,7 @@ export function GetMatched() {
         </div>
 
         <Reveal delay={0.15}>
-          <form onSubmit={submit} noValidate className="rounded-3xl border border-line bg-surface p-6 shadow-xl sm:p-8">
+          <form onSubmit={submit} noValidate className="rounded-3xl bg-surface p-6 text-ink shadow-[0_40px_80px_-30px_rgb(0_0_0/0.55)] ring-1 ring-white/10 sm:p-8">
             <div className="flex items-center justify-between gap-4 border-b border-line pb-5">
               <p className="text-[15px] font-semibold text-ink">Get your shortlist</p>
               <span className="rounded-full bg-sunken px-2.5 py-1 text-[12.5px] font-medium text-muted">2 questions</span>
@@ -775,7 +799,7 @@ export function FeaturedTutors() {
   const tutors = useTutors();
   const featured = tutors.filter((t) => t.featured && t.verification.identity === "verified").slice(0, 4);
   return (
-    <Section tone="canvas">
+    <Section>
       <SectionHeading
         title="Meet some of our tutors"
         description="Experienced, identity-verified tutors. Featured placement never affects search ranking or match scores."
@@ -792,7 +816,7 @@ export function FeaturedTutors() {
           </Button>
         </div>
       ) : (
-        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
+        <Stagger className="swipe-row grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
           {featured.map((t) => (
             <StaggerItem key={t.id}>
               <TutorCard tutor={t} />
@@ -854,7 +878,7 @@ const ALSO_INCLUDED = [
 
 export function WhyTutorLink() {
   return (
-    <Section>
+    <Section tone="canvas">
       <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
         <SectionHeading
           className="mb-0 lg:mb-0"
@@ -869,7 +893,7 @@ export function WhyTutorLink() {
       </div>
 
       {/* Promises, in numbers */}
-      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
+      <Stagger className="swipe-row grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
         {PROMISES.map((p) => (
           <StaggerItem key={p.title} className="h-full">
             <div data-spotlight className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 sm:p-7">
@@ -927,9 +951,9 @@ export function Stories() {
   // Only real (or, in the demo, clearly labelled) stories — the section hides when there are none.
   if (SAMPLE_TESTIMONIALS.length === 0) return null;
   return (
-    <Section tone="brand">
+    <Section>
       <SectionHeading align="center" eyebrow="Stories" title="What families and students tell us" />
-      <Stagger className="grid gap-5 lg:grid-cols-3" stagger={0.08}>
+      <Stagger className="swipe-row grid gap-5 lg:grid-cols-3" stagger={0.08}>
         {SAMPLE_TESTIMONIALS.map((t) => (
           <StaggerItem key={t.name}>
             <figure className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-sm">
@@ -1000,7 +1024,7 @@ export function BecomeTutor() {
 export function HomeFaq() {
   const faqs = FAQS.filter((f) => f.audience !== "tutors").slice(0, 7);
   return (
-    <Section tone="canvas">
+    <Section>
       <div className="grid gap-10 lg:grid-cols-[1fr_1.6fr] lg:gap-20">
         <div className="lg:sticky lg:top-28 lg:self-start">
           <SectionHeading className="mb-6" eyebrow="FAQ" title="Questions? We've got answers." />

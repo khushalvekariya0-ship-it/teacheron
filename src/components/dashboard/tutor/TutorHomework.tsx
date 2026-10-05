@@ -296,7 +296,7 @@ function ReviewDialog({ hw, learner, onClose, tz }: { hw: Homework | null; learn
                 <p className="text-[12.5px] font-medium text-muted">Submitted {hw.submission ? formatDate(hw.submission.submittedAt, tz, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}</p>
                 <p className="mt-1 whitespace-pre-line leading-relaxed text-ink">{hw.submission?.body || <span className="text-muted">No written note.</span>}</p>
                 {hw.submission?.fileName && (
-                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-[13px] text-ink-2">
+                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[13px] text-ink-2">
                     <FileText className="size-3.5 text-muted" aria-hidden /> {hw.submission.fileName}
                   </p>
                 )}

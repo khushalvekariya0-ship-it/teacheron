@@ -159,7 +159,7 @@ export function DisputeCard({ dispute: d, myId, tz }: { dispute: Dispute; myId: 
           {d.evidence.length > 0 && (
             <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Evidence">
               {d.evidence.map((f) => (
-                <li key={f.name} className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-[12px] text-ink-2">
+                <li key={f.name} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[12px] text-ink-2">
                   <FileText className="size-3.5 text-muted" aria-hidden /> {f.name} <span className="text-muted">{f.sizeKb} KB</span>
                 </li>
               ))}
@@ -276,7 +276,7 @@ export function DisputeDialog({ booking, open, onOpenChange, isTutor }: { bookin
                 {files.length > 0 && (
                   <motion.ul initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2, ease: EASE }} className="mt-2 flex flex-wrap gap-1.5 overflow-hidden">
                     {files.map((f) => (
-                      <li key={f.name} className="inline-flex items-center gap-1.5 rounded-md border border-line bg-canvas py-1 pl-2 pr-1 text-[12.5px] text-ink-2">
+                      <li key={f.name} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas py-1 pl-2 pr-1 text-[12.5px] text-ink-2">
                         <FileText className="size-3.5 text-muted" aria-hidden />
                         <span className="max-w-44 truncate">{f.name}</span>
                         <span className="text-muted">{f.sizeKb} KB</span>
