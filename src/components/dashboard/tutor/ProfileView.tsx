@@ -715,7 +715,7 @@ export function ProfileView() {
           <div className="space-y-6 xl:sticky xl:top-20">
             <Card>
               <CardContent className="flex items-center gap-4">
-                <Avatar name={`${tutor.firstName} ${tutor.lastName}`} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
+                <Avatar name={`${tutor.firstName} ${tutor.lastName}`} src={tutor.photoUrl} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-semibold text-ink">
                     {tutor.firstName} {tutor.lastName}

@@ -28,6 +28,7 @@ export const PAYMENT_KIND_LABEL: Record<Payment["kind"], string> = {
   booking: "Lesson",
   subscription: "Subscription",
   lead_credits: "Lead credits",
+  study_credits: "Study Credits",
 };
 
 export const PAYMENT_ROW_META: Record<Payment["status"], { label: string; tone: Tone }> = {

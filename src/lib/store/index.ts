@@ -7,11 +7,11 @@ import type {
   Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message,
   NotificationPrefs, Payment, Payout, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch,
   Subscription, TeachingMode, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WeeklyWindow,
-  AvailabilityException, BookingRules, TrialConfig,
+  AvailabilityException, BookingRules, TrialConfig, PayMethod, WalletTransaction,
 } from "@/lib/types";
 import { DEMO_CHILDREN, DEMO_USERS, OTHER_USERS } from "@/lib/data/users";
 import { REQUIREMENTS_REFERENCE_TIME, SEED_APPLICATIONS, SEED_REQUIREMENTS } from "@/lib/data/requirements";
-import { CREDIT_PACKS, CREDITS_PER_APPLICATION, DEFAULT_FLAGS, DEFAULT_POLICY, SEED_COUPONS, TUTOR_PLANS, type BookingPolicy } from "@/lib/data/platform";
+import { CREDIT_PACKS, CREDITS_PER_APPLICATION, DEFAULT_FLAGS, DEFAULT_POLICY, PAY_METHOD_LABEL, SEED_COUPONS, STUDY_CREDIT_PACKS, TUTOR_PLANS, type BookingPolicy } from "@/lib/data/platform";
 import { TUTOR_BY_ID } from "@/lib/data/tutors";
 import { REVIEWS } from "@/lib/data/reviews";
 import { SITE } from "@/lib/site";
@@ -97,6 +97,8 @@ export interface CreateBookingInput {
   childId?: string;
   notes?: string;
   couponCode?: string;
+  /** Defaults to the card on file. "wallet" needs enough Study Credits for the whole charge. */
+  payWith?: PayMethod;
   idempotencyKey: string;
 }
 
@@ -128,6 +130,8 @@ interface Data {
   payments: Payment[];
   payouts: Payout[];
   leadTransactions: LeadTransaction[];
+  /** Study Credits: every top-up, lesson payment and refund on learner wallets. */
+  walletTransactions: WalletTransaction[];
   subscriptions: Record<string, Subscription>;
   reports: Report[];
   disputes: Dispute[];
@@ -170,6 +174,8 @@ interface Actions {
   transitionBooking(id: string, to: BookingStatus, note?: string): Result<Booking>;
   rescheduleBooking(id: string, newStartUtc: string): Result<Booking>;
   validateCoupon(code: string, subtotalCents: number): Result<{ coupon: Coupon; discountCents: number }>;
+  /** Adds Study Credits to the signed-in learner's wallet, paid by card or UPI. */
+  topUpWallet(packId: string, method: Exclude<PayMethod, "wallet">): Result<WalletTransaction>;
   submitReview(bookingId: string, rating: Review["rating"], body: string): Result<Review>;
   respondToReview(reviewId: string, body: string): Result;
   // messaging
@@ -272,6 +278,7 @@ function initialData(): Data {
     payments: seed.payments,
     payouts: seed.payouts,
     leadTransactions: seed.leadTransactions,
+    walletTransactions: [],
     subscriptions: SAMPLE_DATA ? { tut_sarah_chen: { plan: "pro", status: "active", renewsAt: new Date(now + 18 * 86_400_000).toISOString() } } : {},
     reports: seed.reports,
     disputes: seed.disputes,
@@ -325,6 +332,17 @@ export const useApp = create<AppState>()(
       const creditBalance = (tutorId: string) => get().leadTransactions.filter((t) => t.tutorId === tutorId).reduce((sum, t) => sum + t.delta, 0);
       const patchBooking = (id: string, patch: Partial<Booking>) => set((s) => ({ bookings: s.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
       const addPayment = (p: Omit<Payment, "id" | "createdAt">) => set((s) => ({ payments: [{ ...p, id: uid("pay"), createdAt: nowIso() }, ...s.payments] }));
+      const walletBalance = (userId: string) => get().walletTransactions.filter((t) => t.userId === userId).reduce((sum, t) => sum + t.deltaCents, 0);
+      const addWalletTx = (t: Omit<WalletTransaction, "id" | "createdAt">): WalletTransaction => {
+        const tx: WalletTransaction = { ...t, id: uid("wt"), createdAt: nowIso() };
+        set((s) => ({ walletTransactions: [tx, ...s.walletTransactions] }));
+        return tx;
+      };
+      /** A lesson paid with Study Credits is refunded to the wallet, never to a card. */
+      const paidFromWallet = (bookingId: string) => get().payments.some((p) => p.bookingId === bookingId && p.method === PAY_METHOD_LABEL.wallet && p.amountCents > 0);
+      const refundToWallet = (bookingId: string, userId: string, cents: number, description: string) => {
+        if (cents > 0 && paidFromWallet(bookingId)) addWalletTx({ userId, deltaCents: cents, kind: "refund", description, bookingId });
+      };
       /** Reviews live in sample data until first changed; a change copies them into the store (local copy wins). */
       const findReview = (id: string) => get().reviews.find((x) => x.id === id) ?? REVIEWS.find((x) => x.id === id);
       const upsertReview = (rev: Review) =>
@@ -615,6 +633,19 @@ export const useApp = create<AppState>()(
           const discountCents = c.kind === "percent" ? Math.round((subtotalCents * c.value) / 100) : Math.min(c.value, subtotalCents);
           return ok({ coupon: c, discountCents });
         },
+        topUpWallet(packId, method) {
+          const r = requireUser(["student", "parent"]);
+          if (!r.ok) return r;
+          if (r.data.parentalConsent?.status === "pending") return fail("A parent or guardian needs to approve your account before you can add credits.");
+          const pack = STUDY_CREDIT_PACKS.find((p) => p.id === packId);
+          if (!pack) return fail("Choose an amount to add.");
+          if (method !== "card" && method !== "upi") return fail("Pay for credits with a card or UPI.");
+          const label = `${formatCents(pack.amountCents)} Study Credits`;
+          addPayment({ userId: r.data.id, kind: "study_credits", amountCents: pack.amountCents, status: "succeeded", description: label, method: PAY_METHOD_LABEL[method] });
+          const tx = addWalletTx({ userId: r.data.id, deltaCents: pack.amountCents, kind: "top_up", description: `Added with ${method === "upi" ? "UPI" : "card"}` });
+          notify(r.data.id, { type: "payment", title: "Study Credits added", body: `${label} are in your wallet. Pay for any lesson in one tap.`, href: "/dashboard/payments" });
+          return ok(tx);
+        },
         createBooking(input) {
           const r = requireUser(["student", "parent"]);
           if (!r.ok) return r;
@@ -644,15 +675,20 @@ export const useApp = create<AppState>()(
 
           const priceCents = input.type === "trial" ? tutor.trial.priceCents : sessionPrice(tutor.hourlyRateCents, input.durationMin);
           let discountCents = 0;
+          let couponId: string | null = null;
           if (input.couponCode) {
             const c = get().validateCoupon(input.couponCode, priceCents);
             if (!c.ok) return c;
             discountCents = c.data.discountCents;
-            set((s) => ({ coupons: s.coupons.map((x) => (x.id === c.data.coupon.id ? { ...x, redemptions: x.redemptions + 1 } : x)) }));
+            couponId = c.data.coupon.id;
           }
           const instant = !tutor.rules.requiresApproval && flag("instant_booking");
           const status: BookingStatus = instant ? "confirmed" : "pending";
           const charge = priceCents - discountCents;
+          const payWith: PayMethod = input.payWith ?? "card";
+          if (!(payWith in PAY_METHOD_LABEL)) return fail("Choose how you'd like to pay.");
+          if (payWith === "wallet" && charge > walletBalance(user.id)) return fail("You don't have enough Study Credits for this lesson. Add credits or choose another way to pay.");
+          if (couponId) set((s) => ({ coupons: s.coupons.map((x) => (x.id === couponId ? { ...x, redemptions: x.redemptions + 1 } : x)) }));
           const id = uid("bk");
           const booking: Booking = {
             id, tutorId: tutor.id, bookerId: user.id, childId: input.childId, subject: input.subject, type: input.type, status,
@@ -671,7 +707,12 @@ export const useApp = create<AppState>()(
             createdAt: nowIso(),
           };
           set((s) => ({ bookings: [booking, ...s.bookings] }));
-          if (charge > 0) addPayment({ bookingId: id, userId: user.id, kind: "booking", amountCents: charge, status: instant ? "succeeded" : "pending", description: `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.`, method: "Visa •••• 4242" });
+          if (charge > 0) {
+            const description = `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.`;
+            addPayment({ bookingId: id, userId: user.id, kind: "booking", amountCents: charge, status: instant ? "succeeded" : "pending", description, method: PAY_METHOD_LABEL[payWith] });
+            // Credits leave the wallet straight away; a declined or expired request puts them back.
+            if (payWith === "wallet") addWalletTx({ userId: user.id, deltaCents: -charge, kind: "lesson", description, bookingId: id });
+          }
           get().startConversation(tutor.id, { childId: input.childId, subject: input.subject });
           const when = formatDateTime(input.startUtc, user.timezone);
           notify(user.id, { type: instant ? "booking_confirmed" : "booking_request", title: instant ? "Lesson confirmed" : "Request sent", body: `${subjectName(input.subject)} with ${tutor.firstName} · ${when}`, href: `/dashboard/bookings/${id}` });
@@ -724,9 +765,11 @@ export const useApp = create<AppState>()(
           if (b.paymentStatus === "authorized" && (to === "cancelled_by_student" || to === "cancelled_by_tutor")) {
             patch.paymentStatus = "refunded"; // authorization released, nothing was charged
             set((s) => ({ payments: s.payments.map((p) => (p.bookingId === id && p.status === "pending" ? { ...p, status: "refunded", description: `${p.description} — authorization released` } : p)) }));
+            refundToWallet(id, b.bookerId, paid, "Request cancelled — credits returned");
           } else if (refund && refund.cents > 0) {
             patch.paymentStatus = refund.cents >= paid ? "refunded" : "partially_refunded";
-            addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: -refund.cents, status: "refunded", description: `Refund — ${refund.rule}`, method: "Original payment method" });
+            addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: -refund.cents, status: "refunded", description: `Refund — ${refund.rule}`, method: paidFromWallet(id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
+            refundToWallet(id, b.bookerId, refund.cents, `Refund — ${refund.rule}`);
           }
           patchBooking(id, patch);
           if (to === "no_show_tutor" && policy.tutorNoShowCreditCents > 0) {
@@ -764,6 +807,7 @@ export const useApp = create<AppState>()(
           set((s) => ({
             bookings: [next, ...s.bookings.map((x) => (x.id === id ? { ...x, status: "rescheduled" as const, history: [...x.history, { at: nowIso(), by: r.data.id, from: x.status, to: "rescheduled" as const, note: `Moved to ${formatDateTime(newStartUtc)}` }] } : x))],
             payments: s.payments.map((p) => (p.bookingId === id ? { ...p, bookingId: newId } : p)),
+            walletTransactions: s.walletTransactions.map((t) => (t.bookingId === id ? { ...t, bookingId: newId } : t)),
           }));
           const other = actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId;
           notify(other, { type: "booking_rescheduled", title: "Lesson rescheduled", body: `${subjectName(b.subject)} moved to ${formatDateTime(newStartUtc)}`, href: `/dashboard/bookings/${newId}` });
@@ -1166,7 +1210,11 @@ export const useApp = create<AppState>()(
             const to: BookingStatus = outcome === "full_refund" || outcome === "partial_refund" ? "refunded" : "completed";
             patchBooking(b.id, { status: to, paymentStatus: outcome === "full_refund" ? "refunded" : outcome === "partial_refund" ? "partially_refunded" : b.paymentStatus, history: [...b.history, { at: nowIso(), by: r.data.id, from: "disputed", to, note: `Dispute ${outcome.replace("_", " ")}` }] });
           }
-          if ((outcome === "full_refund" || outcome === "partial_refund") && amount > 0) addPayment({ bookingId: b.id, userId: b.bookerId, kind: "booking", amountCents: -amount, status: "refunded", description: `Dispute refund (${outcome.replace("_", " ")})`, method: "Original payment method" });
+          if ((outcome === "full_refund" || outcome === "partial_refund") && amount > 0) {
+            const description = `Dispute refund (${outcome.replace("_", " ")})`;
+            addPayment({ bookingId: b.id, userId: b.bookerId, kind: "booking", amountCents: -amount, status: "refunded", description, method: paidFromWallet(b.id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
+            refundToWallet(b.id, b.bookerId, amount, description);
+          }
           audit("dispute.resolve", "dispute", id, { outcome, amountCents: amount });
           notify(b.bookerId, { type: "refund", title: "Dispute resolved", body: outcome === "no_refund" ? "No refund was issued. See details in your booking." : outcome === "credit" ? `${formatCents(amount)} platform credit added.` : `${formatCents(amount)} refund issued.`, href: `/dashboard/bookings/${b.id}` });
           return ok(undefined);
@@ -1293,6 +1341,7 @@ export const useApp = create<AppState>()(
             ),
             payments: s.payments.map((p) => (p.bookingId && expiredIds.has(p.bookingId) && p.status === "pending" ? { ...p, status: "refunded" as const, description: `${p.description} — authorization released` } : p)),
           }));
+          for (const b of expired) refundToWallet(b.id, b.bookerId, b.priceCents - b.discountCents, "Request expired — credits returned");
           for (const b of expired) notify(b.bookerId, { type: "booking_cancelled", title: "Lesson request expired", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc)} — you weren't charged.`, href: `/dashboard/bookings/${b.id}` });
           for (const b of completed) notify(b.bookerId, { type: "review_request", title: "How was your lesson?", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc)}`, href: `/dashboard/bookings/${b.id}` });
           return expired.length + completed.length;

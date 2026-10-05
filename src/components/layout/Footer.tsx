@@ -76,7 +76,7 @@ export function Footer() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/tutors" className="group inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[15px] font-medium text-white transition-colors hover:bg-navy-hover">
+            <Link href="/tutors" className="group inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[15px] font-medium text-on-ink transition-colors hover:bg-navy-hover">
               Find a tutor <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Link>
             <Link href="/contact" className="inline-flex h-11 items-center rounded-full border border-line-strong bg-surface px-5 text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle">

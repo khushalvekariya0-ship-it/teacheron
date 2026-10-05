@@ -90,7 +90,7 @@ export function ConversationList({
                     className={cn("relative flex w-full gap-3 rounded-lg px-3 py-3 text-left transition-colors", !active && "hover:bg-canvas")}
                   >
                     {active && <motion.span layoutId="conversation-active" className="absolute inset-0 rounded-lg bg-brand-soft" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
-                    <Avatar name={v.counterpartFull} tone={v.tone} size="md" className="relative" />
+                    <Avatar name={v.counterpartFull} src={v.photoUrl} tone={v.tone} size="md" className="relative" />
                     <span className="relative min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
                         <span className={cn("flex min-w-0 items-center gap-1.5 truncate text-sm text-ink", v.unread ? "font-semibold" : "font-medium")}>

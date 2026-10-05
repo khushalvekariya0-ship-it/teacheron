@@ -106,7 +106,7 @@ export default function HowItWorksPage() {
           <div>
             <Reveal>
               <p className="kicker">
-                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+                <span className="kicker-dot" aria-hidden />
                 How it works
               </p>
             </Reveal>
@@ -290,7 +290,7 @@ export default function HowItWorksPage() {
           <RefundTimeline />
         </Reveal>
         <p className="mb-5 mt-12 kicker">
-          <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+          <span className="kicker-dot" aria-hidden />
           If something doesn&rsquo;t go to plan
         </p>
         <PolicyDetails />

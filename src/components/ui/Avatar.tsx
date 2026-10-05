@@ -3,7 +3,7 @@ import { BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
 
-/** Tinted monogram tiles — sample people never get stock photos of real faces. */
+/** Tinted monogram tiles for anyone without a photo. */
 const TONES = [
   "bg-brand-soft text-brand",
   "bg-sky-soft text-sky",

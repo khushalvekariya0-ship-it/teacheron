@@ -88,7 +88,7 @@ export default function PricingPage() {
           <div>
             <Reveal>
               <p className="kicker">
-                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+                <span className="kicker-dot" aria-hidden />
                 Pricing
               </p>
             </Reveal>
@@ -268,7 +268,7 @@ export default function PricingPage() {
 
         {/* Cancellation and refunds */}
         <p className="mb-5 mt-12 kicker">
-          <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+          <span className="kicker-dot" aria-hidden />
           Cancellation and refunds
         </p>
         <h3 className="mb-6 max-w-2xl font-heading text-[26px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[30px]">

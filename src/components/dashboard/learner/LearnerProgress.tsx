@@ -234,7 +234,7 @@ function ProgressInner({ me }: { me: User }) {
                               const tutor = tutorMap.get(n.tutorId);
                               return (
                                 <li key={n.id} className="relative flex gap-4 pb-6 last:pb-0">
-                                  <Avatar name={tutorFullName(tutor)} tone={tutor?.tone} size="sm" className="relative z-10 ring-4 ring-surface rounded-full" />
+                                  <Avatar name={tutorFullName(tutor)} src={tutor?.photoUrl} tone={tutor?.tone} size="sm" className="relative z-10 ring-4 ring-surface rounded-full" />
                                   <div className="min-w-0 flex-1">
                                     <p className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
                                       <span className="font-medium text-ink">{tutorFullName(tutor)}</span>

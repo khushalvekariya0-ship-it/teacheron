@@ -14,6 +14,8 @@ export interface ConversationView {
   counterpart: string;
   counterpartFull: string;
   tone?: number;
+  /** The counterpart's photo, when the viewer is talking to a tutor who has one. */
+  photoUrl?: string;
   tutor?: Tutor;
   user?: User;
   childName?: string;
@@ -61,6 +63,7 @@ export function useMyConversations(): ConversationView[] {
           counterpart: counterpartEntity ? short(counterpartEntity) : isTutor ? "Student" : "Tutor",
           counterpartFull: counterpartEntity ? `${counterpartEntity.firstName} ${counterpartEntity.lastName}` : isTutor ? "Student" : "Tutor",
           tone: isTutor ? undefined : tutor?.tone,
+          photoUrl: isTutor ? undefined : tutor?.photoUrl,
           tutor,
           user,
           childName: c.childId ? child?.firstName ?? "Student" : undefined,

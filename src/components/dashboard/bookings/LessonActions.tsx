@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Check, CalendarClock, CircleX, CreditCard, Flag, Play, CircleCheck, Star, UserX, Video, ChevronDown } from "lucide-react";
 import type { Booking, BookingStatus } from "@/lib/types";
@@ -85,7 +86,7 @@ export function buildLessonActions(
 
   // Primary: Join › Accept › Retry payment › wrap-up › Start › Review
   let primary: LessonAction | null = null;
-  if (meetingLinkVisible(b, now, policy) && b.meetingUrl) primary = { key: "join", label: "Join lesson", icon: Video, href: b.meetingUrl, tone: "primary" };
+  if (meetingLinkVisible(b, now, policy) && b.meetingUrl) primary = { key: "join", label: "Join lesson", icon: Video, href: `/classroom/${b.id}`, tone: "primary" };
   else primary =
     items.find((i) => i.key === "confirmed" && !i.disabledReason) ??
     items.find((i) => i.key === "pending" && !i.disabledReason) ??
@@ -104,10 +105,9 @@ function ActionButton({ action, onDialog, block, size = "md" }: { action: Lesson
   if (action.href) {
     return (
       <Button asChild variant={variant} size={size} className={cn(block && "w-full")}>
-        <a href={action.href} target="_blank" rel="noopener noreferrer">
+        <Link href={action.href}>
           <Icon /> {action.label}
-          <span className="sr-only"> (opens in a new tab)</span>
-        </a>
+        </Link>
       </Button>
     );
   }

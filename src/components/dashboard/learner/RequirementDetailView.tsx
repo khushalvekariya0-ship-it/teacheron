@@ -569,7 +569,7 @@ function ApplicationCard({
     <Card className={cn("overflow-hidden transition-[border-color,box-shadow]", app.status === "hired" && "border-success-200", comparing && "border-ink ring-1 ring-ink")}>
       <div className="p-4 sm:p-5">
         <div className="flex items-start gap-3.5">
-          <Avatar name={name} tone={tutor?.tone} size="lg" verified={tutor?.verification.identity === "verified"} />
+          <Avatar name={name} src={tutor?.photoUrl} tone={tutor?.tone} size="lg" verified={tutor?.verification.identity === "verified"} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h3 className="text-[15px] font-semibold tracking-tight text-ink">

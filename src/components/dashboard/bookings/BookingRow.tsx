@@ -48,9 +48,9 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
     <>
       {joinable && (
         <Button asChild size="sm">
-          <a href={b.meetingUrl} target="_blank" rel="noopener noreferrer">
-            <Video /> Join<span className="sr-only"> {subject} lesson (opens in a new tab)</span>
-          </a>
+          <Link href={`/classroom/${b.id}`}>
+            <Video /> Join<span className="sr-only"> {subject} lesson</span>
+          </Link>
         </Button>
       )}
       {canAccept && (

@@ -14,10 +14,12 @@ How pages in this repo are built. Read this before adding or changing a page.
 
 ## Design rules
 
-Clean, restrained, premium. Less color, more hierarchy.
+Soft mesh on off-white, midnight-navy ink, deep indigo for selection, and one electric coral for the action we want pressed. A light theme and an OLED-black dark theme share the same tokens.
 
-- **Tokens only.** Use the Tailwind tokens from `src/app/globals.css`: `bg-surface`, `bg-canvas`, `bg-sunken`, `text-ink`, `text-ink-2`, `text-muted`, `text-subtle` (icons and placeholders only, too low-contrast for text), `border-line`, `border-line-strong`, `bg-navy`/`text-navy`, `bg-navy-50`, and the status tokens `success`, `warning` and `danger` (each with `-50` and `-200` variants). Don't hard-code hex values in components.
-- **Navy is the only accent**, used sparingly: primary buttons, active nav, links and selected states. Never use gradients, bright colors, emoji or decorative blobs.
+- **Tokens only.** Use the Tailwind tokens from `src/app/globals.css`: `bg-page` (section background), `bg-surface` (cards), `bg-canvas`, `bg-sunken`, `text-ink`, `text-ink-2`, `text-muted`, `text-subtle` (icons and placeholders only, too low-contrast for text), `border-line`, `border-line-strong`, `bg-navy`/`text-navy`, `bg-navy-50`, `bg-brand`/`text-brand`, `bg-brand-soft`, and the status tokens `success`, `warning` and `danger` (each with `-50` and `-200` variants). Don't hard-code hex values in components.
+- **Dark mode is the same tokens.** `.dark` on `<html>` (toggle: `DarkModeToggle`, state: `useTheme`/`setTheme` in `@/lib/theme`) swaps every token, so pages need no dark styles of their own. That only works if you never write `bg-white`, `text-black` or a hex for a themed surface — use `bg-surface` / `text-ink`. On an always-dark block (`bg-night`, `bg-brand-deep`) use `text-white`; on an ink fill use `text-on-ink`.
+- **Two accents, each with one job.** Deep indigo (`brand`) marks what is selected, linked or focused. Electric coral is only the `cta` button variant — the one action per screen we want pressed (find a tutor, book, pay). Coral carries dark text (`text-on-cta`); for coral text on a light surface use `text-cta-ink`.
+- **Mesh and glass come from utilities, never ad hoc gradients.** `hero-glow` / `page-glow` paint the pastel mesh behind a hero, `mesh-gradient` fills a whole block, `glass` is the frosted navbar fill and `glass-card` a floating card. `bento` is the six-column feature grid. No emoji.
 - Typography is Geist. Page titles use `text-2xl font-semibold tracking-[-0.025em]` (dashboard) or larger marketing sizes with tight tracking. Body text is `text-sm` / `text-[15px]` with `text-muted` for supporting copy. Use `tabular-nums` for numbers in columns.
 - Radii: controls `rounded-md` (8px), cards `rounded-xl`, big panels `rounded-2xl`. Borders are 1px `border-line`. Shadows are only `shadow-xs` / `shadow-sm` for cards, and `shadow-lg`/`xl` for overlays.
 - Spacing is generous. The marketing container is `container-page` (max 1280px). Sections use `py-20 sm:py-24 lg:py-28`.
@@ -29,21 +31,26 @@ Clean, restrained, premium. Less color, more hierarchy.
 
 | Import | What |
 |---|---|
-| `@/components/ui/Button` | `Button` (variants: primary, secondary, outline, ghost, subtle, danger, danger-outline, link; sizes xs–lg, icon, icon-sm; `loading`; `asChild` for links) |
+| `@/components/ui/Button` | `Button` (variants: primary, brand, **cta** (coral, one per screen), secondary, outline, ghost, subtle, danger, danger-outline, link; sizes xs–lg, icon, icon-sm; `loading`; `asChild` for links) |
 | `@/components/ui/Input` | `Field`, `Input` (icon, suffix, prefixText), `Textarea` (showCount), `Select` (native, `options`), `Label` |
 | `@/components/ui/Controls` | `Checkbox` (label/description), `Switch`, `RadioCards`, `ChipGroup` (multi-select chips), `Segmented` (animated single select), `Progress` |
 | `@/components/ui/Overlay` | `Dialog` + `DialogContent`(title, description, size) + `DialogBody` + `DialogFooter` + `DialogClose`; `ConfirmDialog`; `Sheet` + `SheetContent`(side, title, footer); `DropdownMenu*`; `Tooltip`; `Popover*` |
 | `@/components/ui/Disclosure` | `Accordion*`, `Tabs`, `TabsList`, `TabsTrigger`(count), `TabsContent` |
 | `@/components/ui/Card` | `Card`(interactive), `CardHeader`(title, description, action), `CardContent`, `CardFooter`, `Separator`, `DetailRow` |
 | `@/components/ui/Badge` | `Badge` tone: neutral, accent, solid, success, warning, danger, outline; size sm/md; `dot` |
-| `@/components/ui/Avatar` | Initials avatar (`name`, `tone`, `size`, `verified`) |
+| `@/components/ui/Avatar` | Photo when `src` is given, otherwise an initials tile (`name`, `src`, `tone`, `size`, `verified`). For a tutor always pass `src={tutor.photoUrl}` with `tone={tutor.tone}` |
 | `@/components/ui/StarRating` | `StarRating` (shows "New · no reviews yet" when null), `StarInput` |
 | `@/components/ui/States` | `EmptyState`, `ErrorState`, `UnauthorizedState`, `ForbiddenState`, `InlineAlert` |
 | `@/components/ui/Skeleton` | `Skeleton`, `TutorCardSkeleton`, `PageSkeleton` |
 | `@/components/ui/DataTable` | Responsive sortable/paginated/selectable table (`Column<T>`) |
 | `@/components/ui/Toast` | `toast(...)`, `toast.success`, `toast.error` |
 | `@/components/charts` | `ColumnChart`, `AreaChart`, `Sparkline`, `StatTile`, `BarList` (single series, navy) |
-| `@/components/domain/TutorCard` | `TutorCard` (layout "grid" or "row", optional `distance`, `footer`) |
+| `@/components/domain/TutorCard` | `TutorCard` (layout "grid" or "row", optional `distance`, `footer`); the photo plays the tutor's 15-second intro on hover |
+| `@/components/domain/TutorIntro` | `IntroReel` (uploaded clip, or a reel built from the profile), `OnlineNow` badge, `useOnlineNow(tutor)` |
+| `@/components/domain/BookingCalendar` | Month calendar + start times from real availability (`tutor`, `durationMin`, `value`, `onChange`) |
+| `@/components/home/SmartMatchQuiz` | Two-question popup → three best matches from `rankTutors` (`open`, `onOpenChange`, `initialSubject`) |
+| `@/components/wallet/*` | `WalletDrawer` (balance, top-up, activity), `WalletButton` (navbar pill), `formatCredits` |
+| `@/components/classroom/*` | `ClassroomView` (route `/classroom/[id]`), `VideoStage`, `Whiteboard`, `ChatPanel` |
 | `@/components/domain/Badges` | `VerifiedBadge`, `VerificationChecks`, `VerificationStatusBadge`, `BookingStatusBadge`, `PaymentStatusBadge`, label maps |
 | `@/components/domain/useTutorActions` | save / compare / contact / book behaviour with auth redirects |
 | `@/components/marketing/Section` | `Section`(tone), `SectionHeading`, `ArrowLink`, `PageHero`, `CtaBand`, `FeatureItem` |
@@ -51,11 +58,13 @@ Clean, restrained, premium. Less color, more hierarchy.
 
 ## Data & state
 
+- **Photos** live in `public/images` (site imagery, `subject-areas/`, `tutors/` for the sample tutors' stock portraits). Every file is listed with its photographer in `public/images/CREDITS.md` — add a row when you add a photo, and give a replaced photo a new file name so caches don't serve the old one.
 - **Sample data** lives in `src/lib/data/*` (catalog, geo, tutors, reviews, users, requirements, platform, content). It is fictional and the UI discloses this through the preview banner. **Never invent** qualifications, reviews, ratings, availability, verification or statistics in UI copy. Show what's in the data, or nothing.
 - **App state** lives in `useApp` (`src/lib/store/index.ts`), a persisted zustand store. Every mutation is an action that validates auth, ownership and business rules and returns `Result` (`{ ok: true, data } | { ok: false, error }`). Always handle `ok: false` with `toast.error(res.error)` or an inline error. **Never mutate state directly or set statuses yourself** — call the action.
 - **zustand v5 rule:** a selector passed to `useApp` must return a stable reference (a state slice or a primitive). Never build arrays or objects inside the selector — that loops forever. Select raw slices, then derive with `useMemo`.
 - Hooks (`src/lib/store/hooks.ts`): `useSession()` (current user or null), `useHydrated()`, `useTutors()`, `useTutor(idOrSlug)`, `useReviews()`, `useFlag(key)`, `useCreditBalance(tutorId)`, `useUnreadMessages()`, `useUnreadNotifications()`, `useNow(ms)`, `useViewerTimezone()`.
 - The store rehydrates **after mount**. Anything that depends on persisted data or the current time must wait for `useHydrated()`. The dashboard shell already does this for everything under `/dashboard` and `/admin`.
+- **Study Credits** (learner wallet): balance with `useWalletBalance()`, top up with `topUpWallet(packId, "card" | "upi")`, pay with `createBooking({ …, payWith: "wallet" })`. The store debits the wallet and sends every refund for such a lesson back to it — never adjust `walletTransactions` yourself.
 - Money is **integer cents**. Format with `formatCents`. Compute with `sessionPrice`, `applyBps` and `percentOf` from `@/lib/format`. Never use float math for money.
 - Time: store UTC ISO strings. Render with `formatDateTime(iso, tz)` and similar, using `useViewerTimezone()`. Slot generation lives in `@/lib/time` (`generateSlots`, `groupSlotsByDay`, `nextOpening`).
 - Bookings follow the state machine in `@/lib/booking` (`availableTransitions`, `canTransition`, `ACTION_LABEL`, `STATUS_META`, `cancellationRefund`, `policySummary`, `meetingLinkVisible`). Use `actorFor(user, booking)` from `@/lib/permissions` to get the viewer's actor.

@@ -110,7 +110,7 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to conversations" className="md:hidden">
           <ArrowLeft />
         </Button>
-        <Avatar name={view.counterpartFull} tone={view.tone} size="md" />
+        <Avatar name={view.counterpartFull} src={view.photoUrl} tone={view.tone} size="md" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[15px] font-semibold tracking-tight text-ink">{view.counterpart}</h2>
           <p className="truncate text-[12.5px] text-muted">{context || (view.isTutorView ? "Student" : "Tutor")}</p>

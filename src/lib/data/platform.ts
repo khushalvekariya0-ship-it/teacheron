@@ -1,4 +1,4 @@
-import type { Coupon, FeatureFlag } from "@/lib/types";
+import type { Coupon, FeatureFlag, PayMethod } from "@/lib/types";
 import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /**
@@ -67,6 +67,24 @@ export const CREDIT_PACKS = [
   { id: "pack_25", credits: 25, priceCents: 3200 },
   { id: "pack_60", credits: 60, priceCents: 6900 },
 ];
+
+/**
+ * Study Credits: prepaid lesson money on a student or parent account. Credits are worth their face
+ * value (no bonus, no fee) and pay for a lesson in one tap. Refunds for such lessons return to the wallet.
+ */
+export const STUDY_CREDIT_PACKS = [
+  { id: "sc_25", amountCents: 2500 },
+  { id: "sc_50", amountCents: 5000 },
+  { id: "sc_100", amountCents: 10000 },
+  { id: "sc_200", amountCents: 20000 },
+];
+
+/** What a payment record shows as its method. Test instruments only in the preview build. */
+export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
+  card: "Visa •••• 4242",
+  upi: "UPI",
+  wallet: "Study Credits",
+};
 
 /** Credits spent to apply to a job. */
 export const CREDITS_PER_APPLICATION = 1;

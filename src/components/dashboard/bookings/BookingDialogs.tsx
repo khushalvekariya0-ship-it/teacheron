@@ -8,6 +8,7 @@ import { cancellationRefund, policySummary } from "@/lib/booking";
 import { useApp } from "@/lib/store";
 import { useViewerTimezone } from "@/lib/store/hooks";
 import { formatCents, formatDateTime, percentOf } from "@/lib/format";
+import { PAY_METHOD_LABEL } from "@/lib/data/platform";
 import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Input";
 import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DialogClose } from "@/components/ui/Overlay";
@@ -58,7 +59,10 @@ export function DeclineDialog({ booking, open, onOpenChange, counterpart }: { bo
 export function CancelDialog({ booking, actor, open, onOpenChange, counterpart, now }: { booking: Booking; actor: Actor; open: boolean; onOpenChange: (o: boolean) => void; counterpart: string; now: number }) {
   const transition = useApp((s) => s.transitionBooking);
   const policy = useApp((s) => s.policy);
+  const payments = useApp((s) => s.payments);
   const [note, setNote] = React.useState("");
+  // Lessons paid with Study Credits are refunded to the wallet, not to a card.
+  const withCredits = payments.some((p) => p.bookingId === booking.id && p.method === PAY_METHOD_LABEL.wallet && p.amountCents > 0);
   const by = actor === "booker" ? "booker" : actor === "tutor" ? "tutor" : "admin";
   const { refundCents, rule } = cancellationRefund(booking, by, now, policy);
   const paid = booking.priceCents - booking.discountCents;
@@ -71,11 +75,13 @@ export function CancelDialog({ booking, actor, open, onOpenChange, counterpart, 
   let refundLine: React.ReactNode;
   if (paid <= 0) refundLine = "Nothing was charged for this lesson.";
   else if (booking.paymentStatus === "authorized")
-    refundLine = learnerView ? `Your card hold of ${formatCents(paid)} will be released — you won't be charged.` : `The family's ${formatCents(paid)} card hold is released — they won't be charged.`;
+    refundLine = withCredits
+      ? learnerView ? `The ${formatCents(paid)} of Study Credits held for this request goes back to your wallet.` : `The family's ${formatCents(paid)} of Study Credits is returned to their wallet.`
+      : learnerView ? `Your card hold of ${formatCents(paid)} will be released — you won't be charged.` : `The family's ${formatCents(paid)} card hold is released — they won't be charged.`;
   else if (captured) {
     amount = formatCents(refundCents);
     refundLine = learnerView
-      ? refundCents > 0 ? `${formatCents(refundCents)} of ${formatCents(paid)} goes back to your original payment method.` : "This cancellation isn't eligible for a refund."
+      ? refundCents > 0 ? `${formatCents(refundCents)} of ${formatCents(paid)} goes back to ${withCredits ? "your Study Credits wallet" : "your original payment method"}.` : "This cancellation isn't eligible for a refund."
       : `The family is refunded ${formatCents(refundCents)}.`;
   } else refundLine = "No payment was captured for this lesson, so there's nothing to refund.";
 

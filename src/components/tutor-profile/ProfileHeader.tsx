@@ -57,7 +57,7 @@ export function ProfileHeader({ tutor, instant }: { tutor: Tutor; instant: boole
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-7">
         <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
-          <Avatar name={name} tone={tutor.tone} size="3xl" square verified={verified} className="[&>span:first-child]:size-28 sm:[&>span:first-child]:size-40" />
+          <Avatar name={name} src={tutor.photoUrl} tone={tutor.tone} size="3xl" square verified={verified} className="[&>:first-child]:size-28 sm:[&>:first-child]:size-40" />
         </motion.div>
 
         <div className="min-w-0 flex-1">

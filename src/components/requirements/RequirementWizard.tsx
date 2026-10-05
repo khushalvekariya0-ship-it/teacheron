@@ -613,7 +613,7 @@ function SignedOutIntro({ next }: { next: string }) {
           <div>
             <Reveal>
               <p className="kicker">
-                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+                <span className="kicker-dot" aria-hidden />
                 Post a requirement
               </p>
             </Reveal>
@@ -659,7 +659,7 @@ function SignedOutIntro({ next }: { next: string }) {
         <div className="container-page py-16 sm:py-20">
           <Reveal>
             <p className="kicker">
-              <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+              <span className="kicker-dot" aria-hidden />
               How it works
             </p>
             <h2 className="mt-4 font-heading text-[2rem] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[2.5rem]">From a few questions to the right tutor</h2>

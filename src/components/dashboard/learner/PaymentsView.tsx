@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CreditCard, Download, Lock, ReceiptText, RotateCcw, Wallet, BookOpenCheck } from "lucide-react";
+import { CreditCard, Download, Lock, Plus, ReceiptText, RotateCcw, Wallet, BookOpenCheck } from "lucide-react";
 import type { Booking, Payment, Tutor, User } from "@/lib/types";
 import { PageHeader, RoleGate } from "@/components/dashboard/Shell";
 import { Stagger, StaggerItem } from "@/components/motion";
@@ -15,7 +15,8 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogClose } from "@/components/ui/Overlay";
 import { EmptyState } from "@/components/ui/States";
 import { useApp } from "@/lib/store";
-import { useSession, useViewerTimezone } from "@/lib/store/hooks";
+import { useSession, useViewerTimezone, useWalletBalance } from "@/lib/store/hooks";
+import { WalletDrawer, formatCredits } from "@/components/wallet/WalletDrawer";
 import { formatCents, formatDate, formatDateTime, pluralize, tzAbbrev } from "@/lib/format";
 import { subjectName } from "@/lib/data/catalog";
 import { SITE } from "@/lib/site";
@@ -72,12 +73,15 @@ function Inner() {
   const tutorMap = useTutorMap();
   const [filter, setFilter] = React.useState<FilterKey>("all");
   const [receipt, setReceipt] = React.useState<Payment | null>(null);
+  const balance = useWalletBalance();
+  const [walletOpen, setWalletOpen] = React.useState(false);
 
   const bookingById = React.useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
   const mine = React.useMemo(() => payments.filter((p) => p.userId === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [payments, me.id]);
 
   const summary = React.useMemo(() => {
-    const charges = mine.filter((p) => p.amountCents > 0 && ["succeeded", "partially_refunded", "refunded"].includes(p.status));
+    // Buying Study Credits isn't counted as "paid": the money is counted once, when the credits pay for a lesson.
+    const charges = mine.filter((p) => p.kind !== "study_credits" && p.amountCents > 0 && ["succeeded", "partially_refunded", "refunded"].includes(p.status));
     const refundRows = mine.filter((p) => p.amountCents < 0);
     const refundedBookings = new Set(refundRows.map((p) => p.bookingId).filter(Boolean));
     // A charge marked "refunded" with no separate refund row was refunded in full on the original charge.
@@ -209,9 +213,19 @@ function Inner() {
             />
           </StaggerItem>
 
-          <StaggerItem>
+          <StaggerItem className="space-y-5">
             <Card>
-              <CardHeader title="Payment methods" description="Cards used on this account." />
+              <CardHeader title="Study wallet" description="Prepaid credits for one-tap booking." />
+              <CardContent className="pt-3">
+                <p className="font-heading text-[2rem] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">{formatCredits(balance)}</p>
+                <p className="mt-2 text-[13px] leading-snug text-muted">Refunds for lessons paid with credits come back here.</p>
+                <Button variant="cta" className="mt-4 w-full" onClick={() => setWalletOpen(true)}>
+                  <Plus /> Add credits
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader title="Payment methods" description="Ways you've paid on this account." />
               <CardContent className="pt-3">
                 {summary.methods.length ? (
                   <ul className="space-y-2">
@@ -228,11 +242,11 @@ function Inner() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-[13px] text-muted">No cards used yet. You&apos;ll add one when you book your first paid lesson.</p>
+                  <p className="text-[13px] text-muted">Nothing yet. You&apos;ll choose a card, UPI or Study Credits when you book your first paid lesson.</p>
                 )}
                 <p className="mt-4 flex items-start gap-2 text-[12.5px] leading-relaxed text-muted">
                   <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                  Cards are stored and charged by Stripe. Test mode in this preview.
+                  Payments are handled by the payment gateway, never stored here. Test mode in this preview.
                 </p>
               </CardContent>
             </Card>
@@ -241,6 +255,7 @@ function Inner() {
       </Stagger>
 
       <ReceiptDialog payment={receipt} booking={receipt?.bookingId ? bookingById.get(receipt.bookingId) : undefined} tutorMap={tutorMap} tz={tz} me={me} onClose={() => setReceipt(null)} />
+      <WalletDrawer open={walletOpen} onOpenChange={setWalletOpen} />
     </div>
   );
 }

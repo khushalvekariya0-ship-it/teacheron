@@ -208,7 +208,7 @@ export default function BecomeATutorPage() {
   return (
     <>
       <PageHero
-        image={{ src: "/images/become-a-tutor.jpg", alt: "A tutor smiling while working on a laptop" }}
+        image={{ src: "/images/tutor-at-laptop.jpg", alt: "A tutor smiling while working on a laptop" }}
         eyebrow="Become a tutor"
         title="Teach what you know. Build a practice on your terms."
         description="Set your own rates, hours and service area. Families find you through transparent search — and a paid plan never buys a better position."

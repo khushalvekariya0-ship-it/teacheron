@@ -64,9 +64,9 @@ export function EventPopover({ ev, people, tz, now, children }: { ev: CalEvent; 
         <div className="mt-3.5 flex gap-2">
           {joinable && (
             <Button asChild size="sm">
-              <a href={b.meetingUrl} target="_blank" rel="noopener noreferrer">
+              <Link href={`/classroom/${b.id}`}>
                 <Video /> Join
-              </a>
+              </Link>
             </Button>
           )}
           <Button asChild size="sm" variant={joinable ? "secondary" : "primary"} className="flex-1">

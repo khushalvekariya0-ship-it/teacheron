@@ -31,7 +31,7 @@ export function CompareTray() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: "spring", bounce: 0.18, duration: 0.5 }}
-          className={`fixed inset-x-0 bottom-4 z-30 justify-center px-4 ${onProfile ? "hidden lg:flex" : "flex"}`}
+          className={`fixed inset-x-0 bottom-20 z-30 md:bottom-4 justify-center px-4 ${onProfile ? "hidden lg:flex" : "flex"}`}
           role="region"
           aria-label="Tutors selected for comparison"
         >
@@ -41,7 +41,7 @@ export function CompareTray() {
               <AnimatePresence initial={false}>
                 {selected.map((t) => (
                   <motion.div key={t.id} layout initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} className="group relative">
-                    <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="sm" />
+                    <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="sm" />
                     <button
                       type="button"
                       onClick={() => toggle(t.id)}

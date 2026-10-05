@@ -30,7 +30,7 @@ export default function ComparePage() {
           <div>
             <Reveal>
               <p className="kicker">
-                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+                <span className="kicker-dot" aria-hidden />
                 Compare
               </p>
             </Reveal>

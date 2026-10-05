@@ -90,7 +90,7 @@ function Inner() {
                     return (
                       <motion.li key={b.id} layout exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.2 } }}>
                         <Card className="flex h-full items-center gap-4 p-4 sm:p-5">
-                          <Avatar name={tutorFullName(tutor)} tone={tutor?.tone} size="md" verified={tutor?.verification.identity === "verified"} />
+                          <Avatar name={tutorFullName(tutor)} src={tutor?.photoUrl} tone={tutor?.tone} size="md" verified={tutor?.verification.identity === "verified"} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-ink">
                               {subjectName(b.subject)}
@@ -134,7 +134,7 @@ function Inner() {
                         <motion.li key={r.id} layout initial={{ opacity: 0, backgroundColor: "var(--color-brand-50)" }} animate={{ opacity: 1, backgroundColor: "rgba(255,255,255,0)" }} transition={{ duration: 1.2 }} className="p-5">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-3">
-                              <Avatar name={tutorFullName(tutor)} tone={tutor?.tone} size="sm" />
+                              <Avatar name={tutorFullName(tutor)} src={tutor?.photoUrl} tone={tutor?.tone} size="sm" />
                               <div className="min-w-0">
                                 <p className="text-sm font-medium text-ink">
                                   {tutor ? (

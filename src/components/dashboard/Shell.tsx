@@ -8,6 +8,8 @@ import { SearchTrigger } from "@/components/layout/CommandPalette";
 import { Bell, ChevronsUpDown, LogOut, Menu, RotateCcw, Search, Globe, Check, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
+import { DarkModeToggle } from "@/components/ui/DarkModeToggle";
+import { WalletButton } from "@/components/wallet/WalletButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -438,6 +440,8 @@ function ShellLayout({
                 <Link href={user.role === "tutor" ? "/dashboard/jobs" : "/post-requirement"}>{user.role === "tutor" ? "Find jobs" : "Post a requirement"}</Link>
               </Button>
             )}
+            <WalletButton className="hidden sm:inline-flex" />
+            <DarkModeToggle className="size-9" />
             <NotificationsPopover user={user} />
             <div className="lg:hidden">
               <AccountMenu user={user} compact />

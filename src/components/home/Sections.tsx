@@ -8,50 +8,47 @@ import { motion } from "framer-motion";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
-  Music, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
-  Lock, MessagesSquare, Search,
+  Music, ShieldCheck, Sparkles, Star, Target, UserRound, Users, Video, Wallet, Zap,
+  Lock, Search,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem, WordReveal, gsap, useGSAP } from "@/components/motion";
 import { prefersReducedMotion } from "@/components/motion/gsap";
-import { Section, SectionHeading, ArrowLink, CtaBand } from "@/components/marketing/Section";
+import { Section, SectionHeading, ArrowLink, CtaBand, Eyebrow } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { SelectMenu, type SelectGroup, type SelectOption } from "@/components/ui/SelectMenu";
-import { SubjectSearch } from "./SubjectSearch";
+import { CategoryIcon } from "@/components/content/icons";
 import { QuickMatch } from "./QuickMatch";
+import { QUIZ_SUBJECTS, SmartMatchQuiz } from "./SmartMatchQuiz";
 import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
 import { useTutors } from "@/lib/store/hooks";
 
-/* ═══ 1 · Hero — what TutorLink is, a search to start, and the four steps that follow ═══ */
-
-const HERO_POPULAR = SUBJECTS.filter((s) => s.popular).slice(0, 6);
-
-const HERO_PROMISES = ["Free to search", "No subscription for families", "Badges only after checks"];
+/* ═══ 1 · Hero — what TutorLink is, the first Smart Match question, and the three steps that follow ═══ */
 
 /** Three real-life lesson photos: online, one-on-one at a table, and in person. Photos only — no example data. */
 const HERO_PHOTOS = [
-  { src: "/images/online-lesson.jpg", label: "Online", pos: "object-[60%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
-  { src: "/images/hero-tutoring.jpg", label: "1-on-1, at your pace", pos: "object-[64%_40%]", cls: "col-span-12 md:col-span-6 aspect-[4/3] sm:aspect-[16/11]" },
-  { src: "/images/in-person.jpg", label: "In person", pos: "object-[70%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
+  { src: "/images/lesson-online.jpg", label: "Online", pos: "object-[60%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
+  { src: "/images/lesson-tutor-and-student.jpg", label: "1-on-1, at your pace", pos: "object-[64%_40%]", cls: "col-span-12 md:col-span-6 aspect-[4/3] sm:aspect-[16/11]" },
+  { src: "/images/lesson-in-person.jpg", label: "In person", pos: "object-[70%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
 ];
 
-/** What a visitor does on TutorLink, in order. Each step gets its own soft colour. */
+/** Search → Book → Learn: what a visitor does on TutorLink, in order. Each step gets its own soft colour. */
 const HERO_STEPS = [
-  { icon: Search, title: "Search", body: "Pick a subject, grade, schedule and budget. Searching is free.", tint: "bg-brand-soft text-brand" },
-  { icon: MessagesSquare, title: "Compare & message", body: "Read profiles, reviews from real lessons and open times. Ask questions first.", tint: "bg-sky-soft text-sky" },
-  { icon: CalendarDays, title: "Book a lesson", body: "Choose a time that suits you. Many tutors offer a free trial.", tint: "bg-violet-soft text-violet" },
-  { icon: LineChart, title: "Learn & grow", body: "Online or in person, with notes and progress after every lesson.", tint: "bg-teal-soft text-teal" },
+  { icon: Search, title: "Search", body: "Answer two questions and Smart Match shows your three best-fit tutors. Or browse everyone — searching is free.", tint: "bg-brand-soft text-brand" },
+  { icon: CalendarDays, title: "Book", body: "Pick a day and time on the tutor's calendar and see the total straight away. Pay by card, UPI or Study Credits.", tint: "bg-cta-soft text-cta-ink" },
+  { icon: Video, title: "Learn", body: "Meet in the built-in classroom: video, a shared whiteboard and chat on one screen. Nothing to install.", tint: "bg-teal-soft text-teal" },
 ];
 
 export function Hero() {
   const root = React.useRef<HTMLElement>(null);
+  const [quiz, setQuiz] = React.useState<{ open: boolean; subject?: string }>({ open: false });
   useGSAP(
     () => {
       const items = gsap.utils.toArray<HTMLElement>("[data-hero-in]");
@@ -68,16 +65,16 @@ export function Hero() {
   );
 
   return (
-    <section ref={root} className="relative isolate overflow-clip bg-page">
+    <section ref={root} className="relative isolate -mt-16 overflow-clip bg-page pt-16">
       {/* Soft brand light from the top, over a faint grid */}
       <div className="hero-glow pointer-events-none absolute inset-x-0 top-0 -z-10 h-[860px]" aria-hidden />
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[720px] bg-line-grid [mask-image:radial-gradient(ellipse_70%_75%_at_50%_0%,black_25%,transparent_75%)]" aria-hidden />
 
       <div className="container-page flex flex-col items-center pt-14 text-center sm:pt-20 lg:pt-24">
         <p data-hero-in data-reveal className="kicker">
-          <span className="relative flex size-1.5">
+          <span className="relative flex size-2">
             <span className="absolute inset-0 animate-ping rounded-full bg-brand/60" />
-            <span className="relative size-1.5 rounded-full bg-brand" />
+            <span className="relative size-2 rounded-full bg-brand" />
           </span>
           Tutoring marketplace · online &amp; in person
         </p>
@@ -88,46 +85,53 @@ export function Hero() {
         </h1>
 
         <p data-hero-in data-reveal className="mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-          TutorLink connects students and families with private tutors for school subjects, test prep, languages and more. Search for free, compare tutors and book your first lesson.
+          Private tutors for school subjects, test prep, languages and more. Answer two questions, meet your three best matches and book a lesson in a few taps.
         </p>
 
-        <div data-hero-in data-reveal className="mt-9 w-full max-w-2xl">
-          <SubjectSearch hideLabel />
-        </div>
-
-        <div data-hero-in data-reveal className="mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-2">
-          <span className="mr-1 text-[13.5px] text-muted">Popular:</span>
-          {HERO_POPULAR.map((s) => (
-            <Link
-              key={s.slug}
-              href={`/tutors?subject=${s.slug}`}
-              className="rounded-full border border-line bg-surface/80 px-3 py-1 text-[13.5px] font-medium text-ink-2 backdrop-blur transition-colors hover:border-line-strong hover:text-ink"
-            >
-              {s.name}
-            </Link>
-          ))}
-        </div>
-
-        <div data-hero-in data-reveal className="mt-7 flex flex-col items-center gap-3">
-          <ul className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-[14px] text-ink-2">
-            {HERO_PROMISES.map((p) => (
-              <li key={p} className="inline-flex items-center gap-1.5">
-                <Check className="size-4 text-success" strokeWidth={2.6} aria-hidden /> {p}
-              </li>
+        {/* Smart Match starts here: the first question sits in the hero, the second opens in a popup. */}
+        <div data-hero-in data-reveal className="glass-card mt-9 w-full max-w-3xl rounded-3xl p-4 text-left sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2.5 font-heading text-[17px] font-semibold tracking-[-0.02em] text-ink sm:text-[19px]">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-white">
+                <Sparkles className="size-4" aria-hidden />
+              </span>
+              What subject do you need help with?
+            </h2>
+            <span className="hidden shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[12.5px] font-medium text-muted sm:block">Smart Match · 1 of 2</span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
+            {QUIZ_SUBJECTS.map((s) => (
+              <button
+                key={s.slug}
+                type="button"
+                onClick={() => setQuiz({ open: true, subject: s.slug })}
+                className="group flex items-center gap-2.5 rounded-2xl border border-line bg-surface p-2.5 text-left transition-[border-color,background-color,transform] hover:border-brand/50 hover:bg-brand-50 active:scale-[0.98] sm:p-3"
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+                  <CategoryIcon slug={s.category} className="size-[18px]" />
+                </span>
+                <span className="min-w-0 truncate text-[14.5px] font-semibold text-ink">{s.name}</span>
+              </button>
             ))}
-          </ul>
-          <Link href="/concierge" className="group inline-flex items-center gap-1.5 text-[14.5px] font-medium text-brand">
-            Not sure what you need? Get matched <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
-          </Link>
+          </div>
+          <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant="cta" size="lg" className="group" onClick={() => setQuiz({ open: true })}>
+              <Sparkles /> Find my tutor <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+            </Button>
+            <Link href="/tutors" className="group inline-flex items-center justify-center gap-1.5 text-[14.5px] font-medium text-ink-2 transition-colors hover:text-ink">
+              <Search className="size-4" aria-hidden /> Or browse every tutor <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+          </div>
         </div>
+        <SmartMatchQuiz open={quiz.open} onOpenChange={(open) => setQuiz((q) => ({ ...q, open }))} initialSubject={quiz.subject} />
       </div>
 
       {/* Lesson photos */}
       <div className="container-page mt-14 grid grid-cols-12 items-start gap-4 sm:mt-16 lg:gap-5" aria-hidden>
         {HERO_PHOTOS.map((p) => (
           <div key={p.src} data-hero-photo data-reveal className={cn("relative overflow-hidden rounded-3xl border border-line bg-canvas shadow-lg", p.cls)}>
-            <Image src={p.src} alt="" fill preload={p.src === "/images/hero-tutoring.jpg"} sizes="(min-width: 768px) 50vw, 100vw" className={cn("object-cover", p.pos)} />
-            <span className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[12.5px] font-medium text-ink shadow-sm backdrop-blur">{p.label}</span>
+            <Image src={p.src} alt="" fill preload={p.src === "/images/lesson-tutor-and-student.jpg"} sizes="(min-width: 768px) 50vw, 100vw" className={cn("object-cover", p.pos)} />
+            <span className="absolute bottom-3 left-3 rounded-full bg-surface/90 px-3 py-1 text-[12.5px] font-medium text-ink shadow-sm backdrop-blur">{p.label}</span>
           </div>
         ))}
       </div>
@@ -135,17 +139,17 @@ export function Hero() {
       {/* How it works, at a glance: what to do, in order */}
       <div className="container-page pb-16 pt-12 sm:pb-24 sm:pt-16">
         <Reveal>
-          <div className="rounded-3xl border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(9_9_11/0.04),0_28px_56px_-32px_rgb(9_9_11/0.22)] sm:p-8 lg:p-10">
+          <div className="rounded-3xl border border-line bg-surface p-6 shadow-lg sm:p-8 lg:p-10">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-[13.5px] font-medium text-brand">How TutorLink works</p>
-                <h2 className="mt-1.5 font-heading text-[1.6rem] font-bold leading-tight tracking-[-0.035em] text-ink sm:text-[2rem]">From search to your first lesson in four steps</h2>
+                <Eyebrow>How TutorLink works</Eyebrow>
+                <h2 className="mt-5 font-heading text-[1.75rem] font-bold leading-[1.1] tracking-[-0.04em] text-ink sm:text-[2.25rem]">Search, book, learn — three steps to your first lesson</h2>
               </div>
               <ArrowLink href="/how-it-works" className="shrink-0">
                 See every step
               </ArrowLink>
             </div>
-            <Stagger as="ol" className="mt-8 grid gap-7 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0" stagger={0.08}>
+            <Stagger as="ol" className="mt-8 grid gap-7 lg:grid-cols-3 lg:gap-0" stagger={0.08}>
               {HERO_STEPS.map((step, i) => (
                 <StaggerItem key={step.title} className="relative lg:border-l lg:border-line lg:px-7 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0">
                   <div className="flex items-center gap-3">
@@ -250,18 +254,18 @@ function SubjectExplorer() {
           >
             {/* Phones and tablets: a short photo strip */}
             <div className="relative aspect-[16/7] overflow-hidden rounded-xl bg-canvas lg:hidden">
-              <Image src={`/images/subjects/${area.slug}.jpg`} alt="" fill sizes="100vw" className="object-cover" />
+              <Image src={`/images/subject-areas/${area.slug}.jpg`} alt="" fill sizes="100vw" className="object-cover" />
             </div>
 
             <div className="flex flex-col">
               <p className="kicker">
-                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+                <span className="kicker-dot" aria-hidden />
                 {topics.length} subjects{areaTutors > 0 && ` · ${areaTutors} ${areaTutors === 1 ? "tutor" : "tutors"}`}
               </p>
               <h3 className="mt-3 font-heading text-[28px] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[34px]">{area.label}</h3>
               <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-ink-2">{area.body}</p>
 
-              <p className="mt-7 text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Choose a topic</p>
+              <p className="mt-7 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Choose a topic</p>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {topics.map((s) => {
                   const n = counts.bySubject[s.slug] ?? 0;
@@ -300,7 +304,7 @@ function SubjectExplorer() {
                 {SUBJECT_AREAS.map((a) => (
                   <Image
                     key={a.slug}
-                    src={`/images/subjects/${a.slug}.jpg`}
+                    src={`/images/subject-areas/${a.slug}.jpg`}
                     alt=""
                     fill
                     sizes="300px"
@@ -366,7 +370,7 @@ function TutorStack() {
             style={{ left: i * 16, top: i * 92, zIndex: 3 - i }}
           >
             {t ? (
-              <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="xl" square className="shrink-0" />
+              <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="xl" square className="shrink-0" />
             ) : (
               <span className="grid size-16 shrink-0 place-items-center rounded-lg bg-canvas text-subtle">
                 <UserRound className="size-7" />
@@ -422,7 +426,7 @@ function VideoCall() {
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
         className="absolute bottom-0 left-0 h-[94%] w-[78%] overflow-hidden rounded-t-lg border border-b-0 border-ink/20 bg-canvas"
       >
-        <Image src="/images/become-a-tutor.jpg" alt="" fill sizes="(min-width: 1024px) 300px, 78vw" className="object-cover object-[82%_30%]" />
+        <Image src="/images/tutor-at-laptop.jpg" alt="" fill sizes="(min-width: 1024px) 300px, 78vw" className="object-cover object-[40%_30%]" />
       </motion.div>
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
@@ -431,7 +435,7 @@ function VideoCall() {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
         className="absolute right-0 top-[10%] aspect-[4/5] w-[40%] overflow-hidden rounded-lg border-2 border-surface bg-canvas shadow-xl"
       >
-        <Image src="/images/hero-tutoring-close.jpg" alt="" fill sizes="(min-width: 1024px) 160px, 40vw" className="object-cover object-[28%_40%]" />
+        <Image src="/images/adult-learner-online.jpg" alt="" fill sizes="(min-width: 1024px) 160px, 40vw" className="object-cover object-[74%_30%]" />
       </motion.div>
     </div>
   );
@@ -494,7 +498,7 @@ function LearnMock() {
     <div className="relative h-full" aria-hidden>
       <VideoCall />
       <div className="absolute left-0 top-0 z-10 rounded-xl border border-line bg-surface/95 p-4 shadow-lg backdrop-blur">
-        <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-muted">After every lesson</p>
+        <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">After every lesson</p>
         <ul className="mt-2.5 space-y-1.5 text-[13.5px] font-medium text-ink">
           {["Lesson notes", "Homework", "Goal progress"].map((x) => (
             <li key={x} className="flex items-center gap-2">
@@ -729,8 +733,8 @@ export function GetMatched() {
       <div className="container-page grid items-center gap-12 py-16 sm:py-24 lg:grid-cols-[1fr_minmax(0,540px)] lg:gap-20 lg:py-28">
         <div>
           <Reveal>
-            <p className="kicker border-white/15 bg-white/10 text-white/85 shadow-none">
-              <Zap className="size-3.5 fill-[#a5b4fc] text-[#a5b4fc]" aria-hidden /> Smart tutor matching
+            <p className="kicker border-white/20 bg-white/10 text-white shadow-none">
+              <Zap className="size-4 fill-[#a5b4fc] text-[#a5b4fc]" aria-hidden /> Smart tutor matching
             </p>
           </Reveal>
           <h2 id="match-title" className="mt-6 font-heading text-[2.4rem] font-bold leading-[1.02] tracking-[-0.045em] text-white sm:text-[3.25rem] lg:text-[3.75rem] [&_.text-aurora]:text-[#a5b4fc]">
@@ -801,6 +805,7 @@ export function FeaturedTutors() {
   return (
     <Section>
       <SectionHeading
+        eyebrow="Our tutors"
         title="Meet some of our tutors"
         description="Experienced, identity-verified tutors. Featured placement never affects search ranking or match scores."
         action={<ArrowLink href="/tutors">Browse all tutors</ArrowLink>}
@@ -914,7 +919,7 @@ export function WhyTutorLink() {
       <Reveal className="mt-4">
         <div className="grid overflow-hidden rounded-2xl border border-line bg-surface lg:grid-cols-[1fr_1.1fr]">
           <div className="relative min-h-[260px] lg:min-h-[340px]">
-            <Image src="/images/family.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover" />
+            <Image src="/images/parent-and-daughter.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover" />
           </div>
           <div className="flex flex-col justify-center p-6 sm:p-10">
             <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-brand">Also with every lesson</p>
@@ -1011,7 +1016,7 @@ export function BecomeTutor() {
         </div>
         <Reveal delay={0.1} className="relative">
           <div className="relative aspect-[4/3.4] overflow-hidden rounded-2xl shadow-xl">
-            <Image src="/images/become-a-tutor.jpg" alt="A tutor smiling while working on a laptop" fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
+            <Image src="/images/tutor-at-laptop.jpg" alt="A tutor smiling while working on a laptop" fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
           </div>
         </Reveal>
       </div>

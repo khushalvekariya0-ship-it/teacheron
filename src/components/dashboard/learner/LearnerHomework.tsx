@@ -188,7 +188,7 @@ function HomeworkInner({ me }: { me: User }) {
 
                             {h.feedback && (
                               <div className="mt-3 flex gap-3 rounded-lg border border-success-200 bg-success-50/60 px-4 py-3">
-                                <Avatar name={tutorFullName(tutor)} tone={tutor?.tone} size="sm" />
+                                <Avatar name={tutorFullName(tutor)} src={tutor?.photoUrl} tone={tutor?.tone} size="sm" />
                                 <div className="min-w-0">
                                   <p className="text-[12px] font-medium text-success">
                                     Feedback from {tutor?.firstName ?? "your tutor"} · {formatDate(h.feedback.at, tz, { month: "short", day: "numeric" })}

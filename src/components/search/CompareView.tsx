@@ -52,7 +52,7 @@ function HeaderCard({ tutor, notes, onRemove }: { tutor: Tutor; notes: string[];
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between gap-2">
-        <Avatar name={name} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
+        <Avatar name={name} src={tutor.photoUrl} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
         <button type="button" onClick={onRemove} className="-mr-1 -mt-1 grid size-9 place-items-center rounded-md text-muted transition-colors hover:bg-sunken hover:text-ink" aria-label={`Remove ${name} from comparison`}>
           <X className="size-4" />
         </button>
@@ -394,7 +394,7 @@ export function CompareView() {
                           >
                             <X className="size-3.5" />
                           </button>
-                          <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="lg" />
+                          <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="lg" />
                           <span className="mt-2.5 text-[14.5px] font-semibold text-ink">
                             {t.firstName} {t.lastName.charAt(0)}.
                           </span>
@@ -493,7 +493,7 @@ export function CompareView() {
               <AnimatePresence initial={false} mode="popLayout">
                 {selected.map((t) => (
                   <motion.div key={t.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="columnheader" className="flex min-w-0 items-center gap-2 border-l border-line px-3 py-2.5 first:border-l-0 sm:px-4 lg:first:border-l">
-                    <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="xs" className="hidden sm:inline-flex" />
+                    <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="xs" className="hidden sm:inline-flex" />
                     <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
                       {t.firstName} {t.lastName.charAt(0)}.
                     </span>

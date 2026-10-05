@@ -22,7 +22,7 @@ export default function AboutPage() {
   return (
     <>
       <PageHero
-        image={{ src: "/images/hero-tutoring-close.jpg", alt: "A tutor and a student working through a lesson together" }}
+        image={{ src: "/images/lesson-together.jpg", alt: "A tutor and a student working through a lesson together" }}
         eyebrow="About TutorLink"
         title="Tutoring works best when everyone can see how it works."
         description="We're building a tutoring marketplace for families and tutors across the United States — one where rankings are explained, badges are earned, and personal information stays private."

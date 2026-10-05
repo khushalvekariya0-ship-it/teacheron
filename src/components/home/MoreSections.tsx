@@ -25,7 +25,7 @@ function PlanTimeline() {
   const steps = ["Diagnostic test", "Weekly practice", "Full practice test"];
   return (
     <div className="rounded-xl border border-line bg-page p-4" aria-hidden>
-      <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-muted">How a plan can look</p>
+      <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">How a plan can look</p>
       <ol className="relative mt-4 grid grid-cols-3 gap-2">
         <span className="absolute left-[16%] right-[16%] top-3.5 h-px bg-brand-gradient" />
         {steps.map((s, i) => (
@@ -241,8 +241,8 @@ const MODES: Mode[] = [
     icon: Monitor,
     title: "Online lessons",
     bestFor: "Best for busy schedules, test prep and learning with a tutor anywhere in the U.S.",
-    image: "/images/online-class.jpg",
-    alt: "A student following a tutor on a video call",
+    image: "/images/video-call-lesson.jpg",
+    alt: "A learner greeting her tutor on a video call",
     points: [
       "Join from a laptop or tablet with a secure video link",
       "Notes, homework and files kept in one place",
@@ -255,8 +255,8 @@ const MODES: Mode[] = [
     icon: MapPin,
     title: "In-person lessons",
     bestFor: "Best for younger learners, hands-on subjects and focused time at the same table.",
-    image: "/images/in-person.jpg",
-    alt: "A tutor and a student working together at a table",
+    image: "/images/lesson-in-person.jpg",
+    alt: "Two people working through notes together at a library table",
     points: [
       "Search by ZIP code and how far you're happy to travel",
       "Meet at home, a library or another place you agree on",
@@ -278,7 +278,7 @@ function ModeOverlay({ mode }: { mode: Mode["key"] }) {
   if (mode === "online") {
     return (
       <>
-        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
+        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
           <Lock className="size-3.5 text-brand" /> Secure link · opens {DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} min before
         </span>
         <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-night/70 p-1.5 backdrop-blur">
@@ -296,10 +296,10 @@ function ModeOverlay({ mode }: { mode: Mode["key"] }) {
   }
   return (
     <>
-      <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
+      <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
         <MapPin className="size-3.5 text-brand" /> Approximate area only
       </span>
-      <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
+      <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
         <Search className="size-3.5 text-brand" /> Search by ZIP &amp; distance
       </span>
     </>
@@ -410,8 +410,8 @@ const LEARNERS: Learner[] = [
     body: "One parent account covers every child. You choose the tutor, book and pay — and see how each lesson went.",
     points: ["A profile for each child with grade and goals", "See every message about your child", "Notes, homework and attendance after each lesson"],
     startWith: ["reading", "pre-algebra", "study-skills"],
-    image: "/images/family-reading.jpg",
-    alt: "A father and his son reading and writing together",
+    image: "/images/father-and-son.jpg",
+    alt: "A father helping his son with schoolwork at a laptop",
     cta: { href: "/for-parents", label: "Tutoring for your kids" },
   },
   {
@@ -422,7 +422,7 @@ const LEARNERS: Learner[] = [
     body: "Find a tutor for your exact course or exam, and book around practice, work and everything else.",
     points: ["Tutors for your specific class or test", "Lessons that fit around school and activities", "Topics you've mastered, tracked over time"],
     startWith: ["algebra", "chemistry", "sat"],
-    image: "/images/hero-tutoring-close.jpg",
+    image: "/images/lesson-together.jpg",
     alt: "A tutor and a student working through a lesson together",
     cta: { href: "/for-students", label: "Tutoring for students" },
   },
@@ -434,7 +434,7 @@ const LEARNERS: Learner[] = [
     body: "Pick up a language, learn to code or prepare for a graduate exam — with evening and weekend lessons.",
     points: ["Evening and weekend availability", "Learn online from anywhere in the U.S.", "Go at your own pace, lesson by lesson"],
     startWith: ["spanish", "python", "gre"],
-    image: "/images/adult-learner.jpg",
+    image: "/images/adult-learner-online.jpg",
     alt: "An adult learner in an online lesson",
     cta: { href: "/tutors", label: "Browse tutors" },
   },
@@ -446,7 +446,7 @@ function LearnerCard({ learner: l }: { learner: Learner }) {
       <div className="relative aspect-[4/3] overflow-hidden bg-canvas">
         <Image src={l.image} alt={l.alt} fill sizes="(min-width: 1024px) 400px, 100vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.04]" />
         <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night/50 to-transparent" aria-hidden />
-        <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-[13px] font-semibold text-ink shadow-md backdrop-blur">
+        <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-surface/95 px-3 py-1.5 text-[13px] font-semibold text-ink shadow-md backdrop-blur">
           <l.icon className="size-4 text-brand" aria-hidden /> {l.label}
         </span>
       </div>
@@ -460,7 +460,7 @@ function LearnerCard({ learner: l }: { learner: Learner }) {
             </li>
           ))}
         </ul>
-        <p className="mt-6 text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Start with</p>
+        <p className="mt-6 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Start with</p>
         <ul className="mt-2.5 flex flex-wrap gap-1.5">
           {l.startWith.map((slug) => (
             <li key={slug}>

@@ -44,7 +44,7 @@ export function LessonDetails({ booking: b, people, isTutor, tz }: { booking: Bo
               "You"
             ) : people.tutor ? (
               <Link href={`/tutors/${people.tutor.slug}`} className="inline-flex items-center gap-1.5 text-ink hover:underline">
-                <Avatar name={`${people.tutor.firstName} ${people.tutor.lastName}`} tone={people.tutor.tone} size="xs" />
+                <Avatar name={`${people.tutor.firstName} ${people.tutor.lastName}`} src={people.tutor.photoUrl} tone={people.tutor.tone} size="xs" />
                 {people.counterpart}
                 <ArrowUpRight className="size-3.5" aria-hidden />
               </Link>

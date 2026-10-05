@@ -12,9 +12,11 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         // Solid ink: the main action on a page.
-        primary: "bg-ink text-on-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_1px_2px_rgb(9_9_11/0.2)] hover:bg-navy-hover active:bg-black",
-        // Solid indigo accent: the key actions (find, book, sign up).
-        brand: "bg-brand text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(9_9_11/0.18),0_6px_16px_-8px_rgb(79_70_229/0.6)] hover:bg-brand-hover active:bg-brand-press",
+        primary: "bg-ink text-on-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_1px_2px_rgb(9_9_11/0.2)] hover:bg-navy-hover active:bg-navy-press",
+        // Solid indigo: important actions that are not the one coral action on the screen.
+        brand: "bg-brand text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(9_9_11/0.18),0_6px_16px_-8px_var(--color-brand-glow)] hover:bg-brand-hover active:bg-brand-press",
+        // Electric coral with dark text: the action we want pressed (find a tutor, book, pay). One per screen.
+        cta: "bg-cta font-semibold text-on-cta shadow-[inset_0_1px_0_rgb(255_255_255/0.28),0_1px_2px_rgb(9_9_11/0.14),0_10px_24px_-10px_var(--color-cta-glow)] hover:bg-cta-hover active:bg-cta-press",
         // Quiet hairline button on the page colour.
         secondary: "border border-line-strong bg-surface text-ink shadow-xs hover:border-subtle hover:bg-canvas",
         outline: "border border-line-strong bg-surface text-ink hover:border-ink",

@@ -3,16 +3,17 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
-import type { Booking, BookingType, Tutor } from "@/lib/types";
+import type { Booking, BookingType, PayMethod, Tutor } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useFlag, useHydrated, useSession, useViewerTimezone } from "@/lib/store/hooks";
+import { useFlag, useHydrated, useSession, useViewerTimezone, useWalletBalance } from "@/lib/store/hooks";
 import { policySummary } from "@/lib/booking";
 import { formatCents, formatDuration } from "@/lib/format";
 import { cn, idempotencyKey } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
-import { Dialog, DialogContent, Sheet, SheetContent } from "@/components/ui/Overlay";
+import { Sheet, SheetContent } from "@/components/ui/Overlay";
 import { toast } from "@/components/ui/Toast";
+import { WalletDrawer } from "@/components/wallet/WalletDrawer";
 import { useIsDesktop } from "./useMediaQuery";
 import { ConsentGate, FlowLoading, RoleGate, SignInGate } from "./BookingGates";
 import { DetailsStep, NOTES_MAX, ReviewStep, SuccessStep, TimeStep, lessonMinutes, lessonPrice, type Draft } from "./BookingSteps";
@@ -26,12 +27,14 @@ const STEPS: { key: Exclude<Step, "success">; label: string; long: string }[] = 
 ];
 
 /** Errors from createBooking that mean the chosen time no longer works. */
-const SLOT_ERROR = /just booked|notice|days ahead|start times|valid time/i;
+export const SLOT_ERROR = /just booked|notice|days ahead|start times|valid time/i;
 
 export interface BookingRequest {
   /** Increments every time a booking button is pressed, so the flow can reset or resume. */
   id: number;
   type: BookingType;
+  /** A time already picked on the profile calendar: the drawer opens straight on "Confirm". */
+  preset?: { startUtc: string; duration: number; subject: string };
 }
 
 function StepIndicator({ step }: { step: Step }) {
@@ -58,6 +61,10 @@ const slide = {
   exit: (d: number) => ({ x: d * -28, opacity: 0 }),
 };
 
+/**
+ * The checkout: a drawer that slides out from the right (a bottom sheet on phones).
+ * Details → time → confirm and pay, or straight to confirm when the time was picked on the profile.
+ */
 export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tutor; open: boolean; onOpenChange: (open: boolean) => void; request: BookingRequest }) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
@@ -70,6 +77,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const createBooking = useApp((s) => s.createBooking);
   const validateCoupon = useApp((s) => s.validateCoupon);
   const startConversation = useApp((s) => s.startConversation);
+  const balance = useWalletBalance();
   const trialFlag = useFlag("trial_lessons");
   const instantFlag = useFlag("instant_booking");
   const onlineFlag = useFlag("online_lessons");
@@ -99,37 +107,65 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const [submitting, setSubmitting] = React.useState(false);
   const [booking, setBooking] = React.useState<Booking | null>(null);
   const [messaging, setMessaging] = React.useState(false);
+  // null = not chosen yet: Study Credits when they cover the lesson, otherwise the card.
+  const [payChoice, setPayChoice] = React.useState<PayMethod | null>(null);
+  const [walletOpen, setWalletOpen] = React.useState(false);
   // One idempotency key per booking attempt ("session"), created on first confirm press.
   const [session, setSession] = React.useState(0);
   const idem = React.useRef<{ session: number; key: string } | null>(null);
   const bodyRef = React.useRef<HTMLDivElement>(null);
+
+  const trialUsedBy = (learnerKey: string | undefined) =>
+    !!learnerKey && bookings.some((b) => b.tutorId === tutor.id && b.type === "trial" && (b.childId ?? b.bookerId) === learnerKey && !b.status.startsWith("cancelled"));
+
+  /** What still has to be fixed on the details step before this draft can be booked. */
+  const detailsProblem = (d: Draft): string | null =>
+    !tutor.subjects.includes(d.subject)
+      ? "Choose a subject."
+      : !tutor.modes.includes(d.mode) || (d.mode === "online" && !onlineFlag)
+        ? "Choose an available format."
+        : me?.role === "parent" && !myChildren.some((c) => c.id === d.childId)
+          ? myChildren.length
+            ? "Choose who this lesson is for."
+            : "Add a child profile to continue."
+          : d.type === "trial" && (!trialOffered || trialUsedBy(d.childId || me?.id))
+            ? "Trial isn't available — choose a regular lesson."
+            : d.notes.length > NOTES_MAX
+              ? "Shorten your notes."
+              : null;
 
   // A new press of a booking button: resume an unfinished flow of the same type, otherwise start over.
   const [prevRequest, setPrevRequest] = React.useState(request.id);
   if (prevRequest !== request.id) {
     setPrevRequest(request.id);
     const resume = step !== "success" && draft.type === wantedType(request.type) && (me?.role !== "parent" || !!draft.childId);
+    const preset = request.preset;
     if (!resume) {
-      setDraft(freshDraft(request.type));
-      setStep("details");
-      setDir(1);
       setCoupon(null);
       setCouponError(null);
       setAgree(false);
       setAgreeError(false);
       setBooking(null);
       setMessaging(false);
+      setPayChoice(null);
       setSession((s) => s + 1);
+    }
+    if (preset) {
+      // The time was picked on the profile calendar: go straight to confirm unless a detail is still missing.
+      const next: Draft = { ...(resume ? draft : freshDraft(request.type)), duration: preset.duration, subject: preset.subject, startUtc: preset.startUtc };
+      setDraft(next);
+      setDir(1);
+      setStep(detailsProblem(next) ? "details" : "review");
+    } else if (!resume) {
+      setDraft(freshDraft(request.type));
+      setStep("details");
+      setDir(1);
     }
   }
 
   const set = React.useCallback((patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch })), []);
 
-  const learnerKey = draft.childId || me?.id;
-  const trialUsed = React.useMemo(
-    () => !!learnerKey && bookings.some((b) => b.tutorId === tutor.id && b.type === "trial" && (b.childId ?? b.bookerId) === learnerKey && !b.status.startsWith("cancelled")),
-    [bookings, tutor.id, learnerKey],
-  );
+  const trialUsed = trialUsedBy(draft.childId || me?.id);
   const minutes = lessonMinutes(tutor, draft);
   const subtotal = lessonPrice(tutor, draft);
   const discount = coupon ? Math.min(coupon.discount, subtotal) : 0;
@@ -137,20 +173,9 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const instant = !tutor.rules.requiresApproval && instantFlag;
   const child = myChildren.find((c) => c.id === draft.childId);
   const learnerName = me?.role === "parent" ? child?.firstName ?? "—" : me ? `You (${me.firstName})` : "—";
-
-  const detailsError = !tutor.subjects.includes(draft.subject)
-    ? "Choose a subject."
-    : !tutor.modes.includes(draft.mode) || (draft.mode === "online" && !onlineFlag)
-      ? "Choose an available format."
-      : me?.role === "parent" && !child
-        ? myChildren.length
-          ? "Choose who this lesson is for."
-          : "Add a child profile to continue."
-        : draft.type === "trial" && (!trialOffered || trialUsed)
-          ? "Trial isn't available — choose a regular lesson."
-          : draft.notes.length > NOTES_MAX
-            ? "Shorten your notes."
-            : null;
+  const detailsError = detailsProblem(draft);
+  const walletCovers = total > 0 && balance >= total;
+  const payWith: PayMethod = payChoice === "wallet" ? (walletCovers ? "wallet" : "card") : (payChoice ?? (walletCovers ? "wallet" : "card"));
 
   const go = (next: Step, d = 1) => {
     setDir(d);
@@ -199,6 +224,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
       childId: me?.role === "parent" ? draft.childId : undefined,
       notes: draft.notes.trim() || undefined,
       couponCode: coupon && discount > 0 ? coupon.code : undefined,
+      payWith: total > 0 ? payWith : undefined,
       idempotencyKey: key,
     });
     setSubmitting(false);
@@ -279,6 +305,10 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
                   }}
                   couponsEnabled={couponsFlag}
                   instant={instant}
+                  payWith={payWith}
+                  onPayWith={setPayChoice}
+                  walletBalance={balance}
+                  onTopUp={() => setWalletOpen(true)}
                   policy={policySummary(draft.type, policy)}
                   agree={agree}
                   onAgree={(v) => {
@@ -343,29 +373,30 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
           </Button>
         )}
         {step === "review" && (
-          <Button size="lg" onClick={confirm} loading={submitting} className="min-w-40">
+          <Button size="lg" variant="cta" onClick={confirm} loading={submitting} className="min-w-40">
             {!submitting && total > 0 && <Lock />}
-            {submitting ? "Processing…" : total === 0 ? (instant ? "Confirm booking" : "Send request") : instant ? `Pay ${formatCents(total, { exact: total % 100 !== 0 })}` : "Send request"}
+            {submitting ? "Processing…" : total === 0 ? (instant ? "Confirm booking" : "Send request") : instant ? `Pay ${formatCents(total, { exact: total % 100 !== 0 })}${payWith === "wallet" ? " with credits" : ""}` : "Send request"}
           </Button>
         )}
       </div>
     );
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent title={title} description={description} size="lg" onInteractOutside={(e) => submitting && e.preventDefault()}>
-          {body}
-          {footer && <div className="sticky bottom-0 border-t border-line bg-surface/95 px-5 py-3.5 backdrop-blur sm:px-6">{footer}</div>}
-        </DialogContent>
-      </Dialog>
-    );
-  }
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="bottom" title={title} description={description} footer={footer ?? undefined} className="max-h-[92dvh]">
-        {body}
-      </SheetContent>
-    </Sheet>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side={isDesktop ? "right" : "bottom"}
+          title={title}
+          description={description}
+          footer={footer ?? undefined}
+          className={isDesktop ? "w-[min(100vw,32rem)]" : "max-h-[92dvh]"}
+          onInteractOutside={(e) => (submitting || walletOpen) && e.preventDefault()}
+          data-lenis-prevent
+        >
+          {body}
+        </SheetContent>
+      </Sheet>
+      <WalletDrawer open={walletOpen} onOpenChange={setWalletOpen} />
+    </>
   );
 }

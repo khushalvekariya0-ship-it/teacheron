@@ -28,6 +28,10 @@ The preview build had to pick concrete behaviour for every rule. These are **def
 | D20 | Lesson completion timing | Tutor may complete any time after start | Proposed |
 | D21 | Instant booking | Tutor opt-in + platform flag | Proposed |
 | D22 | SMS, referrals, tax | SMS and referrals off | Proposed |
+| D23 | Study Credits (learner wallet) | Packs $25–$200 at face value; refunds return to the wallet | Proposed |
+| D24 | Payment methods and currency | Credits, card and UPI shown; prices in USD | Proposed |
+| D25 | Classroom media and whiteboard sync | Local capture only; no media server yet | Proposed |
+| D26 | "Online now" and tutor intro media | Online = inside teaching hours; intro reel from the profile; stock portraits for sample tutors | Proposed |
 
 ---
 
@@ -190,3 +194,28 @@ The preview build had to pick concrete behaviour for every rule. These are **def
 - **SMS** is off (`sms_notifications` flag). Before enabling: TCPA-compliant opt-in with phone verification, STOP handling, quiet hours (9 pm–8 am recipient time) for non-urgent messages.
 - **Referrals** are off (`referrals` flag). Decide reward (e.g. $20 credit to both parties after the referred learner's first completed paid lesson), caps and fraud checks.
 - **Tax:** Stripe Connect issues 1099-K forms to tutors; decide whether subscriptions and credit packs need sales-tax collection (e.g. Stripe Tax) and review state rules for tutoring marketplaces before launch.
+
+## D23. Study Credits (learner wallet)
+
+**Current:** students and parents can buy credit packs of $25, $50, $100 or $200 by card or UPI. Credits are worth face value (no bonus, no fee), have no expiry rule, and can pay for a whole lesson in one tap; they cannot part-pay. A request that needs tutor approval debits the wallet immediately and returns the credits if it is declined, cancelled or expires. Every refund for a credit-paid lesson goes back to the wallet, not to a card.
+
+**Decide:** whether credits can be withdrawn to the original payment method, whether they expire (check state escheat and stored-value rules), whether larger packs earn a bonus, and whether part-payment (credits + card) is needed.
+
+## D24. Payment methods and currency
+
+**Current:** the checkout offers Study Credits, card and UPI; prices are in US dollars and the copy is US-first. UPI is an Indian payment rail and cannot settle USD through Stripe US.
+
+**Decide:** the launch market. For India: prices in ₹, Razorpay or Stripe India for UPI and cards, GST on the platform fee. For the US: drop UPI and keep cards (plus Apple Pay / Google Pay). Running both needs per-market pricing and two payment providers.
+
+## D25. Classroom media and whiteboard sync
+
+**Current:** the classroom captures the local camera, microphone and screen in the browser and keeps the whiteboard in the browser (mirrored between windows on the same device). Nothing is sent to the other participant yet.
+
+**Recommendation:** a managed WebRTC SFU (LiveKit Cloud, Daily or Twilio Video) with short-lived room tokens issued by the API only to the booking's participants inside the lesson window; whiteboard strokes over the same provider's data channel or the existing realtime gateway, persisted per booking. Decide on lesson recording (consent, storage, retention — sensitive for minors; default off).
+
+## D26. "Online now" and tutor intro media
+
+**Current:** "Online now" means the tutor teaches online and the current time is inside their published teaching hours. Tutor cards play an intro on hover: an uploaded clip (first 15 seconds, muted) when `introVideoUrl` is set, otherwise a 15-second reel generated from the profile. Sample tutors use credited stock portraits (`public/images/tutors`, models — see `public/images/CREDITS.md`) and have no clips, so their hover intro is the generated reel. A tutor without a photo shows an initials tile.
+
+**Recommendation:** real presence from a heartbeat while the tutor's dashboard is open (with an "appear offline" switch); photo and intro-clip upload in tutor onboarding with moderation before publishing, a 60-second / 50 MB limit and server-side transcoding.
+

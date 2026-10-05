@@ -15,6 +15,8 @@ import { CategoryIcon } from "@/components/content/icons";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
+import { DarkModeToggle } from "@/components/ui/DarkModeToggle";
+import { WalletButton } from "@/components/wallet/WalletButton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/Overlay";
 import { useSession, useUnreadNotifications, useUnreadMessages } from "@/lib/store/hooks";
 import { useApp } from "@/lib/store";
@@ -65,9 +67,9 @@ function ActivePill() {
 }
 
 /**
- * Full-width white bar with a hairline bottom border (frosted while scrolling): logo, the main
- * sections in the middle, then search and account actions. Below 1280px the sections move into
- * the ☰ menu.
+ * Full-width bar: see-through at the top of a page (the hero's mesh runs underneath it) and frosted
+ * glass once the page scrolls. Logo, the main sections in the middle, then search, theme, wallet and
+ * account actions. Below 1280px the sections move into the ☰ menu.
  */
 export function Navbar() {
   const pathname = usePathname();
@@ -106,7 +108,7 @@ export function Navbar() {
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
       className={cn(
         "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-200",
-        scrolled ? "border-line bg-white/85 shadow-[0_1px_12px_-6px_rgb(9_9_11/0.12)] backdrop-blur-xl backdrop-saturate-150" : "border-line/70 bg-white",
+        scrolled ? "glass border-line shadow-[0_1px_16px_-8px_rgb(11_16_51/0.18)]" : "border-transparent bg-transparent",
       )}
     >
       <div className="container-page flex h-16 items-center gap-8">
@@ -157,10 +159,12 @@ export function Navbar() {
         <div className="ml-auto flex items-center gap-2">
           <SearchTrigger className="hidden md:inline-flex" />
           <SearchTrigger compact className="md:hidden" />
+          <DarkModeToggle className="hidden sm:grid" />
+          <WalletButton />
           <div className="hidden items-center gap-2 xl:flex">
             <AccountArea />
           </div>
-          <Button asChild variant="brand" size="sm" className="hidden sm:inline-flex xl:hidden">
+          <Button asChild variant="cta" size="sm" className="hidden sm:inline-flex xl:hidden">
             <Link href="/tutors">Find a tutor</Link>
           </Button>
           <button
@@ -236,7 +240,7 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
 }
 
 /** Areas that have a photo; the rest get a gradient panel with their icon. */
-const AREA_PHOTOS = new Set(["math", "science", "english", "test-prep", "languages", "computer-science", "arts", "learning-support"]);
+const AREA_PHOTOS = new Set(["math", "science", "english", "test-prep", "languages", "computer-science", "social-studies", "arts", "learning-support"]);
 const POPULAR_SUBJECTS = SUBJECTS.filter((s) => s.popular).slice(0, 6);
 
 /** Subjects mega menu: hover an area on the left to see its subjects and a picture. */
@@ -314,7 +318,7 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
           <div className="flex flex-col gap-3 border-l border-line p-4">
             <div className="relative aspect-[4/3.6] overflow-hidden rounded-xl bg-canvas">
               {AREA_PHOTOS.has(cat.slug) ? (
-                <Image key={cat.slug} src={`/images/subjects/${cat.slug}.jpg`} alt="" fill sizes="200px" className="object-cover" />
+                <Image key={cat.slug} src={`/images/subject-areas/${cat.slug}.jpg`} alt="" fill sizes="200px" className="object-cover" />
               ) : (
                 <div className="absolute inset-0 grid place-items-center bg-brand-soft">
                   <CategoryIcon slug={cat.slug} className="size-12 text-brand" />
@@ -415,9 +419,12 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                 <DialogPrimitive.Title className="sr-only">Menu</DialogPrimitive.Title>
                 <div className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
                   <Logo />
-                  <DialogPrimitive.Close className="grid size-10 place-items-center rounded-full border border-line-strong text-ink transition-colors hover:bg-sunken" aria-label="Close menu">
-                    <X className="size-[18px]" strokeWidth={2.2} />
-                  </DialogPrimitive.Close>
+                  <div className="flex items-center gap-2">
+                    <DarkModeToggle />
+                    <DialogPrimitive.Close className="grid size-10 place-items-center rounded-full border border-line-strong text-ink transition-colors hover:bg-sunken" aria-label="Close menu">
+                      <X className="size-[18px]" strokeWidth={2.2} />
+                    </DialogPrimitive.Close>
+                  </div>
                 </div>
 
                 <nav aria-label="All pages" className="flex-1 overflow-y-auto px-5 pb-6 pt-4">
@@ -505,8 +512,8 @@ function AccountArea() {
         <Button asChild variant="ghost" size="sm" className="text-ink">
           <Link href="/login">Log in</Link>
         </Button>
-        <Button asChild size="sm">
-          <Link href="/register">Sign up</Link>
+        <Button asChild variant="cta" size="sm">
+          <Link href="/register">Sign up free</Link>
         </Button>
       </>
     );

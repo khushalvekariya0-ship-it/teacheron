@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 /** Areas that have a photo; the others get a gradient panel with their icon. */
-const AREA_PHOTOS = new Set(["math", "science", "english", "test-prep", "languages", "computer-science", "arts", "learning-support"]);
+const AREA_PHOTOS = new Set(["math", "science", "english", "test-prep", "languages", "computer-science", "social-studies", "arts", "learning-support"]);
 
 const MOSAIC = ["math", "science", "test-prep", "languages"];
 
@@ -37,7 +37,7 @@ export default function SubjectsPage() {
           <div>
             <Reveal>
               <p className="kicker">
-                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+                <span className="kicker-dot" aria-hidden />
                 Subjects
               </p>
             </Reveal>
@@ -73,7 +73,7 @@ export default function SubjectsPage() {
                 return (
                   <li key={slug} className={i % 2 ? "translate-y-6" : ""}>
                     <a href={`#${slug}`} className="group relative block aspect-[4/3.4] overflow-hidden rounded-2xl border border-line bg-canvas shadow-[0_18px_40px_-28px_rgb(15_23_42/0.5)]">
-                      <Image src={`/images/subjects/${slug}.jpg`} alt="" fill preload={i < 2} sizes="(min-width: 1024px) 280px, 45vw" className="object-cover transition-transform duration-700 group-hover:scale-105" />
+                      <Image src={`/images/subject-areas/${slug}.jpg`} alt="" fill preload={i < 2} sizes="(min-width: 1024px) 280px, 45vw" className="object-cover transition-transform duration-700 group-hover:scale-105" />
                       <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night/80 to-transparent p-4 pt-12">
                         <span className="inline-flex items-center gap-2 text-[15px] font-semibold text-white">
                           <CategoryIcon slug={slug} className="size-4" /> {c.name}
@@ -103,13 +103,13 @@ export default function SubjectsPage() {
                   <div className="overflow-hidden rounded-2xl border border-line bg-surface">
                     <div className="relative aspect-[16/9] bg-canvas">
                       {AREA_PHOTOS.has(c.slug) ? (
-                        <Image src={`/images/subjects/${c.slug}.jpg`} alt="" fill sizes="(min-width: 1024px) 340px, 100vw" className="object-cover" />
+                        <Image src={`/images/subject-areas/${c.slug}.jpg`} alt="" fill sizes="(min-width: 1024px) 340px, 100vw" className="object-cover" />
                       ) : (
                         <div className="absolute inset-0 grid place-items-center bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-to))]">
                           <CategoryIcon slug={c.slug} className="size-14 text-white/90" />
                         </div>
                       )}
-                      <span className="absolute left-3 top-3 rounded-md bg-white/95 px-2 py-1 font-heading text-[12px] font-bold tabular-nums text-ink shadow-sm">
+                      <span className="absolute left-3 top-3 rounded-md bg-surface/95 px-2 py-1 font-heading text-[12px] font-bold tabular-nums text-ink shadow-sm">
                         {String(i + 1).padStart(2, "0")}
                       </span>
                     </div>

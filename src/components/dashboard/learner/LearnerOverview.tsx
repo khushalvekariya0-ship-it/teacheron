@@ -92,10 +92,9 @@ function JoinArea({ booking, tutor }: { booking: Booking; tutor?: Tutor }) {
     return (
       <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}>
         <Button asChild>
-          <a href={booking.meetingUrl} target="_blank" rel="noopener noreferrer">
+          <Link href={`/classroom/${booking.id}`}>
             <Video /> Join lesson
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
+          </Link>
         </Button>
       </motion.div>
     );
@@ -137,7 +136,7 @@ function NextLessonCard({ booking, tutor, childName, tz }: { booking: Booking | 
         </div>
         <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3.5">
-            <Avatar name={name} tone={tutor?.tone} size="lg" verified={tutor?.verification.identity === "verified"} />
+            <Avatar name={name} src={tutor?.photoUrl} tone={tutor?.tone} size="lg" verified={tutor?.verification.identity === "verified"} />
             <div className="min-w-0">
               <h2 className="font-heading text-[1.4rem] font-bold tracking-[-0.03em] text-ink">
                 {subjectName(booking.subject)}

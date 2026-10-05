@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { CalendarDays, Clock, Copy, Globe, Hourglass, Link2, MapPin, ShieldCheck, Timer, Video } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, Clock, Globe, Hourglass, Link2, MapPin, PenLine, ShieldCheck, Timer, Video } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import { endMs, meetingLinkVisible, startMs } from "@/lib/booking";
 import type { BookingPolicy } from "@/lib/data/platform";
@@ -13,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { toast } from "@/components/ui/Toast";
 import { timeRange, tzShort } from "./shared";
 
 const DAY = 86_400_000;
@@ -62,7 +62,7 @@ export function LessonWhenWhere({
         </Item>
         <Item icon={b.mode === "online" ? Video : MapPin} label="Format">
           {MODE_LABEL[b.mode]}
-          {b.mode === "online" && <span className="font-normal text-muted"> · TutorLink video room</span>}
+          {b.mode === "online" && <span className="font-normal text-muted"> · TutorLink classroom</span>}
         </Item>
       </dl>
 
@@ -113,19 +113,19 @@ function OnlineStrip({ booking: b, now, policy, tz, soon, live, isTutor, tutorFi
   else if (live) {
     body = (
       <Explainer icon={Link2}>
-        Starts {formatRelative(b.startUtc, now)}. The meeting link appears here on {formatWeekdayDate(linkAt, tz)} at {formatTime(linkAt, tz)} — {policy.meetingLinkVisibleMinutesBefore} minutes before the start.
+        Starts {formatRelative(b.startUtc, now)}. The Join button appears here on {formatWeekdayDate(linkAt, tz)} at {formatTime(linkAt, tz)} — {policy.meetingLinkVisibleMinutesBefore} minutes before the start. <EarlyAccess id={b.id} />
       </Explainer>
     );
   } else if (b.status === "pending" && endMs(b) > now) {
     body = (
       <Explainer icon={Link2}>
-        {isTutor ? "Accept this request to confirm it." : `The lesson is confirmed once ${tutorFirstName} accepts.`} The meeting link then appears here {policy.meetingLinkVisibleMinutesBefore} minutes before the start time.
+        {isTutor ? "Accept this request to confirm it." : `The lesson is confirmed once ${tutorFirstName} accepts.`} The Join button for the classroom then appears here {policy.meetingLinkVisibleMinutesBefore} minutes before the start time.
       </Explainer>
     );
   } else if (b.status === "payment_failed") {
-    body = <Explainer icon={Link2}>The meeting link is shared once the booking is confirmed and paid.</Explainer>;
+    body = <Explainer icon={Link2}>The classroom opens once the booking is confirmed and paid.</Explainer>;
   } else if ((b.status === "confirmed" || b.status === "in_progress") && endMs(b) <= now) {
-    body = <Explainer icon={Link2}>This lesson has ended, so the meeting link is no longer available.</Explainer>;
+    body = <Explainer icon={Link2}>This lesson has ended, so the classroom is closed.</Explainer>;
   }
   if (!body) return null;
   return <div className="border-t border-line px-5 py-4">{body}</div>;
@@ -140,42 +140,40 @@ function Explainer({ icon: Icon, children }: { icon: React.ComponentType<{ class
   );
 }
 
+/** The classroom can be opened ahead of time to check the camera and prepare the board. */
+function EarlyAccess({ id }: { id: string }) {
+  return (
+    <Link href={`/classroom/${id}`} className="font-medium text-ink underline underline-offset-4 hover:text-brand">
+      Open the classroom early to check your camera
+    </Link>
+  );
+}
+
 /** Ticks every second — only mounted within 24 hours of the lesson. */
 function LiveJoin({ booking: b, policy, tz }: { booking: Booking; policy: BookingPolicy; tz: string }) {
   const now = useNow(1000);
-  const visible = meetingLinkVisible(b, now, policy) && !!b.meetingUrl;
+  const visible = meetingLinkVisible(b, now, policy);
   const linkAt = new Date(startMs(b) - policy.meetingLinkVisibleMinutesBefore * 60_000).toISOString();
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(b.meetingUrl!);
-      toast.success("Meeting link copied");
-    } catch {
-      toast.error("Couldn't copy the link. Select it and copy manually.");
-    }
-  };
   return (
     <div className="space-y-4">
       <Countdown booking={b} now={now} />
       <AnimatePresence mode="wait" initial={false}>
         {visible ? (
           <motion.div key="join" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.35, ease: EASE }} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button asChild size="lg" className="sm:w-auto">
-              <a href={b.meetingUrl} target="_blank" rel="noopener noreferrer">
-                <Video /> Join lesson <span className="sr-only">(opens in a new tab)</span>
-              </a>
+            <Button asChild size="lg" variant="cta" className="sm:w-auto">
+              <Link href={`/classroom/${b.id}`}>
+                <Video /> Join lesson
+              </Link>
             </Button>
-            <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-line bg-canvas pl-3">
-              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-2">{b.meetingUrl}</span>
-              <Button variant="ghost" size="icon-sm" onClick={copy} aria-label="Copy meeting link">
-                <Copy />
-              </Button>
-            </div>
+            <p className="flex min-w-0 flex-1 items-center gap-2 text-[13.5px] leading-snug text-muted">
+              <PenLine className="size-4 shrink-0" aria-hidden /> Opens the TutorLink classroom: video, whiteboard and chat. Nothing to install.
+            </p>
           </motion.div>
         ) : (
           <motion.p key="wait" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-start gap-2.5 text-[13.5px] leading-relaxed text-muted">
             <Link2 className="mt-0.5 size-4 shrink-0" aria-hidden />
             <span>
-              Your meeting link appears here at <span className="font-medium text-ink">{formatTime(linkAt, tz)}</span>, {policy.meetingLinkVisibleMinutesBefore} minutes before the start.
+              The Join button appears here at <span className="font-medium text-ink">{formatTime(linkAt, tz)}</span>, {policy.meetingLinkVisibleMinutesBefore} minutes before the start. <EarlyAccess id={b.id} />
             </span>
           </motion.p>
         )}

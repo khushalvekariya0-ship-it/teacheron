@@ -6,6 +6,8 @@ import { SAMPLE_DATA } from "@/lib/sample-data";
 /*
  * SAMPLE DATA — every tutor below is fictional and exists only to demonstrate the product.
  * Ratings and review counts are derived from the sample reviews in ./reviews.ts, never typed in by hand.
+ * Their portraits are stock photos (public/images/tutors, credited in public/images/CREDITS.md): the
+ * people pictured are models, not tutors. Real tutors upload their own photo.
  */
 
 type Seed = Omit<Tutor, "city" | "state" | "zip" | "lat" | "lng" | "timezone" | "rating" | "reviewCount" | "rules" | "verification" | "exceptions"> & {
@@ -514,6 +516,7 @@ function build(seed: Seed): Tutor {
     rating,
     reviewCount: reviews.length,
     exceptions: [],
+    photoUrl: `/images/tutors/${seed.slug}.jpg`,
   };
 }
 

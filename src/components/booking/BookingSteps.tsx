@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CalendarDays, Clock3, CreditCard, Info, MapPin, Monitor, Tag, UserRound, Users, X } from "lucide-react";
-import type { Booking, BookingType, Child, TeachingMode, Tutor, User } from "@/lib/types";
+import { CalendarDays, Clock3, CreditCard, Info, MapPin, Monitor, Smartphone, Tag, UserRound, Users, Video, Wallet, X } from "lucide-react";
+import type { Booking, BookingType, Child, PayMethod, TeachingMode, Tutor, User } from "@/lib/types";
 import { GRADE_LABEL, subjectName } from "@/lib/data/catalog";
 import { formatCents, formatDuration, formatTime, formatWeekdayDate, sessionPrice, tzAbbrev } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { Checkbox, RadioCards, Segmented } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
 import { SlotPicker } from "@/components/domain/SlotPicker";
+import { PAY_METHOD_LABEL } from "@/lib/data/platform";
 
 export const NOTES_MAX = 500;
 
@@ -254,6 +255,10 @@ export function ReviewStep({
   onRemoveCoupon,
   couponsEnabled,
   instant,
+  payWith,
+  onPayWith,
+  walletBalance,
+  onTopUp,
   policy,
   agree,
   onAgree,
@@ -271,6 +276,11 @@ export function ReviewStep({
   onRemoveCoupon: () => void;
   couponsEnabled: boolean;
   instant: boolean;
+  payWith: PayMethod;
+  onPayWith: (m: PayMethod) => void;
+  /** Study Credits on the account, in cents. */
+  walletBalance: number;
+  onTopUp: () => void;
   policy: string[];
   agree: boolean;
   onAgree: (v: boolean) => void;
@@ -279,6 +289,8 @@ export function ReviewStep({
   const [code, setCode] = React.useState("");
   const minutes = lessonMinutes(tutor, draft);
   const total = Math.max(0, subtotal - discount);
+  const walletCovers = walletBalance >= total;
+  const credits = formatCents(walletBalance, { exact: walletBalance % 100 !== 0 });
   const start = draft.startUtc!;
   const end = new Date(new Date(start).getTime() + minutes * 60_000).toISOString();
 
@@ -353,18 +365,46 @@ export function ReviewStep({
         )}
 
         {total > 0 && (
-          <div className="space-y-2 border-t border-line bg-canvas/60 px-4 py-3.5 text-[13px]">
-            <p className="flex items-center gap-2 text-ink-2">
-              <CreditCard className="size-4 text-subtle" aria-hidden />
-              <span className="font-medium text-ink">Test card •••• 4242</span>
-              <span className="text-muted">· Stripe test mode — no real charge</span>
+          <fieldset className="space-y-3 border-t border-line bg-canvas/60 px-4 py-4">
+            <legend className="sr-only">Payment method</legend>
+            <p className="text-sm font-medium text-ink" aria-hidden>
+              Pay with
             </p>
-            <p className="leading-relaxed text-muted">
+            <RadioCards<PayMethod>
+              name="pay-with"
+              columns={1}
+              value={payWith}
+              onValueChange={onPayWith}
+              options={[
+                {
+                  value: "wallet",
+                  label: (
+                    <>
+                      {PAY_METHOD_LABEL.wallet} <span className="font-normal text-muted">· {credits} available</span>
+                    </>
+                  ),
+                  icon: <Wallet />,
+                  description: walletCovers ? "One tap. No card details needed." : `You need ${formatCents(total - walletBalance, { exact: (total - walletBalance) % 100 !== 0 })} more for this lesson.`,
+                  disabled: !walletCovers,
+                },
+                { value: "card", label: "Card", icon: <CreditCard />, description: "Test card •••• 4242" },
+                { value: "upi", label: "UPI", icon: <Smartphone />, description: "Approve in your UPI app" },
+              ]}
+            />
+            {!walletCovers && (
+              <button type="button" onClick={onTopUp} className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-brand underline-offset-4 hover:underline">
+                <Wallet className="size-4" aria-hidden /> Add Study Credits and pay in one tap next time
+              </button>
+            )}
+            <p className="text-[13px] leading-relaxed text-muted">
+              Test mode — no real charge.{" "}
               {instant
-                ? "You're charged when you confirm, and the lesson is booked right away."
-                : `Your card is authorized now and charged only when ${tutor.firstName} accepts. If the request isn't accepted, the authorization is released.`}
+                ? "You pay when you confirm, and the lesson is booked right away."
+                : payWith === "wallet"
+                  ? `Your credits are held now and returned in full if ${tutor.firstName} doesn't accept.`
+                  : `Your payment is authorized now and taken only when ${tutor.firstName} accepts. If the request isn't accepted, the authorization is released.`}
             </p>
-          </div>
+          </fieldset>
         )}
         {total === 0 && (
           <p className="border-t border-line bg-canvas/60 px-4 py-3.5 text-[13px] text-muted">
@@ -496,17 +536,26 @@ export function SuccessStep({
       <p className="mt-4 flex items-start gap-2 text-left text-[13px] leading-snug text-muted">
         {booking.mode === "online" ? <Monitor className="mt-0.5 size-3.5 shrink-0 text-subtle" aria-hidden /> : <MapPin className="mt-0.5 size-3.5 shrink-0 text-subtle" aria-hidden />}
         {booking.mode === "online"
-          ? `Your meeting link appears on the booking page ${meetingLinkMinutes} minutes before the lesson.`
+          ? `Your lesson happens in the TutorLink classroom: video, a shared whiteboard and chat on one screen. Nothing to install — a Join button appears on your lesson page ${meetingLinkMinutes} minutes before the start.`
           : booking.locationNote ?? `Agree on a meeting place with ${tutor.firstName} in messages.`}
       </p>
 
-      <div className="mt-6 flex w-full flex-col gap-2 sm:flex-row">
-        <Button asChild size="lg" className="flex-1">
-          <Link href={`/dashboard/bookings/${booking.id}`}>View booking</Link>
-        </Button>
-        <Button size="lg" variant="secondary" className="flex-1" onClick={onMessage} loading={messaging}>
-          Message {tutor.firstName}
-        </Button>
+      <div className="mt-6 flex w-full flex-col gap-2">
+        {booking.mode === "online" && confirmed && (
+          <Button asChild size="lg" variant="cta">
+            <Link href={`/classroom/${booking.id}`}>
+              <Video /> Open the classroom
+            </Link>
+          </Button>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button asChild size="lg" variant={booking.mode === "online" && confirmed ? "secondary" : "primary"} className="flex-1">
+            <Link href={`/dashboard/bookings/${booking.id}`}>View booking</Link>
+          </Button>
+          <Button size="lg" variant="secondary" className="flex-1" onClick={onMessage} loading={messaging}>
+            Message {tutor.firstName}
+          </Button>
+        </div>
       </div>
     </div>
   );

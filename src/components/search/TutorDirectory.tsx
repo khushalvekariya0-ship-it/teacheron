@@ -203,7 +203,7 @@ export function TutorDirectory() {
       <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
           <p className="kicker">
-            <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+            <span className="kicker-dot" aria-hidden />
             Find a tutor
           </p>
           <motion.h1

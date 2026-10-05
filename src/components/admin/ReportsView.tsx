@@ -507,7 +507,7 @@ function TutorTarget({ report }: { report: Report }) {
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-3 rounded-lg border border-line px-4 py-3">
-        <Avatar name={fullName(tutor)} tone={tutor.tone} verified={tutor.verification.identity === "verified"} />
+        <Avatar name={fullName(tutor)} src={tutor.photoUrl} tone={tutor.tone} verified={tutor.verification.identity === "verified"} />
         <div className="min-w-0 flex-1">
           <p className="font-medium text-ink">{fullName(tutor)}</p>
           <p className="line-clamp-2 text-[13px] text-muted">{tutor.headline}</p>

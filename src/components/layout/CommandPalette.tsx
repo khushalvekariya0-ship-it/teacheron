@@ -111,7 +111,7 @@ export function CommandPalette() {
           label: `${t.firstName} ${t.lastName}`,
           hint: `${t.headline} · ${formatCents(t.hourlyRateCents)}/hr`,
           href: `/tutors/${t.slug}`,
-          icon: <Avatar name={`${t.firstName} ${t.lastName}`} tone={t.tone} size="xs" />,
+          icon: <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="xs" />,
         }),
       );
     SUBJECTS.filter((s) => match(s.name, s.summary))

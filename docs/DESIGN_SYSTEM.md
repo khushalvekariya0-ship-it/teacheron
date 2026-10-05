@@ -1,5 +1,7 @@
 # TutorLink design system
 
+> **Current direction (October 2026).** Off-white page with a soft pastel mesh behind heroes, midnight-navy ink, deep indigo (`brand`) for selected states, electric coral (`cta`) for the one action per screen, glass navbar and floating cards, a bento feature grid, and an OLED-black dark theme switched by `.dark` on `<html>`. The token values in `src/app/globals.css` are the source of truth; the palette table in section 2 predates this and lists the earlier neutral values. Principles 1 and 4 below are superseded by the rules in [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md#design-rules). Principle 3 changed too: the site uses real photography (Unsplash, credited in `public/images/CREDITS.md`), including stock portraits for the sample tutors; statistics, ratings, badges and testimonials are still never invented.
+
 Clean, restrained, premium: less colour, more hierarchy. Tokens are defined once in `src/app/globals.css` (Tailwind CSS v4 `@theme`) and consumed as Tailwind utilities (`bg-surface`, `text-muted`, `border-line`, `rounded-xl` …). Components live in `src/components/ui`, `src/components/motion` and `src/components/charts`. How to use them day to day: [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md).
 
 ## 1. Principles

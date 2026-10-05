@@ -70,6 +70,13 @@ export function useCreditBalance(tutorId: string | undefined): number {
   return useMemo(() => (tutorId ? tx.filter((t) => t.tutorId === tutorId).reduce((a, t) => a + t.delta, 0) : 0), [tx, tutorId]);
 }
 
+/** Study Credits in the signed-in learner's wallet, in cents. 0 when signed out. */
+export function useWalletBalance(): number {
+  const tx = useApp((s) => s.walletTransactions);
+  const me = useSession();
+  return useMemo(() => (me ? tx.filter((t) => t.userId === me.id).reduce((a, t) => a + t.deltaCents, 0) : 0), [tx, me]);
+}
+
 export function useUnreadNotifications(): number {
   const list = useApp((s) => s.notifications);
   const me = useSession();

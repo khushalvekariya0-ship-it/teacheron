@@ -49,7 +49,7 @@ export function SchedulePreview({ tutor }: { tutor: Tutor }) {
         className="rounded-2xl border border-line bg-surface p-5 shadow-sm"
       >
         <div className="flex items-center gap-3">
-          <Avatar name={name} tone={tutor.tone} size="lg" square />
+          <Avatar name={name} src={tutor.photoUrl} tone={tutor.tone} size="lg" square />
           <div className="min-w-0">
             <p className="truncate text-[16px] font-semibold text-ink">{name}</p>
             <p className="truncate text-[13px] text-muted">{tutor.headline}</p>

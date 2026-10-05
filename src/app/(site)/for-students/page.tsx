@@ -29,7 +29,7 @@ export default function ForStudentsPage() {
   return (
     <>
       <PageHero
-        image={{ src: "/images/online-lesson.jpg", alt: "A student taking notes during an online lesson" }}
+        image={{ src: "/images/lesson-online.jpg", alt: "A student in headphones following an online lesson on her laptop" }}
         eyebrow="For students"
         title="Help that fits your classes, your goals and your week."
         description="Whether it's a unit test on Friday, an AP exam in May or a career change into software, find a tutor who teaches exactly what you're working on."

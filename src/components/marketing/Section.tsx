@@ -60,11 +60,11 @@ export function Panel({
   );
 }
 
-/** Small pill label above a headline: hairline border, an indigo dot, quiet text. */
+/** The label above a section headline: a crisp pill with an indigo dot. Same size on every section. */
 export function Eyebrow({ children, className, center }: { children: React.ReactNode; className?: string; center?: boolean }) {
   return (
     <p className={cn("kicker", center && "mx-auto", className)}>
-      <span className="size-1.5 rounded-full bg-brand" aria-hidden />
+      <span className="kicker-dot" aria-hidden />
       {children}
     </p>
   );
@@ -95,7 +95,7 @@ export function SectionHeading({
     <div className={cn("mb-10 flex flex-col gap-6 lg:mb-14", align === "center" ? "items-center text-center" : "sm:flex-row sm:items-end sm:justify-between", className)}>
       <Reveal className={cn("max-w-3xl", align === "center" && "mx-auto flex flex-col items-center")}>
         {eyebrow && (
-          <Eyebrow className={cn("mb-5", dark && "border-white/15 bg-white/5 text-white/80 shadow-none")} center={align === "center"}>
+          <Eyebrow className={cn("mb-6", dark && "border-white/20 bg-white/10 text-white shadow-none")} center={align === "center"}>
             {eyebrow}
           </Eyebrow>
         )}
@@ -158,7 +158,7 @@ export function PageHero({
     <div className={cn("max-w-3xl", center && "mx-auto flex flex-col items-center")}>
       {eyebrow && (
         <Reveal>
-          <Eyebrow className={compact ? "mb-4" : "mb-5"} center={center}>
+          <Eyebrow className={compact ? "mb-5" : "mb-6"} center={center}>
             {eyebrow}
           </Eyebrow>
         </Reveal>
@@ -186,7 +186,7 @@ export function PageHero({
     </div>
   );
   return (
-    <section className={cn("relative isolate border-b border-line", tone === "canvas" ? "bg-canvas" : "bg-page")}>
+    <section className={cn("relative isolate -mt-16 border-b border-line pt-16", tone === "canvas" ? "bg-canvas" : "bg-page")}>
       <div className="page-glow pointer-events-none absolute inset-0 -z-10" aria-hidden />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-line-grid [mask-image:radial-gradient(ellipse_80%_70%_at_50%_0%,black_20%,transparent_75%)]" aria-hidden />
       <div
@@ -241,7 +241,7 @@ export function CtaBand({
               )}
             </div>
             <Reveal delay={0.25} className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="bg-white text-ink shadow-none hover:bg-white/90 active:bg-white/80">
+              <Button asChild size="lg" className="bg-white text-night shadow-none hover:bg-white/90 active:bg-white/80">
                 <Link href={primary.href}>
                   {primary.label} <ArrowRight />
                 </Link>

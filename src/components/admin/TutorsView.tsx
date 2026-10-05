@@ -145,7 +145,7 @@ function TutorsInner() {
       sortValue: (t) => fullName(t),
       cell: (t) => (
         <span className="flex min-w-0 items-center gap-2.5">
-          <Avatar name={fullName(t)} tone={t.tone} size="sm" className="hidden md:inline-flex" />
+          <Avatar name={fullName(t)} src={t.photoUrl} tone={t.tone} size="sm" className="hidden md:inline-flex" />
           <span className="min-w-0">
             <RowOpen onOpen={() => setOpenId(t.id)} label={`Open ${fullName(t)}`} className="block truncate font-medium text-ink">{fullName(t)}</RowOpen>
             <span className="block truncate text-[12px] text-muted">{t.city}, {t.state}</span>
@@ -282,7 +282,7 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
   return (
     <div className="divide-y divide-line">
       <div className="flex items-start gap-3.5 px-5 py-5">
-        <Avatar name={fullName(tutor)} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
+        <Avatar name={fullName(tutor)} src={tutor.photoUrl} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
         <div className="min-w-0 flex-1">
           <p className="text-[15px] font-semibold text-ink">{fullName(tutor)}</p>
           <p className="mt-0.5 text-[13px] leading-snug text-muted">{tutor.headline}</p>

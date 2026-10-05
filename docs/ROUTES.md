@@ -95,6 +95,15 @@ Layout: `DashboardShell area="app"`. Sidebar comes from `NAV_BY_ROLE`; shared pa
 
 Rendering for every dashboard page: Client (preview) → dynamic shell + TanStack Query (production).
 
+## Classroom — `src/app/classroom`
+
+Full-screen, outside the site and dashboard layouts; `noindex` and disallowed in `robots.ts`.
+
+| Path | Audience | Purpose | Status | Rendering (preview → production) |
+|---|---|---|---|---|
+| `/classroom/[id]` | The booker and tutor of that booking (staff can view) | In-app lesson room: video stage on the left, infinite whiteboard and chat on the right (tabs below 1280px, stacked on phones). Opens for confirmed online lessons until they end; before the start it is a waiting room. Chat is the booking's existing conversation. | Built (own camera, mic, screen share, whiteboard and chat work; two-way media and cross-device board sync need the realtime service) | Client → Client + WebRTC SFU token from the API + realtime channel |
+| `/classroom/demo` | Everyone | Open demo room for trying the whiteboard, camera and chat without a booking | Built | Client |
+
 ## Admin console — `src/app/admin` (staff)
 
 Layout: `DashboardShell area="admin"`; items hidden unless the user holds the permission. Production requires an MFA-verified staff session.

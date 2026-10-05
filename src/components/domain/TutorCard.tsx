@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BadgeCheck, CalendarClock, Check, GitCompareArrows, GraduationCap, Heart, Languages, MapPin, MessageSquare, Monitor, Star, Users as UsersIcon, Zap } from "lucide-react";
+import { BadgeCheck, CalendarClock, Check, GitCompareArrows, GraduationCap, Heart, Languages, MapPin, MessageSquare, Monitor, Pause, Play, Star, Users as UsersIcon, Zap } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
@@ -11,12 +11,45 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Overlay";
 import { VerifiedBadge } from "./Badges";
+import { INTRO_SECONDS, IntroReel, OnlineNow, useOnlineNow } from "./TutorIntro";
 import { useTutorActions } from "./useTutorActions";
 import { subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
 import { formatCents, formatDateTime } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { useHydrated, useViewerTimezone } from "@/lib/store/hooks";
 import { nextOpening } from "@/lib/time";
+
+/**
+ * The intro plays while the pointer rests on the card, and stops when it leaves.
+ * A short delay keeps it from flashing as the pointer crosses a grid of cards.
+ * On touch screens (no hover) the play button on the photo toggles it instead.
+ */
+function useIntroPlayback() {
+  const [playing, setPlaying] = React.useState(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  React.useEffect(() => clear, []);
+  return {
+    playing,
+    onPointerEnter(e: React.PointerEvent) {
+      if (e.pointerType !== "mouse") return;
+      clear();
+      timer.current = setTimeout(() => setPlaying(true), 220);
+    },
+    onPointerLeave(e: React.PointerEvent) {
+      if (e.pointerType !== "mouse") return;
+      clear();
+      setPlaying(false);
+    },
+    toggle() {
+      clear();
+      setPlaying((p) => !p);
+    },
+  };
+}
 
 function useNextOpening(tutor: Tutor) {
   const hydrated = useHydrated();
@@ -50,6 +83,8 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
   const actions = useTutorActions(tutor);
   const opening = useNextOpening(tutor);
   const tz = useViewerTimezone();
+  const online = useOnlineNow(tutor);
+  const intro = useIntroPlayback();
   const name = `${tutor.firstName} ${tutor.lastName}`;
   const instant = !tutor.rules.requiresApproval;
 
@@ -115,23 +150,44 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
   );
   const bookBtn = (className?: string) =>
     tutor.trial.enabled ? (
-      <Button variant="brand" onClick={actions.bookTrial} className={className}>
+      <Button variant="cta" onClick={actions.bookTrial} className={className}>
         Book trial lesson
       </Button>
     ) : (
-      <Button variant="brand" onClick={actions.book} className={className}>
+      <Button variant="cta" onClick={actions.book} className={className}>
         Book lesson
       </Button>
     );
 
   if (layout === "row") {
     return (
-      <article data-spotlight className={cn("group relative rounded-2xl border border-line bg-surface p-4 transition-colors duration-200 sm:p-5", className)}>
+      <article
+        data-spotlight
+        onPointerEnter={intro.onPointerEnter}
+        onPointerLeave={intro.onPointerLeave}
+        className={cn("group relative rounded-2xl border border-line bg-surface p-4 transition-colors duration-200 sm:p-5", className)}
+      >
         <div className="flex gap-4 sm:gap-6">
-          <Link href={`/tutors/${tutor.slug}`} className="shrink-0" tabIndex={-1} aria-hidden>
-            <Avatar name={name} tone={tutor.tone} size="xl" square className="sm:hidden" />
-            <Avatar name={name} tone={tutor.tone} size="3xl" square className="hidden sm:inline-flex" />
-          </Link>
+          {/* The photo plays the tutor's intro while the row is hovered (from 640px, where it is large enough to read). */}
+          <div className="relative shrink-0 self-start overflow-hidden rounded-xl">
+            <Link href={`/tutors/${tutor.slug}`} className="block" tabIndex={-1} aria-hidden>
+              <Avatar name={name} src={tutor.photoUrl} tone={tutor.tone} size="xl" square className="sm:hidden" />
+              <Avatar name={name} src={tutor.photoUrl} tone={tutor.tone} size="3xl" square className="hidden sm:inline-flex" />
+            </Link>
+            <div className="hidden sm:block">
+              <IntroReel tutor={tutor} playing={intro.playing} compact />
+              <button
+                type="button"
+                onClick={intro.toggle}
+                aria-pressed={intro.playing}
+                aria-label={intro.playing ? `Stop ${tutor.firstName}'s intro` : `Play ${tutor.firstName}'s ${INTRO_SECONDS}-second intro`}
+                className="absolute bottom-1.5 left-1.5 z-10 inline-flex h-7 items-center gap-1 rounded-full bg-night/75 pl-2 pr-2.5 text-[11.5px] font-semibold text-white backdrop-blur transition-colors hover:bg-night"
+              >
+                {intro.playing ? <Pause className="size-3 fill-current" aria-hidden /> : <Play className="size-3 fill-current" aria-hidden />}
+                Intro
+              </button>
+            </div>
+          </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -141,6 +197,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
                 </Link>
               </h3>
               {tutor.verification.identity === "verified" && <BadgeCheck className="size-5 fill-brand text-surface" aria-label="Identity verified" />}
+              {online && <OnlineNow />}
             </div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               <VerifiedBadge tutor={tutor} size="sm" />
@@ -242,13 +299,34 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
     );
   }
 
+  // Grid card: the photo turns into the tutor's 15-second intro while the card is hovered.
   return (
-    <article data-spotlight className={cn("group relative flex h-full flex-col rounded-2xl border border-line bg-surface p-4 transition-colors duration-200", className)}>
-      <div className="relative">
-        <div className="aspect-[4/3] overflow-hidden rounded-xl">
+    <article
+      data-spotlight
+      onPointerEnter={intro.onPointerEnter}
+      onPointerLeave={intro.onPointerLeave}
+      className={cn("group relative flex h-full flex-col rounded-2xl border border-line bg-surface p-4 transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg", className)}
+    >
+      <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
+        {tutor.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={tutor.photoUrl} alt={name} loading="lazy" className="size-full object-cover object-[center_28%]" />
+        ) : (
           <Avatar name={name} tone={tutor.tone} size="3xl" square className="size-full [&>span]:!size-full [&>span]:!rounded-none" />
-        </div>
-        <div className="absolute right-1.5 top-1.5 z-10 rounded-lg bg-surface/90">{saveBtn}</div>
+        )}
+        <IntroReel tutor={tutor} playing={intro.playing} />
+        {online && <OnlineNow className="absolute left-2 top-2 z-10 bg-surface/95 py-1 shadow-sm backdrop-blur" />}
+        <div className="absolute right-1.5 top-1.5 z-10 rounded-lg bg-surface/90 backdrop-blur">{saveBtn}</div>
+        <button
+          type="button"
+          onClick={intro.toggle}
+          aria-pressed={intro.playing}
+          aria-label={intro.playing ? `Stop ${tutor.firstName}'s intro` : `Play ${tutor.firstName}'s ${INTRO_SECONDS}-second intro`}
+          className="absolute bottom-2 left-2 z-10 inline-flex h-8 items-center gap-1.5 rounded-full bg-night/75 pl-2.5 pr-3 text-[12px] font-semibold text-white backdrop-blur transition-colors hover:bg-night"
+        >
+          {intro.playing ? <Pause className="size-3.5 fill-current" aria-hidden /> : <Play className="size-3.5 fill-current" aria-hidden />}
+          Intro · {INTRO_SECONDS}s
+        </button>
       </div>
       <div className="mt-4 flex items-center gap-1.5">
         <h3 className="font-heading text-[18px] font-bold tracking-[-0.02em] text-ink">
@@ -259,8 +337,11 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
         {tutor.verification.identity === "verified" && <BadgeCheck className="size-[18px] fill-brand text-surface" aria-label="Identity verified" />}
       </div>
       <p className="mt-1 line-clamp-2 text-[14px] leading-snug text-ink-2">{tutor.headline}</p>
-      <p className="mt-2 flex items-center gap-1.5 text-[13px] text-muted">
-        <MapPin className="size-3.5" aria-hidden /> {tutor.city}, {tutor.state} · <ModeLine tutor={tutor} />
+      <p className="mt-2 flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
+        <GraduationCap className="size-3.5 shrink-0" aria-hidden /> {tutor.experienceYears} {tutor.experienceYears === 1 ? "year" : "years"} experience
+      </p>
+      <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted">
+        <MapPin className="size-3.5 shrink-0" aria-hidden /> {tutor.city}, {tutor.state} · <ModeLine tutor={tutor} />
       </p>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {tutor.subjects.slice(0, 3).map((s) => (

@@ -106,7 +106,7 @@ export function PublishSuccess({ req, outcome, onPostAnother }: { req: Requireme
                   className="group block h-full rounded-2xl border border-line bg-surface p-4 transition-colors duration-200 hover:border-ink"
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar name={`${r.tutor.firstName} ${r.tutor.lastName}`} tone={r.tutor.tone} size="md" verified={r.tutor.verification.identity === "verified"} />
+                    <Avatar name={`${r.tutor.firstName} ${r.tutor.lastName}`} src={r.tutor.photoUrl} tone={r.tutor.tone} size="md" verified={r.tutor.verification.identity === "verified"} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-ink group-hover:underline group-hover:underline-offset-4">
                         {r.tutor.firstName} {r.tutor.lastName}

@@ -187,8 +187,12 @@ export interface Tutor {
   exceptions: AvailabilityException[];
   featured: boolean;
   joinedAt: ISODate;
-  /** Avatar tone index for initials avatars (no stock photos in the preview build). */
+  /** Tint of the initials tile shown when the tutor has no photo. */
   tone: number;
+  /** The tutor's portrait. Sample tutors use credited stock photos; without one, cards show the initials tile. */
+  photoUrl?: string;
+  /** Short intro clip the tutor uploaded; cards play its first 15 seconds on hover. */
+  introVideoUrl?: string;
 }
 
 export interface Review {
@@ -442,11 +446,25 @@ export interface Homework {
 
 /* ─── Money ─────────────────────────────────────────────────────────────────── */
 
+/** How a learner pays at checkout. "wallet" spends the Study Credits held on their account. */
+export type PayMethod = "card" | "upi" | "wallet";
+
+/** One movement on a learner wallet: + for a top-up or a refund, − for a lesson. Amounts are cents (1 credit = 1 cent). */
+export interface WalletTransaction {
+  id: ID;
+  userId: ID;
+  deltaCents: Cents;
+  kind: "top_up" | "lesson" | "refund";
+  description: string;
+  bookingId?: ID;
+  createdAt: ISODate;
+}
+
 export interface Payment {
   id: ID;
   bookingId?: ID;
   userId: ID;
-  kind: "booking" | "subscription" | "lead_credits";
+  kind: "booking" | "subscription" | "lead_credits" | "study_credits";
   amountCents: Cents;
   status: "succeeded" | "pending" | "failed" | "refunded" | "partially_refunded";
   description: string;

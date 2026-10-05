@@ -450,9 +450,9 @@ function NextLesson({ booking, now, tz, learner, joinable, linkMinutes }: { book
           {booking.mode === "online" &&
             (joinable && booking.meetingUrl ? (
               <Button asChild>
-                <a href={booking.meetingUrl} target="_blank" rel="noopener noreferrer">
+                <Link href={`/classroom/${booking.id}`}>
                   <Video /> Join lesson
-                </a>
+                </Link>
               </Button>
             ) : (
               <Button disabled title={`The join link appears ${linkMinutes} minutes before the start time.`}>

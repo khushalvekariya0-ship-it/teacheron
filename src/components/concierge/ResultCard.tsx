@@ -33,7 +33,7 @@ export function ResultCard({ result, rank, criteria }: { result: MatchResult; ra
           <span className={cn("grid size-7 place-items-center rounded-md text-[12.5px] font-bold tabular-nums", rank === 1 ? "bg-brand text-white" : "bg-canvas text-ink-2")} aria-hidden>
             {rank}
           </span>
-          <Avatar name={name} tone={t.tone} size="lg" verified={t.verification.identity === "verified"} className="hidden sm:inline-flex" />
+          <Avatar name={name} src={t.photoUrl} tone={t.tone} size="lg" verified={t.verification.identity === "verified"} className="hidden sm:inline-flex" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
