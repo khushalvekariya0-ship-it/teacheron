@@ -33,7 +33,7 @@ function match(q: string): Option[] {
  * Big "What do you want to learn?" search: subjects and areas are suggested as you type;
  * anything else (a skill, a tutor's name) becomes a keyword search of the directory.
  */
-export function SubjectSearch({ className }: { className?: string }) {
+export function SubjectSearch({ className, hideLabel, autoFocus }: { className?: string; hideLabel?: boolean; autoFocus?: boolean }) {
   const router = useRouter();
   const id = React.useId();
   const [query, setQuery] = React.useState("");
@@ -76,11 +76,11 @@ export function SubjectSearch({ className }: { className?: string }) {
         go(showList && active >= 0 ? options[active] : undefined);
       }}
     >
-      <label htmlFor={`${id}-input`} className="mb-2.5 block text-left text-[15px] font-semibold text-ink">
+      <label htmlFor={`${id}-input`} className={cn("mb-2.5 block text-left text-[15px] font-semibold text-ink", hideLabel && "sr-only")}>
         What do you want to learn?
       </label>
-      <div className="flex items-center gap-2 rounded-2xl border border-line-strong bg-surface p-2 shadow-lg transition-[border-color,box-shadow] focus-within:border-brand focus-within:shadow-xl">
-        <Search className="ml-3 size-5 shrink-0 text-muted" aria-hidden />
+      <div className="flex items-center gap-2 rounded-full border border-line-strong bg-surface p-1.5 shadow-[0_1px_2px_rgb(9_9_11/0.05),0_12px_32px_-14px_rgb(9_9_11/0.18)] transition-[border-color,box-shadow] focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10">
+        <Search className="ml-3.5 size-5 shrink-0 text-muted" aria-hidden />
         <input
           id={`${id}-input`}
           type="text"
@@ -91,7 +91,8 @@ export function SubjectSearch({ className }: { className?: string }) {
           aria-activedescendant={showList && active >= 0 ? `${id}-opt-${active}` : undefined}
           autoComplete="off"
           value={query}
-          placeholder="Search subjects, skills or tutors…"
+          placeholder={hideLabel ? "What do you want to learn?" : "Search subjects, skills or tutors…"}
+          autoFocus={autoFocus}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
@@ -102,7 +103,7 @@ export function SubjectSearch({ className }: { className?: string }) {
           onKeyDown={onKeyDown}
           className="h-12 min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-muted sm:h-14 sm:text-[17px]"
         />
-        <Button type="submit" variant="brand" size="lg" className="h-12 shrink-0 px-4 sm:h-14 sm:px-7 sm:text-[16px]">
+        <Button type="submit" variant="brand" size="lg" className="h-11 shrink-0 px-4 sm:h-12 sm:px-6">
           Search
           <ArrowRight className="hidden sm:block" />
         </Button>
@@ -113,10 +114,10 @@ export function SubjectSearch({ className }: { className?: string }) {
           id={`${id}-list`}
           role="listbox"
           aria-label={q ? "Suggestions" : "Popular subjects"}
-          className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-line bg-surface p-1.5 text-left shadow-xl"
+          className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-line bg-surface p-1.5 text-left shadow-xl animate-select-in"
         >
           {!q && (
-            <li className="px-3 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-muted" role="presentation">
+            <li className="px-3 pb-1 pt-2 text-[12.5px] font-medium text-muted" role="presentation">
               Popular subjects
             </li>
           )}
@@ -130,7 +131,7 @@ export function SubjectSearch({ className }: { className?: string }) {
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => go(o)}
               onMouseEnter={() => setActive(i)}
-              className={cn("flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] text-ink", i === active && "bg-brand-soft")}
+              className={cn("flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] text-ink", i === active && "bg-brand-50")}
             >
               {o.area ? <LayoutGrid className="size-4 shrink-0 text-muted" aria-hidden /> : <BookOpen className="size-4 shrink-0 text-muted" aria-hidden />}
               <span className={cn("min-w-0 flex-1 truncate", i === active && "text-brand")}>{o.label}</span>

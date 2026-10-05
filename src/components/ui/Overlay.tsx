@@ -30,7 +30,7 @@ export function DialogContent({
       <DialogPrimitive.Overlay className={overlayCls} />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xl outline-none data-[state=open]:animate-dialog-in data-[state=closed]:animate-dialog-out",
+          "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl outline-none data-[state=open]:animate-dialog-in data-[state=closed]:animate-dialog-out",
           { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" }[size],
           className,
         )}
@@ -46,7 +46,7 @@ export function DialogContent({
             )}
           </div>
           {!hideClose && (
-            <DialogPrimitive.Close className="-mr-1.5 -mt-1 grid size-8 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-sunken hover:text-ink" aria-label="Close">
+            <DialogPrimitive.Close className="-mr-1.5 -mt-1 grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-sunken hover:text-ink" aria-label="Close">
               <X className="size-4" />
             </DialogPrimitive.Close>
           )}
@@ -95,13 +95,13 @@ export function ConfirmDialog({
       <DialogContent title={title} description={description} size="sm">
         {children && <DialogBody>{children}</DialogBody>}
         <DialogFooter>
-          <DialogClose className="inline-flex h-10 items-center justify-center rounded-md border border-line-strong bg-surface px-4 text-sm font-medium text-ink hover:bg-canvas">Cancel</DialogClose>
+          <DialogClose className="inline-flex h-10 items-center justify-center rounded-full border border-line-strong bg-surface px-4 text-sm font-medium text-ink shadow-xs hover:bg-canvas">Cancel</DialogClose>
           <button
             type="button"
             disabled={loading || disabled}
             onClick={onConfirm}
             className={cn(
-              "inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium text-white transition-colors disabled:opacity-60",
+              "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium text-white transition-colors disabled:opacity-60",
               tone === "danger" ? "bg-danger text-white hover:bg-danger/90" : "bg-navy text-on-ink hover:bg-navy-hover",
             )}
           >
@@ -151,7 +151,7 @@ export function SheetContent({
               <DialogPrimitive.Description className="sr-only">{typeof title === "string" ? title : "Panel"}</DialogPrimitive.Description>
             )}
           </div>
-          <DialogPrimitive.Close className="grid size-9 place-items-center rounded-md text-muted hover:bg-sunken hover:text-ink" aria-label="Close">
+          <DialogPrimitive.Close className="grid size-9 place-items-center rounded-full text-muted hover:bg-sunken hover:text-ink" aria-label="Close">
             <X className="size-4" />
           </DialogPrimitive.Close>
         </div>
@@ -173,7 +173,7 @@ export function DropdownMenuContent({ className, align = "end", sideOffset = 6, 
       <DropdownPrimitive.Content
         align={align}
         sideOffset={sideOffset}
-        className={cn("z-50 min-w-48 overflow-hidden rounded-lg border border-line bg-surface p-1 shadow-lg data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out", className)}
+        className={cn("z-50 min-w-48 overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-xl data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out", className)}
         {...props}
       />
     </DropdownPrimitive.Portal>
@@ -184,7 +184,7 @@ export function DropdownMenuItem({ className, tone, ...props }: React.ComponentP
   return (
     <DropdownPrimitive.Item
       className={cn(
-        "flex h-9 cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:text-muted",
+        "flex h-9 cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:text-muted",
         tone === "danger" ? "text-danger data-[highlighted]:bg-danger-50 [&_svg]:text-danger" : "text-ink data-[highlighted]:bg-sunken",
         className,
       )}
@@ -213,7 +213,7 @@ export function Tooltip({ content, children, side = "top" }: { content: React.Re
         <TooltipPrimitive.Content
           side={side}
           sideOffset={6}
-          className="z-50 max-w-64 rounded-md bg-ink px-2.5 py-1.5 text-xs leading-snug text-on-ink shadow-md data-[state=delayed-open]:animate-pop-in data-[state=closed]:animate-pop-out"
+          className="z-50 max-w-64 rounded-lg bg-ink px-2.5 py-1.5 text-xs leading-snug text-on-ink shadow-md data-[state=delayed-open]:animate-pop-in data-[state=closed]:animate-pop-out"
         >
           {content}
         </TooltipPrimitive.Content>
@@ -234,7 +234,7 @@ export function PopoverContent({ className, align = "start", sideOffset = 6, ...
       <PopoverPrimitive.Content
         align={align}
         sideOffset={sideOffset}
-        className={cn("z-50 rounded-lg border border-line bg-surface p-3 shadow-lg outline-none data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out", className)}
+        className={cn("z-50 rounded-xl border border-line bg-surface p-3 shadow-xl outline-none data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out", className)}
         {...props}
       />
     </PopoverPrimitive.Portal>

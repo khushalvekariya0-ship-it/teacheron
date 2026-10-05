@@ -106,8 +106,8 @@ export function ColumnChart({
         <svg width={width} height={height} role="img" aria-label={caption} onMouseLeave={() => setHover(null)}>
           <defs>
             <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#1d4ed8" />
-              <stop offset="1" stopColor="#1d4ed8" />
+              <stop offset="0" stopColor="#4f46e5" />
+              <stop offset="1" stopColor="#4f46e5" />
             </linearGradient>
           </defs>
           {ticks.map((t) => (
@@ -208,8 +208,8 @@ export function AreaChart({
               <stop offset="1" stopColor="#121117" />
             </linearGradient>
             <linearGradient id={`${gid}-area`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#1d4ed8" stopOpacity="0.16" />
-              <stop offset="1" stopColor="#1d4ed8" stopOpacity="0" />
+              <stop offset="0" stopColor="#4f46e5" stopOpacity="0.16" />
+              <stop offset="1" stopColor="#4f46e5" stopOpacity="0" />
             </linearGradient>
           </defs>
           {ticks.map((t) => (
@@ -279,7 +279,7 @@ export function Sparkline({ values, className }: { values: number[]; className?:
   const d = values.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className={cn("h-7 w-24", className)} aria-hidden>
-      <motion.path d={d} fill="none" stroke="#1d4ed8" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} />
+      <motion.path d={d} fill="none" stroke="#4f46e5" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} />
       <circle cx={x(values.length - 1)} cy={y(values[values.length - 1])} r={3} fill={SERIES} stroke="white" strokeWidth={1.5} />
     </svg>
   );

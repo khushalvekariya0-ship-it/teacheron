@@ -2,77 +2,82 @@
 
 
 /* ─── Design tokens ─────────────────────────────────────────────────────────────
-   Professional and crisp: white pages, cool slate greys, near-black slate ink for headlines
-   and primary buttons, and one confident blue accent. Light blue-grey blocks mark heroes and
-   selected states. Flat — no gradients or glass; contrast and type weight do the work.
+   Clean studio: white pages, neutral zinc greys, near-black ink for headlines and primary
+   buttons, and ONE indigo accent for key actions, links and selected states. No gradients:
+   hairline borders, generous space and confident type do the work.
    ───────────────────────────────────────────────────────────────────────────── */
 @theme {
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-heading: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: var(--font-heading);
-  --font-hand: var(--font-caveat), "Segoe Print", cursive;
 
-  /* Signature gradient (same in both themes): blue → indigo → violet. White text on it is 4.6:1+. */
-  --color-grad-from: #2f7bff;
-  --color-grad-via: #4b66f5;
-  --color-grad-to: #7552f0;
+  /* Geist is variable: bold reads crisper a touch lighter than 700. */
+  --font-weight-semibold: 580;
+  --font-weight-bold: 640;
+  --font-weight-extrabold: 680;
+  --font-weight-black: 720;
+
+  /* Former gradient stops, now soft indigo tints for decorative blocks behind photos. */
+  --color-grad-from: #eef0ff;
+  --color-grad-via: #e9ebff;
+  --color-grad-to: #e2e5ff;
 
   /* Surfaces: `page` is the page/section background, `surface` is cards, fields and menus on it. */
   --color-page: #ffffff;
   --color-surface: #ffffff;
-  --color-canvas: #f6f8fb;
-  --color-sunken: #eef2f6;
+  --color-canvas: #fafafa;
+  --color-sunken: #f4f4f5;
 
-  /* Text (slate) */
-  --color-ink: #0f172a;
-  --color-ink-2: #334155;
-  --color-muted: #64748b;
-  --color-subtle: #94a3b8;
+  /* Text (zinc) */
+  --color-ink: #09090b;
+  --color-ink-2: #3f3f46;
+  --color-muted: #71717a;
+  --color-subtle: #a1a1aa;
+  /* Second tone of two-tone headlines (3.7:1 on white — large text only). */
+  --color-ink-soft: #83838c;
 
   /* Lines */
-  --color-line: #e2e8f0;
-  --color-line-strong: #cbd5e1;
+  --color-line: #e4e4e7;
+  --color-line-strong: #d4d4d8;
 
-  /* Text/icons placed on an ink (inverse) surface — flips with the theme. */
+  /* Text/icons placed on an ink (inverse) surface. */
   --color-on-ink: #ffffff;
-  /* Always-dark surface (hero, footer, top banner, dark bands, overlays) — deep navy in both themes. */
-  --color-night: #060b24;
+  /* Always-dark surface (footer, dark bands, overlays). */
+  --color-night: #0a0a0b;
   /* Highlighter behind a word and text selection. */
-  --color-marker: #c7d8fb;
+  --color-marker: #e0e3ff;
 
-  /* Brand: one blue accent (buttons, progress, focus) + a light blue-grey block (heroes, selection).
-     White text on brand is 6.7:1. */
-  --color-brand: #3550e8;
-  --color-brand-hover: #2a43d1;
-  --color-brand-press: #2338b4;
-  --color-brand-soft: #eef1ff;
+  /* Brand: one indigo accent. White text on brand is 6.3:1. */
+  --color-brand: #4f46e5;
+  --color-brand-hover: #4338ca;
+  --color-brand-press: #3730a3;
+  --color-brand-soft: #eef0ff;
   --color-brand-50: #f6f7ff;
 
-  /* "navy" is the interactive accent across the app (primary buttons, selected states, links).
-     In this design it is slate ink. */
-  --color-navy: #0f172a;
-  --color-navy-hover: #1e293b;
-  --color-navy-press: #020617;
-  --color-navy-50: #f1f5f9;
-  --color-navy-100: #e2e8f0;
-  --color-navy-200: #cbd5e1;
+  /* "navy" is the interactive neutral across the app (primary buttons, selected states). It is ink. */
+  --color-navy: #09090b;
+  --color-navy-hover: #27272a;
+  --color-navy-press: #000000;
+  --color-navy-50: #f4f4f5;
+  --color-navy-100: #e4e4e7;
+  --color-navy-200: #d4d4d8;
 
-  /* Quiet cool tints (card fills, icon tiles). Strong tones are for icons/large text only. */
+  /* Quiet tints (card fills, icon tiles). Strong tones are for icons/large text only. */
   --color-sky: #0369a1;
-  --color-sky-soft: #e8f1fb;
-  --color-indigo: #1d4ed8;
-  --color-indigo-soft: #e9effd;
-  --color-violet: #4f46e5;
-  --color-violet-soft: #eff1fb;
+  --color-sky-soft: #eef6fc;
+  --color-indigo: #4338ca;
+  --color-indigo-soft: #eef0ff;
+  --color-violet: #6d28d9;
+  --color-violet-soft: #f4f1ff;
   --color-teal: #047857;
-  --color-teal-soft: #e7f4ef;
-  --color-peach: #475569;
-  --color-peach-soft: #f1f4f8;
-  --color-pink: #1d4ed8;
-  --color-pink-soft: #eef4ff;
-  --color-yellow: #475569;
-  --color-yellow-soft: #f1f4f8;
+  --color-teal-soft: #ecf7f2;
+  --color-peach: #52525b;
+  --color-peach-soft: #f4f4f5;
+  --color-pink: #4338ca;
+  --color-pink-soft: #eef0ff;
+  --color-yellow: #52525b;
+  --color-yellow-soft: #f4f4f5;
 
   /* Status */
   --color-success: #127a4a;
@@ -86,21 +91,22 @@
   --color-danger-200: #fbc5cb;
   --color-star: #f59e0b;
 
-  /* Radii — tight and crisp */
-  --radius-xs: 3px;
+  /* Radii — soft but precise */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --radius-2xl: 12px;
-  --radius-3xl: 16px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
 
-  /* Shadows — flat; used only for floating layers */
-  --shadow-xs: 0 1px 1px 0 rgb(15 23 42 / 0.03);
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
-  --shadow-md: 0 4px 10px -4px rgb(15 23 42 / 0.1);
-  --shadow-lg: 0 12px 28px -10px rgb(15 23 42 / 0.16);
-  --shadow-xl: 0 24px 48px -16px rgb(15 23 42 / 0.22);
+  /* Shadows — layered and quiet; mostly for floating layers */
+  --shadow-xs: 0 1px 2px 0 rgb(9 9 11 / 0.04);
+  --shadow-sm: 0 1px 2px 0 rgb(9 9 11 / 0.05), 0 1px 3px 0 rgb(9 9 11 / 0.03);
+  --shadow-md: 0 4px 12px -4px rgb(9 9 11 / 0.08), 0 2px 4px -2px rgb(9 9 11 / 0.04);
+  --shadow-lg: 0 14px 32px -12px rgb(9 9 11 / 0.14), 0 4px 8px -4px rgb(9 9 11 / 0.04);
+  --shadow-xl: 0 24px 56px -20px rgb(9 9 11 / 0.2), 0 8px 16px -8px rgb(9 9 11 / 0.05);
+  --shadow-2xl: 0 36px 80px -28px rgb(9 9 11 / 0.3);
 
   /* Motion */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -157,9 +163,6 @@
 }
 
 
-/* ─── Dark theme ───────────────────────────────────────────────────────────────
-   Set by the `dark` class on <html> (toggle in the header; first visit follows the OS).
-   Only token values change — components keep their classes. */
 /* ─── Base ──────────────────────────────────────────────────────────────────── */
 @layer base {
   html {
@@ -173,23 +176,22 @@
     background: var(--color-surface);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-feature-settings: "cv11";
     line-height: 1.6;
   }
 
   h1, h2, h3, h4, h5, h6 {
     color: var(--color-ink);
     font-family: var(--font-heading);
-    font-weight: 700;
-    line-height: 1.12;
-    letter-spacing: -0.025em;
+    font-weight: 640;
+    line-height: 1.1;
+    letter-spacing: -0.032em;
     text-wrap: balance;
   }
 
   p { text-wrap: pretty; }
 
   :focus-visible {
-    outline: 2px solid var(--color-ink);
+    outline: 2px solid var(--color-brand);
     outline-offset: 2px;
   }
 
@@ -226,8 +228,8 @@
 /* Headline display type: tight, extra-bold. */
 @utility display {
   font-family: var(--font-heading);
-  font-weight: 700;
-  letter-spacing: -0.035em;
+  font-weight: 640;
+  letter-spacing: -0.04em;
   line-height: 1;
 }
 
@@ -236,12 +238,9 @@
   font-style: normal;
 }
 
-/* Former gradient layer, now flat (kept so existing class names keep working). */
+/* Second tone of a two-tone headline (kept under the old class names so markup keeps working). */
 @utility text-aurora {
-  background-image: linear-gradient(90deg, #3b82f6, #4f6ef7 45%, #8b5cf6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--color-ink-soft);
 }
 @utility bg-aurora-soft {
   background-color: var(--color-canvas);
@@ -253,15 +252,32 @@
   display: none;
 }
 
-/* The signature blue → violet gradient as a fill, and as text. */
+/* The accent as a fill (solid indigo — the old gradient name is kept), and the headline second tone. */
 @utility bg-brand-gradient {
-  background-image: linear-gradient(90deg, var(--color-grad-from), var(--color-grad-via), var(--color-grad-to));
+  background-color: var(--color-brand);
+  background-image: none;
 }
 @utility text-gradient {
-  background-image: linear-gradient(90deg, #3b82f6, #4f6ef7 45%, #8b5cf6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--color-ink-soft);
+}
+
+/* Small pill label above a headline: hairline border, accent dot, quiet text. */
+@utility kicker {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-line);
+  border-radius: 9999px;
+  background-color: var(--color-surface);
+  padding: 0.3rem 0.8rem 0.3rem 0.65rem;
+  font-size: 0.8125rem;
+  line-height: 1.15rem;
+  font-weight: 520;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-ink-2);
+  box-shadow: var(--shadow-xs);
 }
 
 /* Highlighter stroke under a word (use on an inline element). */
@@ -309,7 +325,7 @@
 .stagger-children > * > *:nth-child(n + 7) { animation-delay: 0.3s; }
 
 /* ─── Hover emphasis (cards marked data-spotlight) ─────────────────────────────
-   A crisp 1px blue → violet hairline traces the card on hover. No glow. */
+   A crisp 1px ink hairline traces the card on hover. No glow. */
 @media (hover: hover) and (pointer: fine) {
   [data-spotlight] {
     position: relative;
@@ -323,7 +339,7 @@
     pointer-events: none;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, var(--color-grad-from), var(--color-grad-via), var(--color-grad-to));
+    background: var(--color-ink);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
@@ -357,14 +373,14 @@
 
 /* Fine dotted grid used behind hero and feature panels */
 @utility bg-dot-grid {
-  background-image: radial-gradient(circle at 1px 1px, rgb(15 23 42 / 0.14) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, rgb(9 9 11 / 0.13) 1px, transparent 0);
   background-size: 22px 22px;
 }
 
 @utility bg-line-grid {
   background-image:
-    linear-gradient(to right, rgb(15 23 42 / 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(15 23 42 / 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgb(9 9 11 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(9 9 11 / 0.05) 1px, transparent 1px);
   background-size: 56px 56px;
 }
 

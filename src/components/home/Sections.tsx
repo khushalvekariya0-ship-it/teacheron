@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight, BadgeCheck, BookOpen, Brain, Briefcase, Calculator, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronRight, Code, CreditCard, FlaskConical, Gift, GraduationCap, Info, Languages, LineChart,
-  Music, Route, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
+  Music, ShieldCheck, Star, Target, UserRound, Users, Wallet, Zap,
   Lock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -32,70 +32,20 @@ import { useTutors } from "@/lib/store/hooks";
 /* ═══ 1 · Hero — the promise, two actions, and a real tutoring moment ═══════════════════ */
 
 const HERO_FEATURES = [
-  { icon: BadgeCheck, title: "Identity Checks", body: "Badge shown once verified" },
-  { icon: CalendarDays, title: "Flexible Learning", body: "Book times that suit you" },
-  { icon: Gift, title: "Free Trials", body: "Offered by many tutors" },
-  { icon: Wallet, title: "Pay Per Lesson", body: "No subscription for families" },
+  { icon: BadgeCheck, title: "Identity checks", body: "Badge shown once verified" },
+  { icon: CalendarDays, title: "Flexible times", body: "Book times that suit you" },
+  { icon: Gift, title: "Free trials", body: "Offered by many tutors" },
+  { icon: Wallet, title: "Pay per lesson", body: "No subscription for families" },
 ];
 
-/** A tutor helping a student, on a crisp gradient block, with two small fact cards. Photo only — no example data. */
-function TutoringVisual({ className }: { className?: string }) {
-  return (
-    <div className={cn("relative", className)} aria-hidden>
-      {/* Gradient block offset behind the photo */}
-      <div data-hero-slab className="absolute -right-3 -top-3 h-[78%] w-[72%] rounded-2xl bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-via)_55%,var(--color-grad-to))] sm:-right-5 sm:-top-5" />
-      {/* Fine dot grid peeking out bottom-left */}
-      <div className="absolute -bottom-6 -left-6 hidden size-32 bg-dot-grid opacity-70 sm:block" />
+const HERO_POPULAR = SUBJECTS.filter((s) => s.popular).slice(0, 6);
 
-      <div data-hero-photo className="relative aspect-[5/5.4] overflow-hidden rounded-2xl border border-line bg-canvas shadow-2xl sm:aspect-[5/4.6]">
-        <Image src="/images/hero-tutoring.jpg" alt="" fill preload sizes="(min-width: 1024px) 560px, 100vw" className="object-cover object-[64%_50%]" />
-      </div>
-
-      {/* Fact card, top left */}
-      <div data-hero-card className="absolute -left-3 top-[8%] w-[176px] rounded-xl border border-line bg-white/95 p-4 text-ink shadow-xl backdrop-blur-md sm:-left-8">
-        <p className="font-heading text-[24px] font-extrabold leading-none tracking-[-0.02em]">1-on-1</p>
-        <p className="mt-1 text-[12.5px] text-muted">Private lessons, online or in person</p>
-      </div>
-
-      {/* Fact card, bottom right */}
-      <div data-hero-card className="absolute -bottom-5 right-4 flex items-center gap-3 rounded-xl border border-line bg-white/95 p-3 pr-5 shadow-xl backdrop-blur-md sm:-right-6">
-        <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
-          <BookOpen className="size-5" />
-        </span>
-        <span>
-          <span className="block text-[15px] font-bold text-ink">{SUBJECTS.length} subjects</span>
-          <span className="block text-[12.5px] text-muted">From reading to AP Calculus</span>
-        </span>
-      </div>
-
-      {/* Handwritten note with an arrow toward the lesson */}
-      <div data-hero-note className="absolute bottom-[5%] hidden -rotate-[10deg] font-hand text-[30px] font-semibold leading-none text-ink xl:-left-48 xl:block">
-        Help that clicks!
-        <svg viewBox="0 0 120 70" className="absolute -right-14 -top-12 h-14 w-24 text-brand" fill="none">
-          <motion.path
-            d="M4 62 C 30 60, 70 50, 104 12"
-            stroke="currentColor"
-            strokeWidth={2.6}
-            strokeLinecap="round"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.9, delay: 1.5, ease: [0.65, 0, 0.35, 1] }}
-          />
-          <motion.path
-            d="M90 10 L105 11 L103 26"
-            stroke="currentColor"
-            strokeWidth={2.6}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.3, delay: 2.35 }}
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
+/** Three real-life lesson photos: online, one-on-one at a table, and in person. Photos only — no example data. */
+const HERO_PHOTOS = [
+  { src: "/images/online-lesson.jpg", label: "Online", pos: "object-[60%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
+  { src: "/images/hero-tutoring.jpg", label: "1-on-1, at your pace", pos: "object-[64%_40%]", cls: "col-span-12 md:col-span-6 aspect-[4/3] sm:aspect-[16/11]" },
+  { src: "/images/in-person.jpg", label: "In person", pos: "object-[70%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
+];
 
 export function Hero() {
   const root = React.useRef<HTMLElement>(null);
@@ -103,66 +53,89 @@ export function Hero() {
     () => {
       const items = gsap.utils.toArray<HTMLElement>("[data-hero-in]");
       if (prefersReducedMotion()) {
-        gsap.set(items, { autoAlpha: 1 });
+        gsap.set([...items, ...gsap.utils.toArray<HTMLElement>("[data-hero-photo]")], { autoAlpha: 1 });
         return;
       }
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
-      tl.fromTo("[data-hero-slab]", { scale: 0.85, autoAlpha: 0, transformOrigin: "100% 0%" }, { scale: 1, autoAlpha: 1, duration: 1.2 }, 0.15)
-        .fromTo("[data-hero-photo]", { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.2 }, 0.25)
-        .fromTo("[data-hero-photo] img", { scale: 1.1 }, { scale: 1, duration: 1.6 }, 0.25)
-        .fromTo(items, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.08 }, 0.5)
-        .fromTo("[data-hero-card]", { autoAlpha: 0, y: 18, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.9, stagger: 0.15 }, 0.9)
-        .fromTo("[data-hero-note]", { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.8 }, 1.2);
-      gsap.to("[data-hero-card]", { y: -7, duration: 3.2, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 2, stagger: 0.6 });
+      tl.fromTo(items, { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.07 }, 0.35)
+        .fromTo("[data-hero-photo]", { y: 40, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.3, stagger: 0.1 }, 0.55)
+        .fromTo("[data-hero-photo] img", { scale: 1.08 }, { scale: 1, duration: 1.6 }, 0.55);
     },
     { scope: root },
   );
 
   return (
-    <section ref={root} className="relative isolate overflow-hidden bg-gradient-to-b from-brand-50 to-page">
-      <div className="container-page grid grid-cols-1 items-center gap-14 pb-16 pt-12 sm:pt-16 lg:grid-cols-[1.08fr_1fr] lg:gap-16 lg:pb-20 lg:pt-20">
-        <div>
-          <p data-hero-in data-reveal className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
-            <span className="h-px w-6 bg-brand-gradient" aria-hidden />
-            1-on-1 tutoring · online &amp; in person
-          </p>
+    <section ref={root} className="relative isolate overflow-clip bg-page">
+      {/* Faint grid fading out from the top */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[720px] bg-line-grid [mask-image:radial-gradient(ellipse_70%_75%_at_50%_0%,black_25%,transparent_75%)]" aria-hidden />
 
-          <h1 className="mt-6 text-balance font-heading text-[2.75rem] font-extrabold leading-[1.03] tracking-[-0.035em] text-ink sm:text-[3.6rem] xl:text-[4.15rem]">
-            <WordReveal as="span" className="block" text="Learn with the right tutor." delay={0.15} />
-            <WordReveal as="span" className="block" gradient text="Grow with every lesson." delay={0.35} />
-          </h1>
+      <div className="container-page flex flex-col items-center pt-14 text-center sm:pt-20 lg:pt-24">
+        <p data-hero-in data-reveal className="kicker">
+          <span className="relative flex size-1.5">
+            <span className="absolute inset-0 animate-ping rounded-full bg-brand/60" />
+            <span className="relative size-1.5 rounded-full bg-brand" />
+          </span>
+          1-on-1 tutoring · online &amp; in person
+        </p>
 
-          <p data-hero-in data-reveal className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18px]">
-            Private tutoring for school subjects, test prep, languages and more. Search for free, compare tutors and book your first lesson — online or near you.
-          </p>
+        <h1 className="mt-7 max-w-4xl text-balance font-heading text-[2.8rem] font-bold leading-[1] tracking-[-0.05em] text-ink sm:text-[4rem] lg:text-[4.85rem]">
+          <WordReveal as="span" className="block" text="Learn with the right tutor." delay={0.1} />
+          <WordReveal as="span" className="block" gradient text="Grow with every lesson." delay={0.25} />
+        </h1>
 
-          <div data-hero-in data-reveal className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
-            <Button asChild variant="brand" size="lg" className="h-14 rounded-xl px-7 text-[16px] font-bold">
-              <Link href="/tutors">
-                Find a tutor <ArrowRight />
-              </Link>
-            </Button>
-            <Link href="/how-it-works" className="group inline-flex items-center gap-3 text-[15.5px] font-semibold text-ink">
-              <span className="grid size-12 place-items-center rounded-full border border-line-strong transition-colors group-hover:border-brand group-hover:text-brand">
-                <Route className="size-5" aria-hidden />
-              </span>
-              How it works
-            </Link>
-          </div>
+        <p data-hero-in data-reveal className="mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
+          Private tutoring for school subjects, test prep, languages and more. Search for free, compare tutors and book your first lesson — online or near you.
+        </p>
+
+        <div data-hero-in data-reveal className="mt-9 w-full max-w-2xl">
+          <SubjectSearch hideLabel />
         </div>
 
-        <TutoringVisual className="mx-auto w-full max-w-[560px] lg:mr-0" />
+        <div data-hero-in data-reveal className="mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-2">
+          <span className="mr-1 text-[13.5px] text-muted">Popular:</span>
+          {HERO_POPULAR.map((s) => (
+            <Link
+              key={s.slug}
+              href={`/tutors?subject=${s.slug}`}
+              className="rounded-full border border-line bg-surface px-3 py-1 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:text-ink"
+            >
+              {s.name}
+            </Link>
+          ))}
+        </div>
+
+        <div data-hero-in data-reveal className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14.5px]">
+          <Link href="/concierge" className="group inline-flex items-center gap-1.5 font-medium text-ink transition-colors hover:text-brand">
+            Not sure? Get matched <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </Link>
+          <span className="hidden h-4 w-px bg-line-strong sm:block" aria-hidden />
+          <Link href="/how-it-works" className="group inline-flex items-center gap-1.5 font-medium text-ink transition-colors hover:text-brand">
+            How it works <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </Link>
+        </div>
       </div>
 
-      {/* Feature bar */}
-      <div className="container-page relative z-10 pb-8 lg:pb-10">
-        <Stagger className="grid grid-cols-1 gap-5 rounded-2xl border border-line bg-surface p-5 shadow-xl sm:grid-cols-2 sm:p-6 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line lg:px-2 lg:py-6" stagger={0.07}>
+      {/* Lesson photos */}
+      <div className="container-page mt-14 grid grid-cols-12 items-start gap-4 sm:mt-16 lg:gap-5" aria-hidden>
+        {HERO_PHOTOS.map((p) => (
+          <div key={p.src} data-hero-photo data-reveal className={cn("relative overflow-hidden rounded-3xl border border-line bg-canvas shadow-lg", p.cls)}>
+            <Image src={p.src} alt="" fill preload={p.src === "/images/hero-tutoring.jpg"} sizes="(min-width: 768px) 50vw, 100vw" className={cn("object-cover", p.pos)} />
+            <span className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[12.5px] font-medium text-ink shadow-sm backdrop-blur">{p.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Feature row */}
+      <div className="container-page pb-16 pt-12 sm:pb-20">
+        <Stagger className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line" stagger={0.07}>
           {HERO_FEATURES.map((f) => (
-            <StaggerItem key={f.title} className="flex items-start gap-3.5 lg:px-6">
-              <f.icon className="mt-0.5 size-6 shrink-0 text-brand" strokeWidth={1.8} aria-hidden />
-              <span>
-                <span className="block text-[15px] font-bold text-ink">{f.title}</span>
-                <span className="mt-0.5 block text-[13px] leading-snug text-muted">{f.body}</span>
+            <StaggerItem key={f.title} className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:justify-center lg:px-6">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-brand shadow-xs">
+                <f.icon className="size-[18px]" strokeWidth={2} aria-hidden />
+              </span>
+              <span className="text-left">
+                <span className="block text-[15px] font-semibold tracking-[-0.01em] text-ink">{f.title}</span>
+                <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">{f.body}</span>
               </span>
             </StaggerItem>
           ))}
@@ -260,8 +233,8 @@ function SubjectExplorer() {
             </div>
 
             <div className="flex flex-col">
-              <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-brand">
-                <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+              <p className="kicker">
+                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
                 {topics.length} subjects{areaTutors > 0 && ` · ${areaTutors} ${areaTutors === 1 ? "tutor" : "tutors"}`}
               </p>
               <h3 className="mt-3 font-heading text-[28px] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[34px]">{area.label}</h3>
@@ -329,31 +302,23 @@ function SubjectExplorer() {
 export function SubjectTiles() {
   return (
     <Section tone="canvas">
-      <div className="mb-10 grid items-end gap-8 lg:mb-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,500px)] lg:gap-14">
-        <SectionHeading
-          className="mb-0 lg:mb-0"
-          eyebrow="Explore subjects"
-          title="What will you master next?"
-          accent={2}
-          description="Pick an area to see every topic our tutors teach — or search for a subject, a skill or a tutor by name."
-        />
-        <Reveal delay={0.1} className="relative z-20">
-          <SubjectSearch />
-        </Reveal>
-      </div>
+      <SectionHeading
+        eyebrow="Explore subjects"
+        title="What will you master next?"
+        accent={2}
+        description="Pick an area to see every topic our tutors teach, with real tutor counts for each."
+        action={<ArrowLink href="/subjects">View all {SUBJECTS.length} subjects</ArrowLink>}
+      />
 
       <Reveal>
         <SubjectExplorer />
       </Reveal>
 
-      <Reveal className="mt-6 flex flex-col items-start justify-between gap-4 rounded-xl border border-dashed border-line-strong px-5 py-4 sm:flex-row sm:items-center">
-        <p className="text-[15px] text-ink-2">
+      <Reveal className="mt-6 flex flex-col items-start justify-between gap-4 rounded-2xl border border-line bg-surface px-5 py-4 sm:flex-row sm:items-center">
+        <p className="text-[15px] text-muted">
           <span className="font-semibold text-ink">Can&rsquo;t find your subject?</span> We cover {SUBJECTS.length} subjects in {SUBJECT_CATEGORIES.length} areas.
         </p>
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <ArrowLink href="/subjects">View all subjects</ArrowLink>
-          <ArrowLink href="/concierge">Help me find a tutor</ArrowLink>
-        </div>
+        <ArrowLink href="/concierge">Help me find a tutor</ArrowLink>
       </Reveal>
     </Section>
   );
@@ -688,7 +653,7 @@ function MatchSelect({
   const id = React.useId();
   return (
     <div>
-      <label htmlFor={id} className="mb-2.5 block text-[16px] font-semibold text-ink">
+      <label htmlFor={id} className="mb-2 block text-[14px] font-medium text-ink">
         {label}
       </label>
       <SelectMenu
@@ -704,8 +669,8 @@ function MatchSelect({
         leading={<Icon className="size-5 shrink-0 text-muted" aria-hidden />}
         renderValue={(o) => <span className={cn(!o && "text-muted")}>{o?.label ?? placeholder}</span>}
         className={cn(
-          "h-14 w-full gap-3.5 rounded-xl border bg-surface px-5 text-[16px] text-ink transition-[border-color,box-shadow] hover:border-ink/40",
-          "focus-visible:border-[#5b8cff] focus-visible:ring-2 focus-visible:ring-[#5b8cff]/30 data-[state=open]:border-[#5b8cff] data-[state=open]:ring-2 data-[state=open]:ring-[#5b8cff]/30",
+          "h-13 w-full gap-3 rounded-xl border bg-surface px-4 text-[15.5px] text-ink transition-[border-color,box-shadow] hover:border-subtle",
+          "focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/10 data-[state=open]:border-brand data-[state=open]:ring-4 data-[state=open]:ring-brand/10",
           error ? "border-danger" : "border-line-strong",
         )}
       />
@@ -736,36 +701,46 @@ export function GetMatched() {
   };
 
   return (
-    <section aria-labelledby="match-title" className="relative isolate overflow-hidden bg-canvas">
-      {/* Soft light from the top left */}
-      <div className="pointer-events-none absolute -left-40 -top-40 -z-10 size-[620px] rounded-full bg-[#dfe5ff]/60 blur-3xl" aria-hidden />
-
-      <div className="container-page grid items-center gap-14 py-20 sm:py-24 lg:grid-cols-[1fr_1.02fr] lg:gap-16 lg:py-28">
+    <section aria-labelledby="match-title" className="relative isolate overflow-clip bg-canvas">
+      <div className="container-page grid items-center gap-12 py-16 sm:py-24 lg:grid-cols-[1fr_minmax(0,540px)] lg:gap-20 lg:py-28">
         <div>
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand-soft px-3.5 py-1.5 text-[14px] font-semibold text-brand">
-              <Zap className="size-4 fill-current" aria-hidden /> Smart tutor matching
-            </span>
+            <p className="kicker">
+              <Zap className="size-3.5 fill-brand text-brand" aria-hidden /> Smart tutor matching
+            </p>
           </Reveal>
-          <h2 id="match-title" className="mt-6 font-heading text-[2.9rem] font-extrabold leading-[1.04] tracking-[-0.02em] text-ink sm:text-[3.6rem] lg:text-[4.1rem]">
-            <WordReveal as="span" inView className="block" text="Find a tutor that" delay={0.05} />
-            <Reveal as="span" delay={0.25} className="block">
-              <span className="bg-gradient-to-r from-[#3b82f6] via-[#4f6ef7] to-[#8b5cf6] bg-clip-text pb-1 text-transparent">fits you.</span>
-            </Reveal>
+          <h2 id="match-title" className="mt-6 font-heading text-[2.4rem] font-bold leading-[1.02] tracking-[-0.045em] text-ink sm:text-[3.25rem] lg:text-[3.75rem]">
+            <WordReveal as="span" inView className="block" text="Find a tutor" delay={0.05} />
+            <WordReveal as="span" inView gradient className="block" text="that fits you." delay={0.2} />
           </h2>
           <Reveal delay={0.1}>
-            <p className="mt-5 text-[18px] text-ink-2 sm:text-[20px]">Tell us a little about what you want to learn.</p>
-            <ul className="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-[15.5px] text-ink-2">
-              {["Takes about 2 minutes", "No account needed"].map((x) => (
-                <li key={x} className="flex items-center gap-2.5">
-                  <Check className="size-5 text-success" strokeWidth={2.5} aria-hidden /> {x}
+            <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-muted sm:text-[18px]">
+              Answer two quick questions. We&rsquo;ll show a shortlist of tutors and explain exactly why each one matches.
+            </p>
+            <ul className="mt-8 grid max-w-lg gap-3.5 text-[15.5px] text-ink-2">
+              {[
+                { icon: Zap, text: "Takes about 2 minutes" },
+                { icon: Lock, text: "No account needed to see matches" },
+                { icon: ShieldCheck, text: "Paid placement never affects the ranking" },
+              ].map((x) => (
+                <li key={x.text} className="flex items-center gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink shadow-xs">
+                    <x.icon className="size-4" aria-hidden />
+                  </span>
+                  {x.text}
                 </li>
               ))}
             </ul>
           </Reveal>
+        </div>
 
-          <Reveal delay={0.2}>
-            <form onSubmit={submit} noValidate className="mt-10 max-w-[624px] space-y-6">
+        <Reveal delay={0.15}>
+          <form onSubmit={submit} noValidate className="rounded-3xl border border-line bg-surface p-6 shadow-xl sm:p-8">
+            <div className="flex items-center justify-between gap-4 border-b border-line pb-5">
+              <p className="text-[15px] font-semibold text-ink">Get your shortlist</p>
+              <span className="rounded-full bg-sunken px-2.5 py-1 text-[12.5px] font-medium text-muted">2 questions</span>
+            </div>
+            <div className="mt-6 space-y-5">
               <MatchSelect
                 icon={BookOpen}
                 label="What do you want to learn?"
@@ -779,47 +754,15 @@ export function GetMatched() {
                 error={error ? "Choose a subject to see your matches." : undefined}
               />
               <MatchSelect icon={ChartNoAxesColumnIncreasing} label="What's your level?" value={grade} onChange={setGrade} placeholder="Select your level" options={MATCH_GRADE_OPTIONS} />
-              <button
-                type="submit"
-                className="group flex h-16 w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#2f8cff] via-[#4b74fb] to-[#7b5cf5] text-[18px] font-semibold text-white shadow-[0_12px_32px_-12px_rgb(79_110_247/0.8)] transition-[filter,transform] hover:brightness-110 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                Find my matches <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
-              </button>
-              <p className="flex items-start gap-3 text-[15px] leading-snug text-ink-2">
-                <Info className="mt-0.5 size-5 shrink-0" aria-hidden />
-                <span>
-                  Your answers help us find tutors
-                  <br />
-                  that match your goals.
-                </span>
-              </p>
-            </form>
-            <p className="mt-8 flex max-w-[624px] items-center gap-3 border-t border-line pt-6 text-[14.5px] text-muted">
-              <ShieldCheck className="size-5 shrink-0" aria-hidden /> Paid placement never affects the ranking.
+            </div>
+            <Button type="submit" variant="brand" size="lg" className="group mt-7 w-full">
+              Find my matches <ArrowRight className="transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </Button>
+            <p className="mt-5 flex items-start gap-2.5 text-[13.5px] leading-snug text-muted">
+              <Info className="mt-px size-4 shrink-0" aria-hidden />
+              Matches are ranked on {Object.keys(DEFAULT_WEIGHTS).length} clear factors across {SUBJECTS.length} subjects.
             </p>
-          </Reveal>
-        </div>
-
-        {/* Photo on a blue shape, with a small card about how matches are made */}
-        <Reveal delay={0.15} className="relative mx-auto w-full max-w-[600px] lg:mx-0">
-          <svg className="absolute -right-6 -top-14 -z-10 h-[115%] w-[118%] text-[#dfe5ff] sm:-right-10" viewBox="0 0 600 560" fill="currentColor" aria-hidden>
-            <path d="M462 18c58-14 112 10 124 60 14 58-8 118-2 182 7 72 16 148-26 202-46 59-138 70-222 72-86 2-176-12-236-64C40 418-6 330 30 268c26-45 74-42 112-86 36-42 44-112 96-140 60-32 156 0 224-24z" />
-          </svg>
-          <svg className="absolute -right-3 -top-8 size-12 text-[#7b6cf6] sm:-right-8 sm:-top-10" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" aria-hidden>
-            <path d="M18 6l-3 12M38 12l-10 9M44 30l-12 1" />
-          </svg>
-          <div data-match-photo className="relative aspect-[1.08] overflow-hidden rounded-[28px] shadow-2xl">
-            <Image src="/images/online-lesson.jpg" alt="A student with headphones taking notes during an online lesson" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover object-[58%_40%]" />
-          </div>
-          <div className="absolute -bottom-6 -left-3 flex items-center gap-3.5 rounded-2xl border border-line bg-white/95 p-4 pr-6 shadow-xl backdrop-blur-md sm:-left-10 sm:bottom-6">
-            <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#2f5bff] text-white">
-              <Users className="size-5" aria-hidden />
-            </span>
-            <span>
-              <span className="block text-[15px] font-semibold text-ink">Matches in {SUBJECTS.length} subjects</span>
-              <span className="block text-[13.5px] text-muted">ranked on 8 clear factors</span>
-            </span>
-          </div>
+          </form>
         </Reveal>
       </div>
     </section>
@@ -931,7 +874,7 @@ export function WhyTutorLink() {
           <StaggerItem key={p.title} className="h-full">
             <div data-spotlight className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 sm:p-7">
               <div className="flex items-start justify-between gap-4">
-                <span className="font-heading text-[56px] font-extrabold leading-none tracking-[-0.04em] text-gradient">{p.value}</span>
+                <span className="font-heading text-[52px] font-bold leading-none tracking-[-0.05em] text-ink">{p.value}</span>
                 <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line text-brand">
                   <p.icon className="size-5" aria-hidden />
                 </span>

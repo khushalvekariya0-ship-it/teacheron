@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { LogoMark } from "@/components/ui/Logo";
+import { ArrowRight } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 import { SITE } from "@/lib/site";
 import { SUBJECTS } from "@/lib/data/catalog";
 import { METROS } from "@/lib/data/geo";
@@ -52,44 +53,40 @@ const CITIES = METROS.slice(0, 10);
 
 function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="text-[14px] text-white/60 transition-colors hover:text-white">
+    <Link href={href} className="text-[14px] text-muted transition-colors hover:text-ink">
       {children}
     </Link>
   );
 }
 
 function ColumnHeading({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/45">{children}</h2>;
+  return <h2 className="text-[13.5px] font-semibold text-ink">{children}</h2>;
 }
 
 export function Footer() {
   return (
-    <footer className="relative border-t border-white/10 bg-night text-white" role="contentinfo">
-      <div className="absolute inset-x-0 top-0 h-px bg-brand-gradient opacity-60" aria-hidden />
+    <footer className="relative border-t border-line bg-canvas" role="contentinfo">
       <div className="container-page">
         {/* Brand row */}
-        <div className="flex flex-col gap-8 border-b border-white/10 py-12 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-8 border-b border-line py-12 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-md">
-            <Link href="/" className="inline-flex items-center gap-2" aria-label={`${SITE.name} home`}>
-              <LogoMark className="[&_rect]:fill-white [&_path]:stroke-night" />
-              <span className="font-heading text-[22px] font-bold tracking-[-0.03em]">{SITE.name}</span>
-            </Link>
-            <p className="mt-4 text-[15px] leading-relaxed text-white/60">
+            <Logo />
+            <p className="mt-4 text-[15px] leading-relaxed text-muted">
               A marketplace connecting students and families across the United States with qualified tutors, online and in person.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/tutors" className="inline-flex h-11 items-center rounded-lg bg-brand-gradient px-5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110">
-              Find a tutor
+            <Link href="/tutors" className="group inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[15px] font-medium text-white transition-colors hover:bg-navy-hover">
+              Find a tutor <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Link>
-            <Link href="/contact" className="inline-flex h-11 items-center rounded-lg border border-white/20 px-5 text-[15px] font-semibold text-white transition-colors hover:border-white/50 hover:bg-white/5">
+            <Link href="/contact" className="inline-flex h-11 items-center rounded-full border border-line-strong bg-surface px-5 text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle">
               Contact support
             </Link>
           </div>
         </div>
 
         {/* Link columns */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 border-b border-white/10 py-12 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 border-b border-line py-12 sm:grid-cols-3 lg:grid-cols-6">
           {COLUMNS.map((col) => (
             <nav key={col.heading} aria-label={col.heading}>
               <ColumnHeading>{col.heading}</ColumnHeading>
@@ -127,15 +124,15 @@ export function Footer() {
         </div>
 
         {/* Legal row */}
-        <div className="flex flex-col gap-4 py-6 text-[13px] text-white/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 py-6 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between">
           <p>
             © {new Date().getFullYear()} {SITE.legalName} · United States
           </p>
           <ul className="flex flex-wrap gap-x-6 gap-y-2">
-            <li><Link href="/privacy" className="transition-colors hover:text-white">Privacy</Link></li>
-            <li><Link href="/terms" className="transition-colors hover:text-white">Terms</Link></li>
-            <li><Link href="/safety" className="transition-colors hover:text-white">Safety</Link></li>
-            <li><Link href="/trust-safety" className="transition-colors hover:text-white">Trust & safety</Link></li>
+            <li><Link href="/privacy" className="transition-colors hover:text-ink">Privacy</Link></li>
+            <li><Link href="/terms" className="transition-colors hover:text-ink">Terms</Link></li>
+            <li><Link href="/safety" className="transition-colors hover:text-ink">Safety</Link></li>
+            <li><Link href="/trust-safety" className="transition-colors hover:text-ink">Trust & safety</Link></li>
           </ul>
         </div>
       </div>

@@ -100,7 +100,7 @@ function SkillSnippets() {
   return (
     <div className="grid gap-2 sm:grid-cols-2" aria-hidden>
       <div className="rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90">
-        <span className="text-[#8fb2ff]">for</span> step <span className="text-[#8fb2ff]">in</span> plan:
+        <span className="text-[#a5b4fc]">for</span> step <span className="text-[#a5b4fc]">in</span> plan:
         <br />
         &nbsp;&nbsp;learn(step)
         <br />

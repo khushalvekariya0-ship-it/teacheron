@@ -239,8 +239,8 @@ function ScoreRing({ percent }: { percent: number | null }) {
       <svg viewBox="0 0 80 80" className="size-full -rotate-90">
         <defs>
           <linearGradient id="score-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#2f7bff" />
-            <stop offset="100%" stopColor="#7552f0" />
+            <stop offset="0%" stopColor="#4f46e5" />
+            <stop offset="100%" stopColor="#4f46e5" />
           </linearGradient>
         </defs>
         <circle cx="40" cy="40" r={r} fill="none" stroke="var(--color-line)" strokeWidth="8" />

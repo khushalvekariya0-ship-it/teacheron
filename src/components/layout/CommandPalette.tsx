@@ -254,16 +254,16 @@ export function SearchTrigger({ className, compact }: { className?: string; comp
       onClick={openCommandPalette}
       aria-label="Search (Ctrl or Command + K)"
       className={cn(
-        "group inline-flex h-10 items-center gap-2 rounded-lg text-[14px] font-medium text-ink transition-colors",
-        compact ? "w-10 justify-center hover:bg-ink/5" : "border border-line-strong bg-surface pl-3 pr-1.5 hover:border-ink/40",
+        "group inline-flex items-center gap-2 rounded-full text-[14px] font-medium text-ink transition-colors",
+        compact ? "size-10 justify-center hover:bg-sunken" : "h-9 border border-line bg-canvas pl-3 pr-1.5 hover:border-line-strong hover:bg-surface",
         className,
       )}
     >
-      <Search className={compact ? "size-5" : "size-4"} strokeWidth={2.25} />
+      <Search className={compact ? "size-[18px]" : "size-4 text-muted"} strokeWidth={2.2} />
       {!compact && (
         <>
-          <span className="pr-5 text-ink-2">Search</span>
-          <kbd className="rounded-md border border-ink/15 bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-muted">⌘K</kbd>
+          <span className="pr-6 font-normal text-muted">Search…</span>
+          <kbd className="rounded-full border border-line bg-surface px-2 py-0.5 font-mono text-[10.5px] text-muted">⌘K</kbd>
         </>
       )}
     </button>

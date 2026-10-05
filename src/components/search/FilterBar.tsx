@@ -65,7 +65,7 @@ function FilterPill({ label, active, children, panelClassName }: { label: string
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={cn(
-          "inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 text-[14px] font-medium transition-colors",
+          "inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-[14px] font-medium transition-colors",
           open || active ? "border-ink bg-canvas text-ink" : "border-line text-ink-2 hover:border-line-strong hover:text-ink",
         )}
       >

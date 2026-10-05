@@ -109,7 +109,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
           aria-invalid={error ? true : undefined}
           className="max-h-[168px] min-h-10 flex-1 resize-none rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-[15px] leading-6 text-ink outline-none transition-[border-color,box-shadow] placeholder:text-subtle hover:border-subtle focus:border-brand focus:ring-2 focus:ring-brand/25"
         />
-        <Button type="submit" size="icon" disabled={!canSend} aria-label="Send message" className="shrink-0 rounded-xl">
+        <Button type="submit" size="icon" disabled={!canSend} aria-label="Send message" className="shrink-0">
           <Send />
         </Button>
       </form>

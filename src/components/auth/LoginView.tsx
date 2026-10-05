@@ -126,7 +126,7 @@ export function LoginView() {
             key={p.name}
             type="button"
             onClick={() => notConnected(p.name)}
-            className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border-2 border-line-strong bg-surface text-[15.5px] font-semibold text-ink transition-colors hover:border-ink active:translate-y-px"
+            className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line-strong bg-surface text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle hover:bg-canvas active:translate-y-px"
           >
             {p.icon}
             Continue with {p.name}

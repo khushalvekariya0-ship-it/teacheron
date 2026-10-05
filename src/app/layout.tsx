@@ -1,14 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { SITE } from "@/lib/site";
 import { HEAD_INIT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
-/** One clean geometric family for text and headlines. */
-const jakarta = Plus_Jakarta_Sans({ variable: "--font-jakarta", subsets: ["latin"], display: "swap" });
-/** Handwritten note on the homepage hero. */
-const caveat = Caveat({ variable: "--font-caveat", subsets: ["latin"], weight: ["600"], display: "swap" });
+/** One crisp variable family for text and headlines. */
+const geist = Geist({ variable: "--font-geist", subsets: ["latin"], display: "swap" });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
@@ -29,9 +27,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-US" className={`${jakarta.variable} ${geistMono.variable} ${caveat.variable}`} suppressHydrationWarning>
+    <html lang="en-US" className={`${geist.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
-        {/* Before first paint: mark JS as available (GSAP reveals start hidden) and apply the saved light/dark theme. */}
+        {/* Before first paint: mark JS as available (GSAP reveals start hidden). */}
         <script dangerouslySetInnerHTML={{ __html: HEAD_INIT_SCRIPT }} />
       </head>
       <body className="min-h-dvh bg-page antialiased">

@@ -98,14 +98,14 @@ export function RadioCards<T extends string>({
           key={o.value}
           value={o.value}
           disabled={o.disabled}
-          className="group relative flex items-start gap-3 rounded-lg border border-line bg-surface p-3.5 text-left transition-[border-color,background-color,box-shadow] hover:border-line-strong data-[state=checked]:border-brand data-[state=checked]:bg-brand-50/60 data-[state=checked]:shadow-[0_0_0_1px_var(--color-navy)] disabled:opacity-50"
+          className="group relative flex items-start gap-3 rounded-xl border border-line bg-surface p-3.5 text-left transition-[border-color,background-color,box-shadow] hover:border-line-strong data-[state=checked]:border-brand data-[state=checked]:bg-brand-50/60 data-[state=checked]:shadow-[0_0_0_1px_var(--color-brand)] disabled:opacity-50"
         >
           {o.icon && <span className="mt-0.5 text-muted group-data-[state=checked]:text-navy [&_svg]:size-[18px]">{o.icon}</span>}
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-ink">{o.label}</span>
             {o.description && <span className="mt-0.5 block text-[13px] leading-snug text-muted">{o.description}</span>}
           </span>
-          <span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border border-line-strong bg-surface group-data-[state=checked]:border-navy">
+          <span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border border-line-strong bg-surface group-data-[state=checked]:border-brand">
             <RadioGroupPrimitive.Indicator className="size-2 rounded-full bg-brand data-[state=checked]:animate-pop-in" />
           </span>
         </RadioGroupPrimitive.Item>
@@ -142,9 +142,9 @@ export function ChipGroup<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(active ? value.filter((v) => v !== o.value) : [...value, o.value])}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border font-semibold transition-[background-color,border-color,color] duration-150",
+              "inline-flex items-center gap-1.5 rounded-full border font-medium transition-[background-color,border-color,color] duration-150",
               size === "md" ? "h-9 px-3.5 text-sm" : "h-7 px-2.5 text-[13px]",
-              active ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-ink-2 hover:border-ink hover:text-ink",
+              active ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink",
             )}
           >
             {active && <Check className="size-3.5" strokeWidth={2.5} aria-hidden />}
@@ -175,7 +175,7 @@ export function Segmented<T extends string>({
 }) {
   const layoutId = React.useId();
   return (
-    <div role="radiogroup" aria-label={label} className={cn("inline-flex rounded-lg border border-line bg-canvas p-0.5", className)}>
+    <div role="radiogroup" aria-label={label} className={cn("inline-flex rounded-full border border-line bg-sunken p-0.5", className)}>
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -186,7 +186,7 @@ export function Segmented<T extends string>({
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={cn(
-              "relative inline-flex items-center gap-1.5 rounded-md font-medium transition-colors",
+              "relative inline-flex items-center gap-1.5 rounded-full font-medium transition-colors",
               size === "md" ? "h-8 px-3 text-sm" : "h-7 px-2.5 text-[13px]",
               active ? "text-ink" : "text-muted hover:text-ink",
             )}
@@ -194,7 +194,7 @@ export function Segmented<T extends string>({
             {active && (
               <motion.span
                 layoutId={layoutId}
-                className="absolute inset-0 rounded-md border border-line bg-surface shadow-xs"
+                className="absolute inset-0 rounded-full border border-line bg-surface shadow-sm"
                 transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
               />
             )}

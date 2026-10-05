@@ -202,8 +202,8 @@ export function TutorDirectory() {
       {/* ── Title: follows the search; the last words carry the gradient ── */}
       <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
-            <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+          <p className="kicker">
+            <span className="size-1.5 rounded-full bg-brand" aria-hidden />
             Find a tutor
           </p>
           <motion.h1

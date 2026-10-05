@@ -7,7 +7,7 @@ import { SelectMenu, type SelectGroup, type SelectOption } from "./SelectMenu";
 export type { SelectGroup, SelectOption };
 
 const control =
-  "w-full rounded-lg border border-line-strong bg-surface text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-subtle hover:border-subtle focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger";
+  "w-full rounded-lg border border-line-strong bg-surface text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-subtle hover:border-subtle focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger";
 
 /* ─── Field: label + control + hint/error, wired for screen readers ─────────── */
 

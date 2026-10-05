@@ -53,7 +53,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
           value={rate}
           onChange={(e) => setRate(Number(e.target.value))}
           aria-valuetext={`${formatCents(rate)} per hour`}
-          className="mt-5 w-full accent-[#4b66f5]"
+          className="mt-5 w-full accent-[#4f46e5]"
         />
         <div className="mt-1 flex justify-between text-[12px] tabular-nums text-muted">
           <span>{formatCents(MIN)}</span>

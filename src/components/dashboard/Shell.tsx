@@ -100,7 +100,7 @@ function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSec
                       (collapsed ? (
                         <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-ink ring-2 ring-surface" />
                       ) : (
-                        <span className="relative rounded-md bg-brand-gradient px-1.5 py-px text-[11px] font-semibold tabular-nums text-white">{count}</span>
+                        <span className="relative rounded-full bg-brand px-1.5 py-px text-[11px] font-semibold tabular-nums text-white">{count}</span>
                       ))}
                   </Link>
                 </li>
@@ -205,7 +205,7 @@ function NotificationsPopover({ user }: { user: User }) {
   const [open, setOpen] = React.useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="relative grid size-10 place-items-center rounded-lg text-ink transition-colors hover:bg-canvas" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}>
+      <PopoverTrigger className="relative grid size-10 place-items-center rounded-full text-ink-2 transition-colors hover:bg-sunken hover:text-ink" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}>
         <Bell className="size-5" />
         {unread > 0 && (
           <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-surface">
@@ -278,7 +278,7 @@ function TopSearch({ role }: { role: Role }) {
         onChange={(e) => setQ(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-muted hover:border-line-strong focus:border-brand focus:ring-2 focus:ring-brand/25"
+        className="h-9 w-full rounded-full border border-line bg-canvas pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color] placeholder:text-muted hover:border-line-strong focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/10"
       />
     </form>
   );

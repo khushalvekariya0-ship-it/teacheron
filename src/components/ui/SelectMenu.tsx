@@ -55,7 +55,7 @@ function Item({ option, muted }: { option: SelectOption; muted?: boolean }) {
       <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
       {/* The "Any …" / "Choose …" line clears the choice, so it gets no check mark. */}
       {!muted && (
-        <SelectPrimitive.ItemIndicator className="absolute right-2.5 grid size-5 place-items-center rounded-full bg-brand-gradient text-white">
+        <SelectPrimitive.ItemIndicator className="absolute right-2.5 grid size-5 place-items-center rounded-full bg-brand text-white">
           <Check className="size-3" strokeWidth={3.2} aria-hidden />
         </SelectPrimitive.ItemIndicator>
       )}
@@ -85,7 +85,7 @@ export const SelectMenu = React.forwardRef<HTMLButtonElement, SelectMenuProps>(f
           variant === "field" &&
             cn(
               "w-full border border-line-strong bg-surface text-ink transition-[border-color,box-shadow] duration-150 hover:border-subtle",
-              "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25 data-[state=open]:border-brand data-[state=open]:ring-2 data-[state=open]:ring-brand/25",
+              "focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/10 data-[state=open]:border-brand data-[state=open]:ring-4 data-[state=open]:ring-brand/10",
               "disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger",
               FIELD[size],
             ),
@@ -106,7 +106,7 @@ export const SelectMenu = React.forwardRef<HTMLButtonElement, SelectMenuProps>(f
           collisionPadding={12}
           className={cn(
             "z-[120] max-h-[min(var(--radix-select-content-available-height),22rem)] min-w-[max(var(--radix-select-trigger-width),12rem)] overflow-hidden",
-            "rounded-xl border border-line bg-surface shadow-[0_20px_48px_-18px_rgb(15_23_42/0.38)] animate-select-in",
+            "rounded-xl border border-line bg-surface shadow-xl animate-select-in",
             contentClassName,
           )}
         >
@@ -119,7 +119,7 @@ export const SelectMenu = React.forwardRef<HTMLButtonElement, SelectMenuProps>(f
               ? groups.map((g, gi) => (
                   <SelectPrimitive.Group key={g.label}>
                     {(gi > 0 || placeholder !== undefined) && <SelectPrimitive.Separator className="mx-2 my-1.5 h-px bg-line" />}
-                    <SelectPrimitive.Label className="px-3 pb-1 pt-1.5 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted">{g.label}</SelectPrimitive.Label>
+                    <SelectPrimitive.Label className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-muted">{g.label}</SelectPrimitive.Label>
                     {g.options.map((o) => (
                       <Item key={o.value} option={o} />
                     ))}

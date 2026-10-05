@@ -61,26 +61,23 @@ function isCurrent(pathname: string, href: string) {
 
 /** Sliding highlight behind the current top-level item. */
 function ActivePill() {
-  return <motion.span layoutId="nav-active" className="absolute inset-0 rounded-lg bg-brand-soft ring-1 ring-brand/15" transition={{ type: "spring", bounce: 0.18, duration: 0.45 }} aria-hidden />;
+  return <motion.span layoutId="nav-active" className="absolute inset-0 rounded-full bg-sunken" transition={{ type: "spring", bounce: 0.18, duration: 0.45 }} aria-hidden />;
 }
 
 /**
- * Floating framed bar (thin border, frosted glass, crisp corners). At the top of a page it shows every
- * section; once you scroll it narrows into a slim bar (logo · search · theme · ☰ menu) that stays put
- * in both scroll directions.
+ * Full-width white bar with a hairline bottom border (frosted while scrolling): logo, the main
+ * sections in the middle, then search and account actions. Below 1280px the sections move into
+ * the ☰ menu.
  */
 export function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = React.useState<string | null>(null);
   const [menu, setMenu] = React.useState(false);
-  const [compact, setCompact] = React.useState(false);
+  const [scrolled, setScrolled] = React.useState(false);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { scrollY } = useScroll();
-  useMotionValueEvent(scrollY, "change", (y) => {
-    // Small hysteresis so the bar doesn't flicker around the threshold.
-    setCompact((c) => (c ? y > 90 : y > 140));
-  });
+  useMotionValueEvent(scrollY, "change", (y) => setScrolled(y > 8));
 
   // Close menus on navigation (reset-on-change pattern, no effect needed).
   const [lastPath, setLastPath] = React.useState(pathname);
@@ -89,8 +86,6 @@ export function Navbar() {
     setOpen(null);
     setMenu(false);
   }
-  // Dropdowns belong to the full bar only.
-  if (compact && open) setOpen(null);
 
   const openMenu = (label: string) => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -109,111 +104,73 @@ export function Navbar() {
   return (
     <header
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
-      className="sticky top-0 z-40 px-2 pt-2 sm:px-4 sm:pt-3"
+      className={cn(
+        "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-200",
+        scrolled ? "border-line bg-white/85 shadow-[0_1px_12px_-6px_rgb(9_9_11/0.12)] backdrop-blur-xl backdrop-saturate-150" : "border-line/70 bg-white",
+      )}
     >
-      <div
-        className={cn(
-          "mx-auto flex items-center gap-6 rounded-xl border pl-4 pr-2 transition-[max-width,height,background-color,border-color,box-shadow] duration-300 sm:pl-5 sm:pr-3",
-          "border-line-strong/80 bg-white/95 shadow-[0_10px_30px_-14px_rgb(15_23_42/0.35)] backdrop-blur-xl",
-          compact ? "h-14 max-w-[1040px]" : "h-16 max-w-[1248px] lg:h-[68px]",
-        )}
-      >
+      <div className="container-page flex h-16 items-center gap-8">
         <Logo />
 
-        <AnimatePresence initial={false}>
-          {!compact && (
-            <motion.nav
-              key="links"
-              aria-label="Main"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6, transition: { duration: 0.15 } }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="hidden xl:block"
-            >
-              <ul className="flex items-center gap-1">
-                {NAV.map((g) => (
-                  <li key={g.label} className="relative" onMouseEnter={() => (g.links || g.mega) && openMenu(g.label)} onMouseLeave={() => (g.links || g.mega) && scheduleClose()}>
-                    {g.href ? (
-                      <Link
-                        href={g.href}
-                        aria-current={isActive(g) ? "page" : undefined}
-                        className={cn(
-                          "relative inline-flex h-10 items-center whitespace-nowrap rounded-lg px-3.5 text-[15px] transition-colors",
-                          isActive(g) ? "font-semibold text-brand" : "font-medium text-ink hover:bg-ink/5",
-                        )}
-                      >
-                        {isActive(g) && <ActivePill />}
-                        <span className="relative">{g.label}</span>
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-expanded={open === g.label}
-                        aria-haspopup="true"
-                        onClick={() => setOpen((o) => (o === g.label ? null : g.label))}
-                        className={cn(
-                          "relative inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-lg px-3.5 text-[15px] transition-colors",
-                          isActive(g) ? "font-semibold text-brand" : cn("font-medium text-ink hover:bg-ink/5", open === g.label && "bg-ink/5"),
-                        )}
-                      >
-                        {isActive(g) && <ActivePill />}
-                        <span className="relative">{g.label}</span>
-                        <ChevronDown className={cn("relative size-4 transition-transform duration-200", open === g.label && "rotate-180")} />
-                      </button>
+        <nav aria-label="Main" className="hidden xl:block">
+          <ul className="flex items-center gap-0.5">
+            {NAV.map((g) => (
+              <li key={g.label} className="relative" onMouseEnter={() => (g.links || g.mega) && openMenu(g.label)} onMouseLeave={() => (g.links || g.mega) && scheduleClose()}>
+                {g.href ? (
+                  <Link
+                    href={g.href}
+                    aria-current={isActive(g) ? "page" : undefined}
+                    className={cn(
+                      "relative inline-flex h-9 items-center whitespace-nowrap rounded-full px-3.5 text-[14.5px] font-medium transition-colors",
+                      isActive(g) ? "text-ink" : "text-ink-2 hover:text-ink",
                     )}
-                    <AnimatePresence>
-                      {g.links && open === g.label && <MegaMenu group={g} pathname={pathname} />}
-                      {g.mega === "subjects" && open === g.label && <SubjectsMenu pathname={pathname} />}
-                    </AnimatePresence>
-                  </li>
-                ))}
-              </ul>
-            </motion.nav>
-          )}
-        </AnimatePresence>
+                  >
+                    {isActive(g) && <ActivePill />}
+                    <span className="relative">{g.label}</span>
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    aria-expanded={open === g.label}
+                    aria-haspopup="true"
+                    onClick={() => setOpen((o) => (o === g.label ? null : g.label))}
+                    className={cn(
+                      "relative inline-flex h-9 items-center gap-1 whitespace-nowrap rounded-full px-3.5 text-[14.5px] font-medium transition-colors",
+                      isActive(g) || open === g.label ? "text-ink" : "text-ink-2 hover:text-ink",
+                      open === g.label && !isActive(g) && "bg-sunken",
+                    )}
+                  >
+                    {isActive(g) && <ActivePill />}
+                    <span className="relative">{g.label}</span>
+                    <ChevronDown className={cn("relative size-3.5 opacity-60 transition-transform duration-200", open === g.label && "rotate-180")} />
+                  </button>
+                )}
+                <AnimatePresence>
+                  {g.links && open === g.label && <MegaMenu group={g} pathname={pathname} />}
+                  {g.mega === "subjects" && open === g.label && <SubjectsMenu pathname={pathname} />}
+                </AnimatePresence>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <SearchTrigger className={cn("hidden", !compact && "md:inline-flex")} />
-          <SearchTrigger compact className={cn(!compact && "md:hidden")} />
-          <AnimatePresence initial={false} mode="popLayout">
-            {compact ? (
-              <motion.div
-                key="compact-actions"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
-                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                className="hidden items-center gap-2 sm:flex"
-              >
-                <Button asChild variant="brand" size="sm" className="h-10 px-4">
-                  <Link href="/tutors">Find a tutor</Link>
-                </Button>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="account"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                className="hidden items-center gap-2 xl:flex"
-              >
-                <AccountArea />
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="ml-auto flex items-center gap-2">
+          <SearchTrigger className="hidden md:inline-flex" />
+          <SearchTrigger compact className="md:hidden" />
+          <div className="hidden items-center gap-2 xl:flex">
+            <AccountArea />
+          </div>
+          <Button asChild variant="brand" size="sm" className="hidden sm:inline-flex xl:hidden">
+            <Link href="/tutors">Find a tutor</Link>
+          </Button>
           <button
             type="button"
             aria-label="Open menu"
             aria-expanded={menu}
             onClick={() => setMenu(true)}
-            className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-lg text-[15px] font-semibold text-ink transition-colors",
-              compact ? "border border-line-strong px-2.5 hover:bg-ink hover:text-on-ink sm:px-3.5" : "px-2 hover:bg-ink/5 xl:hidden",
-            )}
+            className="grid size-10 place-items-center rounded-full border border-line-strong text-ink transition-colors hover:bg-sunken xl:hidden"
           >
-            <Menu className="size-5" strokeWidth={2.4} />
-            {compact && <span className="hidden sm:inline">Menu</span>}
+            <Menu className="size-[18px]" strokeWidth={2.2} />
           </button>
         </div>
       </div>
@@ -231,9 +188,9 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 4, transition: { duration: 0.12 } }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-      className="absolute left-0 top-full z-50 pt-3"
+      className="absolute left-0 top-full z-50 pt-[18px]"
     >
-      <div className="grid w-[640px] grid-cols-[1fr_230px] gap-2 rounded-xl border border-line bg-surface p-2 shadow-lg">
+      <div className="grid w-[640px] grid-cols-[1fr_230px] gap-2 rounded-2xl border border-line bg-surface p-2 shadow-xl">
         <ul className="grid grid-cols-1 gap-0.5 p-1">
           {g.links!.map((l, i) => {
             const current = isCurrent(pathname, l.href);
@@ -242,18 +199,18 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
                 <Link
                   href={l.href}
                   aria-current={current ? "page" : undefined}
-                  className={cn("group flex items-start gap-3 rounded-lg p-3 transition-colors", current ? "bg-brand-soft" : "hover:bg-canvas")}
+                  className={cn("group flex items-start gap-3 rounded-xl p-3 transition-colors", current ? "bg-brand-50" : "hover:bg-canvas")}
                 >
                   <span
                     className={cn(
-                      "grid size-10 shrink-0 place-items-center rounded-lg border bg-surface transition-colors",
-                      current ? "border-brand/30 text-brand" : "border-line text-ink group-hover:border-ink",
+                      "grid size-10 shrink-0 place-items-center rounded-xl border bg-surface shadow-xs transition-colors",
+                      current ? "border-brand/30 text-brand" : "border-line text-ink-2 group-hover:text-ink",
                     )}
                   >
                     <l.icon className="size-[18px]" />
                   </span>
                   <span className="min-w-0">
-                    <span className={cn("block text-[15px] font-semibold", current ? "text-brand" : "text-ink")}>{l.label}</span>
+                    <span className={cn("block text-[14.5px] font-semibold", current ? "text-brand" : "text-ink")}>{l.label}</span>
                     <span className="mt-0.5 block text-[13px] leading-snug text-muted">{l.description}</span>
                   </span>
                 </Link>
@@ -262,11 +219,13 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
           })}
         </ul>
         {g.feature && (
-          <Link href={g.feature.href} className="group flex flex-col rounded-lg bg-brand-soft p-5 text-ink">
-            <Compass className="size-6" />
-            <p className="mt-auto pt-10 font-heading text-[22px] font-bold leading-tight tracking-[-0.03em]">{g.feature.title}</p>
-            <p className="mt-1.5 text-[13px] leading-snug text-ink/80">{g.feature.body}</p>
-            <span className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold underline decoration-2 underline-offset-4">
+          <Link href={g.feature.href} className="group flex flex-col rounded-xl bg-night p-5 text-white">
+            <span className="grid size-9 place-items-center rounded-lg bg-white/10">
+              <Compass className="size-[18px]" />
+            </span>
+            <p className="mt-auto pt-10 font-heading text-[20px] font-semibold leading-tight tracking-[-0.03em]">{g.feature.title}</p>
+            <p className="mt-1.5 text-[13px] leading-snug text-white/60">{g.feature.body}</p>
+            <span className="mt-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-white">
               {g.feature.cta} <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
             </span>
           </Link>
@@ -292,9 +251,9 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 4, transition: { duration: 0.12 } }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-      className="absolute left-0 top-full z-50 pt-3"
+      className="absolute left-0 top-full z-50 pt-[18px]"
     >
-      <div className="w-[920px] overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_28px_70px_-30px_rgb(15_23_42/0.45)]">
+      <div className="w-[920px] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
         <div className="grid grid-cols-[262px_minmax(0,1fr)_210px]">
           {/* Areas */}
           <ul className="space-y-0.5 border-r border-line bg-canvas p-2.5" aria-label="Subject areas">
@@ -357,8 +316,8 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
               {AREA_PHOTOS.has(cat.slug) ? (
                 <Image key={cat.slug} src={`/images/subjects/${cat.slug}.jpg`} alt="" fill sizes="200px" className="object-cover" />
               ) : (
-                <div className="absolute inset-0 grid place-items-center bg-[linear-gradient(140deg,var(--color-grad-from),var(--color-grad-to))]">
-                  <CategoryIcon slug={cat.slug} className="size-12 text-white/90" />
+                <div className="absolute inset-0 grid place-items-center bg-brand-soft">
+                  <CategoryIcon slug={cat.slug} className="size-12 text-brand" />
                 </div>
               )}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night/80 to-transparent p-3 pt-10">
@@ -381,7 +340,7 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
             <ul className="flex min-w-0 gap-1.5 overflow-hidden">
               {POPULAR_SUBJECTS.map((s) => (
                 <li key={s.slug} className="shrink-0">
-                  <Link href={`/tutors?subject=${s.slug}`} className="inline-flex rounded-md border border-line px-2 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:text-brand">
+                  <Link href={`/tutors?subject=${s.slug}`} className="inline-flex rounded-full border border-line px-2.5 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:text-brand">
                     {s.name}
                   </Link>
                 </li>
@@ -456,8 +415,8 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                 <DialogPrimitive.Title className="sr-only">Menu</DialogPrimitive.Title>
                 <div className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
                   <Logo />
-                  <DialogPrimitive.Close className="grid size-10 place-items-center rounded-lg text-ink transition-colors hover:bg-ink/5" aria-label="Close menu">
-                    <X className="size-6" strokeWidth={2.25} />
+                  <DialogPrimitive.Close className="grid size-10 place-items-center rounded-full border border-line-strong text-ink transition-colors hover:bg-sunken" aria-label="Close menu">
+                    <X className="size-[18px]" strokeWidth={2.2} />
                   </DialogPrimitive.Close>
                 </div>
 
@@ -468,7 +427,7 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                       onOpenChange(false);
                       openCommandPalette();
                     }}
-                    className="flex h-11 w-full items-center gap-2 rounded-lg border border-line-strong px-3.5 text-[15px] text-muted transition-colors hover:border-ink"
+                    className="flex h-11 w-full items-center gap-2 rounded-full border border-line-strong bg-canvas px-4 text-[15px] text-muted transition-colors hover:border-subtle"
                   >
                     <Search className="size-[18px] text-ink" /> Search tutors, subjects, pages…
                   </button>
@@ -494,14 +453,14 @@ function MenuSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                                 href={l.href}
                                 aria-current={current ? "page" : undefined}
                                 className={cn(
-                                  "group flex items-center gap-3 rounded-lg px-2 py-2.5 text-[15.5px] transition-colors",
-                                  current ? "bg-brand-soft font-semibold text-brand" : "font-medium text-ink hover:bg-canvas",
+                                  "group flex items-center gap-3 rounded-xl px-2 py-2 text-[15.5px] transition-colors",
+                                  current ? "bg-brand-50 font-semibold text-brand" : "font-medium text-ink hover:bg-canvas",
                                 )}
                               >
                                 <span
                                   className={cn(
-                                    "grid size-9 shrink-0 place-items-center rounded-lg border transition-colors",
-                                    current ? "border-brand/30 bg-surface text-brand" : "border-line text-ink group-hover:border-ink",
+                                    "grid size-9 shrink-0 place-items-center rounded-xl border bg-surface shadow-xs transition-colors",
+                                    current ? "border-brand/30 text-brand" : "border-line text-ink-2 group-hover:text-ink",
                                   )}
                                 >
                                   <l.icon className="size-[18px]" />
@@ -543,10 +502,10 @@ function AccountArea() {
   if (!me) {
     return (
       <>
-        <Button asChild variant="secondary" size="sm" className="h-10 bg-transparent px-4 hover:bg-ink/5">
+        <Button asChild variant="ghost" size="sm" className="text-ink">
           <Link href="/login">Log in</Link>
         </Button>
-        <Button asChild variant="brand" size="sm" className="h-10 px-4">
+        <Button asChild size="sm">
           <Link href="/register">Sign up</Link>
         </Button>
       </>
@@ -556,13 +515,13 @@ function AccountArea() {
   const home = homeFor(me.role);
   return (
     <>
-      <Link href={me.role === "admin" || me.role === "support" ? "/admin" : "/dashboard/notifications"} className="relative grid size-10 place-items-center rounded-lg text-ink hover:bg-ink/5" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}>
+      <Link href={me.role === "admin" || me.role === "support" ? "/admin" : "/dashboard/notifications"} className="relative grid size-9 place-items-center rounded-full text-ink-2 hover:bg-sunken hover:text-ink" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}>
         <Bell className="size-5" />
         {unread > 0 && <span className="absolute right-2 top-2 size-2.5 rounded-full border-2 border-surface bg-danger" />}
       </Link>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-ink/5" aria-label="Account menu">
-          <Avatar name={`${me.firstName} ${me.lastName}`} size="sm" square />
+        <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-sunken" aria-label="Account menu">
+          <Avatar name={`${me.firstName} ${me.lastName}`} size="sm" />
           <ChevronDown className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-60">
@@ -592,7 +551,7 @@ function AccountArea() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button asChild variant="secondary" size="sm" className="h-10 px-4">
+      <Button asChild size="sm">
         <Link href={home}>Dashboard</Link>
       </Button>
     </>

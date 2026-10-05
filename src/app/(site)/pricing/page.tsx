@@ -81,12 +81,13 @@ export default function PricingPage() {
 
   return (
     <>
-      <section className="relative bg-gradient-to-b from-brand-50 to-page">
+      <section className="relative isolate border-b border-line bg-page">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-line-grid [mask-image:radial-gradient(ellipse_80%_70%_at_50%_0%,black_20%,transparent_75%)]" aria-hidden />
         <div className="container-page grid grid-cols-1 items-center gap-12 pb-14 pt-12 sm:pt-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-20 lg:pt-20">
           <div>
             <Reveal>
-              <p className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
-                <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+              <p className="kicker">
+                <span className="size-1.5 rounded-full bg-brand" aria-hidden />
                 Pricing
               </p>
             </Reveal>
@@ -265,8 +266,8 @@ export default function PricingPage() {
         )}
 
         {/* Cancellation and refunds */}
-        <p className="mb-5 mt-12 flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.16em] text-brand">
-          <span className="h-px w-6 bg-brand-gradient" aria-hidden />
+        <p className="mb-5 mt-12 kicker">
+          <span className="size-1.5 rounded-full bg-brand" aria-hidden />
           Cancellation and refunds
         </p>
         <h3 className="mb-6 max-w-2xl font-heading text-[26px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[30px]">

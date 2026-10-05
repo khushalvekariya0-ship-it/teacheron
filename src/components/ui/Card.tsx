@@ -6,7 +6,7 @@ export function Card({ className, interactive, ...props }: React.HTMLAttributes<
     <div
       data-spotlight={interactive ? "" : undefined}
       className={cn(
-        "rounded-xl border border-line bg-surface shadow-xs",
+        "rounded-2xl border border-line bg-surface shadow-xs",
         interactive && "transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-line-strong hover:shadow-md",
         className,
       )}

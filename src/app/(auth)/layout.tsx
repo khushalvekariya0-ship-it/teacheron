@@ -11,7 +11,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="container-page flex h-16 items-center justify-between gap-4">
           <Logo />
           <div className="flex items-center gap-1.5">
-            <Link href="/" className="group inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3.5 text-[13px] font-semibold text-ink transition-colors hover:border-ink">
+            <Link href="/" className="group inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[13px] font-medium text-ink shadow-xs transition-colors hover:border-line-strong">
               <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" aria-hidden />
               Back to site
             </Link>
