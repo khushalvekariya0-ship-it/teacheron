@@ -140,7 +140,7 @@ export function HowItWorksView() {
                 <ul className="mt-6 space-y-2.5">
                   {s.points.map((p) => (
                     <li key={p} className="flex items-start gap-2.5 text-[15px] text-ink">
-                      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-brand text-white">
+                      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-brand text-on-brand">
                         <Check className="size-3" strokeWidth={3} />
                       </span>
                       {p}

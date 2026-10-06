@@ -668,7 +668,7 @@ function SignedOutIntro({ next }: { next: string }) {
             <span className="absolute left-[12%] right-[12%] top-6 hidden h-px bg-line lg:block" aria-hidden />
             {HOW_IT_WORKS.map((s, i) => (
               <StaggerItem as="li" key={s.title} className="relative">
-                <span className="relative grid size-12 place-items-center rounded-xl bg-brand-gradient text-white shadow-md ring-8 ring-page">
+                <span className="relative grid size-12 place-items-center rounded-xl bg-brand-gradient text-on-brand shadow-md ring-8 ring-page">
                   <s.icon className="size-5" aria-hidden />
                 </span>
                 <p className="mt-5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Step {i + 1}</p>

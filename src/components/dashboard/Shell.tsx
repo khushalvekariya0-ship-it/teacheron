@@ -102,7 +102,7 @@ function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSec
                       (collapsed ? (
                         <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-ink ring-2 ring-surface" />
                       ) : (
-                        <span className="relative rounded-full bg-brand px-1.5 py-px text-[11px] font-semibold tabular-nums text-white">{count}</span>
+                        <span className="relative rounded-full bg-brand px-1.5 py-px text-[11px] font-semibold tabular-nums text-on-brand">{count}</span>
                       ))}
                   </Link>
                 </li>
@@ -210,7 +210,7 @@ function NotificationsPopover({ user }: { user: User }) {
       <PopoverTrigger className="relative grid size-10 place-items-center rounded-full text-ink-2 transition-colors hover:bg-sunken hover:text-ink" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}>
         <Bell className="size-5" />
         {unread > 0 && (
-          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-surface">
+          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-on-brand ring-2 ring-surface">
             {unread}
           </motion.span>
         )}
@@ -389,7 +389,7 @@ function ShellLayout({
         <div className={cn("flex h-16 shrink-0 items-center gap-2 border-b border-line", collapsed ? "justify-center px-2" : "justify-between pl-5 pr-3")}>
           <span className="flex items-center gap-2">
             <Logo compact={collapsed} href={area === "admin" ? "/admin" : "/dashboard"} />
-            {area === "admin" && !collapsed && <span className="rounded-md bg-brand-gradient px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">Admin</span>}
+            {area === "admin" && !collapsed && <span className="rounded-md bg-brand-gradient px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-brand">Admin</span>}
           </span>
           {!collapsed && (
             <button type="button" onClick={toggleCollapsed} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-canvas hover:text-ink" aria-label="Collapse sidebar">

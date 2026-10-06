@@ -82,7 +82,7 @@ function StepFlow({ labels }: { labels: [string, string, string] }) {
             className={cn(
               "rounded-full border px-3 py-1.5 transition-[background-color,border-color,color,box-shadow] duration-300",
               i === current
-                ? "border-brand bg-brand text-white shadow-[0_6px_16px_-8px_var(--color-brand-glow)]"
+                ? "border-brand bg-brand text-on-brand shadow-[0_6px_16px_-8px_var(--color-brand-glow)]"
                 : i < current
                   ? "border-transparent bg-brand-soft text-brand"
                   : "border-line bg-canvas text-ink-2",
@@ -110,7 +110,7 @@ function IntroPreview() {
   const slide = INTRO_SLIDES[step];
   return (
     <div ref={ref} className="relative flex h-44 flex-col overflow-hidden rounded-2xl bg-brand-deep p-3.5 text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_100%_0%,rgb(99_102_241/0.6),transparent_70%),radial-gradient(ellipse_70%_70%_at_0%_100%,rgb(255_77_94/0.3),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_100%_0%,rgb(75_107_99/0.38),transparent_70%),radial-gradient(ellipse_70%_70%_at_0%_100%,rgb(217_80_43/0.28),transparent_70%)]" />
       <div className="relative flex gap-1">
         {INTRO_SLIDES.map((s, i) => (
           <span key={s.label} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/25">
@@ -165,7 +165,7 @@ function CalendarPreview() {
         {[false, true].map((isLong) => (
           <span
             key={String(isLong)}
-            className={cn("rounded-full border px-2.5 py-1 text-center transition-[background-color,border-color,color] duration-300", isLong === long ? "border-brand bg-brand text-white" : "border-line text-ink-2")}
+            className={cn("rounded-full border px-2.5 py-1 text-center transition-[background-color,border-color,color] duration-300", isLong === long ? "border-brand bg-brand text-on-brand" : "border-line text-ink-2")}
           >
             {isLong ? "60 min" : "30 min"}
           </span>
@@ -178,7 +178,7 @@ function CalendarPreview() {
 /** Seconds for one run of the classroom picture: the graph is worked out, two messages arrive, it clears. */
 const ROOM_CYCLE = 11;
 /** Fixed colours: the board in this picture is always a white board, in both themes. */
-const BOARD = { ink: "#0b1033", grey: "#666c8c", coral: "#ff4d5e", indigo: "#4338ca" };
+const BOARD = { ink: "#15140f", grey: "#6a6557", coral: "#d9502b", indigo: "#4b6b63" };
 const MATH_FONT = { fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" as const };
 
 /**
@@ -216,14 +216,14 @@ function ClassroomPreview() {
   return (
     <div ref={ref} className="grid min-h-72 flex-1 grid-cols-1 gap-2.5 rounded-2xl bg-white/[0.06] p-2.5 ring-1 ring-white/10 sm:grid-cols-[5fr_7fr]" aria-hidden>
       {/* The call: the tutor's video, your own picture, and the call controls */}
-      <div className="relative min-h-48 overflow-hidden rounded-xl bg-[#1c2038]">
+      <div className="relative min-h-48 overflow-hidden rounded-xl bg-night">
         {/* Loaded with the page (it sits just below the hero), so the video tile is never an empty box. */}
         <Image src="/images/tutor-at-laptop.jpg" alt="" fill loading="eager" sizes="(min-width: 1024px) 320px, (min-width: 640px) 40vw, 90vw" className="object-cover object-[42%_26%]" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/5 to-black/30" />
         <span className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 text-[11px] font-semibold tabular-nums text-white backdrop-blur">
-          <span className={cn("size-1.5 rounded-full bg-[#ff5c6c]", playing && "animate-pulse")} /> Live · {clock}
+          <span className={cn("size-1.5 rounded-full bg-brand", playing && "animate-pulse")} /> Live · {clock}
         </span>
-        <span className="absolute right-2 top-2 block h-14 w-[4.75rem] overflow-hidden rounded-lg bg-[#2a2f4a] shadow-lg ring-2 ring-white/80">
+        <span className="absolute right-2 top-2 block h-14 w-[4.75rem] overflow-hidden rounded-lg bg-[#35322a] shadow-lg ring-2 ring-white/80">
           <Image src="/images/lesson-online.jpg" alt="" fill loading="eager" sizes="80px" className="object-cover object-[28%_32%]" />
           <span className="absolute bottom-0.5 left-1 text-[9.5px] font-semibold text-white [text-shadow:0_1px_2px_rgb(0_0_0/0.8)]">You</span>
         </span>
@@ -234,7 +234,7 @@ function ClassroomPreview() {
             {[0.5, 1, 0.7, 0.9].map((peak, i) => (
               <motion.span
                 key={i}
-                className="w-[2.5px] origin-center rounded-full bg-[#4ade80]"
+                className="w-[2.5px] origin-center rounded-full bg-live"
                 style={{ height: 12 }}
                 animate={playing ? { scaleY: [0.25, peak, 0.4, peak * 0.7, 0.25] } : { scaleY: 0.35 }}
                 transition={playing ? { duration: 1.1, repeat: Infinity, ease: "easeInOut", delay: i * 0.13 } : { duration: 0.2 }}
@@ -243,13 +243,13 @@ function ClassroomPreview() {
           </span>
         </span>
         <div className="absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
-          <span className="grid size-8 place-items-center rounded-full bg-white text-[#0b1033]">
+          <span className="grid size-8 place-items-center rounded-full bg-white text-night">
             <Mic className="size-4" />
           </span>
-          <span className="grid size-8 place-items-center rounded-full bg-white text-[#0b1033]">
+          <span className="grid size-8 place-items-center rounded-full bg-white text-night">
             <Video className="size-4" />
           </span>
-          <span className="grid h-8 w-11 place-items-center rounded-full bg-[#f0525f] text-white">
+          <span className="grid h-8 w-11 place-items-center rounded-full bg-brand text-white">
             <PhoneOff className="size-4" />
           </span>
         </div>
@@ -258,8 +258,8 @@ function ClassroomPreview() {
       <div className="grid grid-rows-[minmax(0,1fr)_auto] gap-2.5">
         {/* The whiteboard: its toolbar, and a quadratic worked out step by step */}
         <div className="flex min-h-44 flex-col overflow-hidden rounded-xl bg-white">
-          <div className="flex shrink-0 items-center gap-1 border-b border-[#e2e5ef] px-2 py-1.5 text-[#343a5e]">
-            <span className="grid size-6 place-items-center rounded-md bg-[#4338ca] text-white">
+          <div className="flex shrink-0 items-center gap-1 border-b border-[#d8d1c0] px-2 py-1.5 text-[#343a5e]">
+            <span className="grid size-6 place-items-center rounded-md bg-night text-white">
               <Pencil className="size-3.5" />
             </span>
             {[Highlighter, Eraser, Square].map((Icon, i) => (
@@ -267,9 +267,9 @@ function ClassroomPreview() {
                 <Icon className="size-3.5" />
               </span>
             ))}
-            <span className="mx-1 h-4 w-px bg-[#e2e5ef]" />
-            {[BOARD.ink, BOARD.coral, BOARD.indigo, "#0d9488"].map((c) => (
-              <span key={c} className={cn("size-3.5 rounded-full", c === BOARD.coral && "ring-2 ring-[#0b1033] ring-offset-1 ring-offset-white")} style={{ backgroundColor: c }} />
+            <span className="mx-1 h-4 w-px bg-[#d8d1c0]" />
+            {[BOARD.ink, BOARD.coral, BOARD.indigo, "#b59bc3"].map((c) => (
+              <span key={c} className={cn("size-3.5 rounded-full", c === BOARD.coral && "ring-2 ring-night ring-offset-1 ring-offset-white")} style={{ backgroundColor: c }} />
             ))}
           </div>
           <div className="relative min-h-0 flex-1 [background-image:radial-gradient(circle_at_1px_1px,rgb(11_16_51/0.13)_1px,transparent_0)] [background-size:14px_14px]">
@@ -355,7 +355,7 @@ export function BentoFeatures() {
         {/* The classroom: the one large, dark tile */}
         <StaggerItem className="h-full sm:col-span-2 lg:col-span-4 lg:row-span-2">
           <div className="relative isolate flex h-full flex-col overflow-hidden rounded-3xl bg-brand-deep p-6 text-white sm:p-8">
-            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_55%_70%_at_90%_0%,rgb(99_102_241/0.5),transparent_70%),radial-gradient(ellipse_45%_60%_at_0%_100%,rgb(255_77_94/0.2),transparent_70%)]" aria-hidden />
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_55%_70%_at_90%_0%,rgb(75_107_99/0.38),transparent_70%),radial-gradient(ellipse_45%_60%_at_0%_100%,rgb(217_80_43/0.28),transparent_70%)]" aria-hidden />
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div className="max-w-md">
                 <span className="grid size-11 place-items-center rounded-xl bg-white/10 ring-1 ring-white/15">

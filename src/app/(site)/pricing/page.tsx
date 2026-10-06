@@ -196,7 +196,7 @@ export default function PricingPage() {
             <StaggerItem key={col.title} className="h-full">
               <div className={cn("flex h-full flex-col rounded-2xl border p-6 sm:p-7", col.featured ? "border-brand/30 bg-brand-50" : "border-line bg-surface")}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className={cn("grid size-10 place-items-center rounded-lg", col.featured ? "bg-brand-gradient text-white" : "border border-line text-brand")}>
+                  <span className={cn("grid size-10 place-items-center rounded-lg", col.featured ? "bg-brand-gradient text-on-brand" : "border border-line text-brand")}>
                     <col.icon className="size-5" aria-hidden />
                   </span>
                   <span className="font-heading text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink">{col.price}</span>
@@ -225,7 +225,7 @@ export default function PricingPage() {
           <ol className="grid overflow-hidden rounded-2xl border border-line bg-surface sm:grid-cols-3">
             {PAY_STEPS.map((s, i) => (
               <li key={s.title} className={cn("flex gap-4 p-5 sm:p-6", i > 0 && "border-t border-line sm:border-l sm:border-t-0")}>
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-white">{i + 1}</span>
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-on-brand">{i + 1}</span>
                 <span>
                   <span className="block text-[15.5px] font-semibold text-ink">{s.title}</span>
                   <span className="mt-1 block text-[14px] leading-relaxed text-ink-2">{s.body}</span>

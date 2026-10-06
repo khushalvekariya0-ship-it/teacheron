@@ -14,12 +14,14 @@ How pages in this repo are built. Read this before adding or changing a page.
 
 ## Design rules
 
-Soft mesh on off-white, midnight-navy ink, deep indigo for selection, and one electric coral for the action we want pressed. A light theme and an OLED-black dark theme share the same tokens.
+Editorial, like a well-set magazine: a warm charcoal page with cream type (the default theme), or the same page in cream with charcoal type (the "light" theme). Serif headlines with one italic word, a sans for reading, a mono for labels and numbers. Square corners and hairlines; one burnt-orange accent for links, markers and selected states; the main button is a solid block of the text colour. The reference is mnhafinancials.com (the client's request on 2026-10-06).
 
 - **Tokens only.** Use the Tailwind tokens from `src/app/globals.css`: `bg-page` (section background), `bg-surface` (cards), `bg-canvas`, `bg-sunken`, `text-ink`, `text-ink-2`, `text-muted`, `text-subtle` (icons and placeholders only, too low-contrast for text), `border-line`, `border-line-strong`, `bg-navy`/`text-navy`, `bg-navy-50`, `bg-brand`/`text-brand`, `bg-brand-soft`, and the status tokens `success`, `warning` and `danger` (each with `-50` and `-200` variants). Don't hard-code hex values in components.
-- **Dark mode is the same tokens.** `.dark` on `<html>` (toggle: `DarkModeToggle`, state: `useTheme`/`setTheme` in `@/lib/theme`) swaps every token, so pages need no dark styles of their own. That only works if you never write `bg-white`, `text-black` or a hex for a themed surface — use `bg-surface` / `text-ink`. On an always-dark block (`bg-night`, `bg-brand-deep`) use `text-white`; on an ink fill use `text-on-ink`.
-- **Two accents, each with one job.** Deep indigo (`brand`) marks what is selected, linked or focused. Electric coral is only the `cta` button variant — the one action per screen we want pressed (find a tutor, book, pay). Coral carries dark text (`text-on-cta`); for coral text on a light surface use `text-cta-ink`.
-- **Mesh and glass come from utilities, never ad hoc gradients.** `hero-glow` / `page-glow` paint the pastel mesh behind a hero, `mesh-gradient` fills a whole block, `glass` is the frosted navbar fill and `glass-card` a floating card. `bento` is the six-column feature grid. No emoji.
+- **Charcoal is the default; both themes are the same tokens.** `.dark` on `<html>` (applied by the head script unless the visitor chose "light"; toggle: `DarkModeToggle`, state: `useTheme`/`setTheme` in `@/lib/theme`) swaps every token, so pages need no theme styles of their own. That only works if you never write `bg-white`, `text-black` or a hex for a themed surface — use `bg-surface` / `text-ink`. On an always-dark block (`bg-night`, `bg-brand-deep`) use `text-white`; on an ink fill use `text-on-ink`; on an orange fill use `text-on-brand`.
+- **Type.** `h1`, `h2` and anything with `font-heading` are the serif at its only weight — a global rule overrides `font-bold` and `tracking-*` on them, so don't fight it; `h3` and below stay in the sans. The italic word of a headline is `<em>` (or the `accent` prop of `SectionHeading` / `WordReveal`). Labels, numbers and small print use `mono-label` or `font-mono`. The section label (`Eyebrow` / `kicker`) numbers itself in page order ("01", "02" …) with a CSS counter — don't add numbers by hand.
+- **Shapes.** Every radius token is 0 and `rounded-full` is squared globally, so there are no pills or circles anywhere — avatars, markers and buttons are all square. Shadows are off except on floating layers; hairlines (`border-line`) separate things.
+- **Accent.** Burnt orange (`brand`) is for links, the kicker number, markers and selected states. The main action is the `cta` button variant (a solid block of ink); `secondary` is the hairline outline; `brand` is an orange fill. One `cta` per screen.
+- **Illustration.** `WaveArt` (`@/components/marketing/WaveArt`) is the site's only decoration: layered colour bands with film grain, drawn in SVG. Use it full-bleed beside or behind a section (dim it under text). `glass` / `glass-card` are the frosted navbar and floating cards; `bento` is the six-column feature grid. No emoji, no gradients other than a faint wash.
 - Typography is Geist. Page titles use `text-2xl font-semibold tracking-[-0.025em]` (dashboard) or larger marketing sizes with tight tracking. Body text is `text-sm` / `text-[15px]` with `text-muted` for supporting copy. Use `tabular-nums` for numbers in columns.
 - Radii: controls `rounded-md` (8px), cards `rounded-xl`, big panels `rounded-2xl`. Borders are 1px `border-line`. Shadows are only `shadow-xs` / `shadow-sm` for cards, and `shadow-lg`/`xl` for overlays.
 - Spacing is generous. The marketing container is `container-page` (max 1280px). Sections use `py-20 sm:py-24 lg:py-28`.
@@ -31,7 +33,7 @@ Soft mesh on off-white, midnight-navy ink, deep indigo for selection, and one el
 
 | Import | What |
 |---|---|
-| `@/components/ui/Button` | `Button` (variants: primary, brand, **cta** (coral, one per screen), secondary, outline, ghost, subtle, danger, danger-outline, link; sizes xs–lg, icon, icon-sm; `loading`; `asChild` for links) |
+| `@/components/ui/Button` | `Button` (variants: primary, brand (orange), **cta** (solid ink block, one per screen), secondary (hairline), outline, ghost, subtle, danger, danger-outline, link; sizes xs–lg, icon, icon-sm; `loading`; `asChild` for links) |
 | `@/components/ui/Input` | `Field`, `Input` (icon, suffix, prefixText), `Textarea` (showCount), `Select` (native, `options`), `Label` |
 | `@/components/ui/Controls` | `Checkbox` (label/description), `Switch`, `RadioCards`, `ChipGroup` (multi-select chips), `Segmented` (animated single select), `Progress` |
 | `@/components/ui/Overlay` | `Dialog` + `DialogContent`(title, description, size) + `DialogBody` + `DialogFooter` + `DialogClose`; `ConfirmDialog`; `Sheet` + `SheetContent`(side, title, footer); `DropdownMenu*`; `Tooltip`; `Popover*` |
@@ -53,7 +55,8 @@ Soft mesh on off-white, midnight-navy ink, deep indigo for selection, and one el
 | `@/components/classroom/*` | `ClassroomView` (route `/classroom/[id]`), `VideoStage`, `Whiteboard`, `ChatPanel` |
 | `@/components/domain/Badges` | `VerifiedBadge`, `VerificationChecks`, `VerificationStatusBadge`, `BookingStatusBadge`, `PaymentStatusBadge`, label maps |
 | `@/components/domain/useTutorActions` | save / compare / contact / book behaviour with auth redirects |
-| `@/components/marketing/Section` | `Section`(tone), `SectionHeading`, `ArrowLink`, `PageHero`, `CtaBand`, `FeatureItem` |
+| `@/components/marketing/Section` | `Section`(tone), `SectionHeading`, `Eyebrow`, `ArrowLink` (ink text on an orange underline), `PageHero`, `CtaBand` (cream card over the wave art), `FeatureItem` |
+| `@/components/marketing/WaveArt` | The wave illustration (`drift` to animate) |
 | `@/components/dashboard/Shell` | `PageHeader`(title, description, actions, back, eyebrow), `RoleGate`(roles), `PermissionGate`(permission) |
 
 ## Data & state

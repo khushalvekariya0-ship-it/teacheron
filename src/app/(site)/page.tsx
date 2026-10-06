@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Hero, SubjectTiles, HowItWorks, GetMatched, FeaturedTutors, WhyTutorLink, Stories, BecomeTutor, HomeFaq, ClosingCta } from "@/components/home/Sections";
+import { Hero, Statement, ThreeSteps, SubjectTiles, HowItWorks, GetMatched, FeaturedTutors, WhyTutorLink, Stories, BecomeTutor, HomeFaq, ClosingCta } from "@/components/home/Sections";
 import { Programs, LessonModes, Audiences, Resources } from "@/components/home/MoreSections";
 import { BentoFeatures } from "@/components/home/BentoFeatures";
 import { FAQS } from "@/lib/data/content";
@@ -38,6 +38,8 @@ export default function HomePage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <Hero />
+      <Statement />
+      <ThreeSteps />
       <BentoFeatures />
       <SubjectTiles />
       <HowItWorks />

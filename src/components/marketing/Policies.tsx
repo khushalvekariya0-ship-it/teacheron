@@ -18,7 +18,7 @@ export function PolicyCards({ policy = DEFAULT_POLICY }: { policy?: BookingPolic
             <ul className="mt-4 space-y-2.5">
               {c.lines.map((l) => (
                 <li key={l} className="flex items-start gap-2.5 text-sm leading-relaxed text-ink-2">
-                  <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-brand text-white">
+                  <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-brand text-on-brand">
                     <Check className="size-3" strokeWidth={3} />
                   </span>
                   {l}
@@ -44,7 +44,7 @@ export function PolicyDetails({ policy = DEFAULT_POLICY }: { policy?: BookingPol
       {items.map((it) => (
         <StaggerItem key={it.title} className="h-full">
           <div data-spotlight className="flex h-full gap-4 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-gradient text-on-brand">
               <it.icon className="size-5" aria-hidden />
             </span>
             <div>

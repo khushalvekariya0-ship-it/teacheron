@@ -64,7 +64,7 @@ function NoTutorsYet() {
     <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_24px_60px_-36px_rgb(15_23_42/0.35)]">
       <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div className="p-7 sm:p-10">
-          <span className="grid size-12 place-items-center rounded-xl bg-brand-gradient text-white">
+          <span className="grid size-12 place-items-center rounded-xl bg-brand-gradient text-on-brand">
             <UserPlus className="size-6" aria-hidden />
           </span>
           <h3 className="mt-6 font-heading text-[26px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[30px]">Tutors are joining TutorLink</h3>
@@ -95,7 +95,7 @@ function NoTutorsYet() {
           <ol className="mt-6 space-y-6">
             {NEXT_STEPS.map((step, i) => (
               <li key={step.title} className="flex gap-4">
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-white">{i + 1}</span>
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-on-brand">{i + 1}</span>
                 <span>
                   <span className="block text-[16px] font-semibold text-ink">{step.title}</span>
                   <span className="mt-1 block text-[14.5px] leading-relaxed text-ink-2">{step.body}</span>

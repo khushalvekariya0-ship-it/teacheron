@@ -7,24 +7,24 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
-  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.005em] select-none transition-[background-color,border-color,color,transform,filter,box-shadow] duration-150 ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink [&_svg]:shrink-0",
+  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.005em] select-none transition-[background-color,border-color,color,transform,filter,box-shadow] duration-150 ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         // Solid ink: the main action on a page.
-        primary: "bg-ink text-on-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_1px_2px_rgb(9_9_11/0.2)] hover:bg-navy-hover active:bg-navy-press",
-        // Solid indigo: important actions that are not the one coral action on the screen.
-        brand: "bg-brand text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(9_9_11/0.18),0_6px_16px_-8px_var(--color-brand-glow)] hover:bg-brand-hover active:bg-brand-press",
-        // Electric coral with dark text: the action we want pressed (find a tutor, book, pay). One per screen.
-        cta: "bg-cta font-semibold text-on-cta shadow-[inset_0_1px_0_rgb(255_255_255/0.28),0_1px_2px_rgb(9_9_11/0.14),0_10px_24px_-10px_var(--color-cta-glow)] hover:bg-cta-hover active:bg-cta-press",
-        // Quiet hairline button on the page colour.
-        secondary: "border border-line-strong bg-surface text-ink shadow-xs hover:border-subtle hover:bg-canvas",
-        outline: "border border-line-strong bg-surface text-ink hover:border-ink",
+        primary: "bg-ink text-on-ink hover:bg-navy-hover active:bg-navy-press",
+        // Burnt orange: a strong secondary action.
+        brand: "bg-brand text-on-brand hover:bg-brand-hover active:bg-brand-press",
+        // The main action on a screen: a solid block of the text colour (cream on charcoal, charcoal on cream).
+        cta: "bg-cta font-medium text-on-cta hover:bg-cta-hover active:bg-cta-press",
+        // Hairline outline on the page colour.
+        secondary: "border border-line-strong bg-transparent text-ink hover:border-ink hover:bg-sunken/60",
+        outline: "border border-line-strong bg-transparent text-ink hover:border-ink",
         ghost: "text-ink-2 hover:bg-canvas hover:text-ink",
         subtle: "bg-canvas text-ink hover:bg-sunken",
         danger: "bg-danger text-white hover:bg-danger/90",
         "danger-outline": "border border-danger/40 bg-surface text-danger hover:border-danger hover:bg-danger-50",
-        link: "h-auto px-0 text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2 active:translate-y-0",
+        link: "h-auto px-0 text-ink underline decoration-brand decoration-[1.5px] underline-offset-4 hover:decoration-2 active:translate-y-0",
       },
       size: {
         xs: "h-7 rounded-full px-3 text-xs [&_svg]:size-3.5",

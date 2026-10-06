@@ -36,7 +36,7 @@ export function VerticalStepper({ step, maxReached, onSelect }: { step: number; 
                 <span
                   className={cn(
                     "relative mt-0.5 grid size-[26px] shrink-0 place-items-center rounded-md border text-[12px] font-bold tabular-nums transition-colors duration-300",
-                    state === "current" && "border-transparent bg-brand-gradient text-white shadow-sm",
+                    state === "current" && "border-transparent bg-brand-gradient text-on-brand shadow-sm",
                     state === "done" && "border-brand/40 bg-brand-50 text-brand",
                     state === "reachable" && "border-line-strong bg-surface text-ink-2",
                     state === "locked" && "border-line bg-surface text-subtle",

@@ -428,7 +428,7 @@ function NextLesson({ booking, now, tz, learner, joinable, linkMinutes }: { book
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:p-6">
-        <div className="flex w-full shrink-0 flex-row items-center gap-4 rounded-xl bg-brand-gradient px-4 py-3.5 text-white sm:w-36 sm:flex-col sm:items-start sm:gap-1">
+        <div className="flex w-full shrink-0 flex-row items-center gap-4 rounded-xl bg-brand-gradient px-4 py-3.5 text-on-brand sm:w-36 sm:flex-col sm:items-start sm:gap-1">
           <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-white/75">{live ? "Live now" : "Starts"}</span>
           <span className="text-xl font-semibold tabular-nums tracking-tight">{live ? formatTime(booking.startUtc, tz) : countdown(until)}</span>
         </div>

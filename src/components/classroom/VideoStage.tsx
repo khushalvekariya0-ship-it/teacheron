@@ -121,7 +121,7 @@ export function VideoStage({
 
   return (
     <section aria-label="Video" className={cn("relative isolate flex min-h-0 flex-col overflow-hidden rounded-2xl bg-night text-white", className)}>
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_60%_at_20%_0%,rgb(99_102_241/0.35),transparent_70%),radial-gradient(ellipse_60%_60%_at_100%_100%,rgb(255_77_94/0.16),transparent_70%)]" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_60%_at_20%_0%,rgb(75_107_99/0.38),transparent_70%),radial-gradient(ellipse_60%_60%_at_100%_100%,rgb(217_80_43/0.28),transparent_70%)]" aria-hidden />
 
       {/* Main tile: the shared screen, or the person you're meeting */}
       <div className="relative min-h-0 flex-1">
@@ -179,7 +179,7 @@ export function VideoStage({
           <Link
             href={leaveHref}
             aria-label="Leave the classroom"
-            className="grid h-11 w-14 place-items-center rounded-full bg-[#f0525f] text-white transition-colors hover:bg-[#e03f4d] [&_svg]:size-5"
+            className="grid h-11 w-14 place-items-center rounded-full bg-brand text-on-brand transition-colors hover:bg-brand-hover [&_svg]:size-5"
           >
             <PhoneOff />
           </Link>

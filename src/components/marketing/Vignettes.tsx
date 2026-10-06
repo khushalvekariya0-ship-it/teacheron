@@ -46,7 +46,7 @@ export function FeatureVisual({
             whileInView={{ scale: 1, opacity: 1 }}
             viewport={{ once: true, amount: 0.5 }}
             transition={{ duration: 0.5, ease: EASE }}
-            className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand text-white"
+            className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand text-on-brand"
           >
             <Icon className="size-6" aria-hidden />
           </motion.span>

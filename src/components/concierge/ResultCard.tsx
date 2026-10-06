@@ -30,7 +30,7 @@ export function ResultCard({ result, rank, criteria }: { result: MatchResult; ra
     <article className={cn("overflow-hidden rounded-2xl border bg-surface transition-colors duration-200 hover:border-ink", rank === 1 ? "border-ink" : "border-line")} aria-label={`Match ${rank}: ${name}, ${result.percent}% match`}>
       <div className="flex gap-4 p-5 sm:gap-5 sm:p-6">
         <div className="flex flex-col items-center gap-2">
-          <span className={cn("grid size-7 place-items-center rounded-md text-[12.5px] font-bold tabular-nums", rank === 1 ? "bg-brand text-white" : "bg-canvas text-ink-2")} aria-hidden>
+          <span className={cn("grid size-7 place-items-center rounded-md text-[12.5px] font-bold tabular-nums", rank === 1 ? "bg-brand text-on-brand" : "bg-canvas text-ink-2")} aria-hidden>
             {rank}
           </span>
           <Avatar name={name} src={t.photoUrl} tone={t.tone} size="lg" verified={t.verification.identity === "verified"} className="hidden sm:inline-flex" />

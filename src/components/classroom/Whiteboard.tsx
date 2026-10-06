@@ -35,16 +35,16 @@ interface View {
 }
 
 const PALETTE: Record<"light" | "dark", Record<ColorKey, string> & { board: string; dot: string }> = {
-  light: { ink: "#0b1033", coral: "#ff4d5e", indigo: "#4338ca", teal: "#0d9488", amber: "#d97706", violet: "#7c3aed", board: "#ffffff", dot: "rgba(11,16,51,0.14)" },
-  dark: { ink: "#f3f4ff", coral: "#ff5c6c", indigo: "#818cf8", teal: "#2dd4bf", amber: "#fbbf24", violet: "#a78bfa", board: "#0a0a10", dot: "rgba(243,244,255,0.13)" },
+  light: { ink: "#15140f", coral: "#d9502b", indigo: "#4b6b63", teal: "#2f7a6e", amber: "#c98a12", violet: "#6f5a83", board: "#faf7f0", dot: "rgba(21,20,15,0.14)" },
+  dark: { ink: "#eee9dd", coral: "#e5582f", indigo: "#8fb3b0", teal: "#5fc1b0", amber: "#e2b159", violet: "#c3abd1", board: "#1b1a14", dot: "rgba(238,233,221,0.13)" },
 };
 const COLORS: { key: ColorKey; label: string }[] = [
   { key: "ink", label: "Ink" },
   { key: "coral", label: "Coral" },
-  { key: "indigo", label: "Indigo" },
+  { key: "indigo", label: "Slate" },
   { key: "teal", label: "Teal" },
   { key: "amber", label: "Amber" },
-  { key: "violet", label: "Violet" },
+  { key: "violet", label: "Lavender" },
 ];
 const SIZES = [
   { value: 2.5, label: "Fine" },
@@ -465,7 +465,7 @@ export function Whiteboard({ roomId, className }: { roomId: string; className?: 
               aria-label={t.label}
               aria-pressed={tool === t.key}
               onClick={() => setTool(t.key)}
-              className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", tool === t.key ? "bg-brand text-white" : "text-ink-2 hover:bg-sunken hover:text-ink")}
+              className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", tool === t.key ? "bg-brand text-on-brand" : "text-ink-2 hover:bg-sunken hover:text-ink")}
             >
               <t.icon className="size-[18px]" />
             </button>

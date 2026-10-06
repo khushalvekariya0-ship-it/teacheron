@@ -60,7 +60,7 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
 }
 
 function ColumnHeading({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-[13.5px] font-semibold text-ink">{children}</h2>;
+  return <h3 className="mono-label border-b border-line pb-2.5">{children}</h3>;
 }
 
 export function Footer() {
@@ -71,12 +71,13 @@ export function Footer() {
         <div className="flex flex-col gap-8 border-b border-line py-12 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-md">
             <Logo />
-            <p className="mt-4 text-[15px] leading-relaxed text-muted">
-              A marketplace connecting students and families across the United States with qualified tutors, online and in person.
+            <p className="mt-5 font-heading text-[1.9rem] leading-tight text-ink">
+              The right tutor, <em>one lesson at a time.</em>
             </p>
+            <p className="mono-label mt-3">Online &amp; in person · No subscription · Pay per lesson</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/tutors" className="group inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[15px] font-medium text-on-ink transition-colors hover:bg-navy-hover">
+            <Link href="/tutors" className="group inline-flex h-11 items-center gap-2 bg-ink px-5 text-[15px] font-medium text-on-ink transition-colors hover:bg-navy-hover">
               Find a tutor <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Link>
             <Link href="/contact" className="inline-flex h-11 items-center rounded-full border border-line-strong bg-surface px-5 text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle">

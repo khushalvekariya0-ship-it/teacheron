@@ -35,7 +35,7 @@ export function SubjectTile({ subject, className, showSummary = true }: { subjec
             <span className="font-medium text-brand">See tutors</span>
           )}
         </span>
-        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line text-muted transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-white">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line text-muted transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-on-brand">
           <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" aria-hidden />
         </span>
       </span>

@@ -83,7 +83,7 @@ export default function LocationsPage() {
               <ol className="mt-6 space-y-6">
                 {LOCAL_STEPS.map((s, i) => (
                   <li key={s.title} className="flex gap-4">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-white">{i + 1}</span>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-on-brand">{i + 1}</span>
                     <span>
                       <span className="block text-[16px] font-semibold text-ink">{s.title}</span>
                       <span className="mt-1 block text-[14.5px] leading-relaxed text-ink-2">{s.body}</span>
@@ -136,7 +136,7 @@ export default function LocationsPage() {
                             {m.inPerson > 0 ? `${m.inPerson} in-person ${m.inPerson === 1 ? "tutor" : "tutors"}` : "See tutors for this city"}
                           </span>
                         </span>
-                        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line text-muted transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-white">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line text-muted transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-on-brand">
                           <ArrowRight className="size-4" aria-hidden />
                         </span>
                       </Link>
@@ -154,7 +154,7 @@ export default function LocationsPage() {
             <div className="absolute inset-x-0 top-0 h-px bg-brand-gradient" aria-hidden />
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
-                <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white">
+                <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-gradient text-on-brand">
                   <Monitor className="size-6" aria-hidden />
                 </span>
                 <div>

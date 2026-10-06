@@ -21,7 +21,7 @@ export function PlanCards({ exampleCents = 5000 }: { exampleCents?: number }) {
               <div className="flex h-full flex-col rounded-[15px] bg-surface p-6 sm:p-7">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{p.name}</h3>
-                  {p.highlighted && <span className="rounded-md bg-brand-gradient px-2 py-0.5 text-[11.5px] font-semibold text-white">Recommended</span>}
+                  {p.highlighted && <span className="rounded-md bg-brand-gradient px-2 py-0.5 text-[11.5px] font-semibold text-on-brand">Recommended</span>}
                 </div>
                 <p className="mt-1.5 min-h-[46px] text-[14px] leading-relaxed text-ink-2">{p.description}</p>
 
@@ -125,7 +125,7 @@ export function CreditPacks() {
     <div className="grid gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-7 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:items-center">
       <div>
         <h3 className="flex items-center gap-2.5 font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">
-          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
             <Coins className="size-5" aria-hidden />
           </span>
           Credit packs
@@ -144,7 +144,7 @@ export function CreditPacks() {
           const isBest = pack.id === best;
           return (
             <li key={pack.id} className={cn("relative rounded-xl border p-4 text-center", isBest ? "border-brand/40 bg-brand-50" : "border-line")}>
-              {saving > 0 && <span className={cn("absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold", isBest ? "bg-brand-gradient text-white" : "bg-surface text-brand ring-1 ring-brand/30")}>Save {saving}%</span>}
+              {saving > 0 && <span className={cn("absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold", isBest ? "bg-brand-gradient text-on-brand" : "bg-surface text-brand ring-1 ring-brand/30")}>Save {saving}%</span>}
               <p className="text-[13px] font-medium text-muted">{pack.credits} credits</p>
               <p className="mt-1 font-heading text-[28px] font-bold tracking-[-0.03em] tabular-nums text-ink">{formatCents(pack.priceCents)}</p>
               <p className="mt-0.5 text-[12.5px] tabular-nums text-muted">{formatCents(per, { exact: true })} per credit</p>

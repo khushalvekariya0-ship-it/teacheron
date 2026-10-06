@@ -148,7 +148,7 @@ export function BookingCalendar({ tutor, durationMin, value, onChange, className
                       onClick={() => pickDay(c.key)}
                       className={cn(
                         "relative mx-auto grid size-9 place-items-center rounded-full text-[14px] tabular-nums transition-colors",
-                        active ? "bg-brand font-semibold text-white shadow-[0_6px_16px_-8px_var(--color-brand-glow)]" : open ? "bg-brand-50 font-semibold text-brand hover:bg-brand-soft" : "text-subtle",
+                        active ? "bg-brand font-semibold text-on-brand shadow-[0_6px_16px_-8px_var(--color-brand-glow)]" : open ? "bg-brand-50 font-semibold text-brand hover:bg-brand-soft" : "text-subtle",
                         c.key === today && !active && "ring-1 ring-line-strong",
                       )}
                     >
@@ -186,7 +186,7 @@ export function BookingCalendar({ tutor, durationMin, value, onChange, className
                 onClick={() => onChange(s.startUtc)}
                 className={cn(
                   "h-10 rounded-full border text-[13.5px] font-medium tabular-nums transition-colors",
-                  on ? "border-brand bg-brand text-white" : "border-line bg-surface text-ink-2 hover:border-brand/50 hover:text-ink",
+                  on ? "border-brand bg-brand text-on-brand" : "border-line bg-surface text-ink-2 hover:border-brand/50 hover:text-ink",
                 )}
               >
                 {formatTime(s.startUtc, tz)}

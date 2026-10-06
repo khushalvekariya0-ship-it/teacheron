@@ -115,7 +115,7 @@ export default function SubjectsPage() {
                     </div>
                     <div className="p-6">
                       <div className="flex items-center gap-3">
-                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-white">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-on-brand">
                           <CategoryIcon slug={c.slug} className="size-5" />
                         </span>
                         <h2 id={`${c.slug}-title`} className="font-heading text-[24px] font-bold leading-tight tracking-[-0.02em] text-ink">

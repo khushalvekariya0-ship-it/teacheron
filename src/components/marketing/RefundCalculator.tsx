@@ -78,7 +78,7 @@ export function RefundCalculator({ exampleCents, policy = DEFAULT_POLICY }: { ex
                   onClick={() => setWhen(i)}
                   className={cn(
                     "rounded-lg border px-2 py-2 text-[13.5px] font-medium transition-colors",
-                    when === i ? "border-transparent bg-brand-gradient text-white shadow-sm" : "border-line text-ink-2 hover:border-brand/40 hover:text-ink",
+                    when === i ? "border-transparent bg-brand-gradient text-on-brand shadow-sm" : "border-line text-ink-2 hover:border-brand/40 hover:text-ink",
                   )}
                 >
                   {w.label}

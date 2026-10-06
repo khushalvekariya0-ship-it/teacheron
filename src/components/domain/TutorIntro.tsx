@@ -21,25 +21,28 @@ const minutesOf = (hm: string) => {
  * (their weekly availability and date exceptions, in their time zone).
  * Preview build only — production reads live presence from the API instead of this hook.
  */
+/** True when `now` falls inside the tutor's published teaching hours (their time zone) and they teach online. */
+export function isOnlineNow(tutor: Pick<Tutor, "modes" | "availability" | "exceptions" | "timezone">, now: number): boolean {
+  if (!tutor.modes.includes("online")) return false;
+  const p = zonedParts(new Date(now), tutor.timezone);
+  const key = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+  const exception = tutor.exceptions.find((e) => e.date === key);
+  if (exception?.type === "blocked") return false;
+  const windows = exception?.type === "custom" ? (exception.windows ?? []) : tutor.availability.filter((w) => w.day === p.weekday);
+  const minute = p.hour * 60 + p.minute;
+  return windows.some((w) => minute >= minutesOf(w.start) && minute < minutesOf(w.end));
+}
+
 export function useOnlineNow(tutor: Pick<Tutor, "modes" | "availability" | "exceptions" | "timezone">): boolean {
   const hydrated = useHydrated();
   const now = useNow(60_000);
-  return React.useMemo(() => {
-    if (!hydrated || !tutor.modes.includes("online")) return false;
-    const p = zonedParts(new Date(now), tutor.timezone);
-    const key = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
-    const exception = tutor.exceptions.find((e) => e.date === key);
-    if (exception?.type === "blocked") return false;
-    const windows = exception?.type === "custom" ? (exception.windows ?? []) : tutor.availability.filter((w) => w.day === p.weekday);
-    const minute = p.hour * 60 + p.minute;
-    return windows.some((w) => minute >= minutesOf(w.start) && minute < minutesOf(w.end));
-  }, [hydrated, now, tutor]);
+  return React.useMemo(() => hydrated && isOnlineNow(tutor, now), [hydrated, now, tutor]);
 }
 
 /** Pulsing green dot with the "Online now" label. */
 export function OnlineNow({ className, short }: { className?: string; short?: boolean }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full bg-live-soft px-2 py-0.5 text-[12px] font-semibold text-live-ink", className)}>
+    <span className={cn("inline-flex items-center gap-1.5 bg-live-soft px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-live-ink", className)}>
       <span className="live-dot" aria-hidden />
       {short ? "Online" : "Online now"}
     </span>
@@ -122,7 +125,7 @@ function ProfileReel({ tutor, compact }: { tutor: Tutor; compact?: boolean }) {
 
   return (
     <div className={cn("relative flex size-full flex-col bg-brand-deep text-white", compact ? "px-2.5 pb-10 pt-2.5" : "px-4 pb-12 pt-4")}>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgb(99_102_241/0.6),transparent_70%),radial-gradient(ellipse_70%_70%_at_0%_100%,rgb(255_77_94/0.3),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgb(75_107_99/0.38),transparent_70%),radial-gradient(ellipse_70%_70%_at_0%_100%,rgb(217_80_43/0.28),transparent_70%)]" />
       {/* Story-style progress: one bar per slide */}
       <div className="relative flex gap-1">
         {slides.map((s, i) => (

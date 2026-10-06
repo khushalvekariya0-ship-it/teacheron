@@ -91,7 +91,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
           </div>
           <div className="mt-2 flex h-12 overflow-hidden rounded-xl" aria-hidden>
             <motion.div
-              className="flex items-center bg-brand-gradient px-3 text-[13px] font-semibold text-white"
+              className="flex items-center bg-brand-gradient px-3 text-[13px] font-semibold text-on-brand"
               initial={false}
               animate={{ width: `${keepPct}%` }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
@@ -135,7 +135,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
           ].map((s, i, arr) => (
             <li key={s.title} className="relative flex gap-4">
               {i < arr.length - 1 && <span className="absolute left-5 top-11 h-[calc(100%-1rem)] w-px bg-line" aria-hidden />}
-              <span className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white">
+              <span className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-brand-gradient text-on-brand">
                 <s.icon className="size-5" aria-hidden />
               </span>
               <span>

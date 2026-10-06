@@ -216,7 +216,7 @@ export function CommandPalette() {
                             className={cn("relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left", isActive ? "text-ink" : "text-ink-2")}
                           >
                             {isActive && <motion.span layoutId="cmdk-active" className="absolute inset-0 rounded-lg bg-canvas" transition={{ type: "spring", bounce: 0.15, duration: 0.3 }} />}
-                            <span className={cn("relative grid size-8 shrink-0 place-items-center rounded-lg", isActive ? "bg-brand text-white" : "bg-canvas text-muted")}>{it.icon}</span>
+                            <span className={cn("relative grid size-8 shrink-0 place-items-center rounded-lg", isActive ? "bg-brand text-on-brand" : "bg-canvas text-muted")}>{it.icon}</span>
                             <span className="relative min-w-0 flex-1">
                               <span className="block truncate text-sm font-medium">{it.label}</span>
                               {it.hint && <span className="block truncate text-[12.5px] text-muted">{it.hint}</span>}

@@ -54,7 +54,7 @@ export function ReadyChecklist({ signupHref }: { signupHref: string }) {
                 <span
                   className={cn(
                     "mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-brand/40",
-                    on ? "border-transparent bg-brand-gradient text-white" : "border-line-strong bg-surface",
+                    on ? "border-transparent bg-brand-gradient text-on-brand" : "border-line-strong bg-surface",
                   )}
                   aria-hidden
                 >

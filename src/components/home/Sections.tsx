@@ -17,6 +17,7 @@ import { Reveal, Stagger, StaggerItem, WordReveal, gsap, useGSAP } from "@/compo
 import { prefersReducedMotion } from "@/components/motion/gsap";
 import { Section, SectionHeading, ArrowLink, CtaBand, Eyebrow } from "@/components/marketing/Section";
 import { Button } from "@/components/ui/Button";
+import { LogoMark } from "@/components/ui/Logo";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Avatar } from "@/components/ui/Avatar";
@@ -24,27 +25,85 @@ import { SelectMenu, type SelectGroup, type SelectOption } from "@/components/ui
 import { CategoryIcon } from "@/components/content/icons";
 import { QuickMatch } from "./QuickMatch";
 import { QUIZ_SUBJECTS, SmartMatchQuiz } from "./SmartMatchQuiz";
-import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { isOnlineNow } from "@/components/domain/TutorIntro";
+import { WaveArt } from "@/components/marketing/WaveArt";
+import { useApp } from "@/lib/store";
+import { nextOpening } from "@/lib/time";
+import { formatCents, formatDateTime, formatTime } from "@/lib/format";
+import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES, subjectName } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
-import { useTutors } from "@/lib/store/hooks";
+import { useHydrated, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
 
 /* ═══ 1 · Hero — what TutorLink is, the first Smart Match question, and the three steps that follow ═══ */
 
-/** Three real-life lesson photos: online, one-on-one at a table, and in person. Photos only — no example data. */
-const HERO_PHOTOS = [
-  { src: "/images/lesson-online.jpg", label: "Online", pos: "object-[60%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
-  { src: "/images/lesson-tutor-and-student.jpg", label: "1-on-1, at your pace", pos: "object-[64%_40%]", cls: "col-span-12 md:col-span-6 aspect-[4/3] sm:aspect-[16/11]" },
-  { src: "/images/lesson-in-person.jpg", label: "In person", pos: "object-[70%_50%]", cls: "hidden md:block md:col-span-3 aspect-[3/4] md:mt-16" },
-];
-
 /** Search → Book → Learn: what a visitor does on TutorLink, in order. Each step gets its own soft colour. */
 const HERO_STEPS = [
-  { icon: Search, title: "Search", body: "Answer two questions and Smart Match shows your three best-fit tutors. Or browse everyone — searching is free.", tint: "bg-brand-soft text-brand" },
-  { icon: CalendarDays, title: "Book", body: "Pick a day and time on the tutor's calendar and see the total straight away. Pay by card, UPI or Study Credits.", tint: "bg-cta-soft text-cta-ink" },
-  { icon: Video, title: "Learn", body: "Meet in the built-in classroom: video, a shared whiteboard and chat on one screen. Nothing to install.", tint: "bg-teal-soft text-teal" },
+  { icon: Search, title: "Search", body: "Answer two questions and Smart Match shows your three best-fit tutors. Or browse everyone — searching is free." },
+  { icon: CalendarDays, title: "Book", body: "Pick a day and time on the tutor's calendar and see the total straight away. Pay by card, UPI or Study Credits." },
+  { icon: Video, title: "Learn", body: "Meet in the built-in classroom: video, a shared whiteboard and chat on one screen. Nothing to install." },
 ];
+
+/** The four facts under the headline. Rules of the platform, not usage figures. */
+const HERO_FACTS = [
+  { value: String(SUBJECTS.length), label: "Subjects" },
+  { value: "2", label: "Ways to learn: online, in person" },
+  { value: "$0", label: "Booking fee for families" },
+  { value: `${DEFAULT_POLICY.freeCancellationHours}h`, label: "Free cancellation" },
+];
+
+/**
+ * The "tape": who is teaching right now, or the next open times, read from the tutors' real
+ * availability. Hidden when the marketplace has no tutors yet.
+ */
+function TutorTape() {
+  const tutors = useTutors();
+  const hydrated = useHydrated();
+  const bookings = useApp((s) => s.bookings);
+  const tz = useViewerTimezone();
+  const now = useNow(60_000);
+  const rows = React.useMemo(() => {
+    if (!hydrated || !tutors.length) return null;
+    const online = tutors.filter((t) => isOnlineNow(t, now)).slice(0, 4);
+    if (online.length) return { title: "Teaching now", rows: online.map((t) => ({ t, note: "Online" })) };
+    const next = tutors
+      .map((t) => ({ t, slot: nextOpening(t, bookings, tz, now) }))
+      .filter((x): x is { t: (typeof tutors)[number]; slot: NonNullable<ReturnType<typeof nextOpening>> } => !!x.slot)
+      .sort((a, b) => a.slot.startUtc.localeCompare(b.slot.startUtc))
+      .slice(0, 4);
+    return next.length ? { title: "Next openings", rows: next.map(({ t, slot }) => ({ t, note: formatDateTime(slot.startUtc, tz) })) } : null;
+  }, [hydrated, tutors, now, bookings, tz]);
+  if (!rows) return null;
+  return (
+    <div data-hero-in data-reveal className="w-full max-w-sm border border-line bg-surface text-ink" aria-label={rows.title}>
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <span className="mono-label">{rows.title}</span>
+        <span className="mono-label inline-flex items-center gap-1.5 text-live-ink">
+          <span className="live-dot" aria-hidden /> Live
+        </span>
+      </div>
+      <ul className="divide-y divide-line">
+        {rows.rows.map(({ t, note }) => (
+          <li key={t.id}>
+            <Link href={`/tutors/${t.slug}`} className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 px-4 py-2.5 font-mono text-[13px] transition-colors hover:bg-sunken">
+              <span className="truncate">
+                {t.firstName} {t.lastName.charAt(0)}. <span className="text-muted">· {subjectName(t.subjects[0])}</span>
+              </span>
+              <span className={cn("whitespace-nowrap", note === "Online" ? "text-live-ink" : "text-muted")}>{note === "Online" ? `${formatCents(t.hourlyRateCents)}/hr` : note}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center justify-between border-t border-line px-4 py-2.5">
+        <span className="mono-label normal-case tracking-normal text-muted">As of {formatTime(new Date(now).toISOString(), tz)}</span>
+        <ArrowLink href="/tutors" className="text-[14px]">
+          All tutors
+        </ArrowLink>
+      </div>
+    </div>
+  );
+}
 
 export function Hero() {
   const root = React.useRef<HTMLElement>(null);
@@ -58,113 +117,145 @@ export function Hero() {
       }
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
       tl.fromTo(items, { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.07 }, 0.35)
-        .fromTo("[data-hero-photo]", { y: 40, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.3, stagger: 0.1 }, 0.55)
-        .fromTo("[data-hero-photo] img", { scale: 1.08 }, { scale: 1, duration: 1.6 }, 0.55);
+        .fromTo("[data-hero-photo]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 1.2 }, 0.3);
     },
     { scope: root },
   );
 
   return (
-    <section ref={root} className="relative isolate -mt-16 overflow-clip bg-page pt-16">
-      {/* Soft brand light from the top, over a faint grid */}
-      <div className="hero-glow pointer-events-none absolute inset-x-0 top-0 -z-10 h-[860px]" aria-hidden />
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[720px] bg-line-grid [mask-image:radial-gradient(ellipse_70%_75%_at_50%_0%,black_25%,transparent_75%)]" aria-hidden />
+    <section ref={root} className="relative isolate overflow-clip border-b border-line bg-page">
+      <div className="grid lg:grid-cols-12">
+        {/* Words, facts and the first Smart Match question */}
+        <div className="container-page py-12 sm:py-16 lg:col-span-7 lg:max-w-none lg:pl-[max(2rem,calc((100vw-1280px)/2+2rem))] lg:pr-12 lg:py-20">
+          <p data-hero-in data-reveal className="kicker">
+            Tutoring marketplace · online &amp; in person
+          </p>
 
-      <div className="container-page flex flex-col items-center pt-14 text-center sm:pt-20 lg:pt-24">
-        <p data-hero-in data-reveal className="kicker">
-          <span className="relative flex size-2">
-            <span className="absolute inset-0 animate-ping rounded-full bg-brand/60" />
-            <span className="relative size-2 rounded-full bg-brand" />
-          </span>
-          Tutoring marketplace · online &amp; in person
-        </p>
+          <h1 data-hero-in data-reveal className="mt-7 max-w-[13ch] font-heading text-[3.3rem] leading-[0.98] text-ink sm:text-[4.4rem] lg:text-[4.6rem] xl:text-[5.4rem]">
+            Learn with the right tutor. Grow with every <em>lesson.</em>
+          </h1>
 
-        <h1 className="mt-7 max-w-4xl text-balance font-heading text-[2.8rem] font-bold leading-[1] tracking-[-0.05em] text-ink sm:text-[4rem] lg:text-[4.85rem]">
-          <WordReveal as="span" className="block" text="Learn with the right tutor." delay={0.1} />
-          <WordReveal as="span" className="block" gradient text="Grow with every lesson." delay={0.25} />
-        </h1>
+          <p data-hero-in data-reveal className="mt-7 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18px]">
+            Private tutors for school subjects, test prep, languages and more. Answer two questions, meet your three best matches and book a lesson in a few taps.
+          </p>
 
-        <p data-hero-in data-reveal className="mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-          Private tutors for school subjects, test prep, languages and more. Answer two questions, meet your three best matches and book a lesson in a few taps.
-        </p>
-
-        {/* Smart Match starts here: the first question sits in the hero, the second opens in a popup. */}
-        <div data-hero-in data-reveal className="glass-card mt-9 w-full max-w-3xl rounded-3xl p-4 text-left sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2.5 font-heading text-[17px] font-semibold tracking-[-0.02em] text-ink sm:text-[19px]">
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-white">
-                <Sparkles className="size-4" aria-hidden />
-              </span>
-              What subject do you need help with?
-            </h2>
-            <span className="hidden shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[12.5px] font-medium text-muted sm:block">Smart Match · 1 of 2</span>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
-            {QUIZ_SUBJECTS.map((s) => (
-              <button
-                key={s.slug}
-                type="button"
-                onClick={() => setQuiz({ open: true, subject: s.slug })}
-                className="group flex items-center gap-2.5 rounded-2xl border border-line bg-surface p-2.5 text-left transition-[border-color,background-color,transform] hover:border-brand/50 hover:bg-brand-50 active:scale-[0.98] sm:p-3"
-              >
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
-                  <CategoryIcon slug={s.category} className="size-[18px]" />
-                </span>
-                <span className="min-w-0 truncate text-[14.5px] font-semibold text-ink">{s.name}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="cta" size="lg" className="group" onClick={() => setQuiz({ open: true })}>
-              <Sparkles /> Find my tutor <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-            </Button>
-            <Link href="/tutors" className="group inline-flex items-center justify-center gap-1.5 text-[14.5px] font-medium text-ink-2 transition-colors hover:text-ink">
-              <Search className="size-4" aria-hidden /> Or browse every tutor <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
-            </Link>
-          </div>
-        </div>
-        <SmartMatchQuiz open={quiz.open} onOpenChange={(open) => setQuiz((q) => ({ ...q, open }))} initialSubject={quiz.subject} />
-      </div>
-
-      {/* Lesson photos */}
-      <div className="container-page mt-14 grid grid-cols-12 items-start gap-4 sm:mt-16 lg:gap-5" aria-hidden>
-        {HERO_PHOTOS.map((p) => (
-          <div key={p.src} data-hero-photo data-reveal className={cn("relative overflow-hidden rounded-3xl border border-line bg-canvas shadow-lg", p.cls)}>
-            <Image src={p.src} alt="" fill preload={p.src === "/images/lesson-tutor-and-student.jpg"} sizes="(min-width: 768px) 50vw, 100vw" className={cn("object-cover", p.pos)} />
-            <span className="absolute bottom-3 left-3 rounded-full bg-surface/90 px-3 py-1 text-[12.5px] font-medium text-ink shadow-sm backdrop-blur">{p.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* How it works, at a glance: what to do, in order */}
-      <div className="container-page pb-16 pt-12 sm:pb-24 sm:pt-16">
-        <Reveal>
-          <div className="rounded-3xl border border-line bg-surface p-6 shadow-lg sm:p-8 lg:p-10">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <Eyebrow>How TutorLink works</Eyebrow>
-                <h2 className="mt-5 font-heading text-[1.75rem] font-bold leading-[1.1] tracking-[-0.04em] text-ink sm:text-[2.25rem]">Search, book, learn — three steps to your first lesson</h2>
-              </div>
-              <ArrowLink href="/how-it-works" className="shrink-0">
-                See every step
+          {/* Smart Match starts here: the first question sits in the hero, the second opens in a popup. */}
+          <div data-hero-in data-reveal className="mt-9 max-w-2xl border border-line bg-surface">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
+              <h3 className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em] text-ink sm:text-[16px]">
+                <Sparkles className="size-4 text-brand" aria-hidden />
+                What subject do you need help with?
+              </h3>
+              <span className="mono-label hidden sm:block">Smart Match · 1 of 2</span>
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4">
+              {QUIZ_SUBJECTS.map((s) => (
+                <button
+                  key={s.slug}
+                  type="button"
+                  onClick={() => setQuiz({ open: true, subject: s.slug })}
+                  className="group flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-sunken"
+                >
+                  <CategoryIcon slug={s.category} className="size-4 shrink-0 text-brand" />
+                  <span className="min-w-0 truncate text-[14px] font-medium text-ink">{s.name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col items-stretch gap-3 border-t border-line p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <Button variant="cta" size="lg" className="group" onClick={() => setQuiz({ open: true })}>
+                Find my tutor <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+              </Button>
+              <ArrowLink href="/tutors" className="justify-center">
+                Or browse every tutor
               </ArrowLink>
             </div>
-            <Stagger as="ol" className="mt-8 grid gap-7 lg:grid-cols-3 lg:gap-0" stagger={0.08}>
-              {HERO_STEPS.map((step, i) => (
-                <StaggerItem key={step.title} className="relative lg:border-l lg:border-line lg:px-7 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0">
-                  <div className="flex items-center gap-3">
-                    <span className={cn("grid size-11 place-items-center rounded-xl", step.tint)}>
-                      <step.icon className="size-5" aria-hidden />
-                    </span>
-                    <span className="text-[12.5px] font-medium text-muted">Step {i + 1}</span>
-                  </div>
-                  <h3 className="mt-4 text-[17px] font-semibold tracking-[-0.02em] text-ink">{step.title}</h3>
-                  <p className="mt-1.5 text-[14.5px] leading-relaxed text-muted">{step.body}</p>
-                </StaggerItem>
-              ))}
-            </Stagger>
           </div>
+          <SmartMatchQuiz open={quiz.open} onOpenChange={(open) => setQuiz((q) => ({ ...q, open }))} initialSubject={quiz.subject} />
+
+          <dl data-hero-in data-reveal className="mt-10 grid grid-cols-2 divide-x divide-line border-t border-line sm:grid-cols-4">
+            {HERO_FACTS.map((f) => (
+              <div key={f.label} className="px-4 pt-4 first:pl-0 sm:pr-6">
+                <dd className="font-heading text-[2.4rem] leading-none text-ink">{f.value}</dd>
+                <dt className="mono-label mt-2">{f.label}</dt>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        {/* The illustration, full-bleed to the right edge, with a lesson photo and the live tape on it. */}
+        <div data-hero-photo data-reveal className="relative min-h-[26rem] overflow-hidden lg:col-span-5 lg:min-h-0" aria-hidden>
+          <div className="absolute inset-0">
+            <WaveArt />
+          </div>
+          <div className="absolute inset-x-6 bottom-6 flex flex-col items-end gap-4 sm:inset-x-10 lg:inset-x-8 lg:bottom-10">
+            <div className="relative aspect-[5/4] w-full max-w-xs overflow-hidden border border-night/30 bg-canvas sm:max-w-sm">
+              <Image src="/images/lesson-tutor-and-student.jpg" alt="" fill preload sizes="(min-width: 1024px) 420px, 90vw" className="object-cover object-[64%_40%]" />
+              <span className="absolute left-3 top-3 bg-night/80 px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-white backdrop-blur">1-on-1 · at your pace</span>
+            </div>
+            <TutorTape />
+          </div>
+        </div>
+      </div>
+
+    </section>
+  );
+}
+
+/* ═══ 1b · Statement — what the product is for, in one breath ═══════════════════════════ */
+
+export function Statement() {
+  return (
+    <section className="border-b border-line bg-canvas">
+      <div className="container-page flex flex-col items-center py-20 text-center sm:py-28">
+        <Reveal>
+          <LogoMark className="size-7" />
         </Reveal>
+        <WordReveal
+          as="h2"
+          inView
+          accent={1}
+          text="Finding a tutor shouldn't take an evening. Two questions, three matches, one tap to book."
+          className="mt-8 max-w-4xl font-heading text-[2.4rem] leading-[1.05] text-ink sm:text-[3.4rem] lg:text-[4rem]"
+        />
+        <Reveal delay={0.15}>
+          <p className="mono-label mt-8 text-brand">No subscription · No booking fee · Free cancellation up to {DEFAULT_POLICY.freeCancellationHours}h before</p>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ═══ 1c · Three steps — search, book, learn, numbered like a contents page ═══════════════ */
+
+export function ThreeSteps() {
+  return (
+    <section className="border-b border-line bg-page">
+      <div className="container-page grid gap-10 py-16 sm:py-24 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-16">
+        <div className="lg:sticky lg:top-28 lg:self-start">
+          <Eyebrow>How TutorLink works</Eyebrow>
+          <h2 className="mt-6 font-heading text-[2.4rem] leading-[1.02] text-ink sm:text-[3rem] lg:text-[3.4rem]">
+            Search, book, learn. Three steps to your <em>first lesson.</em>
+          </h2>
+          <p className="mt-5 max-w-md text-[16px] leading-relaxed text-ink-2">Everything happens here: the search, the calendar, the payment and the lesson itself. Nothing to install, no meeting links to chase.</p>
+          <ArrowLink href="/how-it-works" className="mt-7">
+            See every step
+          </ArrowLink>
+        </div>
+        <ol className="border-t border-line">
+          {HERO_STEPS.map((step, i) => (
+            <Reveal key={step.title} delay={i * 0.08}>
+              <li className="grid grid-cols-[4.5rem_1fr] gap-x-5 border-b border-line py-8 sm:grid-cols-[6.5rem_1fr] sm:py-10">
+                <span className="font-heading text-[3rem] leading-none text-ink sm:text-[4rem]">0{i + 1}.</span>
+                <div className="pt-1">
+                  <h3 className="flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.1em] text-ink">
+                    <step.icon className="size-4 text-brand" aria-hidden /> {step.title}
+                  </h3>
+                  <p className="mt-3 max-w-lg text-[16.5px] leading-relaxed text-ink-2">{step.body}</p>
+                </div>
+              </li>
+            </Reveal>
+          ))}
+        </ol>
       </div>
     </section>
   );
@@ -230,7 +321,7 @@ function SubjectExplorer() {
               )}
             >
               {on && <motion.span layoutId="explorer-bar" className="absolute inset-y-2 left-0 hidden w-[3px] rounded-full bg-brand-gradient lg:block" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
-              <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg border transition-colors", on ? "border-transparent bg-brand-gradient text-white" : "border-line text-ink-2 group-hover:text-ink")}>
+              <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg border transition-colors", on ? "border-transparent bg-brand-gradient text-on-brand" : "border-line text-ink-2 group-hover:text-ink")}>
                 <a.icon className="size-[18px]" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
@@ -586,7 +677,7 @@ export function HowItWorks() {
                 <span
                   className={cn(
                     "absolute left-0 top-1/2 hidden size-10 -translate-y-1/2 place-items-center rounded-full border font-heading text-[15px] font-bold transition-colors duration-300 lg:grid",
-                    i <= active ? "border-transparent bg-brand-gradient text-white shadow-md" : "border-line-strong bg-surface text-muted",
+                    i <= active ? "border-transparent bg-brand-gradient text-on-brand shadow-md" : "border-line-strong bg-surface text-muted",
                   )}
                   aria-hidden
                 >
@@ -726,18 +817,18 @@ export function GetMatched() {
   };
 
   return (
-    <section aria-labelledby="match-title" className="relative isolate overflow-clip bg-brand-deep text-white">
-      {/* Indigo light from the top right and a faint grid */}
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_55%_70%_at_85%_0%,rgb(99_102_241/0.45),transparent_70%),radial-gradient(ellipse_40%_60%_at_0%_100%,rgb(56_189_248/0.16),transparent_70%)]" aria-hidden />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgb(255_255_255/0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.05)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_80%_80%_at_70%_20%,black,transparent_75%)]" aria-hidden />
+    <section aria-labelledby="match-title" className="relative isolate overflow-clip border-y border-line bg-night text-white">
+      {/* The wave illustration behind, dimmed so the words stay readable */}
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-40" aria-hidden>
+        <WaveArt drift={false} />
+      </div>
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-night via-night/85 to-night/40" aria-hidden />
       <div className="container-page grid items-center gap-12 py-16 sm:py-24 lg:grid-cols-[1fr_minmax(0,540px)] lg:gap-20 lg:py-28">
         <div>
           <Reveal>
-            <p className="kicker border-white/20 bg-white/10 text-white shadow-none">
-              <Zap className="size-4 fill-[#a5b4fc] text-[#a5b4fc]" aria-hidden /> Smart tutor matching
-            </p>
+            <p className="kicker text-white">Smart tutor matching</p>
           </Reveal>
-          <h2 id="match-title" className="mt-6 font-heading text-[2.4rem] font-bold leading-[1.02] tracking-[-0.045em] text-white sm:text-[3.25rem] lg:text-[3.75rem] [&_.text-aurora]:text-[#a5b4fc]">
+          <h2 id="match-title" className="mt-6 font-heading text-[2.6rem] leading-[1.02] text-white sm:text-[3.4rem] lg:text-[4rem]">
             <WordReveal as="span" inView className="block" text="Find a tutor" delay={0.05} />
             <WordReveal as="span" inView gradient className="block" text="that fits you." delay={0.2} />
           </h2>
@@ -897,19 +988,17 @@ export function WhyTutorLink() {
         </Reveal>
       </div>
 
-      {/* Promises, in numbers */}
-      <Stagger className="swipe-row grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
+      {/* Promises, in numbers: hairline columns */}
+      <Stagger className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
         {PROMISES.map((p) => (
           <StaggerItem key={p.title} className="h-full">
-            <div data-spotlight className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 sm:p-7">
+            <div className="flex h-full flex-col border-t border-line pt-5">
               <div className="flex items-start justify-between gap-4">
-                <span className="font-heading text-[52px] font-bold leading-none tracking-[-0.05em] text-ink">{p.value}</span>
-                <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line text-brand">
-                  <p.icon className="size-5" aria-hidden />
-                </span>
+                <span className="font-heading text-[3.4rem] leading-none text-ink">{p.value}</span>
+                <p.icon className="mt-1 size-5 shrink-0 text-brand" aria-hidden />
               </div>
-              <h3 className="mt-4 text-[17px] font-bold text-ink">{p.title}</h3>
-              <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-2">{p.body}</p>
+              <h3 className="mt-4 text-[12.5px] font-semibold uppercase tracking-[0.1em] text-ink">{p.title}</h3>
+              <p className="mt-2.5 text-[15px] leading-relaxed text-ink-2">{p.body}</p>
             </div>
           </StaggerItem>
         ))}
@@ -922,7 +1011,7 @@ export function WhyTutorLink() {
             <Image src="/images/parent-and-daughter.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover" />
           </div>
           <div className="flex flex-col justify-center p-6 sm:p-10">
-            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-brand">Also with every lesson</p>
+            <p className="mono-label text-brand">Also with every lesson</p>
             <ul className="mt-5 space-y-4">
               {ALSO_INCLUDED.map((x) => (
                 <li key={x.text} className="flex items-start gap-3.5">
@@ -1044,7 +1133,7 @@ export function HomeFaq() {
           <Accordion type="single" collapsible className="border-t border-line">
             {faqs.map((f, k) => (
               <AccordionItem key={f.q} value={`f${k}`} className="border-b border-line">
-                <AccordionTrigger className="py-5 text-left text-[17px] font-semibold sm:text-[18px]">{f.q}</AccordionTrigger>
+                <AccordionTrigger className="py-5 text-left text-[16.5px] font-medium sm:text-[17.5px]">{f.q}</AccordionTrigger>
                 <AccordionContent className="text-[16px] leading-relaxed text-ink-2">{f.a}</AccordionContent>
               </AccordionItem>
             ))}

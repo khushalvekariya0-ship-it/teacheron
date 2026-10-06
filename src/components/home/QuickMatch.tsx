@@ -154,7 +154,7 @@ export function QuickMatch() {
             }}
             className="h-10 min-w-0 flex-1 bg-transparent text-[15px] font-medium text-ink outline-none placeholder:font-normal placeholder:text-muted"
           />
-          <button type="submit" className="shrink-0 rounded-lg bg-brand-gradient px-3.5 py-2 text-[13.5px] font-semibold text-white shadow-sm transition-[filter] hover:brightness-110">
+          <button type="submit" className="shrink-0 rounded-lg bg-brand-gradient px-3.5 py-2 text-[13.5px] font-semibold text-on-brand shadow-sm transition-[filter] hover:brightness-110">
             Search
           </button>
         </div>

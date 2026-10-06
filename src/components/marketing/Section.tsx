@@ -5,8 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
 import { Reveal, WordReveal } from "@/components/motion";
+import { WaveArt } from "./WaveArt";
 
 /*
  * Page structure: full-bleed sections stacked on a white page, separated by space rather than
@@ -18,7 +18,7 @@ type Tone = "default" | "canvas" | "brand" | "dark" | "yellow";
 const TONE: Record<Tone, string> = {
   default: "bg-page",
   canvas: "bg-canvas",
-  brand: "bg-brand-50",
+  brand: "bg-canvas",
   dark: "bg-night text-white",
   yellow: "bg-canvas",
 };
@@ -90,12 +90,12 @@ export function SectionHeading({
   /** How many of the title's last words get the gradient (0 = none). */
   accent?: number;
 }) {
-  const titleCls = cn("font-heading text-[2.15rem] font-bold leading-[1.04] tracking-[-0.042em] sm:text-[2.75rem] lg:text-[3.25rem]", dark ? "text-white" : "text-ink");
+  const titleCls = cn("font-heading text-[2.4rem] leading-[1.02] sm:text-[3rem] lg:text-[3.6rem]", dark ? "text-white" : "text-ink");
   return (
     <div className={cn("mb-10 flex flex-col gap-6 lg:mb-14", align === "center" ? "items-center text-center" : "sm:flex-row sm:items-end sm:justify-between", className)}>
       <Reveal className={cn("max-w-3xl", align === "center" && "mx-auto flex flex-col items-center")}>
         {eyebrow && (
-          <Eyebrow className={cn("mb-6", dark && "border-white/20 bg-white/10 text-white shadow-none")} center={align === "center"}>
+          <Eyebrow className={cn("mb-6", dark && "text-white")} center={align === "center"}>
             {eyebrow}
           </Eyebrow>
         )}
@@ -115,12 +115,12 @@ export function SectionHeading({
   );
 }
 
-/** Quiet text link with an arrow that slides on hover. */
+/** Text link on an orange underline, with an orange arrow that slides on hover. */
 export function ArrowLink({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) {
   return (
-    <Link href={href} className={cn("group inline-flex items-center gap-1.5 text-[15px] font-medium text-ink transition-colors hover:text-brand", className)}>
-      {children}
-      <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+    <Link href={href} className={cn("group inline-flex items-center gap-2 text-[15px] font-medium text-ink transition-colors hover:text-brand", className)}>
+      <span className="border-b-[1.5px] border-brand pb-px">{children}</span>
+      <ArrowRight className="size-4 text-brand transition-transform duration-300 group-hover:translate-x-1" />
     </Link>
   );
 }
@@ -167,10 +167,10 @@ export function PageHero({
         text={title}
         accent={accent}
         className={cn(
-          "font-heading font-bold text-ink",
+          "font-heading text-ink",
           compact
-            ? "text-[2.2rem] leading-[1.05] tracking-[-0.04em] sm:text-[2.6rem] lg:text-[3rem]"
-            : "text-[2.5rem] leading-[1.03] tracking-[-0.045em] sm:text-[3.25rem] lg:text-[3.75rem]",
+            ? "text-[2.5rem] leading-[1.02] sm:text-[3rem] lg:text-[3.4rem]"
+            : "text-[2.9rem] leading-[1] sm:text-[3.75rem] lg:text-[4.4rem]",
         )}
       />
       {description && (
@@ -188,7 +188,6 @@ export function PageHero({
   return (
     <section className={cn("relative isolate -mt-16 border-b border-line pt-16", tone === "canvas" ? "bg-canvas" : "bg-page")}>
       <div className="page-glow pointer-events-none absolute inset-0 -z-10" aria-hidden />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-line-grid [mask-image:radial-gradient(ellipse_80%_70%_at_50%_0%,black_20%,transparent_75%)]" aria-hidden />
       <div
         className={cn(
           "container-page relative",
@@ -227,32 +226,29 @@ export function CtaBand({
   secondary?: { href: string; label: string };
 }) {
   return (
-    <section className="relative">
-      <div className="container-page py-16 sm:py-20">
-        <div className="relative overflow-hidden rounded-3xl bg-night px-6 py-14 text-white sm:px-14 sm:py-16">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.06)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_70%_90%_at_85%_0%,black,transparent_70%)]" aria-hidden />
-          <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl">
-              <WordReveal as="h2" inView text={title} accent={2} className="font-heading text-[2rem] font-bold leading-[1.06] tracking-[-0.04em] text-white sm:text-[2.6rem] [&_.text-aurora]:text-white/55" />
-              {description && (
-                <Reveal delay={0.15}>
-                  <p className="mt-4 max-w-2xl text-[17px] leading-relaxed text-white/65">{description}</p>
-                </Reveal>
-              )}
-            </div>
-            <Reveal delay={0.25} className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="bg-white text-night shadow-none hover:bg-white/90 active:bg-white/80">
-                <Link href={primary.href}>
-                  {primary.label} <ArrowRight />
-                </Link>
-              </Button>
-              {secondary && (
-                <Button asChild variant="ghost" size="lg" className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
-                  <Link href={secondary.href}>{secondary.label}</Link>
-                </Button>
-              )}
+    <section className="relative isolate overflow-hidden border-y border-line">
+      <div className="absolute inset-0 -z-10" aria-hidden>
+        <WaveArt />
+      </div>
+      <div className="container-page py-20 sm:py-28">
+        <div className="max-w-xl bg-[#f6f2e8] p-8 text-[#15140f] sm:p-12">
+          <WordReveal as="h2" inView text={title} accent={2} className="font-heading text-[2.4rem] leading-[1.02] text-[#15140f] sm:text-[3.2rem]" />
+          {description && (
+            <Reveal delay={0.15}>
+              <p className="mt-5 text-[16.5px] leading-relaxed text-[#3a362d]">{description}</p>
             </Reveal>
-          </div>
+          )}
+          <Reveal delay={0.25} className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-4">
+            <Link href={primary.href} className="inline-flex h-13 items-center gap-2 bg-[#15140f] px-6 text-[15.5px] font-medium text-[#f4f0e6] transition-colors hover:bg-[#2a2721]">
+              {primary.label} <ArrowRight className="size-[18px]" />
+            </Link>
+            {secondary && (
+              <Link href={secondary.href} className="group inline-flex items-center gap-2 text-[15px] font-medium text-[#15140f]">
+                <span className="border-b-[1.5px] border-[#b83a19] pb-px">{secondary.label}</span>
+                <ArrowRight className="size-4 text-[#b83a19] transition-transform group-hover:translate-x-1" />
+              </Link>
+            )}
+          </Reveal>
         </div>
       </div>
     </section>

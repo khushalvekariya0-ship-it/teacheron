@@ -102,7 +102,7 @@ function TutorWhy() {
               <p className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted">Lesson lengths</p>
               <p className="mt-2.5 flex flex-wrap gap-1.5">
                 {[30, 45, 60, 90].map((m, i) => (
-                  <span key={m} className={cn("rounded-md px-2 py-0.5 text-[12.5px] font-semibold", i === 2 ? "bg-brand-gradient text-white" : "border border-line text-ink-2")}>
+                  <span key={m} className={cn("rounded-md px-2 py-0.5 text-[12.5px] font-semibold", i === 2 ? "bg-brand-gradient text-on-brand" : "border border-line text-ink-2")}>
                     {m}m
                   </span>
                 ))}
@@ -123,7 +123,7 @@ function TutorWhy() {
         <ToolTile icon={<MessageSquare />} title="Families come to you" body="Families find you in search and message you directly. Being contacted never costs credits.">
           <div className="space-y-2">
             <div className="w-[85%] rounded-2xl rounded-bl-md bg-canvas px-3.5 py-2.5 text-[13px] text-ink-2">Hi! Are you available for weekly lessons?</div>
-            <div className="ml-auto w-[70%] rounded-2xl rounded-br-md bg-brand-gradient px-3.5 py-2.5 text-[13px] text-white">Yes — let&rsquo;s book a trial.</div>
+            <div className="ml-auto w-[70%] rounded-2xl rounded-br-md bg-brand-gradient px-3.5 py-2.5 text-[13px] text-on-brand">Yes — let&rsquo;s book a trial.</div>
           </div>
         </ToolTile>
 
@@ -155,7 +155,7 @@ function TutorWhy() {
               <span className="block h-2 w-24 rounded-full bg-line-strong" />
               <span className="mt-2 block h-2 w-32 rounded-full bg-line" />
             </span>
-            <span className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-[12px] font-semibold text-white">
+            <span className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-[12px] font-semibold text-on-brand">
               Apply · {CREDITS_PER_APPLICATION} credit
             </span>
           </div>
@@ -191,7 +191,7 @@ function TutorWhy() {
             <ArrowRight className="size-3.5 text-muted" />
             <span className="font-semibold text-ink">Taught</span>
             <ArrowRight className="size-3.5 text-muted" />
-            <span className="rounded-md bg-brand-gradient px-2 py-0.5 font-semibold text-white">Paid out</span>
+            <span className="rounded-md bg-brand-gradient px-2 py-0.5 font-semibold text-on-brand">Paid out</span>
           </div>
         </ToolTile>
       </Stagger>
@@ -266,7 +266,7 @@ export default function BecomeATutorPage() {
                   {phase.steps.map((s, i) => (
                     <li key={s.title} className="flex gap-4">
                       <span className="relative flex flex-col items-center">
-                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white shadow-sm">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-gradient text-on-brand shadow-sm">
                           <s.icon className="size-5" aria-hidden />
                         </span>
                         {i === 0 && <span className="mt-2 w-px flex-1 bg-line" aria-hidden />}
@@ -290,7 +290,7 @@ export default function BecomeATutorPage() {
             <div className="absolute inset-y-0 left-0 w-1 bg-brand-gradient" aria-hidden />
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
-                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-gradient text-white">
+                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-gradient text-on-brand">
                   <Check className="size-6" strokeWidth={2.6} aria-hidden />
                 </span>
                 <div>
@@ -328,7 +328,7 @@ export default function BecomeATutorPage() {
             <div className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-7">
               <div className="absolute inset-x-0 top-0 h-1 bg-brand-gradient" aria-hidden />
               <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+                <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
                   <Handshake className="size-5" aria-hidden />
                 </span>
                 <div>

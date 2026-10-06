@@ -54,9 +54,9 @@ export function ChatPanel({
 
   return (
     <section aria-label="Chat" className={cn("flex min-h-0 flex-col bg-surface", className)}>
-      <h2 className="hidden shrink-0 items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-ink xl:flex">
+      <h3 className="hidden shrink-0 items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-ink xl:flex">
         <MessagesSquare className="size-4 text-muted" aria-hidden /> Chat
-      </h2>
+      </h3>
       <div ref={listRef} data-lenis-prevent className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-4" role="log" aria-live="polite">
         {lines.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
@@ -67,7 +67,7 @@ export function ChatPanel({
         ) : (
           lines.map((l) => (
             <div key={l.id} className={cn("flex flex-col", l.mine ? "items-end" : "items-start")}>
-              <p className={cn("max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[14px] leading-snug", l.mine ? "rounded-br-md bg-brand text-white" : "rounded-bl-md bg-sunken text-ink")}>
+              <p className={cn("max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[14px] leading-snug", l.mine ? "rounded-br-md bg-brand text-on-brand" : "rounded-bl-md bg-sunken text-ink")}>
                 {l.body}
               </p>
               <span className="mt-1 px-1 text-[11px] text-muted">

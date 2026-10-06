@@ -44,7 +44,7 @@ function FilterBox({
           open ? "bg-brand-50" : "hover:bg-canvas",
         )}
       >
-        <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", active ? "bg-brand-gradient text-white" : "bg-canvas text-ink-2")}>
+        <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", active ? "bg-brand-gradient text-on-brand" : "bg-canvas text-ink-2")}>
           <Icon className="size-[18px]" aria-hidden />
         </span>
         <span className="min-w-0 flex-1">

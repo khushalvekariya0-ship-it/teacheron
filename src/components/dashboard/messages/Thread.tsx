@@ -217,7 +217,7 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
                       <div
                         className={cn(
                           "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[14.5px] leading-relaxed sm:max-w-[70%]",
-                          mine ? "bg-brand-gradient text-white" : "bg-canvas text-ink",
+                          mine ? "bg-brand-gradient text-on-brand" : "bg-canvas text-ink",
                           endOfRun && (mine ? "rounded-br-md" : "rounded-bl-md"),
                         )}
                       >

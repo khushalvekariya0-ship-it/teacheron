@@ -108,7 +108,7 @@ export function Navbar() {
       onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
       className={cn(
         "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-200",
-        scrolled ? "glass border-line shadow-[0_1px_16px_-8px_rgb(11_16_51/0.18)]" : "border-transparent bg-transparent",
+        scrolled ? "glass border-line" : "border-line/60 bg-page",
       )}
     >
       <div className="container-page flex h-16 items-center gap-8">
@@ -271,7 +271,7 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
                     onFocus={() => setArea(c.slug)}
                     className={cn("group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] transition-colors", on ? "bg-surface font-semibold text-ink shadow-sm ring-1 ring-line" : "text-ink-2 hover:text-ink")}
                   >
-                    <span className={cn("grid size-7 shrink-0 place-items-center rounded-md transition-colors", on ? "bg-brand-gradient text-white" : "bg-surface text-ink-2 ring-1 ring-line")}>
+                    <span className={cn("grid size-7 shrink-0 place-items-center rounded-md transition-colors", on ? "bg-brand-gradient text-on-brand" : "bg-surface text-ink-2 ring-1 ring-line")}>
                       <CategoryIcon slug={c.slug} className="size-4" />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{c.name}</span>
@@ -509,11 +509,11 @@ function AccountArea() {
   if (!me) {
     return (
       <>
-        <Button asChild variant="ghost" size="sm" className="text-ink">
+        <Button asChild variant="secondary" size="sm">
           <Link href="/login">Log in</Link>
         </Button>
         <Button asChild variant="cta" size="sm">
-          <Link href="/register">Sign up free</Link>
+          <Link href="/register">Get started</Link>
         </Button>
       </>
     );
@@ -541,7 +541,7 @@ function AccountArea() {
           {me.role !== "admin" && me.role !== "support" && (
             <>
               <DropdownMenuItem onSelect={() => router.push("/dashboard/messages")}>
-                <MessagesSquare /> Messages {unreadMsgs > 0 && <span className="ml-auto rounded-md bg-brand px-1.5 text-[11px] font-semibold text-white">{unreadMsgs}</span>}
+                <MessagesSquare /> Messages {unreadMsgs > 0 && <span className="ml-auto rounded-md bg-brand px-1.5 text-[11px] font-semibold text-on-brand">{unreadMsgs}</span>}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => router.push("/dashboard/bookings")}><Wallet /> Bookings</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => router.push("/dashboard/settings")}><UserRound /> Account settings</DropdownMenuItem>

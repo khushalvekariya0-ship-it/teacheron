@@ -405,7 +405,7 @@ export function CompareView() {
                           href="/tutors"
                           className="group flex h-full min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong p-3 text-center text-[13px] font-medium sm:min-h-36 sm:p-4 sm:text-[13.5px] text-muted transition-colors hover:border-brand/50 hover:bg-brand-50 hover:text-brand"
                         >
-                          <span className="grid size-10 place-items-center rounded-full border border-line bg-surface transition-colors group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-white">
+                          <span className="grid size-10 place-items-center rounded-full border border-line bg-surface transition-colors group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-on-brand">
                             <Plus className="size-4" aria-hidden />
                           </span>
                           Add tutor {i + 1}
@@ -437,7 +437,7 @@ export function CompareView() {
               <ol className="mt-6 space-y-6">
                 {HOW_TO.map((step, i) => (
                   <li key={step.title} className="flex gap-4">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-white">{i + 1}</span>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-[14px] font-bold text-on-brand">{i + 1}</span>
                     <span>
                       <span className="block text-[16px] font-semibold text-ink">{step.title}</span>
                       <span className="mt-1 block text-[14.5px] leading-relaxed text-ink-2">{step.body}</span>
@@ -530,7 +530,7 @@ export function CompareView() {
                     href="/tutors"
                     className="group flex h-full min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong px-3 text-center text-[13px] font-medium text-muted transition-colors hover:border-brand/50 hover:bg-brand-50 hover:text-brand"
                   >
-                    <span className="grid size-9 place-items-center rounded-full border border-line bg-surface transition-colors group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-white">
+                    <span className="grid size-9 place-items-center rounded-full border border-line bg-surface transition-colors group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-on-brand">
                       <Plus className="size-4" aria-hidden />
                     </span>
                     Add a tutor

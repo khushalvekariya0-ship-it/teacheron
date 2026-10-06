@@ -105,7 +105,7 @@ function WalletBody({ onClose }: { onClose: () => void }) {
       <div className="space-y-6 p-5">
         {/* Balance */}
         <div className="relative isolate overflow-hidden rounded-2xl bg-brand-deep p-5 text-white">
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(99_102_241/0.55),transparent_70%),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(255_77_94/0.28),transparent_70%)]" aria-hidden />
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(75_107_99/0.38),transparent_70%),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(217_80_43/0.28),transparent_70%)]" aria-hidden />
           <p className="flex items-center gap-2 text-[13px] font-medium text-white/70">
             <Wallet className="size-4" aria-hidden /> Study Credits
           </p>

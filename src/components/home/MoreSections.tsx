@@ -30,7 +30,7 @@ function PlanTimeline() {
         <span className="absolute left-[16%] right-[16%] top-3.5 h-px bg-brand-gradient" />
         {steps.map((s, i) => (
           <li key={s} className="relative flex flex-col items-center text-center">
-            <span className="grid size-7 place-items-center rounded-full bg-brand-gradient text-[12px] font-bold text-white ring-4 ring-page">{i + 1}</span>
+            <span className="grid size-7 place-items-center rounded-full bg-brand-gradient text-[12px] font-bold text-on-brand ring-4 ring-page">{i + 1}</span>
             <span className="mt-2 text-[12.5px] font-medium leading-tight text-ink">{s}</span>
           </li>
         ))}
@@ -46,7 +46,7 @@ function PacePath() {
       <ArrowRight className="size-3.5 text-muted" />
       <span className="rounded-full border border-line bg-page px-2 py-1 text-ink-2">On track</span>
       <ArrowRight className="size-3.5 text-muted" />
-      <span className="rounded-md bg-brand-gradient px-2 py-1 text-white">Ahead</span>
+      <span className="rounded-md bg-brand-gradient px-2 py-1 text-on-brand">Ahead</span>
     </div>
   );
 }
@@ -74,14 +74,14 @@ function SkillSnippets() {
   return (
     <div className="grid gap-2 sm:grid-cols-2" aria-hidden>
       <div className="rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90">
-        <span className="text-[#a5b4fc]">for</span> step <span className="text-[#a5b4fc]">in</span> plan:
+        <span className="text-peach">for</span> step <span className="text-peach">in</span> plan:
         <br />
         &nbsp;&nbsp;learn(step)
         <br />
         <span className="text-[#b9a6ff]">print</span>(<span className="text-[#7ee2b8]">&quot;Done!&quot;</span>)
       </div>
       <div className="flex items-center gap-3 rounded-xl border border-line bg-page p-4">
-        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-white">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-on-brand">
           <Music className="size-5" />
         </span>
         <span className="text-[13px] leading-snug text-ink-2">
@@ -206,7 +206,7 @@ export function Programs() {
             className="group flex h-full flex-col justify-between gap-6 rounded-2xl border border-dashed border-line-strong p-6 transition-colors hover:border-brand/50 hover:bg-surface sm:p-7"
           >
             <span>
-              <span className="grid size-11 place-items-center rounded-xl bg-brand-gradient text-white">
+              <span className="grid size-11 place-items-center rounded-xl bg-brand-gradient text-on-brand">
                 <Sparkles className="size-5" aria-hidden />
               </span>
               <span className="mt-5 block font-heading text-[21px] font-bold leading-tight tracking-[-0.02em] text-ink">Not sure yet?</span>
@@ -317,7 +317,7 @@ function ModeCard({ mode }: { mode: Mode }) {
       </div>
       <div className="flex flex-1 flex-col p-6 sm:p-7">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
             <mode.icon className="size-5" aria-hidden />
           </span>
           <h3 className="font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{mode.title}</h3>

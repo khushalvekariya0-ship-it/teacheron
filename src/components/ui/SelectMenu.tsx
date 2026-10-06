@@ -55,7 +55,7 @@ function Item({ option, muted }: { option: SelectOption; muted?: boolean }) {
       <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
       {/* The "Any …" / "Choose …" line clears the choice, so it gets no check mark. */}
       {!muted && (
-        <SelectPrimitive.ItemIndicator className="absolute right-2.5 grid size-5 place-items-center rounded-full bg-brand text-white">
+        <SelectPrimitive.ItemIndicator className="absolute right-2.5 grid size-5 place-items-center rounded-full bg-brand text-on-brand">
           <Check className="size-3" strokeWidth={3.2} aria-hidden />
         </SelectPrimitive.ItemIndicator>
       )}

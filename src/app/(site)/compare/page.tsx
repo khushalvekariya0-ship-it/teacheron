@@ -57,7 +57,7 @@ export default function ComparePage() {
               <ul className="mt-5 grid gap-5 sm:grid-cols-2">
                 {COMPARED.map((c) => (
                   <li key={c.title} className="flex gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-white">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-gradient text-on-brand">
                       <c.icon className="size-5" aria-hidden />
                     </span>
                     <span>

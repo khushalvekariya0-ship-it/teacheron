@@ -152,7 +152,7 @@ export default function HowItWorksPage() {
                 <span className="absolute bottom-6 left-5 top-6 w-px bg-[linear-gradient(to_bottom,var(--color-grad-from),var(--color-grad-to))]" aria-hidden />
                 {JOURNEY.map((j, i) => (
                   <StaggerItem as="li" key={j.title} className="relative flex items-center gap-4">
-                    <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-brand-gradient text-white shadow-md ring-4 ring-surface">
+                    <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-brand-gradient text-on-brand shadow-md ring-4 ring-surface">
                       <j.icon className="size-[18px]" aria-hidden />
                     </span>
                     <span className={cn("flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border border-line px-4 py-3", i === JOURNEY.length - 1 ? "bg-brand-50" : "bg-page")}>
@@ -210,7 +210,7 @@ export default function HowItWorksPage() {
             <StaggerItem as="li" key={s.stage} className="h-full">
               <div className="relative flex h-full flex-col rounded-2xl border border-line bg-surface p-6">
                 <div className="flex items-center justify-between">
-                  <span className="grid size-11 place-items-center rounded-xl bg-brand-gradient text-white">
+                  <span className="grid size-11 place-items-center rounded-xl bg-brand-gradient text-on-brand">
                     <s.icon className="size-5" aria-hidden />
                   </span>
                   <span className="font-heading text-[13px] font-bold uppercase tracking-[0.16em] text-brand">{s.stage}</span>
@@ -311,7 +311,7 @@ export default function HowItWorksPage() {
             {SAFETY_STAGES.map((stage, i) => (
               <StaggerItem as="li" key={stage.title} className="h-full">
                 <div className="flex justify-center lg:justify-start">
-                  <span className="relative grid size-11 place-items-center rounded-full bg-brand-gradient text-white shadow-md ring-8 ring-page">
+                  <span className="relative grid size-11 place-items-center rounded-full bg-brand-gradient text-on-brand shadow-md ring-8 ring-page">
                     <ShieldCheck className="size-5" aria-hidden />
                   </span>
                 </div>

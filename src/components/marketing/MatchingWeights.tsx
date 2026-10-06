@@ -123,7 +123,7 @@ export function MatchingWeights() {
                           onClick={() => setPicked((p) => ({ ...p, [c.key]: i }))}
                           className={cn(
                             "rounded-lg border px-3 py-1.5 text-[13.5px] font-medium transition-colors",
-                            on ? "border-transparent bg-brand-gradient text-white shadow-sm" : "border-line bg-surface text-ink-2 hover:border-brand/40 hover:text-ink",
+                            on ? "border-transparent bg-brand-gradient text-on-brand shadow-sm" : "border-line bg-surface text-ink-2 hover:border-brand/40 hover:text-ink",
                           )}
                         >
                           {o.label}
@@ -196,7 +196,7 @@ export function MatchingWeights() {
       {/* The rules around the score */}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-line bg-surface p-6">
-          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
             <Ban className="size-5" aria-hidden />
           </span>
           <p className="mt-4 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">Never affects ranking</p>
@@ -207,7 +207,7 @@ export function MatchingWeights() {
           </ul>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-6">
-          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
             <ShieldAlert className="size-5" aria-hidden />
           </span>
           <p className="mt-4 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">Hard requirements</p>
@@ -216,7 +216,7 @@ export function MatchingWeights() {
           </p>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-6">
-          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-white">
+          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
             <ListOrdered className="size-5" aria-hidden />
           </span>
           <p className="mt-4 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">How ties are broken</p>

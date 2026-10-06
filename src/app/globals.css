@@ -5,131 +5,131 @@
 
 
 /* ─── Design tokens ─────────────────────────────────────────────────────────────
-   Soft mesh on off-white: an off-white page (#f8f9fa) with pastel light behind heroes,
-   midnight-navy ink, a deep indigo brand colour for selected states and links, and ONE
-   electric coral reserved for the action we want pressed (find, book, pay).
-   `.dark` on <html> swaps the same tokens to an OLED-black theme with brighter accents.
+   Editorial, like a well-set magazine: a warm charcoal page with cream type (the default), or the
+   same page in cream with charcoal type (the "light" theme). Serif headlines with an italic word,
+   a sans for reading, a mono for labels and numbers. Square corners, hairlines, one burnt-orange
+   accent for links, markers and selected states; the main button is a solid block of the text colour.
+   `.dark` on <html> is the charcoal theme; the values here are the cream theme.
    ───────────────────────────────────────────────────────────────────────────── */
 @theme {
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-heading: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-sans-face), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: var(--font-serif-face), "Times New Roman", Georgia, serif;
+  --font-mono: var(--font-mono-face), ui-monospace, "SF Mono", Menlo, monospace;
   --font-display: var(--font-heading);
 
-  /* Geist is variable: bold reads crisper a touch lighter than 700. */
-  --font-weight-semibold: 580;
-  --font-weight-bold: 640;
-  --font-weight-extrabold: 680;
-  --font-weight-black: 720;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 700;
+  --font-weight-black: 700;
 
-  /* Soft indigo tints for decorative blocks behind photos. */
-  --color-grad-from: #eceeff;
-  --color-grad-via: #e8ecff;
-  --color-grad-to: #e2e7ff;
+  /* Soft warm tints for decorative blocks behind photos. */
+  --color-grad-from: #ebe5d6;
+  --color-grad-via: #e6dfcd;
+  --color-grad-to: #e0d8c4;
 
   /* Surfaces: `page` is the page/section background, `surface` is cards, fields and menus on it. */
-  --color-page: #f8f9fa;
-  --color-surface: #ffffff;
-  --color-canvas: #f3f4f8;
-  --color-sunken: #eceef4;
+  --color-page: #f4f0e6;
+  --color-surface: #faf7f0;
+  --color-canvas: #ede8db;
+  --color-sunken: #e4ded0;
 
-  /* Text (midnight navy) */
-  --color-ink: #0b1033;
-  --color-ink-2: #343a5e;
-  --color-muted: #666c8c;
-  --color-subtle: #9aa0bd;
-  /* Second tone of two-tone headlines (large text only). */
-  --color-ink-soft: #7e85a8;
+  /* Text (warm charcoal) */
+  --color-ink: #15140f;
+  --color-ink-2: #3a362d;
+  --color-muted: #6a6557;
+  --color-subtle: #a39d8e;
+  /* Second tone of two-tone headlines: the same ink, set in italic (see `text-aurora`). */
+  --color-ink-soft: #15140f;
 
   /* Lines */
-  --color-line: #e2e5ef;
-  --color-line-strong: #cfd3e2;
+  --color-line: #d8d1c0;
+  --color-line-strong: #bfb7a4;
 
   /* Text/icons placed on an ink (inverse) surface. */
-  --color-on-ink: #ffffff;
+  --color-on-ink: #f4f0e6;
   /* Always-dark surface (dark bands, overlays, the classroom video stage). */
-  --color-night: #07081a;
+  --color-night: #15140f;
   /* Highlighter behind a word and text selection. */
-  --color-marker: #dfe2ff;
+  --color-marker: rgb(184 58 25 / 0.22);
 
-  /* Brand: deep indigo. White text on brand is 7.9:1. */
-  --color-brand: #4338ca;
-  --color-brand-hover: #3730a3;
-  --color-brand-press: #312e81;
-  --color-brand-soft: #eceeff;
-  --color-brand-50: #f5f6ff;
-  /* Midnight indigo for the one bold brand band on a page (white text 16:1). */
-  --color-brand-deep: #14123f;
-  --color-brand-glow: rgb(67 56 202 / 0.45);
+  /* Brand: burnt orange. Links, markers, selected states. White text on it is 5.7:1. */
+  --color-brand: #b83a19;
+  --color-brand-hover: #a33315;
+  --color-brand-press: #8f2c12;
+  --color-brand-soft: rgb(184 58 25 / 0.1);
+  --color-brand-50: rgb(184 58 25 / 0.06);
+  --color-brand-deep: #15140f;
+  --color-brand-glow: rgb(184 58 25 / 0.3);
+  --color-on-brand: #ffffff;
 
-  /* CTA: electric coral, with dark text on it (5.6:1 — white would only reach 3.2:1). */
-  --color-cta: #ff4d5e;
-  --color-cta-hover: #ff3d50;
-  --color-cta-press: #f02e43;
-  --color-on-cta: #2a0a10;
-  --color-cta-soft: #ffeef0;
-  --color-cta-50: #fff6f7;
-  --color-cta-glow: rgb(255 77 94 / 0.45);
-  /* Coral as text on a light surface. */
-  --color-cta-ink: #c81e3a;
+  /* CTA: the main button is a solid block of ink; its text is the page colour. */
+  --color-cta: #15140f;
+  --color-cta-hover: #2a2721;
+  --color-cta-press: #000000;
+  --color-on-cta: #f4f0e6;
+  --color-cta-soft: rgb(21 20 15 / 0.06);
+  --color-cta-50: rgb(21 20 15 / 0.04);
+  --color-cta-glow: rgb(0 0 0 / 0);
+  /* Orange as text on a light surface. */
+  --color-cta-ink: #b83a19;
 
   /* "navy" is the interactive neutral across the app (primary buttons, selected states). It is ink. */
-  --color-navy: #0b1033;
-  --color-navy-hover: #1c2250;
-  --color-navy-press: #05071f;
-  --color-navy-50: #f1f2f9;
-  --color-navy-100: #e2e5ef;
-  --color-navy-200: #cfd3e2;
+  --color-navy: #15140f;
+  --color-navy-hover: #2a2721;
+  --color-navy-press: #000000;
+  --color-navy-50: #ede8db;
+  --color-navy-100: #d8d1c0;
+  --color-navy-200: #bfb7a4;
 
-  /* Quiet tints (card fills, icon tiles). Strong tones are for icons/large text only. */
-  --color-sky: #0369a1;
-  --color-sky-soft: #e8f4fc;
-  --color-indigo: #3730a3;
-  --color-indigo-soft: #eceeff;
-  --color-violet: #6d28d9;
-  --color-violet-soft: #f4f1ff;
-  --color-teal: #0f766e;
-  --color-teal-soft: #e6f7f4;
-  --color-peach: #c2410c;
-  --color-peach-soft: #fff4ee;
-  --color-pink: #be185d;
-  --color-pink-soft: #fdf2f8;
-  --color-yellow: #92400e;
-  --color-yellow-soft: #fffbeb;
+  /* Quiet tints (card fills, icon tiles), drawn from the wave illustration. Strong tones are for icons/large text only. */
+  --color-sky: #3f6b64;
+  --color-sky-soft: rgb(78 111 103 / 0.14);
+  --color-indigo: #6f5a83;
+  --color-indigo-soft: rgb(181 155 195 / 0.25);
+  --color-violet: #7a5f8f;
+  --color-violet-soft: rgb(181 155 195 / 0.25);
+  --color-teal: #3f6b64;
+  --color-teal-soft: rgb(78 111 103 / 0.14);
+  --color-peach: #b4531f;
+  --color-peach-soft: rgb(233 163 110 / 0.25);
+  --color-pink: #a24a4a;
+  --color-pink-soft: rgb(217 138 138 / 0.2);
+  --color-yellow: #6d6428;
+  --color-yellow-soft: rgb(200 189 134 / 0.3);
 
   /* Status */
-  --color-success: #127a4a;
-  --color-success-50: #edfaf2;
-  --color-success-200: #b5ecce;
-  --color-warning: #a35200;
-  --color-warning-50: #fff7e8;
-  --color-warning-200: #fddca0;
-  --color-danger: #c02637;
-  --color-danger-50: #fff0f1;
-  --color-danger-200: #fbc5cb;
-  --color-star: #f59e0b;
+  --color-success: #2f7a46;
+  --color-success-50: rgb(47 122 70 / 0.1);
+  --color-success-200: rgb(47 122 70 / 0.3);
+  --color-warning: #8a5a0a;
+  --color-warning-50: rgb(138 90 10 / 0.1);
+  --color-warning-200: rgb(138 90 10 / 0.3);
+  --color-danger: #b83a19;
+  --color-danger-50: rgb(184 58 25 / 0.1);
+  --color-danger-200: rgb(184 58 25 / 0.3);
+  --color-star: #c98a12;
 
-  /* Presence: the pulsing "online now" dot, and its text colour. */
+  /* Presence: the "online now" marker, and its text colour. */
   --color-live: #22c55e;
-  --color-live-ink: #15803d;
-  --color-live-soft: #e7f9ee;
+  --color-live-ink: #2f7a46;
+  --color-live-soft: rgb(34 197 94 / 0.14);
 
-  /* Radii — soft but precise */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
-  --radius-3xl: 24px;
+  /* Radii — none. Every corner is square; see the `rounded-full` rule near the end of this file. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 
-  /* Shadows — layered and quiet; mostly for floating layers */
-  --shadow-xs: 0 1px 2px 0 rgb(11 16 51 / 0.04);
-  --shadow-sm: 0 1px 2px 0 rgb(11 16 51 / 0.05), 0 1px 3px 0 rgb(11 16 51 / 0.03);
-  --shadow-md: 0 4px 12px -4px rgb(11 16 51 / 0.08), 0 2px 4px -2px rgb(11 16 51 / 0.04);
-  --shadow-lg: 0 14px 32px -12px rgb(11 16 51 / 0.14), 0 4px 8px -4px rgb(11 16 51 / 0.04);
-  --shadow-xl: 0 24px 56px -20px rgb(11 16 51 / 0.2), 0 8px 16px -8px rgb(11 16 51 / 0.05);
-  --shadow-2xl: 0 36px 80px -28px rgb(11 16 51 / 0.3);
+  /* Shadows — hairlines do the work; only floating layers get a soft shadow */
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
+  --shadow-lg: 0 16px 32px -16px rgb(21 20 15 / 0.18);
+  --shadow-xl: 0 24px 48px -20px rgb(21 20 15 / 0.25), 0 0 0 1px var(--color-line);
+  --shadow-2xl: 0 32px 64px -24px rgb(21 20 15 / 0.3), 0 0 0 1px var(--color-line);
 
   /* Motion */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -193,6 +193,10 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     scroll-behavior: smooth;
+    /* The serif has one weight; never let the browser fake a bold or an oblique. */
+    font-synthesis: none;
+    /* Numbers each section label in order (see `kicker`). */
+    counter-reset: section;
   }
 
   body {
@@ -202,12 +206,20 @@
     line-height: 1.6;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1, h2 {
     color: var(--color-ink);
     font-family: var(--font-heading);
-    font-weight: 640;
-    line-height: 1.1;
-    letter-spacing: -0.032em;
+    font-weight: 400;
+    line-height: 1.02;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+  /* Smaller headings stay in the sans, set a little heavier. */
+  h3, h4, h5, h6 {
+    color: var(--color-ink);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
     text-wrap: balance;
   }
 
@@ -256,22 +268,23 @@
   padding-inline: 0;
 }
 
-/* Headline display type: tight, extra-bold. */
+/* Headline display type. */
 @utility display {
   font-family: var(--font-heading);
-  font-weight: 640;
-  letter-spacing: -0.04em;
+  font-weight: 400;
+  letter-spacing: -0.012em;
   line-height: 1;
 }
 
-/* Former serif accent: headline words now stay in the same bold face. */
+/* The italic word of a headline (see the type rules near the end of this file). */
 @utility accent {
-  font-style: normal;
+  font-style: italic;
 }
 
-/* Second tone of a two-tone headline (kept under the old class names so markup keeps working). */
+/* Second tone of a two-tone headline: the same ink, italic. */
 @utility text-aurora {
   color: var(--color-ink-soft);
+  font-style: italic;
 }
 @utility bg-aurora-soft {
   background-color: var(--color-canvas);
@@ -283,65 +296,56 @@
   display: none;
 }
 
-/* The accent as a fill (solid indigo — the old gradient name is kept), and the headline second tone. */
+/* The accent as a fill (the old gradient name is kept), and the headline second tone. */
 @utility bg-brand-gradient {
   background-color: var(--color-brand);
   background-image: none;
 }
 @utility text-gradient {
   color: var(--color-ink-soft);
+  font-style: italic;
 }
 
-/* Soft pastel mesh from the top of a hero: indigo in the middle, coral and teal at the sides,
-   violet and sky lower down. Paint it on an absolutely positioned layer behind the content.
-   The colours are the `--mesh-*` variables, so the dark theme swaps them in one place. */
+/* A faint warm light from the top of a hero. Paint it on an absolutely positioned layer behind the content. */
 @utility hero-glow {
   background-image:
-    radial-gradient(ellipse 50% 58% at 50% -8%, var(--mesh-indigo), transparent 70%),
-    radial-gradient(ellipse 34% 46% at 5% 6%, var(--mesh-coral), transparent 70%),
-    radial-gradient(ellipse 34% 46% at 95% 3%, var(--mesh-teal), transparent 70%),
-    radial-gradient(ellipse 38% 36% at 76% 46%, var(--mesh-violet), transparent 70%),
-    radial-gradient(ellipse 38% 36% at 22% 52%, var(--mesh-sky), transparent 70%);
+    radial-gradient(ellipse 50% 58% at 50% -8%, var(--mesh-coral), transparent 70%),
+    radial-gradient(ellipse 34% 46% at 5% 6%, var(--mesh-teal), transparent 70%),
+    radial-gradient(ellipse 34% 46% at 95% 3%, var(--mesh-indigo), transparent 70%);
 }
 /* The same light, quieter, for inner page heroes (text sits on the left). */
 @utility page-glow {
   background-image:
-    radial-gradient(ellipse 45% 70% at 16% -10%, var(--mesh-indigo), transparent 70%),
-    radial-gradient(ellipse 34% 58% at 94% 0%, var(--mesh-teal), transparent 70%),
-    radial-gradient(ellipse 30% 50% at 62% -12%, var(--mesh-coral), transparent 70%);
+    radial-gradient(ellipse 45% 70% at 16% -10%, var(--mesh-coral), transparent 70%),
+    radial-gradient(ellipse 34% 58% at 94% 0%, var(--mesh-teal), transparent 70%);
 }
 
-/* The label above every section headline: a crisp pill with an accent dot (`kicker-dot`) and
-   bold ink text. Use it through `Eyebrow` / the `eyebrow` prop so every section matches. */
+/* The label above every section headline: a running number in orange mono ("01", "02" …, counted
+   in page order) followed by the label in small bold capitals. Use it through `Eyebrow` / the
+   `eyebrow` prop so every section matches. */
 @utility kicker {
   display: inline-flex;
   width: fit-content;
-  align-items: center;
-  gap: 0.6rem;
-  border: 1px solid var(--color-line-strong);
-  border-radius: 9999px;
-  background-color: var(--color-surface);
-  padding: 0.45rem 1rem 0.45rem 0.8rem;
-  font-size: 0.875rem;
+  align-items: baseline;
+  gap: 0.8rem;
+  font-size: 0.8125rem;
   line-height: 1.25rem;
   font-weight: 600;
-  letter-spacing: -0.005em;
-  text-transform: none;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--color-ink);
-  box-shadow: 0 1px 2px rgb(11 16 51 / 0.06);
-  @media (width >= 640px) {
-    padding: 0.5rem 1.15rem 0.5rem 0.9rem;
-    font-size: 0.9375rem;
+  &::before {
+    counter-increment: section;
+    content: counter(section, decimal-leading-zero);
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--color-brand);
   }
 }
-/* The accent dot inside a kicker: solid indigo with a soft halo. */
+/* The old accent dot of a kicker: the number has taken its place. */
 @utility kicker-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  flex-shrink: 0;
-  border-radius: 9999px;
-  background-color: var(--color-brand);
-  box-shadow: 0 0 0 3px var(--color-brand-soft);
+  display: none;
 }
 
 /* Highlighter stroke under a word (use on an inline element). */
@@ -389,7 +393,7 @@
 .stagger-children > * > *:nth-child(n + 7) { animation-delay: 0.3s; }
 
 /* ─── Hover emphasis (cards marked data-spotlight) ─────────────────────────────
-   A crisp 1px ink hairline traces the card on hover. No glow. */
+   A crisp 1px hairline in the text colour traces the card on hover. No glow. */
 @media (hover: hover) and (pointer: fine) {
   [data-spotlight] {
     position: relative;
@@ -446,10 +450,12 @@
 }
 
 @utility eyebrow {
-  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   line-height: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--color-muted);
 }
 
@@ -497,61 +503,68 @@
   & strong { color: var(--color-ink); font-weight: 600; }
 }
 
-/* ─── Soft mesh ────────────────────────────────────────────────────────────────
-   Five pastel lights. The same variables drive `hero-glow`, `page-glow` and `mesh-gradient`,
-   so the dark theme only has to swap these. */
+/* ─── Decorative variables ─────────────────────────────────────────────────────
+   The page is flat; these only tint the faint grid and the glass surfaces. */
 :root {
-  --mesh-indigo: rgb(99 102 241 / 0.2);
-  --mesh-coral: rgb(255 77 94 / 0.12);
-  --mesh-teal: rgb(45 212 191 / 0.16);
-  --mesh-violet: rgb(167 139 250 / 0.14);
-  --mesh-sky: rgb(56 189 248 / 0.12);
-  --glass-bg: rgb(255 255 255 / 0.72);
-  --glass-line: rgb(255 255 255 / 0.7);
-  --grid-line: rgb(11 16 51 / 0.05);
-  --grid-dot: rgb(11 16 51 / 0.13);
+  --mesh-indigo: rgb(181 155 195 / 0.1);
+  --mesh-coral: rgb(226 81 42 / 0.07);
+  --mesh-teal: rgb(78 111 103 / 0.1);
+  --mesh-violet: rgb(181 155 195 / 0.08);
+  --mesh-sky: rgb(78 111 103 / 0.06);
+  --glass-bg: rgb(244 240 230 / 0.84);
+  --glass-line: rgb(21 20 15 / 0.1);
+  --grid-line: rgb(21 20 15 / 0.06);
+  --grid-dot: rgb(21 20 15 / 0.14);
 }
 
-/* A whole block painted with the mesh (bento tiles, the classroom backdrop). */
+/* A whole block with a faint warm wash (used behind a few panels). */
 @utility mesh-gradient {
   background-color: var(--color-page);
   background-image:
     radial-gradient(ellipse 70% 55% at 12% 8%, var(--mesh-indigo), transparent 60%),
     radial-gradient(ellipse 55% 45% at 88% 12%, var(--mesh-teal), transparent 60%),
-    radial-gradient(ellipse 50% 45% at 78% 92%, var(--mesh-coral), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 18% 96%, var(--mesh-violet), transparent 60%);
+    radial-gradient(ellipse 50% 45% at 78% 92%, var(--mesh-coral), transparent 60%);
 }
 
 /* ─── Glass ────────────────────────────────────────────────────────────────────
-   Frosted surfaces for the navbar and floating cards. `glass` is only the fill and blur,
-   `glass-card` adds the light edge and a soft shadow. */
+   Frosted surfaces for the navbar and floating cards. */
 @utility glass {
   background-color: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(170%);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 @utility glass-card {
   background-color: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(170%);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
-  border: 1px solid var(--glass-line);
-  box-shadow: 0 1px 2px rgb(11 16 51 / 0.04), 0 24px 48px -28px rgb(11 16 51 / 0.28);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  border: 1px solid var(--color-line);
 }
 
 /* ─── Online now ───────────────────────────────────────────────────────────────
-   A green dot with a ring that pulses outwards. */
+   A small green square with a ring that pulses outwards. */
 @keyframes live-ring {
   0% { box-shadow: 0 0 0 0 rgb(34 197 94 / 0.55); }
-  70%, 100% { box-shadow: 0 0 0 7px rgb(34 197 94 / 0); }
+  70%, 100% { box-shadow: 0 0 0 6px rgb(34 197 94 / 0); }
 }
 @utility live-dot {
   display: inline-block;
   width: 0.5rem;
   height: 0.5rem;
   flex-shrink: 0;
-  border-radius: 9999px;
   background-color: var(--color-live);
   animation: live-ring 1.8s ease-out infinite;
+}
+
+/* ─── Mono label ───────────────────────────────────────────────────────────────
+   Small print in the mono face: table headers, figure captions, stat labels. */
+@utility mono-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
 }
 
 /* ─── Bento grid ───────────────────────────────────────────────────────────────
@@ -570,99 +583,132 @@
   to { transform: scaleX(1); }
 }
 
-/* ─── Dark theme (OLED black) ──────────────────────────────────────────────────
-   Set by the toggle in the navbar (`.dark` on <html>, remembered in localStorage).
-   Only tokens change, so every page follows without its own dark styles. */
+/* Slow drift of the wave illustration's bands. */
+@keyframes wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-6%); }
+}
+
+/* ─── Square corners ───────────────────────────────────────────────────────────
+   The radius tokens above are all 0, which squares every `rounded-*` utility except `rounded-full`
+   (a fixed 9999px). This squares that one too, so pills, chips, avatars and markers all share the
+   same sharp edge. Outside any layer on purpose, so it wins over the utility. */
+.rounded-full,
+.rounded-t-full,
+.rounded-b-full {
+  border-radius: 0;
+}
+
+/* ─── Type rules ───────────────────────────────────────────────────────────────
+   Headlines are the serif at its only weight. Utilities like `font-bold` or `tracking-[…]` on a
+   headline would fake a bold or squeeze the serif, so these win over them. */
+h1,
+h2,
+.font-heading,
+.display {
+  font-family: var(--font-heading) !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.012em !important;
+}
+/* The second tone of a two-tone headline: same ink, italic. */
+.text-aurora,
+.accent {
+  color: inherit !important;
+  font-style: italic;
+}
+
+/* ─── Dark theme (warm charcoal) — the default ─────────────────────────────────
+   Applied by the head script unless the visitor chose "light". Only tokens change. */
 .dark {
   color-scheme: dark;
 
-  --color-grad-from: rgb(99 102 241 / 0.16);
-  --color-grad-via: rgb(99 102 241 / 0.12);
-  --color-grad-to: rgb(99 102 241 / 0.08);
+  --color-grad-from: rgb(238 233 221 / 0.08);
+  --color-grad-via: rgb(238 233 221 / 0.06);
+  --color-grad-to: rgb(238 233 221 / 0.04);
 
-  --color-page: #000000;
-  --color-surface: #0a0a10;
-  --color-canvas: #101018;
-  --color-sunken: #171722;
+  --color-page: #15140f;
+  --color-surface: #1b1a14;
+  --color-canvas: #1f1d17;
+  --color-sunken: #27241b;
 
-  --color-ink: #f3f4ff;
-  --color-ink-2: #c5c8e4;
-  --color-muted: #8e93b4;
-  --color-subtle: #5b6082;
-  --color-ink-soft: #8f95bd;
+  --color-ink: #eee9dd;
+  --color-ink-2: #d6d0c1;
+  --color-muted: #a49d8c;
+  --color-subtle: #6e6959;
+  --color-ink-soft: #eee9dd;
 
-  --color-line: #1e1e2b;
-  --color-line-strong: #2d2d3f;
+  --color-line: #35322a;
+  --color-line-strong: #4a463b;
 
-  --color-on-ink: #07081a;
-  --color-night: #07070d;
-  --color-marker: rgb(129 140 248 / 0.3);
+  --color-on-ink: #15140f;
+  --color-night: #0f0e0b;
+  --color-marker: rgb(229 88 47 / 0.35);
 
-  --color-brand: #6366f1;
-  --color-brand-hover: #7477f5;
-  --color-brand-press: #585bdc;
-  --color-brand-soft: rgb(99 102 241 / 0.18);
-  --color-brand-50: rgb(99 102 241 / 0.09);
-  --color-brand-deep: #0d0c2b;
-  --color-brand-glow: rgb(99 102 241 / 0.7);
+  --color-brand: #e5582f;
+  --color-brand-hover: #ef6b45;
+  --color-brand-press: #cf4a25;
+  --color-brand-soft: rgb(229 88 47 / 0.14);
+  --color-brand-50: rgb(229 88 47 / 0.08);
+  --color-brand-deep: #1f1d17;
+  --color-brand-glow: rgb(229 88 47 / 0.4);
+  --color-on-brand: #15140f;
 
-  --color-cta: #ff5c6c;
-  --color-cta-hover: #ff7080;
-  --color-cta-press: #ff4d5e;
-  --color-cta-soft: rgb(255 92 108 / 0.15);
-  --color-cta-50: rgb(255 92 108 / 0.08);
-  --color-cta-glow: rgb(255 92 108 / 0.6);
-  --color-cta-ink: #ff8b96;
+  --color-cta: #eee9dd;
+  --color-cta-hover: #ffffff;
+  --color-cta-press: #d9d3c4;
+  --color-on-cta: #15140f;
+  --color-cta-soft: rgb(238 233 221 / 0.1);
+  --color-cta-50: rgb(238 233 221 / 0.06);
+  --color-cta-glow: rgb(0 0 0 / 0);
+  --color-cta-ink: #e5582f;
 
-  --color-navy: #f3f4ff;
-  --color-navy-hover: #d9dcf5;
-  --color-navy-press: #c5c8e4;
-  --color-navy-50: rgb(243 244 255 / 0.07);
-  --color-navy-100: #1e1e2b;
-  --color-navy-200: #2d2d3f;
+  --color-navy: #eee9dd;
+  --color-navy-hover: #ffffff;
+  --color-navy-press: #d9d3c4;
+  --color-navy-50: rgb(238 233 221 / 0.07);
+  --color-navy-100: #35322a;
+  --color-navy-200: #4a463b;
 
-  --color-sky: #7dd3fc;
-  --color-sky-soft: rgb(56 189 248 / 0.14);
-  --color-indigo: #a5b4fc;
-  --color-indigo-soft: rgb(129 140 248 / 0.16);
-  --color-violet: #c4b5fd;
-  --color-violet-soft: rgb(167 139 250 / 0.16);
-  --color-teal: #5eead4;
-  --color-teal-soft: rgb(45 212 191 / 0.14);
-  --color-peach: #fdba74;
-  --color-peach-soft: rgb(251 146 60 / 0.14);
-  --color-pink: #f9a8d4;
-  --color-pink-soft: rgb(244 114 182 / 0.14);
-  --color-yellow: #fcd34d;
-  --color-yellow-soft: rgb(251 191 36 / 0.13);
+  --color-sky: #8fb3b0;
+  --color-sky-soft: rgb(78 111 103 / 0.28);
+  --color-indigo: #c3abd1;
+  --color-indigo-soft: rgb(181 155 195 / 0.18);
+  --color-violet: #c3abd1;
+  --color-violet-soft: rgb(181 155 195 / 0.18);
+  --color-teal: #8fb3b0;
+  --color-teal-soft: rgb(78 111 103 / 0.28);
+  --color-peach: #e9a36e;
+  --color-peach-soft: rgb(233 163 110 / 0.16);
+  --color-pink: #d98a8a;
+  --color-pink-soft: rgb(217 138 138 / 0.16);
+  --color-yellow: #c8bd86;
+  --color-yellow-soft: rgb(200 189 134 / 0.16);
 
-  --color-success: #4ade80;
-  --color-success-50: rgb(74 222 128 / 0.1);
-  --color-success-200: rgb(74 222 128 / 0.32);
-  --color-warning: #fbbf24;
-  --color-warning-50: rgb(251 191 36 / 0.1);
-  --color-warning-200: rgb(251 191 36 / 0.32);
-  --color-danger: #f0525f;
-  --color-danger-50: rgb(240 82 95 / 0.12);
-  --color-danger-200: rgb(240 82 95 / 0.36);
+  --color-success: #8fcf9a;
+  --color-success-50: rgb(143 207 154 / 0.12);
+  --color-success-200: rgb(143 207 154 / 0.35);
+  --color-warning: #e2b159;
+  --color-warning-50: rgb(226 177 89 / 0.12);
+  --color-warning-200: rgb(226 177 89 / 0.35);
+  --color-danger: #e8604a;
+  --color-danger-50: rgb(232 96 74 / 0.14);
+  --color-danger-200: rgb(232 96 74 / 0.4);
+  --color-star: #e2b159;
 
-  --color-live-ink: #4ade80;
-  --color-live-soft: rgb(34 197 94 / 0.14);
+  --color-live-ink: #8fcf9a;
+  --color-live-soft: rgb(74 222 128 / 0.14);
 
-  --mesh-indigo: rgb(99 102 241 / 0.34);
-  --mesh-coral: rgb(255 92 108 / 0.16);
-  --mesh-teal: rgb(45 212 191 / 0.16);
-  --mesh-violet: rgb(139 92 246 / 0.24);
-  --mesh-sky: rgb(56 189 248 / 0.14);
-  --glass-bg: rgb(10 10 16 / 0.66);
-  --glass-line: rgb(255 255 255 / 0.09);
-  --grid-line: rgb(243 244 255 / 0.05);
-  --grid-dot: rgb(243 244 255 / 0.12);
+  --mesh-indigo: rgb(181 155 195 / 0.08);
+  --mesh-coral: rgb(229 88 47 / 0.08);
+  --mesh-teal: rgb(78 111 103 / 0.12);
+  --mesh-violet: rgb(181 155 195 / 0.06);
+  --mesh-sky: rgb(78 111 103 / 0.06);
+  --glass-bg: rgb(21 20 15 / 0.82);
+  --glass-line: rgb(238 233 221 / 0.1);
+  --grid-line: rgb(238 233 221 / 0.05);
+  --grid-dot: rgb(238 233 221 / 0.12);
 
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.5);
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.6), 0 1px 3px 0 rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 12px -4px rgb(0 0 0 / 0.7), 0 2px 4px -2px rgb(0 0 0 / 0.5);
-  --shadow-lg: 0 14px 32px -12px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.04);
-  --shadow-xl: 0 24px 56px -20px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(255 255 255 / 0.05);
-  --shadow-2xl: 0 36px 80px -28px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --shadow-lg: 0 20px 40px -20px rgb(0 0 0 / 0.7);
+  --shadow-xl: 0 30px 60px -24px rgb(0 0 0 / 0.8), 0 0 0 1px var(--color-line);
+  --shadow-2xl: 0 40px 80px -28px rgb(0 0 0 / 0.85), 0 0 0 1px var(--color-line);
 }
