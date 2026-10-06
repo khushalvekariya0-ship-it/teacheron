@@ -186,7 +186,7 @@ const MATH_FONT = { fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: 
  * corner, a quadratic being worked out on the whiteboard, and the chat underneath.
  * Photos are general imagery; the maths is real (y = x² − 4x + 3 does cross at 1 and 3).
  */
-function ClassroomPreview() {
+export function ClassroomPreview() {
   const { ref, playing } = usePlaying(0.3);
   const [seconds, setSeconds] = React.useState(0);
   React.useEffect(() => {

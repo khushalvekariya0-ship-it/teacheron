@@ -506,6 +506,8 @@
 /* ─── Decorative variables ─────────────────────────────────────────────────────
    The page is flat; these only tint the faint grid and the glass surfaces. */
 :root {
+  --board-teal: rgb(63 107 100 / 0.22);
+  --board-orange: rgb(184 58 25 / 0.14);
   --mesh-indigo: rgb(181 155 195 / 0.1);
   --mesh-coral: rgb(226 81 42 / 0.07);
   --mesh-teal: rgb(78 111 103 / 0.1);
@@ -581,6 +583,28 @@
 @keyframes reel-fill {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
+}
+
+/* The hero chalkboard: each line is drawn once, then stays; labels fade in. */
+@keyframes chalk-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes chalk-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.chalk-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: chalk-draw var(--draw, 2.2s) ease-out var(--delay, 0s) forwards;
+}
+.chalk-text {
+  opacity: 0;
+  animation: chalk-fade 1.2s ease-out var(--delay, 0s) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chalk-line, .chalk-text { animation-delay: 0s !important; }
 }
 
 /* Slow drift of the wave illustration's bands. */
@@ -698,6 +722,8 @@ h2,
   --color-live-ink: #8fcf9a;
   --color-live-soft: rgb(74 222 128 / 0.14);
 
+  --board-teal: rgb(90 140 130 / 0.45);
+  --board-orange: rgb(229 88 47 / 0.3);
   --mesh-indigo: rgb(181 155 195 / 0.08);
   --mesh-coral: rgb(229 88 47 / 0.08);
   --mesh-teal: rgb(78 111 103 / 0.12);
