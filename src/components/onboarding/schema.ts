@@ -103,6 +103,8 @@ export const profileSchema = z.object({
   approach: z.string().trim().min(40, "Write at least 40 characters about how you teach.").max(1000, "Keep this under 1,000 characters."),
   languages: z.array(z.string()).min(1, "Choose at least one language."),
   photoName: z.string().optional(),
+  /** The photo itself, shrunk to a small JPEG data URL. */
+  photoDataUrl: z.string().optional(),
 });
 
 export const verificationSchema = z.object({

@@ -6,9 +6,10 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, BadgeCheck, Check, ExternalLink, Monitor, Pencil, Users, Zap } from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, ExternalLink, ImageUp, Monitor, Pencil, Users, Zap } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { imageFileToDataUrl } from "@/lib/image";
 import { useApp } from "@/lib/store";
 import { useFlag } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
@@ -670,6 +671,64 @@ function CredentialsSection({ tutor }: { tutor: Tutor }) {
 
 /* ─── Page ──────────────────────────────────────────────────────────────────── */
 
+/** Upload (or remove) the profile photo. The picture is shrunk in the browser and saved with the profile. */
+function PhotoPicker({ hasPhoto }: { hasPhoto: boolean }) {
+  const update = useApp((s) => s.updateTutorProfile);
+  const id = React.useId();
+  const [busy, setBusy] = React.useState(false);
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/\.(png|jpe?g|webp)$/i.test(file.name)) return toast.error("Choose a PNG, JPG or WebP image.");
+    if (file.size > 5 * 1024 * 1024) return toast.error("Choose an image under 5 MB.");
+    setBusy(true);
+    try {
+      const photoUrl = await imageFileToDataUrl(file);
+      const res = update({ photoUrl });
+      if (!res.ok) toast.error(res.error);
+      else toast.success("Profile photo updated", { description: "It shows on your cards and profile straight away." });
+    } catch {
+      toast.error("That image couldn't be read. Try a different file.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <label
+        htmlFor={id}
+        className={cn("inline-flex h-9 cursor-pointer items-center gap-2 border border-line-strong bg-surface px-3.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-sunken", busy && "pointer-events-none opacity-60")}
+      >
+        <ImageUp className="size-4" aria-hidden /> {busy ? "Saving…" : hasPhoto ? "Change photo" : "Upload a photo"}
+        <input
+          id={id}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            void pick(file);
+          }}
+        />
+      </label>
+      {hasPhoto && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const res = update({ photoUrl: undefined });
+            if (!res.ok) toast.error(res.error);
+            else toast.success("Photo removed");
+          }}
+        >
+          Remove
+        </Button>
+      )}
+      <p className="basis-full text-[12.5px] text-muted">A clear, friendly headshot. PNG, JPG or WebP up to 5 MB.</p>
+    </div>
+  );
+}
+
 export function ProfileView() {
   const { me, tutor } = useMyTutor();
 
@@ -716,7 +775,7 @@ export function ProfileView() {
             <Card>
               <CardContent className="flex items-center gap-4">
                 <Avatar name={`${tutor.firstName} ${tutor.lastName}`} src={tutor.photoUrl} tone={tutor.tone} size="lg" verified={tutor.verification.identity === "verified"} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-semibold text-ink">
                     {tutor.firstName} {tutor.lastName}
                   </p>
@@ -726,6 +785,9 @@ export function ProfileView() {
                   <StarRating rating={tutor.rating} count={tutor.reviewCount} className="mt-1" />
                 </div>
               </CardContent>
+              <div className="border-t border-line px-5 py-3">
+                <PhotoPicker hasPhoto={!!tutor.photoUrl} />
+              </div>
             </Card>
             <Card>
               <CardHeader title="Profile strength" description={`${checklist.filter((c) => c.done).length} of ${checklist.length} complete`} action={<span className="text-lg font-semibold tabular-nums text-ink">{pct}%</span>} />

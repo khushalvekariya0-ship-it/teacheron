@@ -18,6 +18,7 @@ import { useHydrated, useSession } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import type { User } from "@/lib/types";
 import { destinationFor, safeNext } from "./authUtils";
+import { PreviewInbox } from "./PreviewInbox";
 import { PasswordInput, PasswordStrengthMeter } from "./PasswordField";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -76,6 +77,13 @@ const AGE_OPTIONS: { value: AgeBand; label: string }[] = [
   { value: "13-17", label: "13–17" },
   { value: "under13", label: "Under 13" },
 ];
+
+/** The verification email, shown in the preview inbox. */
+function VerificationInbox({ userId, email }: { userId: string; email: string }) {
+  const token = useApp((s) => s.emailTokens[userId]);
+  if (!token) return null;
+  return <PreviewInbox className="mt-6" to={email} subject="Verify your TutorLink email" href={`/verify-email?user=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`} cta="Open the verification link" />;
+}
 
 function isRole(v: string | null): v is RoleChoice {
   return v === "student" || v === "parent" || v === "tutor";
@@ -183,8 +191,8 @@ export function RegisterView() {
           >
             {created.role === "tutor" ? "Set up your tutor profile" : "Go to your dashboard"} <ArrowRight />
           </Button>
-          <p className="text-center text-[12.5px] text-muted">Preview build — no email is actually sent.</p>
         </div>
+        <VerificationInbox userId={created.id} email={created.email} />
       </motion.div>
     );
   }

@@ -261,7 +261,11 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
   const [dir, setDir] = React.useState(1);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
-  const [photo, setPhoto] = React.useState<PhotoPreview | null>(null);
+  // A photo picked earlier is kept with the draft (as a small data URL), so it is still here after a reload.
+  const [photo, setPhoto] = React.useState<PhotoPreview | null>(() => {
+    const d = draft?.data as { photoDataUrl?: unknown; photoName?: unknown } | undefined;
+    return typeof d?.photoDataUrl === "string" ? { url: d.photoDataUrl, name: typeof d.photoName === "string" ? d.photoName : "photo" } : null;
+  });
   const getter = React.useRef<() => Record<string, unknown>>(() => ({}));
   const navigated = React.useRef(false);
   const headingRef = React.useRef<HTMLHeadingElement>(null);
@@ -270,10 +274,6 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     getter.current = g;
   }, []);
 
-  // Free the in-memory photo preview when it's replaced or the wizard unmounts.
-  React.useEffect(() => () => {
-    if (photo) URL.revokeObjectURL(photo.url);
-  }, [photo]);
 
   const meta = STEPS[step - 1];
   const formId = `onboarding-step-${step}`;

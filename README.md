@@ -19,6 +19,8 @@ No environment variables are needed for the preview. [`.env.example`](.env.examp
 
 ## Demo accounts
 
+The demo accounts, sample tutors and sample bookings are only included when `NEXT_PUBLIC_SAMPLE_DATA=true` is set at build time (`.env.local` locally, or the project's environment variables on Vercel). Without it the site builds empty, as it would on launch day. Password-reset and verification emails are not sent; each one appears on the page as a "preview inbox" card with the link, and the Google / Apple / Facebook / SSO buttons open an account picker that stands in for the provider's window.
+
 Sign in with one click from **`/login`** (demo account picker), or with the email below and the password **`tutorlink-demo`**.
 
 | Role | Name | Email | What they have |

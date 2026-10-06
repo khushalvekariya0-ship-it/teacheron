@@ -142,6 +142,12 @@ interface Data {
   policy: BookingPolicy;
   platformFeeBps: number;
   loginHistory: { userId: string; at: string; device: string; success: boolean }[];
+  /** Password-reset links that are still valid (token → account). Stands in for the emailed link. */
+  passwordResets: Record<string, { userId: string; expiresAt: string }>;
+  /** Pending email-verification codes by user id. Stands in for the emailed link. */
+  emailTokens: Record<string, string>;
+  /** Accounts that have signed in through a provider in this browser (shown in the account picker). */
+  providerAccounts: { provider: string; email: string; firstName: string; lastName: string }[];
 }
 
 interface Actions {
@@ -152,6 +158,16 @@ interface Actions {
   logout(): void;
   updateMe(patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "city" | "state" | "zip" | "timezone">>): Result;
   changePassword(current: string, next: string): Promise<Result>;
+  /** Issues a reset link for the account with this email. Always succeeds, so emails can't be probed; the link only works for a real account. */
+  requestPasswordReset(email: string): Result<{ token: string }>;
+  /** Sets a new password from a reset link and signs the account in. */
+  resetPassword(token: string, password: string): Promise<Result<User>>;
+  /** Issues a fresh verification link for the signed-in account. */
+  requestEmailVerification(): Result<{ userId: string; token: string }>;
+  /** Marks the account's email as verified from its link. */
+  verifyEmail(userId: string, token: string): Result<User>;
+  /** Sign in (or sign up as a student) through Google, Apple, Facebook or an SSO provider. */
+  loginWithProvider(provider: string, account: { email: string; firstName: string; lastName: string }): Result<User>;
   deleteMyAccount(): Result;
   // discovery
   toggleFavorite(tutorId: string): Result<boolean>;
@@ -200,7 +216,7 @@ interface Actions {
   setTopicStatus(goalId: string, topic: string, status: LearningGoal["topics"][number]["status"]): Result;
   addGoal(input: Omit<LearningGoal, "id" | "createdAt" | "tutorId"> & { tutorId?: string }): Result<LearningGoal>;
   // tutor
-  updateTutorProfile(patch: Partial<Pick<Tutor, "headline" | "bio" | "approach" | "hourlyRateCents" | "modes" | "subjects" | "specialties" | "levels" | "languages" | "serviceRadiusMiles" | "learningSupport">>): Result;
+  updateTutorProfile(patch: Partial<Pick<Tutor, "headline" | "bio" | "approach" | "hourlyRateCents" | "modes" | "subjects" | "specialties" | "levels" | "languages" | "serviceRadiusMiles" | "learningSupport" | "photoUrl">>): Result;
   setAvailability(windows: WeeklyWindow[]): Result;
   setExceptions(exceptions: AvailabilityException[]): Result;
   setBookingRules(rules: Partial<BookingRules>): Result;
@@ -289,6 +305,9 @@ function initialData(): Data {
     policy: DEFAULT_POLICY,
     platformFeeBps: SITE.platformFeeBps,
     loginHistory: [],
+    passwordResets: {},
+    emailTokens: {},
+    providerAccounts: [],
   };
 }
 
@@ -407,8 +426,77 @@ export const useApp = create<AppState>()(
             ...(input.role === "student" && input.ageBand === "13-17" ? { parentalConsent: { parentEmail: input.parentEmail!, status: "pending" as const } } : {}),
           };
           const hash = await sha256(`${email}:${input.password}`);
-          set((s) => ({ users: [...s.users, user], credentials: { ...s.credentials, [email]: hash } }));
+          set((s) => ({ users: [...s.users, user], credentials: { ...s.credentials, [email]: hash }, emailTokens: { ...s.emailTokens, [user.id]: uid("vrf") } }));
           notify(user.id, { type: "security", title: "Verify your email", body: `We sent a verification link to ${email}.` });
+          return get().loginAs(user.id);
+        },
+        requestPasswordReset(email) {
+          const e = email.trim().toLowerCase();
+          const u = get().users.find((x) => x.email.toLowerCase() === e);
+          const token = uid("rst");
+          // An unknown email still gets a token, but it points nowhere — the reset page then says the link isn't valid.
+          if (u) set((s) => ({ passwordResets: { ...s.passwordResets, [token]: { userId: u.id, expiresAt: new Date(Date.now() + 3_600_000).toISOString() } } }));
+          return ok({ token });
+        },
+        async resetPassword(token, password) {
+          const entry = get().passwordResets[token];
+          const u = entry && get().users.find((x) => x.id === entry.userId);
+          if (!entry || !u) return fail("This reset link isn't valid. Request a new one.");
+          if (new Date(entry.expiresAt).getTime() < Date.now()) return fail("This reset link has expired. Request a new one.");
+          if (password.length < 10) return fail("Use at least 10 characters.");
+          const e = u.email.toLowerCase();
+          const hash = await sha256(`${e}:${password}`);
+          set((s) => {
+            const { [token]: _used, ...passwordResets } = s.passwordResets;
+            void _used;
+            return { credentials: { ...s.credentials, [e]: hash }, passwordResets };
+          });
+          notify(u.id, { type: "security", title: "Password changed", body: "If this wasn't you, contact support immediately." });
+          return get().loginAs(u.id);
+        },
+        requestEmailVerification() {
+          const r = requireUser();
+          if (!r.ok) return r;
+          if (r.data.emailVerified) return fail("Your email is already verified.");
+          const token = uid("vrf");
+          set((s) => ({ emailTokens: { ...s.emailTokens, [r.data.id]: token } }));
+          return ok({ userId: r.data.id, token });
+        },
+        verifyEmail(userId, token) {
+          const u = get().users.find((x) => x.id === userId);
+          if (!u) return fail("This verification link isn't valid.");
+          if (u.emailVerified) return ok(u);
+          if (!token || get().emailTokens[userId] !== token) return fail("This verification link isn't valid. Request a new one from Settings.");
+          const updated: User = { ...u, emailVerified: true };
+          set((s) => {
+            const { [userId]: _used, ...emailTokens } = s.emailTokens;
+            void _used;
+            return { users: s.users.map((x) => (x.id === userId ? updated : x)), emailTokens };
+          });
+          notify(userId, { type: "security", title: "Email verified", body: "Thanks — your email address is confirmed." });
+          return ok(updated);
+        },
+        loginWithProvider(provider, account) {
+          const email = account.email.trim().toLowerCase();
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("Enter a valid email address.");
+          const firstName = account.firstName.trim();
+          const lastName = account.lastName.trim();
+          if (!firstName) return fail("Enter your name.");
+          const remember = (s: Data) => ({
+            providerAccounts: [{ provider, email, firstName, lastName }, ...s.providerAccounts.filter((p) => !(p.provider === provider && p.email === email))].slice(0, 6),
+          });
+          const existing = get().users.find((x) => x.email.toLowerCase() === email);
+          if (existing) {
+            set(remember);
+            return get().loginAs(existing.id);
+          }
+          // The provider vouches for the address, so the account starts verified. It has no password: sign in with the same provider again.
+          const user: User = {
+            id: uid("usr"), role: "student", firstName, lastName, email, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || SITE.defaultTimezone,
+            createdAt: nowIso(), emailVerified: true, status: "active",
+          };
+          set((s) => ({ users: [...s.users, user], ...remember(s) }));
+          notify(user.id, { type: "security", title: `Welcome to ${SITE.name}`, body: `You signed up with ${provider}. Add a password in Settings if you'd like to sign in without it.` });
           return get().loginAs(user.id);
         },
         logout: () => set({ sessionUserId: null, compare: [] }),
@@ -1106,6 +1194,7 @@ export const useApp = create<AppState>()(
             verification: { identity: d.idDocument ? "submitted" : "not_started", education: "not_started", certification: "not_started", background: "not_started" },
             rating: null, reviewCount: 0, lessonsCompleted: 0, responseTimeHours: null, availability: (d.availability as unknown as WeeklyWindow[]) ?? [], exceptions: [],
             featured: false, joinedAt: nowIso(), tone: 2,
+            ...(typeof d.photoDataUrl === "string" && String(d.photoDataUrl).startsWith("data:image/") ? { photoUrl: String(d.photoDataUrl) } : {}),
           };
           set((s) => ({
             registeredTutors: [...s.registeredTutors, tutor],

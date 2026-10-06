@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { destinationFor, safeNext } from "./authUtils";
 import { PasswordInput } from "./PasswordField";
 import { AppleIcon, FacebookIcon, GoogleIcon } from "./SocialIcons";
+import { ProviderSignIn } from "./ProviderSignIn";
 import { setRememberMe } from "@/lib/remember";
 
 const schema = z.object({
@@ -44,6 +45,7 @@ export function LoginView() {
   const [pendingDemo, setPendingDemo] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
+  const [provider, setProvider] = React.useState<{ name: string; icon?: React.ReactNode } | null>(null);
 
   const form = useForm({ resolver: zodResolver(schema), mode: "onTouched", defaultValues: { email: "", password: "" } });
   const { errors, isSubmitting } = form.formState;
@@ -75,8 +77,14 @@ export function LoginView() {
 
   const busy = isSubmitting || redirecting;
   const signupHref = (role: "student" | "tutor") => `/register?role=${role}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
-  const notConnected = (provider: string) =>
-    toast(`${provider} sign-in isn't connected yet`, { description: "It will work once the login server is set up. Use your email and password for now." });
+  const openProvider = (name: string, icon?: React.ReactNode) => setProvider({ name, icon });
+  const onProviderSignedIn = (user: { firstName: string; role: Parameters<typeof destinationFor>[0] }, isNew: boolean) => {
+    setProvider(null);
+    setRememberMe(remember);
+    setRedirecting(true);
+    toast.success(isNew ? `Welcome, ${user.firstName}` : `Welcome back, ${user.firstName}`);
+    router.push(destinationFor(user.role, next));
+  };
 
   return (
     <div>
@@ -115,6 +123,8 @@ export function LoginView() {
         )}
       </AnimatePresence>
 
+      <ProviderSignIn provider={provider?.name ?? null} icon={provider?.icon} open={!!provider} onOpenChange={(o) => !o && setProvider(null)} onSignedIn={onProviderSignedIn} />
+
       {/* Social sign-in */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE, delay: 0.05 }} className="mt-7 space-y-3">
         {[
@@ -125,7 +135,7 @@ export function LoginView() {
           <button
             key={p.name}
             type="button"
-            onClick={() => notConnected(p.name)}
+            onClick={() => openProvider(p.name, p.icon)}
             className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line-strong bg-surface text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle hover:bg-canvas active:translate-y-px"
           >
             {p.icon}
@@ -133,7 +143,7 @@ export function LoginView() {
           </button>
         ))}
         <p className="pt-1 text-center">
-          <button type="button" onClick={() => notConnected("Corporate (SSO)")} className="text-[14px] font-medium text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
+          <button type="button" onClick={() => openProvider("your organisation (SSO)")} className="text-[14px] font-medium text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
             Continue with corporate login (SSO)
           </button>
         </p>

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { User, WeeklyWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { imageFileToDataUrl } from "@/lib/image";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, ChipGroup, RadioCards, Segmented, Switch } from "@/components/ui/Controls";
@@ -538,7 +539,7 @@ export function ProfileStep({
   useBind(form, bindValues);
   const { register, control, handleSubmit, setValue, formState: { errors } } = form;
   const [photoError, setPhotoError] = React.useState<string | null>(null);
-  const [bioRaw, headlineRaw, approachRaw, photoName] = useWatch({ control, name: ["bio", "headline", "approach", "photoName"] });
+  const [bioRaw, headlineRaw, approachRaw, photoName, photoDataUrl] = useWatch({ control, name: ["bio", "headline", "approach", "photoName", "photoDataUrl"] });
   const bio = bioRaw ?? "";
   const headline = headlineRaw ?? "";
   const approach = approachRaw ?? "";
@@ -547,15 +548,12 @@ export function ProfileStep({
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-6">
       <div className="flex flex-col gap-4 rounded-xl border border-line p-4 sm:flex-row sm:items-center">
-        <Avatar name={`${me.firstName} ${me.lastName}`} src={photo?.url} size="xl" />
+        <Avatar name={`${me.firstName} ${me.lastName}`} src={photo?.url ?? photoDataUrl} size="xl" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">Profile photo</p>
           <p className="mt-0.5 text-[13px] text-muted">
             {photoName ? (
-              <>
-                <span className="font-medium text-ink-2">{photoName}</span>
-                {!photo && " · preview isn't kept after reloading in this preview build"}
-              </>
+              <span className="font-medium text-ink-2">{photoName}</span>
             ) : (
               "A clear, friendly headshot. PNG, JPG or WebP up to 5 MB."
             )}
@@ -577,15 +575,21 @@ export function ProfileStep({
               type="file"
               accept="image/png,image/jpeg,image/webp"
               className="sr-only"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file) return;
                 if (!/\.(png|jpe?g|webp)$/i.test(file.name)) return setPhotoError("Choose a PNG, JPG or WebP image.");
                 if (file.size > 5 * 1024 * 1024) return setPhotoError("Choose an image under 5 MB.");
                 setPhotoError(null);
-                onPhoto({ url: URL.createObjectURL(file), name: file.name });
-                setValue("photoName", file.name, { shouldDirty: true });
+                try {
+                  const dataUrl = await imageFileToDataUrl(file);
+                  onPhoto({ url: dataUrl, name: file.name });
+                  setValue("photoName", file.name, { shouldDirty: true });
+                  setValue("photoDataUrl", dataUrl, { shouldDirty: true });
+                } catch {
+                  setPhotoError("That image couldn't be read. Try a different file.");
+                }
               }}
             />
           </label>
@@ -596,6 +600,7 @@ export function ProfileStep({
               onClick={() => {
                 onPhoto(null);
                 setValue("photoName", undefined, { shouldDirty: true });
+                setValue("photoDataUrl", undefined, { shouldDirty: true });
               }}
             >
               Remove
