@@ -86,22 +86,22 @@ import { useTutors } from "@/lib/store/hooks";
 const GRAIN =
   "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>\")";
 
-/** Search → Book → Learn: what a visitor does on TutorLink, in order. One line each — the steps page has the detail. */
+/** Search → Book → Learn: what a visitor does on TutorLink, in order. Each step gets its own soft colour. */
 const HERO_STEPS = [
   {
     icon: Search,
     title: "Search",
-    body: "Two questions, three best-fit tutors. Or browse everyone.",
+    body: "Answer two questions and Smart Match shows your three best-fit tutors. Or browse everyone — searching is free.",
   },
   {
     icon: CalendarDays,
     title: "Book",
-    body: "Pick a time on the tutor's calendar. Pay by card, UPI or credits.",
+    body: "Pick a day and time on the tutor's calendar and see the total straight away. Pay by card, UPI or Study Credits.",
   },
   {
     icon: Video,
     title: "Learn",
-    body: "Video, whiteboard and chat in one built-in classroom.",
+    body: "Meet in the built-in classroom: video, a shared whiteboard and chat on one screen. Nothing to install.",
   },
 ];
 
@@ -226,8 +226,12 @@ export function ThreeSteps() {
         <div className="lg:sticky lg:top-28 lg:self-start">
           <Eyebrow>How TutorLink works</Eyebrow>
           <h2 className="mt-6 font-heading text-[2.4rem] leading-[1.02] text-ink sm:text-[3rem] lg:text-[3.4rem]">
-            Three steps to your <em>first lesson.</em>
+            Search, book, learn. Three steps to your <em>first lesson.</em>
           </h2>
+          <p className="mt-5 max-w-md text-[16px] leading-relaxed text-ink-2">
+            Everything happens here: the search, the calendar, the payment and
+            the lesson itself. Nothing to install, no meeting links to chase.
+          </p>
           <ArrowLink href="/how-it-works" className="mt-7">
             See every step
           </ArrowLink>
@@ -235,16 +239,16 @@ export function ThreeSteps() {
         <ol className="border-t border-line">
           {HERO_STEPS.map((step, i) => (
             <Reveal key={step.title} delay={i * 0.08}>
-              <li className="grid grid-cols-[4.5rem_1fr] items-center gap-x-5 border-b border-line py-8 sm:grid-cols-[6.5rem_1fr] sm:py-10">
+              <li className="grid grid-cols-[4.5rem_1fr] gap-x-5 border-b border-line py-8 sm:grid-cols-[6.5rem_1fr] sm:py-10">
                 <span className="font-heading text-[3rem] leading-none text-ink sm:text-[4rem]">
                   0{i + 1}.
                 </span>
-                <div>
-                  <h3 className="flex items-center gap-2.5 text-[20px] font-semibold tracking-[-0.01em] text-ink sm:text-[22px]">
-                    <step.icon className="size-[18px] text-brand" aria-hidden />{" "}
+                <div className="pt-1">
+                  <h3 className="flex items-center gap-2.5 text-[12.5px] font-semibold uppercase tracking-[0.1em] text-ink">
+                    <step.icon className="size-4 text-brand" aria-hidden />{" "}
                     {step.title}
                   </h3>
-                  <p className="mt-1.5 text-[16px] leading-relaxed text-muted">
+                  <p className="mt-3 max-w-lg text-[16.5px] leading-relaxed text-ink-2">
                     {step.body}
                   </p>
                 </div>
