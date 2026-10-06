@@ -6,7 +6,6 @@ import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, WordReveal } from "@/components/motion";
-import { WaveArt } from "./WaveArt";
 
 /*
  * Page structure: full-bleed sections stacked on a white page, separated by space rather than
@@ -226,10 +225,17 @@ export function CtaBand({
   secondary?: { href: string; label: string };
 }) {
   return (
-    <section className="relative isolate overflow-hidden border-y border-line">
-      <div className="absolute inset-0 -z-10" aria-hidden>
-        <WaveArt />
-      </div>
+    <section className="relative isolate overflow-hidden border-y border-line bg-night">
+      {/* A crisp backdrop: a fine grid, and nested squares stepping out from the logo's corner mark */}
+      <div className="pointer-events-none absolute inset-0 -z-10 [background-image:linear-gradient(to_right,rgb(238_233_221/0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgb(238_233_221/0.06)_1px,transparent_1px)] [background-size:56px_56px]" aria-hidden />
+      <svg className="pointer-events-none absolute inset-y-0 right-0 -z-10 hidden h-full w-[62%] lg:block" viewBox="0 0 900 600" preserveAspectRatio="xMaxYMid slice" fill="none" aria-hidden>
+        {[80, 160, 240, 320, 400, 480].map((r, i) => (
+          <rect key={r} x={560 - r} y={300 - r} width={r * 2} height={r * 2} stroke="#eee9dd" strokeOpacity={0.16 - i * 0.02} strokeWidth="1.25" />
+        ))}
+        <rect x="536" y="276" width="48" height="48" fill="#e5582f" />
+        <path d="M80 300H480M560 60V236" stroke="#eee9dd" strokeOpacity="0.14" strokeWidth="1.25" />
+      </svg>
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-px bg-[linear-gradient(to_right,#e5582f,transparent_55%)]" aria-hidden />
       <div className="container-page py-20 sm:py-28">
         <div className="max-w-xl bg-[#f6f2e8] p-8 text-[#15140f] sm:p-12">
           <WordReveal as="h2" inView text={title} accent={2} className="font-heading text-[2.4rem] leading-[1.02] text-[#15140f] sm:text-[3.2rem]" />

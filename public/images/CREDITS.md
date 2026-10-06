@@ -9,7 +9,8 @@ General imagery for the home page, the audience pages and the subject areas.
 
 | File | Photo | Photographer | Source |
 | --- | --- | --- | --- |
-| `hero-lesson.jpg` | Two men sitting beside table with opened book | [Nick Fithen](https://unsplash.com/@nickfith) | [Unsplash](https://unsplash.com/photos/two-men-sitting-beside-table-with-opened-book-Y125COCWeuQ) |
+| `old-library.jpg` | Historic library interior with towering wooden bookshelves and arched ceiling | [Gunnar Ridderström](https://unsplash.com/@gunnarridder) | [Unsplash](https://unsplash.com/photos/historic-library-interior-with-towering-wooden-bookshelves-and-arched-ceiling-jMgkx-aTJuo) |
+| `hero-blackboard-2.jpg` | Two people writing math formulas on a chalkboard | [Vitaly Gariev](https://unsplash.com/@silverkblack) | [Unsplash](https://unsplash.com/photos/two-people-writing-math-formulas-on-a-chalkboard-TSRMOX6FV3A) |
 | `lesson-tutor-and-student.jpg` | Girl in pink sweater beside girl in gray sweater | [sofatutor](https://unsplash.com/@sofatutor) | [Unsplash](https://unsplash.com/photos/girl-in-pink-sweater-beside-girl-in-gray-sweater-4r5Hogjbgkw) |
 | `lesson-together.jpg` | A woman showing a woman something on the laptop | [Centre for Ageing Better](https://unsplash.com/@ageing_better) | [Unsplash](https://unsplash.com/photos/a-woman-showing-a-woman-something-on-the-laptop-ukDFRP2RNA0) |
 | `lesson-online.jpg` | A woman wearing white headphones using a laptop in a cafe with a croissant | [Vitaly Gariev](https://unsplash.com/@silverkblack) | [Unsplash](https://unsplash.com/photos/woman-using-laptop-in-cafe-workspace-7QVUTtvcIGI) |

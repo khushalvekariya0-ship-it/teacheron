@@ -74,31 +74,17 @@ import {
 import { CategoryIcon } from "@/components/content/icons";
 import { QuickMatch } from "./QuickMatch";
 import { QUIZ_SUBJECTS, SmartMatchQuiz } from "./SmartMatchQuiz";
-import { OnlineNow, isOnlineNow } from "@/components/domain/TutorIntro";
-import { WaveArt } from "@/components/marketing/WaveArt";
-import { Chalkboard } from "./Chalkboard";
-import { ClassroomPreview } from "./BentoFeatures";
-import { useApp } from "@/lib/store";
-import { nextOpening } from "@/lib/time";
-import { formatCents, formatDateTime, formatTime } from "@/lib/format";
-import {
-  GRADES,
-  SUBJECTS,
-  SUBJECT_BY_SLUG,
-  SUBJECT_CATEGORIES,
-  subjectName,
-} from "@/lib/data/catalog";
+import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
-import {
-  useHydrated,
-  useNow,
-  useTutors,
-  useViewerTimezone,
-} from "@/lib/store/hooks";
+import { useTutors } from "@/lib/store/hooks";
 
-/* ═══ 1 · Hero — what TutorLink is, the first Smart Match question, and the three steps that follow ═══ */
+/* ═══ 1 · Hero — what TutorLink is and the first Smart Match question, on a blackboard ═══ */
+
+/** Film grain, as a tiny tiled SVG. */
+const GRAIN =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>\")";
 
 /** Search → Book → Learn: what a visitor does on TutorLink, in order. Each step gets its own soft colour. */
 const HERO_STEPS = [
@@ -124,311 +110,99 @@ const HERO_FACTS = [
   { value: String(SUBJECTS.length), label: "Subjects" },
   { value: "2", label: "Ways to learn: online, in person" },
   { value: "$0", label: "Booking fee for families" },
-  {
-    value: `${DEFAULT_POLICY.freeCancellationHours}h`,
-    label: "Free cancellation",
-  },
+  { value: `${DEFAULT_POLICY.freeCancellationHours}h`, label: "Free cancellation" },
 ];
 
-/**
- * The "tape": who is teaching right now, or the next open times, read from the tutors' real
- * availability. Hidden when the marketplace has no tutors yet.
+/*
+ * The first screen: one photograph — two people working through formulas on a blackboard — across the
+ * whole width, slowly drifting, with the page colour fading in over its left half so the words
+ * sit on something calm. Film grain ties the two together.
  */
-function TutorTape() {
-  const tutors = useTutors();
-  const hydrated = useHydrated();
-  const bookings = useApp((s) => s.bookings);
-  const tz = useViewerTimezone();
-  const now = useNow(60_000);
-  const rows = React.useMemo(() => {
-    if (!hydrated || !tutors.length) return null;
-    const online = tutors.filter((t) => isOnlineNow(t, now)).slice(0, 4);
-    if (online.length)
-      return {
-        title: "Teaching now",
-        rows: online.map((t) => ({ t, note: "Online" })),
-      };
-    const next = tutors
-      .map((t) => ({ t, slot: nextOpening(t, bookings, tz, now) }))
-      .filter(
-        (
-          x,
-        ): x is {
-          t: (typeof tutors)[number];
-          slot: NonNullable<ReturnType<typeof nextOpening>>;
-        } => !!x.slot,
-      )
-      .sort((a, b) => a.slot.startUtc.localeCompare(b.slot.startUtc))
-      .slice(0, 4);
-    return next.length
-      ? {
-          title: "Next openings",
-          rows: next.map(({ t, slot }) => ({
-            t,
-            note: formatDateTime(slot.startUtc, tz),
-          })),
-        }
-      : null;
-  }, [hydrated, tutors, now, bookings, tz]);
-  if (!rows) return null;
-  return (
-    <div
-      data-hero-in
-      data-reveal
-      className="w-full max-w-sm border border-line bg-surface text-ink"
-      aria-label={rows.title}
-    >
-      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-        <span className="mono-label">{rows.title}</span>
-        <span className="mono-label inline-flex items-center gap-1.5 text-live-ink">
-          <span className="live-dot" aria-hidden /> Live
-        </span>
-      </div>
-      <ul className="divide-y divide-line">
-        {rows.rows.map(({ t, note }) => (
-          <li key={t.id}>
-            <Link
-              href={`/tutors/${t.slug}`}
-              className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 px-4 py-2.5 font-mono text-[13px] transition-colors hover:bg-sunken"
-            >
-              <span className="truncate">
-                {t.firstName} {t.lastName.charAt(0)}.{" "}
-                <span className="text-muted">
-                  · {subjectName(t.subjects[0])}
-                </span>
-              </span>
-              <span
-                className={cn(
-                  "whitespace-nowrap",
-                  note === "Online" ? "text-live-ink" : "text-muted",
-                )}
-              >
-                {note === "Online"
-                  ? `${formatCents(t.hourlyRateCents)}/hr`
-                  : note}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center justify-between border-t border-line px-4 py-2.5">
-        <span className="mono-label normal-case tracking-normal text-muted">
-          As of {formatTime(new Date(now).toISOString(), tz)}
-        </span>
-        <ArrowLink href="/tutors" className="text-[14px]">
-          All tutors
-        </ArrowLink>
-      </div>
-    </div>
-  );
-}
-
-/** A small card that drifts gently up and down beside the hero photo (still, with reduced motion). */
-function Floating({
-  children,
-  className,
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  return (
-    <motion.div
-      // No initial styles on the server render, so hydration matches; the drift starts from where it sits.
-      initial={false}
-      animate={{ y: [0, -9, 0] }}
-      transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay }}
-      className={cn(
-        "absolute z-10 border border-line bg-surface/95 p-3 shadow-xl backdrop-blur",
-        className,
-      )}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
 export function Hero() {
   const root = React.useRef<HTMLElement>(null);
-  const [quiz, setQuiz] = React.useState<{ open: boolean; subject?: string }>({
-    open: false,
-  });
+  const [quiz, setQuiz] = React.useState<{ open: boolean; subject?: string }>({ open: false });
   useGSAP(
     () => {
       const items = gsap.utils.toArray<HTMLElement>("[data-hero-in]");
       if (prefersReducedMotion()) {
-        gsap.set(
-          [...items, ...gsap.utils.toArray<HTMLElement>("[data-hero-photo]")],
-          { autoAlpha: 1 },
-        );
+        gsap.set([...items, ...gsap.utils.toArray<HTMLElement>("[data-hero-photo]")], { autoAlpha: 1 });
         return;
       }
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
-      tl.fromTo(
+      tl.fromTo("[data-hero-photo]", { autoAlpha: 0, scale: 1.06 }, { autoAlpha: 1, scale: 1, duration: 1.8 }, 0.1).fromTo(
         items,
         { y: 18, autoAlpha: 0 },
         { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.07 },
-        0.35,
-      ).fromTo(
-        "[data-hero-photo]",
-        { autoAlpha: 0 },
-        { autoAlpha: 1, duration: 1.2 },
-        0.3,
+        0.5,
       );
     },
     { scope: root },
   );
 
   return (
-    <section
-      ref={root}
-      className="relative isolate overflow-clip border-b border-line bg-page"
-    >
-      <Chalkboard className="absolute inset-0 -z-10" />
-      <div className="grid lg:grid-cols-12">
-        {/* Words, facts and the first Smart Match question */}
-        <div className="container-page py-12 sm:py-16 lg:col-span-6 lg:max-w-none lg:pl-[max(2rem,calc((100vw-1280px)/2+2rem))] lg:pr-12 lg:py-20">
+    <section ref={root} className="relative isolate overflow-clip border-b border-line bg-night">
+      {/* The photograph, with a very slow drift so it feels alive */}
+      <div data-hero-photo data-reveal className="absolute inset-0 -z-20" aria-hidden>
+        <Image src="/images/hero-blackboard-2.jpg" alt="" fill preload sizes="100vw" className="object-cover object-[64%_20%] [animation:hero-drift_40s_ease-in-out_infinite_alternate]" />
+      </div>
+      {/* Page colour over the words' half, a fade along the bottom, and grain over everything */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-t from-page via-page/70 to-page/20 lg:bg-gradient-to-r lg:from-page lg:via-page/88 lg:to-page/10" aria-hidden />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-40 bg-gradient-to-t from-page to-transparent" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.12] mix-blend-overlay" style={{ backgroundImage: GRAIN }} aria-hidden />
+
+      <div className="container-page grid min-h-[calc(100dvh-4rem)] items-center py-20 lg:min-h-[46rem] lg:grid-cols-12 lg:py-24">
+        {/* On wide screens the words take the left half; the teachers stay in view on the right. */}
+        <div className="lg:col-span-7">
           <p data-hero-in data-reveal className="kicker">
             Tutoring marketplace · online &amp; in person
           </p>
 
-          <h1
-            data-hero-in
-            data-reveal
-            className="mt-7 max-w-[13ch] font-heading text-[3.3rem] leading-[0.98] text-ink sm:text-[4.4rem] lg:text-[4.6rem] xl:text-[5.4rem]"
-          >
+          <h1 data-hero-in data-reveal className="mt-7 max-w-[13ch] font-heading text-[3.3rem] leading-[0.98] text-ink sm:text-[4.4rem] lg:text-[4.6rem] xl:text-[5.4rem]">
             Learn with the right tutor. Grow with every <em>lesson.</em>
           </h1>
 
-          <p
-            data-hero-in
-            data-reveal
-            className="mt-7 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18px]"
-          >
-            Private tutors for school subjects, test prep, languages and more.
-            Answer two questions, meet your three best matches and book a lesson
-            in a few taps.
+          <p data-hero-in data-reveal className="mt-7 max-w-xl text-[17px] leading-relaxed text-ink-2 sm:text-[18px]">
+            Private tutors for school subjects, test prep, languages and more. Answer two questions, meet your three best matches and book a lesson in a few taps.
           </p>
 
           {/* Smart Match starts here: the first question sits in the hero, the second opens in a popup. */}
-          <div
-            data-hero-in
-            data-reveal
-            className="mt-9 max-w-2xl border border-line bg-surface"
-          >
+          <div data-hero-in data-reveal className="mt-9 max-w-2xl border border-line bg-surface/90 backdrop-blur">
             <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
               <h3 className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em] text-ink sm:text-[16px]">
                 <Sparkles className="size-4 text-brand" aria-hidden />
                 What subject do you need help with?
               </h3>
-              <span className="mono-label hidden sm:block">
-                Smart Match · 1 of 2
-              </span>
+              <span className="mono-label hidden sm:block">Smart Match · 1 of 2</span>
             </div>
             <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4">
               {QUIZ_SUBJECTS.map((s) => (
-                <button
-                  key={s.slug}
-                  type="button"
-                  onClick={() => setQuiz({ open: true, subject: s.slug })}
-                  className="group flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-sunken"
-                >
-                  <CategoryIcon
-                    slug={s.category}
-                    className="size-4 shrink-0 text-brand"
-                  />
-                  <span className="min-w-0 truncate text-[14px] font-medium text-ink">
-                    {s.name}
-                  </span>
+                <button key={s.slug} type="button" onClick={() => setQuiz({ open: true, subject: s.slug })} className="group flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-sunken">
+                  <CategoryIcon slug={s.category} className="size-4 shrink-0 text-brand" />
+                  <span className="min-w-0 truncate text-[14px] font-medium text-ink">{s.name}</span>
                 </button>
               ))}
             </div>
             <div className="flex flex-col items-stretch gap-3 border-t border-line p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-              <Button
-                variant="cta"
-                size="lg"
-                className="group"
-                onClick={() => setQuiz({ open: true })}
-              >
-                Find my tutor{" "}
-                <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+              <Button variant="cta" size="lg" className="group" onClick={() => setQuiz({ open: true })}>
+                Find my tutor <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
               </Button>
               <ArrowLink href="/tutors" className="justify-center">
                 Or browse every tutor
               </ArrowLink>
             </div>
           </div>
-          <SmartMatchQuiz
-            open={quiz.open}
-            onOpenChange={(open) => setQuiz((q) => ({ ...q, open }))}
-            initialSubject={quiz.subject}
-          />
+          <SmartMatchQuiz open={quiz.open} onOpenChange={(open) => setQuiz((q) => ({ ...q, open }))} initialSubject={quiz.subject} />
 
-          <dl
-            data-hero-in
-            data-reveal
-            className="mt-10 grid grid-cols-2 divide-x divide-line border-t border-line sm:grid-cols-4"
-          >
+          <dl data-hero-in data-reveal className="mt-10 grid grid-cols-2 divide-x divide-line border-t border-line sm:grid-cols-4">
             {HERO_FACTS.map((f) => (
               <div key={f.label} className="px-4 pt-4 first:pl-0 sm:pr-6">
-                <dd className="font-heading text-[2.4rem] leading-none text-ink">
-                  {f.value}
-                </dd>
+                <dd className="font-heading text-[2.4rem] leading-none text-ink">{f.value}</dd>
                 <dt className="mono-label mt-2">{f.label}</dt>
               </div>
             ))}
           </dl>
         </div>
-
-        {/* The screen: the classroom, live, with the product's moments floating around it. */}
-        <div data-hero-photo data-reveal className="relative mx-auto w-full max-w-[28rem] px-6 pb-12 pt-6 sm:max-w-[34rem] sm:px-8 lg:col-span-6 lg:max-w-none lg:py-16 lg:pl-8 lg:pr-[max(3rem,calc((100vw-1280px)/2+2.5rem))]" aria-hidden>
-          {/* Cards are placed against this box, not the padded column, so they never leave the page. */}
-          <div className="relative">
-            <div className="relative border border-line-strong bg-night p-2 shadow-2xl">
-              <div className="flex items-center justify-between px-1.5 pb-2 pt-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-white/60">
-                <span>TutorLink classroom · Calculus</span>
-                <span className="inline-flex items-center gap-1.5 text-[#8fcf9a]">
-                  <span className="live-dot" /> Live
-                </span>
-              </div>
-              <div className="flex h-[26rem] text-white sm:h-[24rem] lg:h-[26rem]">
-                <ClassroomPreview />
-              </div>
-            </div>
-
-            <Floating className="left-0 top-0 w-52 sm:-left-6 sm:-top-7" delay={0}>
-              <div className="flex items-center gap-3">
-                <span className="relative size-10 shrink-0 overflow-hidden border border-line">
-                  <Image src="/images/tutor-at-laptop.jpg" alt="" fill sizes="40px" className="object-cover object-[42%_22%]" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[13.5px] font-semibold text-ink">Your tutor</span>
-                  <OnlineNow className="mt-0.5" short />
-                </span>
-              </div>
-            </Floating>
-
-            <Floating className="-bottom-6 right-0 w-[16.5rem] sm:-right-5 sm:bottom-8" delay={0.9}>
-              <div className="flex items-center gap-3">
-                <span className="grid size-9 shrink-0 place-items-center bg-success-50 text-success">
-                  <Check className="size-4" strokeWidth={3} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-semibold text-ink">Lesson confirmed</span>
-                  <span className="block font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Classroom opens {DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} min before</span>
-                </span>
-              </div>
-            </Floating>
-          </div>
-
-          {/* The live tape sits under the screen from tablets up. */}
-          <div className="mt-8 hidden justify-end sm:flex">
-            <TutorTape />
-          </div>
-        </div>
       </div>
-
     </section>
   );
 }
@@ -1338,17 +1112,13 @@ export function GetMatched() {
       aria-labelledby="match-title"
       className="relative isolate overflow-clip border-y border-line bg-night text-white"
     >
-      {/* The wave illustration behind, dimmed so the words stay readable */}
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 opacity-40"
-        aria-hidden
-      >
-        <WaveArt drift={false} />
+      {/* An old library behind: arched wooden shelves, kept dark and warm so the words stay readable */}
+      <div className="absolute inset-0 -z-20" aria-hidden>
+        <Image src="/images/old-library.jpg" alt="" fill sizes="100vw" className="object-cover object-[50%_45%] [animation:hero-drift_50s_ease-in-out_infinite_alternate]" />
       </div>
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-night via-night/85 to-night/40"
-        aria-hidden
-      />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-night via-night/72 to-night/20" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-night/30 via-transparent to-night/60" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.12] mix-blend-overlay" style={{ backgroundImage: GRAIN }} aria-hidden />
       <div className="container-page grid items-center gap-12 py-16 sm:py-24 lg:grid-cols-[1fr_minmax(0,540px)] lg:gap-20 lg:py-28">
         <div>
           <Reveal>
