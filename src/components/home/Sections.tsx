@@ -105,14 +105,6 @@ const HERO_STEPS = [
   },
 ];
 
-/** The four facts under the headline. Rules of the platform, not usage figures. */
-const HERO_FACTS = [
-  { value: String(SUBJECTS.length), label: "Subjects" },
-  { value: "2", label: "Ways to learn: online, in person" },
-  { value: "$0", label: "Booking fee for families" },
-  { value: `${DEFAULT_POLICY.freeCancellationHours}h`, label: "Free cancellation" },
-];
-
 /*
  * The first screen: one photograph — two people working through formulas on a blackboard — across the
  * whole width, slowly drifting, with the page colour fading in over its left half so the words
@@ -192,15 +184,6 @@ export function Hero() {
             </div>
           </div>
           <SmartMatchQuiz open={quiz.open} onOpenChange={(open) => setQuiz((q) => ({ ...q, open }))} initialSubject={quiz.subject} />
-
-          <dl data-hero-in data-reveal className="mt-10 grid grid-cols-2 divide-x divide-line border-t border-line sm:grid-cols-4">
-            {HERO_FACTS.map((f) => (
-              <div key={f.label} className="px-4 pt-4 first:pl-0 sm:pr-6">
-                <dd className="font-heading text-[2.4rem] leading-none text-ink">{f.value}</dd>
-                <dt className="mono-label mt-2">{f.label}</dt>
-              </div>
-            ))}
-          </dl>
         </div>
       </div>
     </section>
