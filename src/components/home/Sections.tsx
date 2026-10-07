@@ -8,7 +8,6 @@ import { motion } from "framer-motion";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight,
-  BadgeCheck,
   BookOpen,
   Brain,
   Briefcase,
@@ -24,16 +23,13 @@ import {
   GraduationCap,
   Info,
   Languages,
-  LineChart,
   Music,
   ShieldCheck,
   Sparkles,
   Star,
   Target,
   UserRound,
-  Users,
   Video,
-  Wallet,
   Zap,
   Lock,
   Search,
@@ -1262,148 +1258,65 @@ export function FeaturedTutors() {
 
 /* ═══ 7 · Why families choose TutorLink — our promises, in numbers ══════════════════════ */
 
-/** Each number is a rule of the platform (from the booking policy and matching settings), not a usage statistic. */
-const PROMISES: {
-  value: string;
-  title: string;
-  body: string;
-  icon: LucideIcon;
-}[] = [
-  {
-    value: "0",
-    title: "paid spots in your results",
-    body: `Matches are ranked on ${Object.keys(DEFAULT_WEIGHTS).length} open factors. No tutor can pay to rank higher.`,
-    icon: Target,
-  },
-  {
-    value: "$0",
-    title: "subscription or booking fee",
-    body: "Families pay per lesson and see the full price before booking.",
-    icon: Wallet,
-  },
-  {
-    value: `${DEFAULT_POLICY.freeCancellationHours}h`,
-    title: "free cancellation window",
-    body: `Cancel up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson and get a full refund.`,
-    icon: CalendarDays,
-  },
-  {
-    value: `${DEFAULT_POLICY.tutorNoShowRefundPercent}%`,
-    title: "refund if a tutor doesn't show",
-    body: "If your tutor misses a lesson, you get your money back in full.",
-    icon: ShieldCheck,
-  },
-  {
-    value: "4",
-    title: "kinds of checks on profiles",
-    body: "Identity, education, certification and background — each badge appears only once its check is complete.",
-    icon: BadgeCheck,
-  },
-  {
-    value: "1",
-    title: "parent account for every child",
-    body: "See each child's bookings, messages and progress, with consent built in for younger learners.",
-    icon: Users,
-  },
+/** Each number is a rule of the platform (from the booking policy and matching settings), not a usage statistic. One line each. */
+const PROMISES: { value: string; title: string; body: string }[] = [
+  { value: "0", title: "Paid spots in your results", body: "No tutor can pay to rank higher." },
+  { value: "$0", title: "Subscription or booking fee", body: "Pay per lesson, full price shown first." },
+  { value: `${DEFAULT_POLICY.freeCancellationHours}h`, title: "Free cancellation", body: `Full refund up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson.` },
+  { value: `${DEFAULT_POLICY.tutorNoShowRefundPercent}%`, title: "Refund if a tutor doesn't show", body: "Your money back in full." },
+  { value: "4", title: "Checks on every profile", body: "Identity, education, certification, background." },
+  { value: "1", title: "Parent account for every child", body: "Bookings, messages, progress and consent." },
 ];
 
-const ALSO_INCLUDED = [
-  {
-    icon: Lock,
-    text: "Phone numbers and emails are hidden in messages automatically",
-  },
+/** Two more rules that have no number. */
+const ALSO_INCLUDED: { icon: LucideIcon; text: string }[] = [
+  { icon: Lock, text: "Phone numbers and emails are hidden in messages" },
   { icon: Star, text: "Reviews come only from completed lessons" },
-  {
-    icon: LineChart,
-    text: "Notes, homework and goals saved after every lesson",
-  },
 ];
 
 export function WhyTutorLink() {
   return (
     <Section tone="canvas">
       <div className="mb-12 flex flex-col gap-6 lg:mb-14 lg:flex-row lg:items-end lg:justify-between">
-        <SectionHeading
-          className="mb-0 lg:mb-0"
-          eyebrow="Why TutorLink"
-          title="Built on trust, not fine print"
-          accent={3}
-          description="Clear rules, real reviews and checks you can see — so you can stop worrying about the details and focus on learning."
-        />
+        <SectionHeading className="mb-0 lg:mb-0" eyebrow="Why TutorLink" title="Built on trust, not fine print" accent={3} description="Clear rules and checks you can see." />
         <Reveal delay={0.1} className="shrink-0">
-          <ArrowLink href="/trust-safety">
-            See our trust &amp; safety rules
-          </ArrowLink>
+          <ArrowLink href="/trust-safety">See our trust &amp; safety rules</ArrowLink>
         </Reveal>
       </div>
 
-      {/* Promises, in numbers: hairline columns */}
-      <Stagger
-        className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3"
-        stagger={0.06}
-      >
-        {PROMISES.map((p) => (
-          <StaggerItem key={p.title} className="h-full">
-            <div className="flex h-full flex-col border-t border-line pt-5">
-              <div className="flex items-start justify-between gap-4">
-                <span className="font-heading text-[3.4rem] leading-none text-ink">
-                  {p.value}
-                </span>
-                <p.icon
-                  className="mt-1 size-5 shrink-0 text-brand"
-                  aria-hidden
-                />
-              </div>
-              <h3 className="mt-4 text-[12.5px] font-semibold uppercase tracking-[0.1em] text-ink">
-                {p.title}
-              </h3>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-ink-2">
-                {p.body}
-              </p>
-            </div>
-          </StaggerItem>
-        ))}
-      </Stagger>
+      {/* Photo on the left, the rules as one list on the right: a number and a single line each. */}
+      <div className="grid gap-8 lg:grid-cols-12 lg:gap-12">
+        <Reveal className="lg:col-span-5 lg:h-full">
+          <div className="relative min-h-[280px] overflow-hidden border border-line bg-surface lg:h-full">
+            <Image src="/images/parent-and-daughter.jpg" alt="A parent and her daughter reviewing schoolwork together" fill sizes="(min-width: 1024px) 520px, 100vw" className="object-cover" />
+          </div>
+        </Reveal>
 
-      {/* Photo band: everything else that comes with every lesson */}
-      <Reveal className="mt-4">
-        <div className="grid overflow-hidden rounded-2xl border border-line bg-surface lg:grid-cols-[1fr_1.1fr]">
-          <div className="relative min-h-[260px] lg:min-h-[340px]">
-            <Image
-              src="/images/parent-and-daughter.jpg"
-              alt="A parent and her daughter reviewing schoolwork together"
-              fill
-              sizes="(min-width: 1024px) 600px, 100vw"
-              className="object-cover"
-            />
-          </div>
-          <div className="flex flex-col justify-center p-6 sm:p-10">
-            <p className="mono-label text-brand">Also with every lesson</p>
-            <ul className="mt-5 space-y-4">
-              {ALSO_INCLUDED.map((x) => (
-                <li key={x.text} className="flex items-start gap-3.5">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
-                    <x.icon className="size-[18px]" aria-hidden />
-                  </span>
-                  <span className="pt-1.5 text-[16px] leading-snug text-ink">
-                    {x.text}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild variant="brand">
-                <Link href="/for-parents">
-                  How it works for parents <ArrowRight />
-                </Link>
-              </Button>
-              <Button asChild variant="secondary">
-                <Link href="/tutors">Find a tutor</Link>
-              </Button>
-            </div>
-          </div>
+        <div className="lg:col-span-7">
+          <Stagger as="ol" className="border-t border-line" stagger={0.05}>
+            {PROMISES.map((p) => (
+              <StaggerItem as="li" key={p.title} className="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-4 border-b border-line py-4 sm:grid-cols-[6rem_1fr] sm:gap-x-5">
+                <span className="font-heading text-[2.1rem] leading-none text-ink sm:text-[2.5rem]">{p.value}</span>
+                <p className="text-[15.5px] leading-snug">
+                  <span className="font-semibold text-ink">{p.title}.</span> <span className="text-ink-2">{p.body}</span>
+                </p>
+              </StaggerItem>
+            ))}
+          </Stagger>
+
+          <Reveal delay={0.1} className="mt-5 flex flex-col gap-2 text-[14px] text-ink-2 sm:flex-row sm:flex-wrap sm:gap-x-7">
+            {ALSO_INCLUDED.map((x) => (
+              <p key={x.text} className="flex items-center gap-2">
+                <x.icon className="size-4 shrink-0 text-brand" aria-hidden /> {x.text}
+              </p>
+            ))}
+          </Reveal>
+
+          <Reveal delay={0.15} className="mt-8">
+            <ArrowLink href="/for-parents">How it works for parents</ArrowLink>
+          </Reveal>
         </div>
-      </Reveal>
+      </div>
     </Section>
   );
 }
