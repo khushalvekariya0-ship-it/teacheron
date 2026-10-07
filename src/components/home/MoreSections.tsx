@@ -4,8 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Clock, Code, CreditCard, GraduationCap, Languages, MapPin, Monitor, Music,
-  NotebookPen, ShieldCheck, Sparkles, Target, Users,
+  ArrowRight, BookOpenText, Brain, Calculator, Clock, Code, GraduationCap, Languages, MapPin, Monitor, Music,
+  Sparkles, Target, Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -258,13 +258,6 @@ const MODES: Mode[] = [
   },
 ];
 
-const SAME_EITHER_WAY: { icon: LucideIcon; text: string }[] = [
-  { icon: CalendarCheck, text: "Real openings in your time zone" },
-  { icon: CreditCard, text: "Pay per lesson, no subscription" },
-  { icon: ShieldCheck, text: `Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours} h before` },
-  { icon: NotebookPen, text: "Notes and homework saved" },
-];
-
 function ModeCard({ mode, index }: { mode: Mode; index: number }) {
   return (
     <article className="group flex h-full flex-col bg-surface">
@@ -305,16 +298,6 @@ export function LessonModes() {
           </Reveal>
         ))}
       </div>
-
-      {/* What is the same whichever you pick — one row, no card */}
-      <Reveal delay={0.1} className="mt-5 grid gap-x-6 gap-y-3 border border-line px-5 py-4 sm:grid-cols-2 lg:grid-cols-[auto_repeat(4,minmax(0,1fr))] lg:items-center">
-        <p className="mono-label sm:col-span-2 lg:col-span-1 lg:pr-2">Either way</p>
-        {SAME_EITHER_WAY.map((x) => (
-          <p key={x.text} className="flex items-center gap-2 text-[13.5px] leading-snug text-ink-2">
-            <x.icon className="size-4 shrink-0 text-brand" aria-hidden /> {x.text}
-          </p>
-        ))}
-      </Reveal>
     </Section>
   );
 }
