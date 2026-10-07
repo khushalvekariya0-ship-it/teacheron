@@ -4,14 +4,13 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Check, Clock, Code, CreditCard, GraduationCap, Languages, Lock, MapPin, Mic, Monitor, Music,
-  NotebookPen, PhoneOff, Search, ShieldCheck, Sparkles, Target, Users, Video,
+  ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Check, Clock, Code, CreditCard, GraduationCap, Languages, MapPin, Monitor, Music,
+  NotebookPen, ShieldCheck, Sparkles, Target, Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Section, SectionHeading, ArrowLink } from "@/components/marketing/Section";
-import { Button } from "@/components/ui/Button";
 import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
 import { BLOG_POSTS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
@@ -235,106 +234,60 @@ type Mode = {
   cta: { href: string; label: string };
 };
 
+/* Short on purpose: one line on who it suits, the two or three facts that differ, and a link. What is the same either way sits in one row below. */
 const MODES: Mode[] = [
   {
     key: "online",
     icon: Monitor,
     title: "Online lessons",
-    bestFor: "Best for busy schedules, test prep and learning with a tutor anywhere in the U.S.",
+    bestFor: "Busy schedules, test prep, any tutor in the U.S.",
     image: "/images/video-call-lesson.jpg",
     alt: "A learner greeting her tutor on a video call",
-    points: [
-      "Join from a laptop or tablet with a secure video link",
-      "Notes, homework and files kept in one place",
-      "No travel time — lessons fit around school and work",
-    ],
+    points: [`Secure video link, opens ${DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} min before the lesson`, "No travel — lessons fit around school and work"],
     cta: { href: "/tutors?mode=online", label: "Find online tutors" },
   },
   {
     key: "in_person",
     icon: MapPin,
     title: "In-person lessons",
-    bestFor: "Best for younger learners, hands-on subjects and focused time at the same table.",
+    bestFor: "Younger learners, hands-on subjects, the same table.",
     image: "/images/lesson-in-person.jpg",
     alt: "Two people working through notes together at a library table",
-    points: [
-      "Search by ZIP code and how far you're happy to travel",
-      "Meet at home, a library or another place you agree on",
-      "Tutors share an approximate area — never a home address",
-    ],
+    points: ["Search by ZIP code and how far you'll travel", "Meet at home, a library or a place you agree on", "Tutors share an area, never a home address"],
     cta: { href: "/tutors?mode=in_person", label: "Find tutors near you" },
   },
 ];
 
-const SAME_EITHER_WAY: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: CalendarCheck, title: "Same booking", body: "Real openings shown in your time zone" },
-  { icon: CreditCard, title: "Same secure payment", body: "Pay per lesson — no subscription for families" },
-  { icon: ShieldCheck, title: "Same cancellation rules", body: `Free up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson` },
-  { icon: NotebookPen, title: "Same lesson record", body: "Notes and homework saved after every lesson" },
+const SAME_EITHER_WAY: { icon: LucideIcon; text: string }[] = [
+  { icon: CalendarCheck, text: "Real openings in your time zone" },
+  { icon: CreditCard, text: "Pay per lesson, no subscription" },
+  { icon: ShieldCheck, text: `Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours} h before` },
+  { icon: NotebookPen, text: "Notes and homework saved" },
 ];
 
-/** Small UI touches on each photo — what the experience looks like, not example data. */
-function ModeOverlay({ mode }: { mode: Mode["key"] }) {
-  if (mode === "online") {
-    return (
-      <>
-        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
-          <Lock className="size-3.5 text-brand" /> Secure link · opens {DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} min before
-        </span>
-        <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-night/70 p-1.5 backdrop-blur">
-          {[Mic, Video].map((I, i) => (
-            <span key={i} className="grid size-8 place-items-center rounded-full bg-white/15 text-white">
-              <I className="size-4" />
-            </span>
-          ))}
-          <span className="grid size-8 place-items-center rounded-full bg-danger text-white">
-            <PhoneOff className="size-4" />
-          </span>
-        </span>
-      </>
-    );
-  }
+function ModeCard({ mode, index }: { mode: Mode; index: number }) {
   return (
-    <>
-      <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
-        <MapPin className="size-3.5 text-brand" /> Approximate area only
-      </span>
-      <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[12.5px] font-semibold text-ink shadow-md backdrop-blur">
-        <Search className="size-3.5 text-brand" /> Search by ZIP &amp; distance
-      </span>
-    </>
-  );
-}
-
-function ModeCard({ mode }: { mode: Mode }) {
-  return (
-    <article data-spotlight className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-      <div className="relative aspect-[16/9] overflow-hidden bg-canvas" aria-hidden={false}>
+    <article className="group flex h-full flex-col bg-surface">
+      <div className="relative aspect-[16/9] overflow-hidden bg-canvas">
         <Image src={mode.image} alt={mode.alt} fill sizes="(min-width: 1024px) 600px, 100vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.04]" />
-        <div aria-hidden>
-          <ModeOverlay mode={mode.key} />
-        </div>
       </div>
       <div className="flex flex-1 flex-col p-6 sm:p-7">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-brand-gradient text-on-brand">
-            <mode.icon className="size-5" aria-hidden />
-          </span>
-          <h3 className="font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">{mode.title}</h3>
-        </div>
-        <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{mode.bestFor}</p>
-        <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
+        <p className="mono-label flex items-center gap-2">
+          <mode.icon className="size-4 text-brand" aria-hidden />
+          0{index + 1} · {mode.key === "online" ? "Online" : "In person"}
+        </p>
+        <h3 className="mt-3 font-heading text-[1.9rem] leading-none text-ink sm:text-[2.2rem]">{mode.title}</h3>
+        <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">{mode.bestFor}</p>
+        <ul className="mt-5 divide-y divide-line border-y border-line">
           {mode.points.map((p) => (
-            <li key={p} className="flex items-start gap-3 text-[15px] leading-snug text-ink">
-              <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.6} aria-hidden /> {p}
+            <li key={p} className="py-2.5 text-[14.5px] leading-snug text-ink">
+              {p}
             </li>
           ))}
         </ul>
-        <Button asChild variant="secondary" className="mt-7 w-full">
-          <Link href={mode.cta.href}>
-            {mode.cta.label} <ArrowRight />
-          </Link>
-        </Button>
+        <div className="mt-auto pt-6">
+          <ArrowLink href={mode.cta.href}>{mode.cta.label}</ArrowLink>
+        </div>
       </div>
     </article>
   );
@@ -343,44 +296,24 @@ function ModeCard({ mode }: { mode: Mode }) {
 export function LessonModes() {
   return (
     <Section tone="canvas">
-      <SectionHeading
-        align="center"
-        eyebrow="Online or in person"
-        title="Learn where you learn best"
-        accent={2}
-        description="Every tutor sets where they teach. Filter for online, in person or both — many tutors offer both."
-      />
+      <SectionHeading align="center" eyebrow="Online or in person" title="Learn where you learn best" accent={2} description="Every tutor sets where they teach — many offer both." />
 
-      <div className="relative grid gap-6 lg:grid-cols-2 lg:gap-10">
+      <div className="grid border border-line lg:grid-cols-2 lg:divide-x lg:divide-line">
         {MODES.map((m, i) => (
-          <Reveal key={m.key} delay={i * 0.1} className="h-full">
-            <ModeCard mode={m} />
+          <Reveal key={m.key} delay={i * 0.1} className={cn("h-full", i > 0 && "border-t border-line lg:border-t-0")}>
+            <ModeCard mode={m} index={i} />
           </Reveal>
         ))}
-        {/* The "or" between the two cards */}
-        <span
-          className="absolute left-1/2 top-[22%] z-10 hidden size-14 -translate-x-1/2 place-items-center rounded-full border border-line bg-page font-heading text-[15px] font-bold uppercase tracking-[0.08em] text-ink shadow-lg lg:grid"
-          aria-hidden
-        >
-          or
-        </span>
       </div>
 
-      <Reveal delay={0.1} className="mt-8 rounded-2xl border border-line bg-canvas p-5 sm:p-6">
-        <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">The same rules either way</p>
-        <ul className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {SAME_EITHER_WAY.map((x) => (
-            <li key={x.title} className="flex items-start gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-surface text-brand">
-                <x.icon className="size-5" aria-hidden />
-              </span>
-              <span>
-                <span className="block text-[15px] font-semibold text-ink">{x.title}</span>
-                <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">{x.body}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
+      {/* What is the same whichever you pick — one row, no card */}
+      <Reveal delay={0.1} className="mt-5 grid gap-x-6 gap-y-3 border border-line px-5 py-4 sm:grid-cols-2 lg:grid-cols-[auto_repeat(4,minmax(0,1fr))] lg:items-center">
+        <p className="mono-label sm:col-span-2 lg:col-span-1 lg:pr-2">Either way</p>
+        {SAME_EITHER_WAY.map((x) => (
+          <p key={x.text} className="flex items-center gap-2 text-[13.5px] leading-snug text-ink-2">
+            <x.icon className="size-4 shrink-0 text-brand" aria-hidden /> {x.text}
+          </p>
+        ))}
       </Reveal>
     </Section>
   );
