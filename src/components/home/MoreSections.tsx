@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Check, Clock, Code, CreditCard, GraduationCap, Languages, MapPin, Monitor, Music,
+  ArrowRight, BookOpenText, Brain, Calculator, CalendarCheck, Clock, Code, CreditCard, GraduationCap, Languages, MapPin, Monitor, Music,
   NotebookPen, ShieldCheck, Sparkles, Target, Users,
   type LucideIcon,
 } from "lucide-react";
@@ -334,14 +334,15 @@ type Learner = {
   cta: { href: string; label: string };
 };
 
+/* Short on purpose: a title, one line, three facts and three subjects per learner. The audience pages have the detail. */
 const LEARNERS: Learner[] = [
   {
     id: "parents",
     label: "For parents",
     icon: Users,
     title: "Stay involved without hovering",
-    body: "One parent account covers every child. You choose the tutor, book and pay — and see how each lesson went.",
-    points: ["A profile for each child with grade and goals", "See every message about your child", "Notes, homework and attendance after each lesson"],
+    body: "One account for every child. You choose, book and pay, and see how each lesson went.",
+    points: ["A profile per child, with grade and goals", "Every message about your child", "Notes and attendance after each lesson"],
     startWith: ["reading", "pre-algebra", "study-skills"],
     image: "/images/father-and-son.jpg",
     alt: "A father helping his son with schoolwork at a laptop",
@@ -351,9 +352,9 @@ const LEARNERS: Learner[] = [
     id: "students",
     label: "For students",
     icon: GraduationCap,
-    title: "Help that fits your classes and your week",
-    body: "Find a tutor for your exact course or exam, and book around practice, work and everything else.",
-    points: ["Tutors for your specific class or test", "Lessons that fit around school and activities", "Topics you've mastered, tracked over time"],
+    title: "Help that fits your week",
+    body: "A tutor for your exact course or exam, booked around everything else.",
+    points: ["Tutors for your specific class or test", "Lessons around school and activities", "Progress tracked topic by topic"],
     startWith: ["algebra", "chemistry", "sat"],
     image: "/images/lesson-together.jpg",
     alt: "A tutor and a student working through a lesson together",
@@ -363,9 +364,9 @@ const LEARNERS: Learner[] = [
     id: "adults",
     label: "For adult learners",
     icon: Clock,
-    title: "Learn something new, on your schedule",
-    body: "Pick up a language, learn to code or prepare for a graduate exam — with evening and weekend lessons.",
-    points: ["Evening and weekend availability", "Learn online from anywhere in the U.S.", "Go at your own pace, lesson by lesson"],
+    title: "Something new, on your schedule",
+    body: "A language, coding or a graduate exam, with evening and weekend lessons.",
+    points: ["Evening and weekend availability", "Online from anywhere in the U.S.", "Your own pace, lesson by lesson"],
     startWith: ["spanish", "python", "gre"],
     image: "/images/adult-learner-online.jpg",
     alt: "An adult learner in an online lesson",
@@ -373,42 +374,44 @@ const LEARNERS: Learner[] = [
   },
 ];
 
-function LearnerCard({ learner: l }: { learner: Learner }) {
+function LearnerCard({ learner: l, index }: { learner: Learner; index: number }) {
   return (
-    <article data-spotlight className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+    <article className="group flex h-full flex-col bg-surface">
       <div className="relative aspect-[4/3] overflow-hidden bg-canvas">
         <Image src={l.image} alt={l.alt} fill sizes="(min-width: 1024px) 400px, 100vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.04]" />
-        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night/50 to-transparent" aria-hidden />
-        <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-lg bg-surface/95 px-3 py-1.5 text-[13px] font-semibold text-ink shadow-md backdrop-blur">
-          <l.icon className="size-4 text-brand" aria-hidden /> {l.label}
-        </span>
       </div>
-      <div className="flex flex-1 flex-col p-6 sm:p-7">
-        <h3 className="font-heading text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink">{l.title}</h3>
+      <div className="flex flex-1 flex-col p-6">
+        <p className="mono-label flex items-center gap-2">
+          <l.icon className="size-4 text-brand" aria-hidden />
+          0{index + 1} · {l.label}
+        </p>
+        <h3 className="mt-3 font-heading text-[1.7rem] leading-[1.05] text-ink">{l.title}</h3>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{l.body}</p>
-        <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
+        <ul className="mt-5 divide-y divide-line border-y border-line">
           {l.points.map((p) => (
-            <li key={p} className="flex items-start gap-3 text-[14.5px] leading-snug text-ink">
-              <Check className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={2.6} aria-hidden /> {p}
+            <li key={p} className="py-2.5 text-[14.5px] leading-snug text-ink">
+              {p}
             </li>
           ))}
         </ul>
-        <p className="mt-6 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Start with</p>
-        <ul className="mt-2.5 flex flex-wrap gap-1.5">
-          {l.startWith.map((slug) => (
-            <li key={slug}>
-              <Link
-                href={`/tutors?subject=${slug}`}
-                className="inline-flex rounded-full border border-line px-2.5 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
-              >
+        <p className="mt-4 text-[13.5px] leading-relaxed text-muted">
+          <span className="mono-label mr-2">Start with</span>
+          {l.startWith.map((slug, i) => (
+            <React.Fragment key={slug}>
+              {i > 0 && (
+                <span aria-hidden className="mx-1.5">
+                  ·
+                </span>
+              )}
+              <Link href={`/tutors?subject=${slug}`} className="text-ink-2 underline-offset-4 transition-colors hover:text-brand hover:underline">
                 {SUBJECT_BY_SLUG[slug]?.name ?? slug}
               </Link>
-            </li>
+            </React.Fragment>
           ))}
-        </ul>
-        <Link href={l.cta.href} className="group/cta mt-auto inline-flex items-center gap-1.5 pt-7 text-[15px] font-semibold text-brand">
-          {l.cta.label} <ArrowRight className="size-4 transition-transform duration-300 group-hover/cta:translate-x-1" aria-hidden />
-        </Link>
+        </p>
+        <div className="mt-auto pt-6">
+          <ArrowLink href={l.cta.href}>{l.cta.label}</ArrowLink>
+        </div>
       </div>
     </article>
   );
@@ -417,17 +420,11 @@ function LearnerCard({ learner: l }: { learner: Learner }) {
 export function Audiences() {
   return (
     <Section>
-      <SectionHeading
-        align="center"
-        eyebrow="Built for every learner"
-        title="Made for kids, teens and grown-ups"
-        accent={1}
-        description="Parents stay in the loop, students get help that fits their week, and adults learn at their own pace."
-      />
-      <Stagger className="swipe-row grid gap-5 md:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
+      <SectionHeading align="center" eyebrow="Built for every learner" title="Made for kids, teens and grown-ups" accent={1} />
+      <Stagger className="grid border border-line md:grid-cols-3 md:divide-x md:divide-line" stagger={0.08}>
         {LEARNERS.map((l, i) => (
-          <StaggerItem key={l.id} className={cn("h-full", i === 2 && "md:col-span-2 lg:col-span-1")}>
-            <LearnerCard learner={l} />
+          <StaggerItem key={l.id} className={cn("h-full", i > 0 && "border-t border-line md:border-t-0")}>
+            <LearnerCard learner={l} index={i} />
           </StaggerItem>
         ))}
       </Stagger>
