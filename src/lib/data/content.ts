@@ -98,7 +98,10 @@ export const BLOG_POSTS: BlogPost[] = [
 export interface Testimonial {
   quote: string;
   name: string;
+  /** Where they are and what they studied. */
   context: string;
+  /** The part of TutorLink the story is about, with a link to it. */
+  used: { label: string; href: string };
 }
 
 /**
@@ -106,8 +109,23 @@ export interface Testimonial {
  * with consented, verified customer testimonials (managed in Admin → CMS) before launch.
  */
 const ILLUSTRATIVE_TESTIMONIALS: Testimonial[] = [
-  { quote: "The comparison view made it easy to explain to my husband why we chose the tutor we did. We booked a free trial the same evening.", name: "Parent of a 7th grader", context: "Brooklyn, NY · Pre-algebra" },
-  { quote: "I liked that I could see exactly why each tutor was recommended. No mystery ranking — just subject, schedule and budget fit.", name: "College sophomore", context: "Houston, TX · Organic chemistry" },
-  { quote: "Posting a requirement brought me four thoughtful applications in two days. I hired the second tutor after a trial.", name: "Parent of a high school junior", context: "Austin, TX · AP Calculus" },
+  {
+    quote: "The comparison view made it easy to explain to my husband why we chose the tutor we did. We booked a free trial the same evening.",
+    name: "Parent of a 7th grader",
+    context: "Brooklyn, NY · Pre-algebra",
+    used: { label: "Compare tutors", href: "/tutors" },
+  },
+  {
+    quote: "I liked that I could see exactly why each tutor was recommended. No mystery ranking — just subject, schedule and budget fit.",
+    name: "College sophomore",
+    context: "Houston, TX · Organic chemistry",
+    used: { label: "Smart Match", href: "/how-it-works" },
+  },
+  {
+    quote: "Posting a requirement brought me four thoughtful applications in two days. I hired the second tutor after a trial.",
+    name: "Parent of a high school junior",
+    context: "Austin, TX · AP Calculus",
+    used: { label: "Post a requirement", href: "/post-requirement" },
+  },
 ];
 export const SAMPLE_TESTIMONIALS: Testimonial[] = SAMPLE_DATA ? ILLUSTRATIVE_TESTIMONIALS : [];

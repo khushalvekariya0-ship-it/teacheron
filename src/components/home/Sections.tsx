@@ -1323,45 +1323,53 @@ export function WhyTutorLink() {
 
 /* ═══ 8 · Stories (illustrative, clearly labelled) ═══════════════════════════════ */
 
+/** One story: a numbered mono label, the quote in serif, who said it, and a link to the feature it is about. */
+function Story({ t, index, featured }: { t: (typeof SAMPLE_TESTIMONIALS)[number]; index: number; featured?: boolean }) {
+  return (
+    <figure className={cn("relative flex h-full flex-col overflow-hidden bg-surface", featured ? "p-7 sm:p-10 lg:p-12" : "p-7 sm:p-8")}>
+      {/* A large quote mark sits behind the words, like a pull quote on a magazine page. */}
+      <span aria-hidden className={cn("pointer-events-none absolute -top-5 right-4 select-none font-heading leading-none text-brand/15", featured ? "text-[14rem]" : "text-[9rem]")}>
+        &rdquo;
+      </span>
+      <p className="mono-label relative">
+        0{index + 1} · {t.context}
+      </p>
+      <blockquote className={cn("relative mt-5 flex-1 font-heading text-ink", featured ? "max-w-[22ch] text-[1.9rem] leading-[1.15] sm:text-[2.4rem] lg:text-[2.8rem]" : "text-[1.35rem] leading-[1.25] sm:text-[1.5rem]")}>
+        &ldquo;{t.quote}&rdquo;
+      </blockquote>
+      <figcaption className="relative mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-t border-line pt-5">
+        <span className="block text-[15px] font-semibold text-ink">{t.name}</span>
+        <ArrowLink href={t.used.href} className="text-[14px]">
+          {t.used.label}
+        </ArrowLink>
+      </figcaption>
+    </figure>
+  );
+}
+
 export function Stories() {
   // Only real (or, in the demo, clearly labelled) stories — the section hides when there are none.
   if (SAMPLE_TESTIMONIALS.length === 0) return null;
+  const [first, ...rest] = SAMPLE_TESTIMONIALS;
   return (
-    <Section>
-      <SectionHeading
-        align="center"
-        eyebrow="Stories"
-        title="What families and students tell us"
-      />
-      <Stagger className="swipe-row grid gap-5 lg:grid-cols-3" stagger={0.08}>
-        {SAMPLE_TESTIMONIALS.map((t) => (
-          <StaggerItem key={t.name}>
-            <figure className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-sm">
-              <span
-                className="font-heading text-[44px] leading-none text-brand"
-                aria-hidden
-              >
-                “
-              </span>
-              <blockquote className="mt-2 flex-1 text-[16.5px] leading-relaxed text-ink">
-                {t.quote}
-              </blockquote>
-              <figcaption className="mt-6 border-t border-line pt-4">
-                <span className="block text-[15px] font-semibold text-ink">
-                  {t.name}
-                </span>
-                <span className="block text-[13.5px] text-muted">
-                  {t.context}
-                </span>
-              </figcaption>
-            </figure>
-          </StaggerItem>
-        ))}
-      </Stagger>
-      <p className="mt-8 text-center text-[13px] text-muted">
-        Illustrative stories for this preview. Published testimonials will come
-        from verified, consenting customers.
-      </p>
+    <Section tone="canvas">
+      <SectionHeading align="center" eyebrow="Stories" title="What families and students tell us" />
+
+      {/* The first story runs large on the left; the others stack beside it. All share one border. */}
+      <div className="grid border border-line lg:grid-cols-12">
+        <Reveal className="lg:col-span-7 lg:border-r lg:border-line">
+          <Story t={first} index={0} featured />
+        </Reveal>
+        <div className="grid border-t border-line lg:col-span-5 lg:border-t-0">
+          {rest.map((t, i) => (
+            <Reveal key={t.name} delay={0.08 * (i + 1)} className={cn(i > 0 && "border-t border-line")}>
+              <Story t={t} index={i + 1} />
+            </Reveal>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-6 text-center text-[13px] text-muted">Illustrative stories for this preview. Published testimonials will come from verified, consenting customers.</p>
     </Section>
   );
 }
