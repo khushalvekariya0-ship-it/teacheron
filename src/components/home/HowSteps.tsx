@@ -4,21 +4,25 @@ import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarDays, Check, Mic, MicOff, Plus, ShieldCheck, Star, Video, VideoOff } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, CreditCard, Mic, MicOff, Plus, RotateCcw, Send, ShieldCheck, Star, UserCheck, Video, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { useHydrated, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
+import { EXAMPLE_TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { formatCents, formatDate, formatTime, sessionPrice, tzAbbrev } from "@/lib/format";
 import { generateSlots, groupSlotsByDay } from "@/lib/time";
 import type { Tutor } from "@/lib/types";
 import { Avatar } from "@/components/ui/Avatar";
+import { motion } from "@/components/motion";
 
 /*
  * Steps 2–4 of the homepage "How it works", working for real like step 1 (QuickMatch):
  * compare real tutors side by side, pick a real opening and carry it into the booking panel,
  * and try the after-lesson record (a clearly labelled example).
+ * Before tutors join (sample data off, e.g. the live demo) steps 2 and 3 run on the fictional example
+ * tutors instead, labelled "Demo · example tutors", and booking shows what would happen next.
  */
 
 const MAX_COMPARE = 3;
@@ -32,22 +36,34 @@ export function HowStepsProvider({ children }: { children: React.ReactNode }) {
   return <HowContext value={value}>{children}</HowContext>;
 }
 
-/** Up to four tutors to try it with: verified and featured first, then by rating. Real data only. */
-function usePool(): Tutor[] {
+/**
+ * Up to four tutors to try it with: verified and featured first, then by rating. Real tutors when at
+ * least two are listed; otherwise the fictional example tutors, flagged `demo` so the steps say so.
+ */
+function usePool(): { pool: Tutor[]; demo: boolean } {
   const tutors = useTutors();
-  return React.useMemo(
-    () =>
-      [...tutors]
-        .sort(
-          (a, b) =>
-            Number(b.verification.identity === "verified") - Number(a.verification.identity === "verified") ||
-            Number(b.featured) - Number(a.featured) ||
-            (b.rating ?? 0) - (a.rating ?? 0) ||
-            b.reviewCount - a.reviewCount ||
-            a.lastName.localeCompare(b.lastName),
-        )
-        .slice(0, 4),
-    [tutors],
+  return React.useMemo(() => {
+    const demo = tutors.length < 2;
+    const pool = [...(demo ? EXAMPLE_TUTORS : tutors)]
+      .sort(
+        (a, b) =>
+          Number(b.verification.identity === "verified") - Number(a.verification.identity === "verified") ||
+          Number(b.featured) - Number(a.featured) ||
+          (b.rating ?? 0) - (a.rating ?? 0) ||
+          b.reviewCount - a.reviewCount ||
+          a.lastName.localeCompare(b.lastName),
+      )
+      .slice(0, 4);
+    return { pool, demo };
+  }, [tutors]);
+}
+
+/** Says plainly that the tutors in a step are examples, not real people. */
+function DemoNote() {
+  return (
+    <p className="inline-flex w-fit items-center gap-1.5 border border-brand/30 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand">
+      <span className="size-1.5 rounded-full bg-brand" aria-hidden /> Demo · example tutors
+    </p>
   );
 }
 
@@ -141,7 +157,7 @@ function bestIds(row: Row, tutors: Tutor[]): Set<string> {
 
 export function CompareStep() {
   const router = useRouter();
-  const pool = usePool();
+  const { pool, demo } = usePool();
   const { ids, toggle } = usePicked(pool);
   const clearCompare = useApp((s) => s.clearCompare);
   const toggleCompare = useApp((s) => s.toggleCompare);
@@ -158,6 +174,11 @@ export function CompareStep() {
   return (
     <div className="flex h-full flex-col gap-4">
       <div>
+        {demo && (
+          <div className="mb-2.5">
+            <DemoNote />
+          </div>
+        )}
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[14px] font-semibold text-ink">Pick 2 or 3 tutors</p>
           <p className="text-[12.5px] tabular-nums text-muted" aria-live="polite">
@@ -226,14 +247,18 @@ export function CompareStep() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[12px] text-muted">Highlighted: the best value in each row</p>
-        <button
-          type="button"
-          onClick={openFull}
-          disabled={chosen.length < 2}
-          className="inline-flex h-9 items-center gap-1.5 bg-brand-gradient px-3.5 text-[13.5px] font-semibold text-on-brand shadow-sm transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Open full comparison <ArrowRight className="size-4" aria-hidden />
-        </button>
+        {demo ? (
+          <p className="text-[12px] text-muted">Example profiles · real tutors appear here once they join</p>
+        ) : (
+          <button
+            type="button"
+            onClick={openFull}
+            disabled={chosen.length < 2}
+            className="inline-flex h-9 items-center gap-1.5 bg-brand-gradient px-3.5 text-[13.5px] font-semibold text-on-brand shadow-sm transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Open full comparison <ArrowRight className="size-4" aria-hidden />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -244,7 +269,7 @@ export function CompareStep() {
 export function BookStep() {
   const router = useRouter();
   const hydrated = useHydrated();
-  const pool = usePool();
+  const { pool, demo } = usePool();
   const { ids } = usePicked(pool);
   const candidates = ids.length ? ids.map((id) => pool.find((t) => t.id === id)).filter((t): t is Tutor => !!t) : pool.slice(0, 1);
   const [tutorId, setTutorId] = React.useState<string | null>(null);
@@ -255,6 +280,8 @@ export function BookStep() {
   const bookings = useApp((s) => s.bookings);
   const now = useNow(60_000);
   const [pick, setPick] = React.useState<string | null>(null);
+  // Demo only: the time "booked" with an example tutor, to walk through what happens next.
+  const [demoBooked, setDemoBooked] = React.useState<{ tutorId: string; startUtc: string; type: "trial" | "regular"; minutes: number; price: number } | null>(null);
 
   const type = kind === "trial" && tutor?.trial.enabled ? "trial" : "regular";
   const regularMin = tutor?.rules.sessionLengths[0] ?? 60;
@@ -273,11 +300,27 @@ export function BookStep() {
 
   const go = () => {
     if (!picked) return;
-    router.push(`/tutors/${tutor.slug}?book=${type}&start=${encodeURIComponent(picked)}`);
+    if (demo) setDemoBooked({ tutorId: tutor.id, startUtc: picked, type, minutes, price });
+    else router.push(`/tutors/${tutor.slug}?book=${type}&start=${encodeURIComponent(picked)}`);
   };
+
+  const bookedTutor = demoBooked && pool.find((t) => t.id === demoBooked.tutorId);
+  if (demo && demoBooked && bookedTutor)
+    return (
+      <BookingProcess
+        tutor={bookedTutor}
+        {...demoBooked}
+        tz={tz}
+        onReset={() => {
+          setDemoBooked(null);
+          setPick(null);
+        }}
+      />
+    );
 
   return (
     <div className="flex h-full flex-col gap-4">
+      {demo && <DemoNote />}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {candidates.length > 1 ? (
           <div role="group" aria-label="Tutor to book" className="flex flex-wrap gap-2">
@@ -384,7 +427,90 @@ export function BookStep() {
           disabled={!picked}
           className="inline-flex h-9 items-center gap-1.5 bg-brand-gradient px-3.5 text-[13.5px] font-semibold text-on-brand shadow-sm transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Continue to book <ArrowRight className="size-4" aria-hidden />
+          {demo ? "Book this time (demo)" : "Continue to book"} <ArrowRight className="size-4" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Demo: what happens after booking, step by step, with the example tutor's own settings and the
+ * platform's real rules (instant vs. request, price, lesson link timing, cancellation and rescheduling).
+ */
+function BookingProcess({
+  tutor,
+  startUtc,
+  type,
+  minutes,
+  price,
+  tz,
+  onReset,
+}: {
+  tutor: Tutor;
+  startUtc: string;
+  type: "trial" | "regular";
+  minutes: number;
+  price: number;
+  tz: string;
+  onReset: () => void;
+}) {
+  const name = `${tutor.firstName} ${tutor.lastName.charAt(0)}.`;
+  const when = `${formatDate(startUtc, tz, { weekday: "short", month: "short", day: "numeric" })} · ${formatTime(startUtc, tz)}`;
+  const request = tutor.rules.requiresApproval;
+  const online = tutor.modes.includes("online");
+  const cancelHours = type === "trial" ? DEFAULT_POLICY.trialFreeCancellationHours : DEFAULT_POLICY.freeCancellationHours;
+  const steps = [
+    { icon: Send, title: request ? `Request sent to ${name}` : `Booked with ${name}`, body: `${type === "trial" ? "Trial" : "Lesson"} · ${when} · ${minutes} min` },
+    {
+      icon: UserCheck,
+      title: request ? `${tutor.firstName} confirms` : "Confirmed instantly",
+      body: request
+        ? tutor.responseTimeHours !== null
+          ? `Usually replies in ~${Math.max(1, Math.round(tutor.responseTimeHours))} hr · you get a notification`
+          : "You get a notification when they reply"
+        : `${tutor.firstName} accepts instant bookings`,
+    },
+    { icon: CreditCard, title: price === 0 ? "Nothing to pay" : `Pay ${formatCents(price)} at checkout`, body: price === 0 ? "This trial is free" : "Pay per lesson · no subscription" },
+    {
+      icon: Video,
+      title: online ? "Join from your dashboard" : "Meet in person",
+      body: online ? `The secure lesson link appears ${DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} min before` : "You agree on the place in messages",
+    },
+    { icon: RotateCcw, title: "Plans change?", body: `Free cancellation up to ${cancelHours} h before · reschedule up to ${DEFAULT_POLICY.rescheduleMinHours} h before` },
+  ];
+
+  return (
+    <div className="flex h-full flex-col gap-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <DemoNote />
+        <p className="text-[12px] text-muted">Nothing was booked</p>
+      </div>
+      <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto border border-line bg-surface p-4 shadow-sm" aria-label="What happens next">
+        {steps.map((s, i) => (
+          <motion.li
+            key={s.title}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: i * 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="flex gap-3"
+          >
+            <span className="grid size-8 shrink-0 place-items-center border border-brand/30 bg-brand-50 text-brand">
+              <s.icon className="size-4" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold text-ink">
+                <span className="tabular-nums text-muted">{i + 1}.</span> {s.title}
+              </p>
+              <p className="mt-0.5 text-[12.5px] leading-snug text-muted">{s.body}</p>
+            </div>
+          </motion.li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[12px] text-muted">This is what happens after you book.</p>
+        <button type="button" onClick={onReset} className="inline-flex h-9 items-center gap-1.5 border border-line-strong bg-surface px-3.5 text-[13.5px] font-semibold text-ink transition-colors hover:border-ink">
+          <RotateCcw className="size-4" aria-hidden /> Try another time
         </button>
       </div>
     </div>

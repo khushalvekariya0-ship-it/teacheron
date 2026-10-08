@@ -92,7 +92,8 @@ const RAW: R[] = [
   ["tut_rachel_adams", "Diana M.", "parent", 4, "algebra", "2026-01-22", "Great teacher; slots fill quickly."],
 ];
 
-export const REVIEWS: Review[] = (SAMPLE_DATA ? RAW : []).map(([tutorId, authorName, authorRole, rating, subject, date, body, response], i) => ({
+/** The fictional reviews, always built (the homepage demo uses them); `REVIEWS` is what the site shows. */
+export const EXAMPLE_REVIEWS: Review[] = RAW.map(([tutorId, authorName, authorRole, rating, subject, date, body, response], i) => ({
   id: `rev_${String(i + 1).padStart(3, "0")}`,
   tutorId,
   bookingId: `bk_hist_${String(i + 1).padStart(3, "0")}`,
@@ -105,6 +106,8 @@ export const REVIEWS: Review[] = (SAMPLE_DATA ? RAW : []).map(([tutorId, authorN
   status: "published",
   ...(response ? { tutorResponse: { body: response, createdAt: `${date}T21:00:00Z` } } : {}),
 }));
+
+export const REVIEWS: Review[] = SAMPLE_DATA ? EXAMPLE_REVIEWS : [];
 
 export function reviewsForTutor(tutorId: string): Review[] {
   return REVIEWS.filter((r) => r.tutorId === tutorId && r.status === "published").sort((a, b) => b.createdAt.localeCompare(a.createdAt));

@@ -1,6 +1,6 @@
-import type { BookingRules, Tutor, VerificationKind, VerificationStatus, WeeklyWindow } from "@/lib/types";
+import type { BookingRules, Review, Tutor, VerificationKind, VerificationStatus, WeeklyWindow } from "@/lib/types";
 import { METRO_BY_SLUG } from "./geo";
-import { REVIEWS } from "./reviews";
+import { EXAMPLE_REVIEWS, REVIEWS } from "./reviews";
 import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
@@ -497,9 +497,9 @@ const SEEDS: Seed[] = [
   },
 ];
 
-function build(seed: Seed): Tutor {
+function build(seed: Seed, allReviews: Review[] = REVIEWS): Tutor {
   const metro = METRO_BY_SLUG[seed.metro];
-  const reviews = REVIEWS.filter((r) => r.tutorId === seed.id && r.status === "published");
+  const reviews = allReviews.filter((r) => r.tutorId === seed.id && r.status === "published");
   const rating = reviews.length ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) * 10) / 10 : null;
   const { metro: _metro, rules, verification, ...rest } = seed;
   void _metro;
@@ -520,8 +520,14 @@ function build(seed: Seed): Tutor {
   };
 }
 
+/**
+ * The fictional tutors with their example reviews, always built. Only the homepage "How it works" demo
+ * uses them directly (labelled as examples); everything else uses `TUTORS`.
+ */
+export const EXAMPLE_TUTORS: Tutor[] = SEEDS.map((s) => build(s, EXAMPLE_REVIEWS));
+
 /** Sample tutors (empty when the sample-data switch is off). */
-export const TUTORS: Tutor[] = SAMPLE_DATA ? SEEDS.map(build) : [];
+export const TUTORS: Tutor[] = SAMPLE_DATA ? EXAMPLE_TUTORS : [];
 
 export const TUTOR_BY_ID: Record<string, Tutor> = Object.fromEntries(TUTORS.map((t) => [t.id, t]));
 export const TUTOR_BY_SLUG: Record<string, Tutor> = Object.fromEntries(TUTORS.map((t) => [t.slug, t]));
