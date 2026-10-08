@@ -19,8 +19,6 @@ import {
   Code,
   CreditCard,
   FlaskConical,
-  Gift,
-  GraduationCap,
   Info,
   Languages,
   Music,
@@ -28,7 +26,6 @@ import {
   Sparkles,
   Star,
   Target,
-  UserRound,
   Video,
   Zap,
   Lock,
@@ -61,7 +58,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/Disclosure";
 import { TutorCard } from "@/components/domain/TutorCard";
-import { Avatar } from "@/components/ui/Avatar";
 import {
   SelectMenu,
   type SelectGroup,
@@ -69,8 +65,9 @@ import {
 } from "@/components/ui/SelectMenu";
 import { CategoryIcon } from "@/components/content/icons";
 import { QuickMatch } from "./QuickMatch";
+import { BookStep, CompareStep, HowStepsProvider, LearnStep } from "./HowSteps";
 import { QUIZ_SUBJECTS, SmartMatchQuiz } from "./SmartMatchQuiz";
-import { GRADES, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
@@ -560,226 +557,6 @@ export function SubjectTiles() {
 
 /* ═══ 4 · How it works — a scroll story: four steps, one pinned picture ════════════ */
 
-/** Stacked tutor cards. Real tutors when there are any; otherwise neutral placeholders (no made-up names or ratings). */
-function TutorStack() {
-  const tutors = useTutors();
-  const top = React.useMemo(
-    () =>
-      [...tutors]
-        .sort(
-          (a, b) =>
-            (b.rating ?? 0) - (a.rating ?? 0) || b.reviewCount - a.reviewCount,
-        )
-        .slice(0, 3),
-    [tutors],
-  );
-  return (
-    <div className="relative h-full" aria-hidden>
-      {[0, 1, 2].map((i) => {
-        const t = top[i];
-        return (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{
-              duration: 0.6,
-              ease: [0.22, 1, 0.36, 1],
-              delay: 0.15 + i * 0.12,
-            }}
-            className="absolute flex w-[calc(100%-2rem)] gap-3.5 rounded-lg border border-ink/20 bg-surface p-3 shadow-md"
-            style={{ left: i * 16, top: i * 92, zIndex: 3 - i }}
-          >
-            {t ? (
-              <Avatar
-                name={`${t.firstName} ${t.lastName}`}
-                src={t.photoUrl}
-                tone={t.tone}
-                size="xl"
-                square
-                className="shrink-0"
-              />
-            ) : (
-              <span className="grid size-16 shrink-0 place-items-center rounded-lg bg-canvas text-subtle">
-                <UserRound className="size-7" />
-              </span>
-            )}
-            <div className="min-w-0 flex-1 pt-0.5">
-              {t ? (
-                <>
-                  <p className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[15.5px] font-bold text-ink">
-                      {t.firstName} {t.lastName.charAt(0)}.
-                    </span>
-                    {t.rating !== null && (
-                      <span className="flex shrink-0 items-center gap-1 text-[14px] font-semibold text-ink">
-                        <Star className="size-3.5 fill-ink" />{" "}
-                        {t.rating.toFixed(1)}
-                      </span>
-                    )}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] text-ink-2">
-                    <GraduationCap className="size-3.5 shrink-0" />{" "}
-                    {SUBJECT_BY_SLUG[t.subjects[0]]?.name ?? "Subject"} tutor
-                  </p>
-                  <p className="mt-0.5 flex items-start gap-1.5 text-[13px] leading-snug text-ink-2">
-                    <Languages className="mt-0.5 size-3.5 shrink-0" />
-                    <span className="line-clamp-2">
-                      Speaks {t.languages.slice(0, 2).join(", ")}
-                      {t.languages.length > 2 && ` +${t.languages.length - 2}`}
-                    </span>
-                  </p>
-                </>
-              ) : (
-                <div className="space-y-2.5 pt-1">
-                  <span className="block h-3 w-2/5 rounded-full bg-line-strong" />
-                  <span className="block h-2.5 w-3/5 rounded-full bg-line" />
-                  <span className="block h-2.5 w-4/5 rounded-full bg-line" />
-                </div>
-              )}
-            </div>
-          </motion.div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** A lesson on a video call: the tutor large, the learner in a smaller tile. Photos only. */
-function VideoCall() {
-  return (
-    <div className="relative h-full" aria-hidden>
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-40px" }}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
-        className="absolute bottom-0 left-0 h-[94%] w-[78%] overflow-hidden rounded-t-lg border border-b-0 border-ink/20 bg-canvas"
-      >
-        <Image
-          src="/images/tutor-at-laptop.jpg"
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 300px, 78vw"
-          className="object-cover object-[40%_30%]"
-        />
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        whileInView={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true, margin: "-40px" }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
-        className="absolute right-0 top-[10%] aspect-[4/5] w-[40%] overflow-hidden rounded-lg border-2 border-surface bg-canvas shadow-xl"
-      >
-        <Image
-          src="/images/adult-learner-online.jpg"
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 160px, 40vw"
-          className="object-cover object-[74%_30%]"
-        />
-      </motion.div>
-    </div>
-  );
-}
-
-const SLOT_PATTERN = [
-  [true, false, true],
-  [false, true, true],
-  [true, true, false],
-  [false, true, true],
-  [true, false, true],
-];
-
-/** Step 3 picture: open times in a week grid (no real times or prices) and the trial / cancellation facts. */
-function BookingMock() {
-  return (
-    <div className="flex h-full flex-col gap-4" aria-hidden>
-      <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[15px] font-semibold text-ink">Pick a time</p>
-          <span className="text-[12px] text-muted">
-            Shown in your time zone
-          </span>
-        </div>
-        <div className="mt-4 grid grid-cols-[auto_repeat(5,minmax(0,1fr))] gap-1.5 text-center">
-          <span />
-          {["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
-            <span key={d} className="pb-1 text-[12px] font-medium text-muted">
-              {d}
-            </span>
-          ))}
-          {["Morning", "Afternoon", "Evening"].map((band, j) => (
-            <React.Fragment key={band}>
-              <span className="pr-2 text-left text-[11.5px] leading-8 text-muted">
-                {band}
-              </span>
-              {SLOT_PATTERN.map((day, i) => {
-                const picked = i === 3 && j === 1;
-                return (
-                  <span
-                    key={i}
-                    className={cn(
-                      "h-8 rounded-md",
-                      picked
-                        ? "bg-brand-gradient shadow-sm"
-                        : day[j]
-                          ? "border border-brand/25 bg-brand-50"
-                          : "bg-canvas",
-                    )}
-                  />
-                );
-              })}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-      <div className="mt-auto grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
-          <Gift className="size-5 text-brand" />
-          <p className="mt-3 text-[14.5px] font-semibold text-ink">
-            Trial lesson
-          </p>
-          <p className="mt-0.5 text-[12.5px] leading-snug text-muted">
-            Free or low-cost with many tutors
-          </p>
-        </div>
-        <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
-          <ShieldCheck className="size-5 text-brand" />
-          <p className="mt-3 text-[14.5px] font-semibold text-ink">
-            Free cancellation
-          </p>
-          <p className="mt-0.5 text-[12.5px] leading-snug text-muted">
-            Up to {DEFAULT_POLICY.freeCancellationHours} hours before
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Step 4 picture: the lesson on a video call, and what's kept after it. */
-function LearnMock() {
-  return (
-    <div className="relative h-full" aria-hidden>
-      <VideoCall />
-      <div className="absolute left-0 top-0 z-10 rounded-xl border border-line bg-surface/95 p-4 shadow-lg backdrop-blur">
-        <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">
-          After every lesson
-        </p>
-        <ul className="mt-2.5 space-y-1.5 text-[13.5px] font-medium text-ink">
-          {["Lesson notes", "Homework", "Goal progress"].map((x) => (
-            <li key={x} className="flex items-center gap-2">
-              <Check className="size-4 text-success" /> {x}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
 const HOW_STEPS: {
   label: string;
   title: string;
@@ -807,8 +584,8 @@ const HOW_STEPS: {
       "Badges appear only once a check is complete",
       "Reviews come only from completed lessons",
     ],
-    visual: TutorStack,
-    mobileHeight: "h-[330px]",
+    visual: CompareStep,
+    mobileHeight: "",
   },
   {
     label: "Book",
@@ -818,8 +595,8 @@ const HOW_STEPS: {
       `Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours} hours before`,
       "Pay per lesson — no subscription for families",
     ],
-    visual: BookingMock,
-    mobileHeight: "h-[460px]",
+    visual: BookStep,
+    mobileHeight: "",
   },
   {
     label: "Learn",
@@ -829,8 +606,8 @@ const HOW_STEPS: {
       `Reschedule up to ${DEFAULT_POLICY.rescheduleMinHours} hours before a lesson`,
       "Parents see their child's lessons and progress",
     ],
-    visual: LearnMock,
-    mobileHeight: "h-[340px]",
+    visual: LearnStep,
+    mobileHeight: "",
   },
 ];
 
@@ -838,6 +615,7 @@ export function HowItWorks() {
   const [active, setActive] = React.useState(0);
   const step = HOW_STEPS[active];
   return (
+    <HowStepsProvider>
     <Section>
       <div className="mb-12 flex flex-col gap-6 lg:mb-16 lg:flex-row lg:items-end lg:justify-between">
         <SectionHeading
@@ -852,7 +630,7 @@ export function HowItWorks() {
         </Reveal>
       </div>
 
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
         {/* Steps — the rail fills as you scroll and the current step lights up */}
         <ol className="relative">
           <div
@@ -972,6 +750,7 @@ export function HowItWorks() {
                         : "pointer-events-none translate-y-3 opacity-0",
                     )}
                     aria-hidden={i !== active}
+                    inert={i !== active}
                   >
                     <s.visual />
                   </div>
@@ -993,6 +772,7 @@ export function HowItWorks() {
         </p>
       </Reveal>
     </Section>
+    </HowStepsProvider>
   );
 }
 

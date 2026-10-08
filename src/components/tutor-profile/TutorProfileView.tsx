@@ -25,21 +25,24 @@ import { BookingPanel, MobileBookingBar, type BookingSelection } from "./Booking
 
 /**
  * Opens the booking flow when the URL carries ?book=trial|regular (e.g. from a tutor card or after
- * signing in), then removes the parameter so a refresh or "back" doesn't reopen it.
+ * signing in), then removes the parameters so a refresh or "back" doesn't reopen it. With
+ * &start=<ISO time> (a time picked on the homepage) that time is selected in the panel instead.
  * Lives in its own Suspense boundary so the rest of the profile can be prerendered.
  */
-function BookingUrlTrigger({ onTrigger }: { onTrigger: (t: BookingType) => void }) {
+function BookingUrlTrigger({ onTrigger }: { onTrigger: (t: BookingType, startUtc?: string) => void }) {
   const searchParams = useSearchParams();
   const hydrated = useHydrated();
   const book = searchParams.get("book");
+  const start = searchParams.get("start");
   React.useEffect(() => {
     if (!hydrated || (book !== "trial" && book !== "regular")) return;
-    onTrigger(book);
+    onTrigger(book, start && !Number.isNaN(Date.parse(start)) ? new Date(start).toISOString() : undefined);
     document.getElementById("book")?.scrollIntoView({ behavior: "smooth", block: "start" });
     const url = new URL(window.location.href);
     url.searchParams.delete("book");
+    url.searchParams.delete("start");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [hydrated, book, onTrigger]);
+  }, [hydrated, book, start, onTrigger]);
   return null;
 }
 
@@ -147,6 +150,14 @@ function Profile({ tutor }: { tutor: Tutor }) {
     setFlowOpen(true);
   };
   const scrollToCalendar = () => document.getElementById("book")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  /** From a link: a time that came with it is selected in the panel (the calendar drops it if it's no longer free); otherwise the flow opens. */
+  const openFromUrl = React.useCallback(
+    (t: BookingType, startUtc?: string) => {
+      if (startUtc) select({ type: t, startUtc });
+      else openFlow(t);
+    },
+    [select, openFlow],
+  );
 
   const [booking, setBooking] = React.useState(false);
   const [booked, setBooked] = React.useState<Booking | null>(null);
@@ -226,7 +237,7 @@ function Profile({ tutor }: { tutor: Tutor }) {
       <BookingFlow tutor={tutor} open={flowOpen} onOpenChange={setFlowOpen} request={request} />
       <BookingSuccessSheet tutor={tutor} booking={booked} onClose={() => setBooked(null)} />
       <React.Suspense fallback={null}>
-        <BookingUrlTrigger onTrigger={openFlow} />
+        <BookingUrlTrigger onTrigger={openFromUrl} />
       </React.Suspense>
     </>
   );
