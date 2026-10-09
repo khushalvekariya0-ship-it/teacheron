@@ -11,12 +11,7 @@ import { Button } from "@/components/ui/Button";
  * element that is `relative`; the ring is masked to the border, so nothing
  * covers the label. Corners are square here, like every other edge on the site.
  */
-export function BorderBeam({ size = 20, duration = 5, offset = 0, className }: { size?: number; duration?: number; /** Where on the edge the spark starts, 0..1 — so several beams are not in step. */ offset?: number; className?: string }) {
-  const o = Math.min(Math.max(offset, 0), 0.999);
-  const start = (o * 100).toFixed(1) + "%";
-  // 100% and 0% are the same point on the path, so the loop stays seamless.
-  const keyframes = o > 0 ? [start, "100%", "0%", start] : ["0%", "100%"];
-  const times = o > 0 ? [0, 1 - o, 1 - o, 1] : undefined;
+export function BorderBeam({ size = 20, duration = 5, className }: { size?: number; duration?: number; className?: string }) {
   return (
     <div
       aria-hidden
@@ -28,8 +23,8 @@ export function BorderBeam({ size = 20, duration = 5, offset = 0, className }: {
       <motion.div
         className="absolute aspect-square bg-gradient-to-r from-transparent via-brand to-brand"
         style={{ width: size, offsetPath: "rect(0 auto auto 0 round 0px)" }}
-        animate={{ offsetDistance: keyframes }}
-        transition={{ repeat: Number.POSITIVE_INFINITY, duration, ease: "linear", times }}
+        animate={{ offsetDistance: ["0%", "100%"] }}
+        transition={{ repeat: Number.POSITIVE_INFINITY, duration, ease: "linear" }}
       />
     </div>
   );
