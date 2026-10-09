@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/content/icons";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
-import { BorderBeam } from "@/components/ui/button-border";
 import { Avatar } from "@/components/ui/Avatar";
 import { DarkModeToggle } from "@/components/ui/DarkModeToggle";
 import { WalletButton } from "@/components/wallet/WalletButton";
@@ -513,11 +512,8 @@ function AccountArea() {
         <Button asChild variant="secondary" size="sm">
           <Link href="/login">Log in</Link>
         </Button>
-        <Button asChild variant="cta" size="sm" className="relative">
-          <Link href="/register">
-            <BorderBeam />
-            Get started
-          </Link>
+        <Button asChild variant="cta" size="sm">
+          <Link href="/register">Get started</Link>
         </Button>
       </>
     );
