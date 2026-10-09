@@ -117,7 +117,7 @@ export function Navbar() {
 
         <nav aria-label="Main" className="hidden xl:block">
           <ul className="flex items-center gap-0.5">
-            {NAV.map((g) => (
+            {NAV.map((g, i) => (
               <li key={g.label} className="relative" onMouseEnter={() => (g.links || g.mega) && openMenu(g.label)} onMouseLeave={() => (g.links || g.mega) && scheduleClose()}>
                 {g.href ? (
                   <Link
@@ -128,6 +128,7 @@ export function Navbar() {
                       isActive(g) ? "text-ink" : "text-ink-2 hover:text-ink",
                     )}
                   >
+                    <BorderBeam size={16} offset={i / NAV.length} />
                     {isActive(g) && <ActivePill />}
                     <span className="relative">{g.label}</span>
                   </Link>
@@ -143,6 +144,7 @@ export function Navbar() {
                       open === g.label && !isActive(g) && "bg-sunken",
                     )}
                   >
+                    <BorderBeam size={16} offset={i / NAV.length} />
                     {isActive(g) && <ActivePill />}
                     <span className="relative">{g.label}</span>
                     <ChevronDown className={cn("relative size-3.5 opacity-60 transition-transform duration-200", open === g.label && "rotate-180")} />
