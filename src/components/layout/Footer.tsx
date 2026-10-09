@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import FlashlightTextReveal from "@/components/ui/flashlight-text-reveal";
 import { SITE } from "@/lib/site";
 import { SUBJECTS } from "@/lib/data/catalog";
 import { METROS } from "@/lib/data/geo";
@@ -137,6 +138,19 @@ export function Footer() {
           </ul>
         </div>
       </div>
+
+      {/* The name, written on a dark wall at the very bottom. Move the pointer to light it; left alone, the light roams. */}
+      <FlashlightTextReveal
+        text="TUTORLINK"
+        textColor="#eee9dd"
+        fontFamily="var(--font-heading)"
+        fontSize="clamp(3.4rem, 15vw, 15rem)"
+        colors={["#15140f", "#3b372e"]}
+        ghost={0.06}
+        radius={0.42}
+        height="clamp(16rem, 36vw, 30rem)"
+        className="border-t border-line"
+      />
     </footer>
   );
 }
