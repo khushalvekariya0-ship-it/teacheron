@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CalendarClock, Compass, GitCompareArrows, Globe, GraduationCap, Link2, NotebookPen, RefreshCw, Search, ShieldCheck, Star, Target, UserRound } from "lucide-react";
-import { Reveal, Stagger, StaggerItem } from "@/components/motion";
+import { Reveal } from "@/components/motion";
 import { ArrowLink, CtaBand, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
 import { Split } from "@/components/marketing/Split";
 import { ProgressVignette, SearchVignette, SlotVignette } from "@/components/marketing/Vignettes";
-import { SubjectTile } from "@/components/content/SubjectTile";
+import { SubjectTileGrid } from "@/components/content/SubjectCatalog";
 import { Button } from "@/components/ui/Button";
-import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
 import { TUTORS } from "@/lib/data/tutors";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 
@@ -21,7 +20,6 @@ export const metadata: Metadata = {
 const STUDENT_SUBJECTS = ["sat", "act", "ap-exams", "calculus", "chemistry", "physics", "statistics", "college-essays", "python", "spanish", "gre", "lsat"];
 
 export default function ForStudentsPage() {
-  const subjects = STUDENT_SUBJECTS.map((s) => SUBJECT_BY_SLUG[s]).filter(Boolean);
   const college = TUTORS.filter((t) => t.levels.includes("college")).length;
   const adult = TUTORS.filter((t) => t.levels.includes("adult")).length;
   const high = TUTORS.filter((t) => t.levels.includes("high")).length;
@@ -75,13 +73,7 @@ export default function ForStudentsPage() {
             <ArrowLink href="/subjects">All subjects</ArrowLink>
           }
         />
-        <Stagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" stagger={0.04}>
-          {subjects.map((s) => (
-            <StaggerItem key={s.slug} className="h-full">
-              <SubjectTile subject={s} />
-            </StaggerItem>
-          ))}
-        </Stagger>
+        <SubjectTileGrid slugs={STUDENT_SUBJECTS} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" />
       </Section>
 
       <Section>

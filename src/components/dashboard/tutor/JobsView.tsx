@@ -13,9 +13,9 @@ import {
 import type { Level, Requirement, TeachingMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
-import { useCreditBalance, useFlag, useNow } from "@/lib/store/hooks";
+import { useCatalog, useCreditBalance, useFlag, useNow } from "@/lib/store/hooks";
 import { scoreTutor, type MatchResult } from "@/lib/matching";
-import { GRADE_LABEL, LEVELS, MODE_LABEL, SUBJECTS, gradeToLevel, subjectName } from "@/lib/data/catalog";
+import { GRADE_LABEL, LEVELS, MODE_LABEL, gradeToLevel, subjectName } from "@/lib/data/catalog";
 import { CREDITS_PER_APPLICATION } from "@/lib/data/platform";
 import { formatCents, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -57,6 +57,7 @@ export function JobsSkeleton() {
 }
 
 export function JobsView() {
+  const catalog = useCatalog();
   const { me, tutor } = useMyTutor();
   const router = useRouter();
   const pathname = usePathname();
@@ -157,7 +158,7 @@ export function JobsView() {
     else toast.success(res.data ? "Job saved" : "Removed from saved jobs");
   };
 
-  const subjectOptions = (mine ? SUBJECTS.filter((s) => tutor.subjects.includes(s.slug)) : SUBJECTS).map((s) => ({ value: s.slug, label: s.name }));
+  const subjectOptions = (mine ? catalog.allSubjects.filter((s) => tutor.subjects.includes(s.slug)) : catalog.subjects).map((s) => ({ value: s.slug, label: s.name }));
 
   const filterControls = (prefix: string) => (
     <div className="grid gap-4 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">

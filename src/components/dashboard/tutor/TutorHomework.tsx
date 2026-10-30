@@ -5,8 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, ClipboardCheck, FileText, MessageSquareText, NotebookPen, Plus } from "lucide-react";
 import type { Homework } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useNow, useViewerTimezone } from "@/lib/store/hooks";
-import { SUBJECTS, subjectName } from "@/lib/data/catalog";
+import { useCatalog, useNow, useViewerTimezone } from "@/lib/store/hooks";
+import { subjectName } from "@/lib/data/catalog";
 import { formatDate, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
@@ -182,6 +182,7 @@ function AssignDialog({
   tutorSubjects: string[];
   today: string;
 }) {
+  const catalog = useCatalog();
   const assign = useApp((s) => s.assignHomework);
   const [learnerId, setLearnerId] = React.useState("");
   const [subject, setSubject] = React.useState("");
@@ -234,7 +235,7 @@ function AssignDialog({
                 <Select value={learnerId} onChange={(e) => setLearnerId(e.target.value)} placeholder="Choose" options={students.map((s) => ({ value: s.id, label: s.name }))} />
               </Field>
               <Field label="Subject" required error={show("subject")}>
-                <Select value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Choose" options={SUBJECTS.filter((s) => tutorSubjects.includes(s.slug)).map((s) => ({ value: s.slug, label: s.name }))} />
+                <Select value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Choose" options={catalog.allSubjects.filter((s) => tutorSubjects.includes(s.slug)).map((s) => ({ value: s.slug, label: s.name }))} />
               </Field>
             </div>
             <Field label="Title" required error={show("title")}>

@@ -7,9 +7,9 @@ import { CalendarCheck2, CalendarClock, CalendarX2, Goal, LineChart, NotebookPen
 import type { LearningGoal, ProgressNote } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
-import { useNow, useViewerTimezone } from "@/lib/store/hooks";
+import { useCatalog, useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { endMs } from "@/lib/booking";
-import { subjectName, SUBJECTS } from "@/lib/data/catalog";
+import { subjectName } from "@/lib/data/catalog";
 import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
@@ -304,6 +304,7 @@ function NotesCard({ student, notes, now, tz }: { student: Learner; notes: Progr
 }
 
 function GoalDialog({ open, onOpenChange, student, tutorSubjects }: { open: boolean; onOpenChange: (o: boolean) => void; student: Learner; tutorSubjects: string[] }) {
+  const catalog = useCatalog();
   const addGoal = useApp((s) => s.addGoal);
   const tz = useViewerTimezone();
   const now = useNow(60_000);
@@ -353,7 +354,7 @@ function GoalDialog({ open, onOpenChange, student, tutorSubjects }: { open: bool
             {error && <InlineAlert tone="danger">{error}</InlineAlert>}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Subject" required error={touched ? errs.subject ?? undefined : undefined}>
-                <Select value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Choose" options={SUBJECTS.filter((s) => subjectSlugs.includes(s.slug)).map((s) => ({ value: s.slug, label: s.name }))} />
+                <Select value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Choose" options={catalog.allSubjects.filter((s) => subjectSlugs.includes(s.slug)).map((s) => ({ value: s.slug, label: s.name }))} />
               </Field>
               <Field label="Target date" optional error={touched ? errs.target ?? undefined : undefined}>
                 <Input type="date" min={today} value={target} onChange={(e) => setTarget(e.target.value)} />

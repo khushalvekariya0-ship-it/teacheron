@@ -18,11 +18,10 @@ import { Avatar } from "@/components/ui/Avatar";
 import { DarkModeToggle } from "@/components/ui/DarkModeToggle";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/Overlay";
-import { useSession, useUnreadNotifications, useUnreadMessages } from "@/lib/store/hooks";
+import { useCatalog, useSession, useUnreadNotifications, useUnreadMessages } from "@/lib/store/hooks";
 import { useApp } from "@/lib/store";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { homeFor } from "@/lib/permissions";
-import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { SearchTrigger, openCommandPalette } from "./CommandPalette";
 
 type NavLink = { label: string; href: string; description: string; icon: React.ComponentType<{ className?: string }> };
@@ -241,13 +240,16 @@ function MegaMenu({ group: g, pathname }: { group: NavGroup; pathname: string })
 
 /** Areas that have a photo; the rest get a gradient panel with their icon. */
 const AREA_PHOTOS = new Set(["math", "science", "english", "test-prep", "languages", "computer-science", "social-studies", "arts", "learning-support"]);
-const POPULAR_SUBJECTS = SUBJECTS.filter((s) => s.popular).slice(0, 6);
 
 /** Subjects mega menu: hover an area on the left to see its subjects and a picture. */
 function SubjectsMenu({ pathname }: { pathname: string }) {
-  const [area, setArea] = React.useState(SUBJECT_CATEGORIES[0].slug);
-  const cat = SUBJECT_CATEGORIES.find((c) => c.slug === area) ?? SUBJECT_CATEGORIES[0];
-  const subjects = SUBJECTS.filter((s) => s.category === cat.slug);
+  // Areas and subjects come from the live catalog (Admin → Catalog).
+  const catalog = useCatalog();
+  const [area, setArea] = React.useState<string | null>(null);
+  const cat = catalog.categories.find((c) => c.slug === area) ?? catalog.categories[0];
+  if (!cat) return null;
+  const subjects = catalog.subjects.filter((s) => s.category === cat.slug);
+  const popular = catalog.subjects.filter((s) => s.popular).slice(0, 6);
 
   return (
     <motion.div
@@ -261,7 +263,7 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
         <div className="grid grid-cols-[262px_minmax(0,1fr)_210px]">
           {/* Areas */}
           <ul className="space-y-0.5 border-r border-line bg-canvas p-2.5" aria-label="Subject areas">
-            {SUBJECT_CATEGORIES.map((c) => {
+            {catalog.categories.map((c) => {
               const on = c.slug === area;
               return (
                 <li key={c.slug}>
@@ -342,7 +344,7 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
           <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-[12.5px] font-medium text-muted">Popular:</span>
             <ul className="flex min-w-0 gap-1.5 overflow-hidden">
-              {POPULAR_SUBJECTS.map((s) => (
+              {popular.map((s) => (
                 <li key={s.slug} className="shrink-0">
                   <Link href={`/tutors?subject=${s.slug}`} className="inline-flex rounded-full border border-line px-2.5 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:text-brand">
                     {s.name}
@@ -352,7 +354,7 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
             </ul>
           </div>
           <Link href="/subjects" className="group inline-flex shrink-0 items-center gap-1.5 text-[14px] font-semibold text-brand">
-            Browse all {SUBJECTS.length} subjects <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            Browse all {catalog.subjects.length} subjects <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
       </div>

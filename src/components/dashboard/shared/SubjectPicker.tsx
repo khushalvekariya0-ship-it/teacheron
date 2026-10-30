@@ -4,7 +4,8 @@ import * as React from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay";
-import { SUBJECT_CATEGORIES, SUBJECTS, subjectName } from "@/lib/data/catalog";
+import { subjectName } from "@/lib/data/catalog";
+import { useCatalog } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 
 /** Searchable multi-select for catalog subjects, with removable chips for the current selection. */
@@ -26,9 +27,10 @@ export function SubjectPicker({
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
   const query = q.trim().toLowerCase();
-  const groups = SUBJECT_CATEGORIES.map((c) => ({
+  const catalog = useCatalog();
+  const groups = catalog.categories.map((c) => ({
     ...c,
-    subjects: SUBJECTS.filter((s) => s.category === c.slug && (!query || s.name.toLowerCase().includes(query) || c.name.toLowerCase().includes(query))),
+    subjects: catalog.subjects.filter((s) => s.category === c.slug && (!query || s.name.toLowerCase().includes(query) || c.name.toLowerCase().includes(query))),
   })).filter((g) => g.subjects.length);
   const full = value.length >= max;
 

@@ -9,23 +9,16 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import {
   ArrowRight,
   BookOpen,
-  Brain,
   Briefcase,
-  Calculator,
   CalendarDays,
   ChartNoAxesColumnIncreasing,
   Check,
   ChevronRight,
-  Code,
   CreditCard,
-  FlaskConical,
   Info,
-  Languages,
-  Music,
   ShieldCheck,
   Sparkles,
   Star,
-  Target,
   Video,
   Zap,
   Lock,
@@ -66,12 +59,12 @@ import {
 import { CategoryIcon } from "@/components/content/icons";
 import { QuickMatch } from "./QuickMatch";
 import { BookStep, CompareStep, HowStepsProvider, LearnStep } from "./HowSteps";
-import { QUIZ_SUBJECTS, SmartMatchQuiz } from "./SmartMatchQuiz";
-import { GRADES, SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { SmartMatchQuiz, useQuizSubjects } from "./SmartMatchQuiz";
+import { GRADES, subjectGroups } from "@/lib/data/catalog";
 import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
-import { useTutors } from "@/lib/store/hooks";
+import { useCatalog, useTutors } from "@/lib/store/hooks";
 
 /* ═══ 1 · Hero — what TutorLink is and the first Smart Match question, on a blackboard ═══ */
 
@@ -106,6 +99,7 @@ const HERO_STEPS = [
 export function Hero() {
   const root = React.useRef<HTMLElement>(null);
   const [quiz, setQuiz] = React.useState<{ open: boolean; subject?: string }>({ open: false });
+  const quizSubjects = useQuizSubjects();
   useGSAP(
     () => {
       const items = gsap.utils.toArray<HTMLElement>("[data-hero-in]");
@@ -160,7 +154,7 @@ export function Hero() {
               <span className="mono-label hidden sm:block">Smart Match · 1 of 2</span>
             </div>
             <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4">
-              {QUIZ_SUBJECTS.map((s) => (
+              {quizSubjects.map((s) => (
                 <button key={s.slug} type="button" onClick={() => setQuiz({ open: true, subject: s.slug })} className="group flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-sunken">
                   <CategoryIcon slug={s.category} className="size-4 shrink-0 text-brand" />
                   <span className="min-w-0 truncate text-[14px] font-medium text-ink">{s.name}</span>
@@ -256,66 +250,15 @@ export function ThreeSteps() {
 
 /* ═══ 3 · Subjects — search, then an explorer: pick an area, see its topics ══════════════ */
 
-/** The eight most-asked-for areas, most popular first. Labels are the short names people search for. */
-const SUBJECT_AREAS: {
-  slug: string;
-  label: string;
-  icon: LucideIcon;
-  body: string;
-}[] = [
-  {
-    slug: "math",
-    label: "Mathematics",
-    icon: Calculator,
-    body: "From number sense and fractions to algebra, calculus and statistics — help with homework, tests and getting ahead.",
-  },
-  {
-    slug: "science",
-    label: "Science",
-    icon: FlaskConical,
-    body: "Biology, chemistry, physics and earth science, with labs, problem sets and AP courses explained step by step.",
-  },
-  {
-    slug: "english",
-    label: "English",
-    icon: BookOpen,
-    body: "Reading, writing, grammar and literature — from early readers to confident essay writers.",
-  },
-  {
-    slug: "test-prep",
-    label: "Test Prep",
-    icon: Target,
-    body: "Structured plans for the SAT, ACT, AP exams and graduate admissions tests, with practice tests reviewed together.",
-  },
-  {
-    slug: "languages",
-    label: "Languages",
-    icon: Languages,
-    body: "Conversation-first lessons in Spanish, French, Mandarin and English as a second language.",
-  },
-  {
-    slug: "computer-science",
-    label: "Coding",
-    icon: Code,
-    body: "Python, Java and web development — from first lines of code to AP Computer Science.",
-  },
-  {
-    slug: "arts",
-    label: "Music & Arts",
-    icon: Music,
-    body: "Piano, guitar, voice and drawing for beginners and experienced learners alike.",
-  },
-  {
-    slug: "learning-support",
-    label: "Study Skills",
-    icon: Brain,
-    body: "Study habits, executive function and dyslexia support — patient, specialised help that builds independence.",
-  },
-];
+/** Areas with a photo in /images/subject-areas; others (e.g. ones an admin adds) show their icon on a tinted panel. */
+const AREA_PHOTOS = new Set(["arts", "computer-science", "english", "languages", "learning-support", "math", "science", "social-studies", "test-prep"]);
 
 function SubjectExplorer() {
   const tutors = useTutors();
-  const [active, setActive] = React.useState(SUBJECT_AREAS[0].slug);
+  const catalog = useCatalog();
+  // Areas and their subjects come from the live catalog (Admin → Catalog), in the admin's order.
+  const areas = React.useMemo(() => catalog.categories.map((c) => ({ slug: c.slug, label: c.name, body: c.description })), [catalog]);
+  const [active, setActive] = React.useState<string | null>(null);
 
   // Real counts only: tutors per subject and per area.
   const counts = React.useMemo(() => {
@@ -323,29 +266,30 @@ function SubjectExplorer() {
     for (const t of tutors)
       for (const s of t.subjects) bySubject[s] = (bySubject[s] ?? 0) + 1;
     const byArea: Record<string, number> = {};
-    for (const a of SUBJECT_AREAS) {
+    for (const a of areas) {
       const subs = new Set(
-        SUBJECTS.filter((s) => s.category === a.slug).map((s) => s.slug),
+        catalog.subjects.filter((s) => s.category === a.slug).map((s) => s.slug),
       );
       byArea[a.slug] = tutors.filter((t) =>
         t.subjects.some((s) => subs.has(s)),
       ).length;
     }
     return { bySubject, byArea };
-  }, [tutors]);
+  }, [tutors, areas, catalog]);
 
-  const area = SUBJECT_AREAS.find((a) => a.slug === active) ?? SUBJECT_AREAS[0];
-  const topics = SUBJECTS.filter((s) => s.category === area.slug);
+  const area = areas.find((a) => a.slug === active) ?? areas[0];
+  if (!area) return null;
+  const topics = catalog.subjects.filter((s) => s.category === area.slug);
   const areaTutors = counts.byArea[area.slug] ?? 0;
   const summary = (slug: string) => {
     const n = counts.byArea[slug] ?? 0;
-    const k = SUBJECTS.filter((s) => s.category === slug).length;
+    const k = catalog.subjects.filter((s) => s.category === slug).length;
     return n > 0 ? `${n} ${n === 1 ? "tutor" : "tutors"}` : `${k} subjects`;
   };
 
   return (
     <TabsPrimitive.Root
-      value={active}
+      value={area.slug}
       onValueChange={setActive}
       orientation="vertical"
       className="grid overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_24px_60px_-32px_rgb(15_23_42/0.35)] lg:grid-cols-[290px_minmax(0,1fr)]"
@@ -354,7 +298,7 @@ function SubjectExplorer() {
         aria-label="Subject areas"
         className="scrollbar-none flex gap-1 overflow-x-auto border-b border-line p-2 lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:p-3"
       >
-        {SUBJECT_AREAS.map((a) => {
+        {areas.map((a) => {
           const on = a.slug === active;
           return (
             <TabsPrimitive.Trigger
@@ -381,7 +325,7 @@ function SubjectExplorer() {
                     : "border-line text-ink-2 group-hover:text-ink",
                 )}
               >
-                <a.icon className="size-[18px]" aria-hidden />
+                <CategoryIcon slug={a.slug} className="size-[18px]" />
               </span>
               <span className="min-w-0 flex-1">
                 <span
@@ -425,13 +369,19 @@ function SubjectExplorer() {
         >
           {/* Phones and tablets: a short photo strip */}
           <div className="relative aspect-[16/7] overflow-hidden rounded-xl bg-canvas lg:hidden">
-            <Image
-              src={`/images/subject-areas/${area.slug}.jpg`}
-              alt=""
-              fill
-              sizes="100vw"
-              className="object-cover"
-            />
+            {AREA_PHOTOS.has(area.slug) ? (
+              <Image
+                src={`/images/subject-areas/${area.slug}.jpg`}
+                alt=""
+                fill
+                sizes="100vw"
+                className="object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 grid place-items-center bg-brand-soft">
+                <CategoryIcon slug={area.slug} className="size-12 text-brand" />
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col">
@@ -495,8 +445,13 @@ function SubjectExplorer() {
               aria-hidden
             />
             <div className="relative h-full min-h-[380px] overflow-hidden rounded-xl border border-line bg-canvas">
-              {/* All eight photos load together, so switching areas never waits for an image. */}
-              {SUBJECT_AREAS.map((a) => (
+              {/* All the area photos load together, so switching areas never waits for an image. */}
+              {!AREA_PHOTOS.has(area.slug) && (
+                <div className="absolute inset-0 grid place-items-center bg-brand-soft">
+                  <CategoryIcon slug={area.slug} className="size-14 text-brand" />
+                </div>
+              )}
+              {areas.filter((a) => AREA_PHOTOS.has(a.slug)).map((a) => (
                 <Image
                   key={a.slug}
                   src={`/images/subject-areas/${a.slug}.jpg`}
@@ -511,7 +466,7 @@ function SubjectExplorer() {
               ))}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night/80 to-transparent p-4 pt-16">
                 <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-white">
-                  <area.icon className="size-4" aria-hidden /> {area.label}
+                  <CategoryIcon slug={area.slug} className="size-4" /> {area.label}
                 </span>
               </div>
             </div>
@@ -523,6 +478,7 @@ function SubjectExplorer() {
 }
 
 export function SubjectTiles() {
+  const catalog = useCatalog();
   return (
     <Section tone="canvas">
       <SectionHeading
@@ -532,7 +488,7 @@ export function SubjectTiles() {
         description="Pick an area to see every topic our tutors teach, with real tutor counts for each."
         action={
           <ArrowLink href="/subjects">
-            View all {SUBJECTS.length} subjects
+            View all {catalog.subjects.length} subjects
           </ArrowLink>
         }
       />
@@ -546,7 +502,7 @@ export function SubjectTiles() {
           <span className="font-semibold text-ink">
             Can&rsquo;t find your subject?
           </span>{" "}
-          We cover {SUBJECTS.length} subjects in {SUBJECT_CATEGORIES.length}{" "}
+          We cover {catalog.subjects.length} subjects in {catalog.categories.length}{" "}
           areas.
         </p>
         <ArrowLink href="/concierge">Help me find a tutor</ArrowLink>
@@ -778,13 +734,6 @@ export function HowItWorks() {
 
 /* ═══ 5 · Smart tutor matching — a short guided start on a deep navy stage ═══════════ */
 
-const MATCH_SUBJECT_GROUPS: SelectGroup[] = SUBJECT_CATEGORIES.map((c) => ({
-  label: c.name,
-  options: SUBJECTS.filter((s) => s.category === c.slug).map((s) => ({
-    value: s.slug,
-    label: s.name,
-  })),
-}));
 const MATCH_GRADE_OPTIONS: SelectOption[] = GRADES.map((g) => ({
   value: g.value,
   label: g.label,
@@ -851,6 +800,8 @@ function MatchSelect({
 
 export function GetMatched() {
   const router = useRouter();
+  const catalog = useCatalog();
+  const subjectOptions: SelectGroup[] = subjectGroups(catalog);
   const [subject, setSubject] = React.useState("");
   const [grade, setGrade] = React.useState("");
   const [error, setError] = React.useState(false);
@@ -952,7 +903,7 @@ export function GetMatched() {
                   setError(false);
                 }}
                 placeholder="Choose a subject"
-                groups={MATCH_SUBJECT_GROUPS}
+                groups={subjectOptions}
                 error={
                   error ? "Choose a subject to see your matches." : undefined
                 }
@@ -981,7 +932,7 @@ export function GetMatched() {
             <p className="mt-5 flex items-start gap-2.5 text-[13.5px] leading-snug text-muted">
               <Info className="mt-px size-4 shrink-0" aria-hidden />
               Matches are ranked on {Object.keys(DEFAULT_WEIGHTS).length} clear
-              factors across {SUBJECTS.length} subjects.
+              factors across {catalog.subjects.length} subjects.
             </p>
           </form>
         </Reveal>

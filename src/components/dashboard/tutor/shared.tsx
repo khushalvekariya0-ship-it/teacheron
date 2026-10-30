@@ -9,10 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ChipGroup, Progress } from "@/components/ui/Controls";
 import { EmptyState } from "@/components/ui/States";
-import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
 import { EASE } from "@/components/motion";
 import { useApp } from "@/lib/store";
-import { useSession } from "@/lib/store/hooks";
+import { useCatalog, useSession } from "@/lib/store/hooks";
 
 /* ─── Missing profile ───────────────────────────────────────────────────────── */
 
@@ -155,10 +154,11 @@ export function TagInput({
 /* ─── Subjects grouped by category ──────────────────────────────────────────── */
 
 export function SubjectPicker({ value, onChange, max = 10 }: { value: string[]; onChange: (next: string[]) => void; max?: number }) {
+  const catalog = useCatalog();
   return (
     <div className="space-y-5">
-      {SUBJECT_CATEGORIES.map((cat) => {
-        const options = SUBJECTS.filter((s) => s.category === cat.slug).map((s) => ({ value: s.slug, label: s.name }));
+      {catalog.categories.map((cat) => {
+        const options = catalog.subjects.filter((s) => s.category === cat.slug).map((s) => ({ value: s.slug, label: s.name }));
         const picked = value.filter((v) => options.some((o) => o.value === v)).length;
         return (
           <div key={cat.slug}>

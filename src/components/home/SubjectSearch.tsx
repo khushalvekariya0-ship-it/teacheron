@@ -4,29 +4,35 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, BookOpen, LayoutGrid, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import type { Catalog } from "@/lib/data/catalog";
+import { useCatalog } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
 
 type Option = { key: string; label: string; hint: string; href: string; area?: boolean };
 
-const SUBJECT_OPTIONS: Option[] = SUBJECTS.map((s) => ({
-  key: s.slug,
-  label: s.name,
-  hint: SUBJECT_CATEGORIES.find((c) => c.slug === s.category)?.name ?? "",
-  href: `/tutors?subject=${s.slug}`,
-}));
-const AREA_OPTIONS: Option[] = SUBJECT_CATEGORIES.map((c) => ({ key: `area:${c.slug}`, label: c.name, hint: "All subjects in this area", href: `/subjects#${c.slug}`, area: true }));
 /** Everyday words people type for an area. */
 const AREA_ALIASES: Record<string, string> = { math: "math", maths: "math", coding: "computer-science", programming: "computer-science", music: "arts", art: "arts", "study skills": "learning-support" };
-const POPULAR = SUBJECT_OPTIONS.filter((o) => SUBJECTS.find((s) => s.slug === o.key)?.popular).slice(0, 6);
 
-function match(q: string): Option[] {
-  if (!q) return POPULAR;
+/** Search options from the live catalog (subjects an admin adds show up here too). */
+function buildOptions(catalog: Catalog) {
+  const subjects: Option[] = catalog.subjects.map((s) => ({
+    key: s.slug,
+    label: s.name,
+    hint: catalog.categoryBySlug[s.category]?.name ?? "",
+    href: `/tutors?subject=${s.slug}`,
+  }));
+  const areas: Option[] = catalog.categories.map((c) => ({ key: `area:${c.slug}`, label: c.name, hint: "All subjects in this area", href: `/subjects#${c.slug}`, area: true }));
+  const popular = subjects.filter((o) => catalog.bySlug[o.key]?.popular).slice(0, 6);
+  return { subjects, areas, popular };
+}
+
+function match(q: string, { subjects, areas, popular }: ReturnType<typeof buildOptions>): Option[] {
+  if (!q) return popular;
   const aliased = new Set(q.length >= 2 ? Object.entries(AREA_ALIASES).filter(([word]) => word.startsWith(q)).map(([, slug]) => `area:${slug}`) : []);
-  const areas = AREA_OPTIONS.filter((o) => o.label.toLowerCase().includes(q) || aliased.has(o.key));
-  const starts = SUBJECT_OPTIONS.filter((o) => o.label.toLowerCase().startsWith(q));
-  const contains = SUBJECT_OPTIONS.filter((o) => !o.label.toLowerCase().startsWith(q) && o.label.toLowerCase().includes(q));
-  return [...areas.slice(0, 2), ...starts, ...contains].slice(0, 7);
+  const areaHits = areas.filter((o) => o.label.toLowerCase().includes(q) || aliased.has(o.key));
+  const starts = subjects.filter((o) => o.label.toLowerCase().startsWith(q));
+  const contains = subjects.filter((o) => !o.label.toLowerCase().startsWith(q) && o.label.toLowerCase().includes(q));
+  return [...areaHits.slice(0, 2), ...starts, ...contains].slice(0, 7);
 }
 
 /**
@@ -40,14 +46,16 @@ export function SubjectSearch({ className, hideLabel, autoFocus }: { className?:
   const [open, setOpen] = React.useState(false);
   const [active, setActive] = React.useState(-1);
 
+  const catalog = useCatalog();
+  const all = React.useMemo(() => buildOptions(catalog), [catalog]);
   const q = query.trim().toLowerCase();
-  const options = React.useMemo(() => match(q), [q]);
+  const options = React.useMemo(() => match(q, all), [q, all]);
   const showList = open && options.length > 0;
 
   const go = (option?: Option) => {
     setOpen(false);
     if (option) return router.push(option.href);
-    const exact = SUBJECT_OPTIONS.find((o) => o.label.toLowerCase() === q);
+    const exact = all.subjects.find((o) => o.label.toLowerCase() === q);
     if (exact) return router.push(exact.href);
     router.push(q ? `/tutors?q=${encodeURIComponent(query.trim())}` : "/tutors");
   };

@@ -7,7 +7,7 @@ import { ArrowRight, BellPlus, Briefcase, Coins, Inbox, MapPin, Search, SlidersH
 import type { AlertFrequency, ApplicationStatus, Level, Requirement, Role, TeachingMode } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useCreditBalance, useFlag, useHydrated, useNow, useSession, useTutor } from "@/lib/store/hooks";
-import { LEVELS, LEVEL_LABEL, SUBJECT_BY_SLUG, gradeToLevel, subjectName } from "@/lib/data/catalog";
+import { LEVELS, LEVEL_LABEL, getSubject, gradeToLevel, subjectName } from "@/lib/data/catalog";
 import { isValidZip, resolveLocation } from "@/lib/data/geo";
 import { scoreTutor } from "@/lib/matching";
 import { pluralize } from "@/lib/format";
@@ -60,7 +60,7 @@ function parseFilters(p: URLSearchParams): JobFilters {
   const sort = p.get("sort") as SortKey | null;
   return {
     q: p.get("q")?.trim() || undefined,
-    subject: subject && SUBJECT_BY_SLUG[subject] ? subject : undefined,
+    subject: subject && getSubject(subject) ? subject : undefined,
     level: level && LEVELS.some((l) => l.value === level) ? level : undefined,
     mode: mode === "online" || mode === "in_person" ? mode : undefined,
     location: p.get("location")?.trim() || undefined,

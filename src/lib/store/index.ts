@@ -7,7 +7,7 @@ import type {
   Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message,
   NotificationPrefs, Payment, Payout, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch,
   Subscription, TeachingMode, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WeeklyWindow,
-  AvailabilityException, BookingRules, TrialConfig, PayMethod, WalletTransaction,
+  AvailabilityException, BookingRules, TrialConfig, PayMethod, WalletTransaction, Subject, SubjectCategory,
 } from "@/lib/types";
 import { DEMO_CHILDREN, DEMO_USERS, OTHER_USERS } from "@/lib/data/users";
 import { REQUIREMENTS_REFERENCE_TIME, SEED_APPLICATIONS, SEED_REQUIREMENTS } from "@/lib/data/requirements";
@@ -21,7 +21,7 @@ import { isFlagOn } from "@/lib/flags";
 import { resolveLocation } from "@/lib/data/geo";
 import { canTransition, cancellationRefund, STATUS_META } from "@/lib/booking";
 import { actorFor, hasPermission } from "@/lib/permissions";
-import { subjectName } from "@/lib/data/catalog";
+import { DEFAULT_SUBJECTS, DEFAULT_SUBJECT_CATEGORIES, buildCatalog, setLiveCatalog, slugify, subjectName } from "@/lib/data/catalog";
 import { createSeed, emptySeed } from "./seed";
 import { SAMPLE_DATA } from "@/lib/sample-data";
 
@@ -47,6 +47,13 @@ function definedOnly<T extends object>(obj: T): Partial<T> {
 const shiftIso = (iso: string | undefined, ms: number) => (iso ? new Date(new Date(iso).getTime() + ms).toISOString() : iso);
 
 const uid = (p: string) => `${p}_${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 12)}`;
+/** "algebra" → "algebra", or "algebra-2" when that slug is taken. Empty when the name has no letters or numbers. */
+const uniqueSlug = (base: string, taken: string[]): string => {
+  if (!base) return "";
+  let slug = base;
+  for (let n = 2; taken.includes(slug); n++) slug = `${base}-${n}`;
+  return slug;
+};
 const nowIso = () => new Date().toISOString();
 
 async function sha256(text: string): Promise<string> {
@@ -141,6 +148,8 @@ interface Data {
   coupons: Coupon[];
   policy: BookingPolicy;
   platformFeeBps: number;
+  /** Subject areas and subjects, as edited in Admin → Catalog. Every page reads this (see useCatalog). */
+  catalog: { categories: SubjectCategory[]; subjects: Subject[] };
   loginHistory: { userId: string; at: string; device: string; success: boolean }[];
   /** Password-reset links that are still valid (token → account). Stands in for the emailed link. */
   passwordResets: Record<string, { userId: string; expiresAt: string }>;
@@ -240,6 +249,14 @@ interface Actions {
   updatePolicy(patch: Partial<BookingPolicy>): Result;
   setPlatformFee(bps: number): Result;
   saveCoupon(input: Omit<Coupon, "id" | "redemptions"> & { id?: string }): Result<Coupon>;
+  // subject catalog (admin)
+  /** Creates an area (no slug) or edits one (with its slug). The slug is made from the name once and never changes. */
+  saveSubjectArea(input: { slug?: string; name: string; description: string; hidden?: boolean }): Result<SubjectCategory>;
+  deleteSubjectArea(slug: string): Result;
+  saveSubject(input: { slug?: string; name: string; category: string; summary: string; popular?: boolean; hidden?: boolean }): Result<Subject>;
+  /** Only for subjects nothing uses yet; otherwise hide it so old records keep its name. */
+  deleteSubject(slug: string): Result;
+  moveCatalogItem(kind: "area" | "subject", slug: string, direction: -1 | 1): Result;
   logConversationAccess(conversationId: string, reason: string): Result;
   // background jobs & consent
   /** What the BullMQ scheduler does in production: expire stale requests, auto-complete finished lessons. */
@@ -304,6 +321,7 @@ function initialData(): Data {
     coupons: SEED_COUPONS,
     policy: DEFAULT_POLICY,
     platformFeeBps: SITE.platformFeeBps,
+    catalog: { categories: DEFAULT_SUBJECT_CATEGORIES, subjects: DEFAULT_SUBJECTS },
     loginHistory: [],
     passwordResets: {},
     emailTokens: {},
@@ -337,6 +355,13 @@ export const useApp = create<AppState>()(
       const audit = (action: string, targetType: string, targetId: string, meta?: AuditLog["meta"]) => {
         const u = me();
         set((s) => ({ auditLogs: [{ id: uid("aud"), actorId: u?.id ?? "system", action, targetType, targetId, meta, createdAt: nowIso() }, ...s.auditLogs] }));
+      };
+      /** Catalog edits need an admin with content.manage. */
+      const requireCatalogEditor = (): Result<User> => {
+        const r = requireUser(["admin"]);
+        if (!r.ok) return r;
+        if (!hasPermission(r.data, "content.manage")) return fail("You don't have permission to edit the subject catalog.");
+        return r;
       };
       const requireUser = (roles?: Role[]): Result<User> => {
         const u = me();
@@ -1382,6 +1407,110 @@ export const useApp = create<AppState>()(
           audit("settings.platform_fee", "settings", "platform_fee", { bps });
           return ok(undefined);
         },
+        saveSubjectArea(input) {
+          const r = requireCatalogEditor();
+          if (!r.ok) return r;
+          const name = input.name.trim().replace(/\s+/g, " ");
+          const description = input.description.trim();
+          if (name.length < 2 || name.length > 60) return fail("Give the area a name of 2–60 characters.");
+          if (description.length > 200) return fail("Keep the description under 200 characters.");
+          const { categories } = get().catalog;
+          if (categories.some((c) => c.slug !== input.slug && c.name.toLowerCase() === name.toLowerCase())) return fail("An area with that name already exists.");
+          if (input.slug) {
+            const existing = categories.find((c) => c.slug === input.slug);
+            if (!existing) return fail("That area no longer exists.");
+            const updated: SubjectCategory = { ...existing, name, description, hidden: !!input.hidden };
+            set((st) => ({ catalog: { ...st.catalog, categories: st.catalog.categories.map((c) => (c.slug === updated.slug ? updated : c)) } }));
+            audit("catalog.area.update", "subject_area", updated.slug, { name, hidden: !!input.hidden });
+            return ok(updated);
+          }
+          const slug = uniqueSlug(slugify(name), categories.map((c) => c.slug));
+          if (!slug) return fail("Use letters or numbers in the name.");
+          const created: SubjectCategory = { slug, name, description, hidden: !!input.hidden };
+          set((st) => ({ catalog: { ...st.catalog, categories: [...st.catalog.categories, created] } }));
+          audit("catalog.area.create", "subject_area", slug, { name });
+          return ok(created);
+        },
+        deleteSubjectArea(slug) {
+          const r = requireCatalogEditor();
+          if (!r.ok) return r;
+          const area = get().catalog.categories.find((c) => c.slug === slug);
+          if (!area) return fail("That area no longer exists.");
+          const inside = get().catalog.subjects.filter((x) => x.category === slug).length;
+          if (inside > 0) return fail(`Move or delete the ${inside} ${inside === 1 ? "subject" : "subjects"} in ${area.name} first — or hide the area instead.`);
+          set((st) => ({ catalog: { ...st.catalog, categories: st.catalog.categories.filter((c) => c.slug !== slug) } }));
+          audit("catalog.area.delete", "subject_area", slug, { name: area.name });
+          return ok(undefined);
+        },
+        saveSubject(input) {
+          const r = requireCatalogEditor();
+          if (!r.ok) return r;
+          const name = input.name.trim().replace(/\s+/g, " ");
+          const summary = input.summary.trim();
+          if (name.length < 2 || name.length > 60) return fail("Give the subject a name of 2–60 characters.");
+          if (summary.length > 200) return fail("Keep the summary under 200 characters.");
+          const { categories, subjects } = get().catalog;
+          if (!categories.some((c) => c.slug === input.category)) return fail("Choose the area this subject belongs to.");
+          if (subjects.some((x) => x.slug !== input.slug && x.name.toLowerCase() === name.toLowerCase())) return fail("A subject with that name already exists.");
+          if (input.slug) {
+            const existing = subjects.find((x) => x.slug === input.slug);
+            if (!existing) return fail("That subject no longer exists.");
+            const updated: Subject = { ...existing, name, summary, category: input.category, popular: !!input.popular, hidden: !!input.hidden };
+            set((st) => ({ catalog: { ...st.catalog, subjects: st.catalog.subjects.map((x) => (x.slug === updated.slug ? updated : x)) } }));
+            audit("catalog.subject.update", "subject", updated.slug, { name, category: input.category, hidden: !!input.hidden, popular: !!input.popular });
+            return ok(updated);
+          }
+          const slug = uniqueSlug(slugify(name), subjects.map((x) => x.slug));
+          if (!slug) return fail("Use letters or numbers in the name.");
+          const created: Subject = { slug, name, category: input.category, summary, popular: !!input.popular, hidden: !!input.hidden };
+          set((st) => ({ catalog: { ...st.catalog, subjects: [...st.catalog.subjects, created] } }));
+          audit("catalog.subject.create", "subject", slug, { name, category: input.category });
+          return ok(created);
+        },
+        deleteSubject(slug) {
+          const r = requireCatalogEditor();
+          if (!r.ok) return r;
+          const subject = get().catalog.subjects.find((x) => x.slug === slug);
+          if (!subject) return fail("That subject no longer exists.");
+          const st = get();
+          const tutorIds = [...Object.keys(TUTOR_BY_ID), ...st.registeredTutors.map((t) => t.id)];
+          const tutors = tutorIds.filter((id) => resolveTutor(st, id)?.subjects.includes(slug)).length;
+          const records = st.requirements.filter((q) => q.subject === slug).length + st.bookings.filter((b) => b.subject === slug).length;
+          if (tutors + records > 0) {
+            const parts = [tutors && `${tutors} ${tutors === 1 ? "tutor teaches" : "tutors teach"} it`, records && `${records} ${records === 1 ? "booking or request uses" : "bookings and requests use"} it`].filter(Boolean);
+            return fail(`${parts.join(" and ")}. Hide it instead so those records keep its name.`);
+          }
+          set((x) => ({ catalog: { ...x.catalog, subjects: x.catalog.subjects.filter((y) => y.slug !== slug) } }));
+          audit("catalog.subject.delete", "subject", slug, { name: subject.name });
+          return ok(undefined);
+        },
+        moveCatalogItem(kind, slug, direction) {
+          const r = requireCatalogEditor();
+          if (!r.ok) return r;
+          const swap = <T extends { slug: string }>(list: T[], peers: (x: T) => boolean): T[] | null => {
+            const i = list.findIndex((x) => x.slug === slug);
+            if (i < 0) return null;
+            let j = i + direction;
+            while (j >= 0 && j < list.length && !peers(list[j])) j += direction;
+            if (j < 0 || j >= list.length) return null;
+            const next = [...list];
+            [next[i], next[j]] = [next[j], next[i]];
+            return next;
+          };
+          const { categories, subjects } = get().catalog;
+          if (kind === "area") {
+            const next = swap(categories, () => true);
+            if (!next) return fail("It's already at the edge.");
+            set((st) => ({ catalog: { ...st.catalog, categories: next } }));
+          } else {
+            const area = subjects.find((x) => x.slug === slug)?.category;
+            const next = swap(subjects, (x) => x.category === area);
+            if (!next) return fail("It's already at the edge.");
+            set((st) => ({ catalog: { ...st.catalog, subjects: next } }));
+          }
+          audit("catalog.reorder", kind === "area" ? "subject_area" : "subject", slug, { direction });
+          return ok(undefined);
+        },
         saveCoupon(input) {
           const r = requireUser(["admin"]);
           if (!r.ok) return r;
@@ -1462,3 +1591,10 @@ export const useApp = create<AppState>()(
     },
   ),
 );
+
+/* The catalog registry that plain modules read (getCatalog / subjectName) follows the store. */
+const syncCatalog = (c: Data["catalog"]) => setLiveCatalog(buildCatalog(c.categories, c.subjects));
+syncCatalog(useApp.getState().catalog);
+useApp.subscribe((state, prev) => {
+  if (state.catalog !== prev.catalog) syncCatalog(state.catalog);
+});

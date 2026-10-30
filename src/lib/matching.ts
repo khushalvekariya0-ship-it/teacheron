@@ -1,5 +1,5 @@
 import type { Grade, Level, TeachingMode, Tutor } from "@/lib/types";
-import { SUBJECT_BY_SLUG, gradeToLevel, LEVEL_LABEL, TIMES_OF_DAY, WEEKDAYS, subjectName } from "@/lib/data/catalog";
+import { getCatalog, getSubject, gradeToLevel, LEVEL_LABEL, TIMES_OF_DAY, WEEKDAYS, subjectName } from "@/lib/data/catalog";
 import { distanceMiles, resolveLocation } from "@/lib/data/geo";
 import { formatCents } from "@/lib/format";
 
@@ -65,7 +65,7 @@ export const FACTOR_LABEL: Record<FactorKey, string> = {
 };
 
 function relatedSubject(a: string, b: string): boolean {
-  return SUBJECT_BY_SLUG[a]?.category !== undefined && SUBJECT_BY_SLUG[a]?.category === SUBJECT_BY_SLUG[b]?.category;
+  return getSubject(a)?.category !== undefined && getSubject(a)?.category === getSubject(b)?.category;
 }
 
 function timeWindowOverlaps(tutor: Tutor, days: string[] | undefined, times: MatchCriteria["timesOfDay"]): { overlap: number; total: number; matched: string[] } {
@@ -110,7 +110,7 @@ export function scoreTutor(tutor: Tutor, c: MatchCriteria, weights = DEFAULT_WEI
   if (c.subject) {
     if (tutor.subjects.includes(c.subject)) push("subject", 1, `Teaches ${subjectName(c.subject)}`);
     else if (tutor.subjects.some((s) => relatedSubject(s, c.subject!))) {
-      push("subject", 0.35, `Teaches related ${SUBJECT_BY_SLUG[c.subject]?.category === "math" ? "math" : "subjects"}, not ${subjectName(c.subject)} specifically`);
+      push("subject", 0.35, `Teaches related ${getSubject(c.subject)?.category === "math" ? "math" : "subjects"}, not ${subjectName(c.subject)} specifically`);
     } else {
       push("subject", 0, `Does not list ${subjectName(c.subject)}`);
       disqualified = true;
@@ -215,7 +215,7 @@ export function parseNaturalLanguage(text: string): MatchCriteria {
 
   // Whole-word matching so "Saturday" never reads as SAT and "act" never matches "practice".
   const hasWord = (k: string) => new RegExp(`(^|[^a-z0-9])${k.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`).test(t);
-  const subjectHit = Object.values(SUBJECT_BY_SLUG)
+  const subjectHit = getCatalog().subjects
     .map((s) => ({ s, keys: [s.name.toLowerCase(), s.slug.replace(/-/g, " "), ...(SUBJECT_ALIASES[s.slug] ?? [])] }))
     .find(({ keys }) => keys.some(hasWord));
   if (subjectHit) c.subject = subjectHit.s.slug;

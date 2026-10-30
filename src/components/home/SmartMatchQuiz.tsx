@@ -4,9 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, BadgeCheck, Check, SearchX, Star } from "lucide-react";
 import type { Grade, Level } from "@/lib/types";
-import { LEVELS, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES, subjectName } from "@/lib/data/catalog";
+import { LEVELS, subjectGroups, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, rankTutors, type MatchResult } from "@/lib/matching";
-import { useTutors } from "@/lib/store/hooks";
+import { useCatalog, useTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
@@ -17,13 +17,11 @@ import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent } from "@/components/ui/Overlay";
 import { SelectMenu, type SelectGroup } from "@/components/ui/SelectMenu";
 
-/** The eight most-asked-for subjects; every other subject is one tap away in the list below them. */
-export const QUIZ_SUBJECTS = SUBJECTS.filter((s) => s.popular).slice(0, 8);
-
-const SUBJECT_GROUPS: SelectGroup[] = SUBJECT_CATEGORIES.map((c) => ({
-  label: c.name,
-  options: SUBJECTS.filter((s) => s.category === c.slug).map((s) => ({ value: s.slug, label: s.name })),
-}));
+/** The eight most-asked-for (popular) subjects in the live catalog; every other subject is one tap away in the list below them. */
+export function useQuizSubjects() {
+  const { subjects } = useCatalog();
+  return React.useMemo(() => subjects.filter((s) => s.popular).slice(0, 8), [subjects]);
+}
 
 /** The matcher scores a grade, so each level is represented by a grade in the middle of it. */
 const LEVEL_GRADE: Record<Level, Grade> = { elementary: "3", middle: "7", high: "10", college: "college", adult: "adult" };
@@ -61,7 +59,10 @@ export function SmartMatchQuiz({ open, onOpenChange, initialSubject }: { open: b
 
 function QuizBody({ initialSubject, onClose }: { initialSubject?: string; onClose: () => void }) {
   const tutors = useTutors();
-  const startSubject = initialSubject && SUBJECT_BY_SLUG[initialSubject] ? initialSubject : null;
+  const catalog = useCatalog();
+  const quizSubjects = useQuizSubjects();
+  const groups: SelectGroup[] = subjectGroups(catalog);
+  const startSubject = initialSubject && catalog.bySlug[initialSubject] ? initialSubject : null;
   const [subject, setSubject] = React.useState<string | null>(startSubject);
   const [level, setLevel] = React.useState<Level | null>(null);
   const [step, setStep] = React.useState(startSubject ? 1 : 0);
@@ -105,7 +106,7 @@ function QuizBody({ initialSubject, onClose }: { initialSubject?: string; onClos
               </h3>
               <p className="mt-1.5 text-[14.5px] text-muted">Pick one. You can change it later.</p>
               <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                {QUIZ_SUBJECTS.map((s) => (
+                {quizSubjects.map((s) => (
                   <button
                     key={s.slug}
                     type="button"
@@ -128,14 +129,14 @@ function QuizBody({ initialSubject, onClose }: { initialSubject?: string; onClos
               <div className="mt-4">
                 <SelectMenu
                   aria-label="Another subject"
-                  value={subject && !QUIZ_SUBJECTS.some((s) => s.slug === subject) ? subject : ""}
+                  value={subject && !quizSubjects.some((s) => s.slug === subject) ? subject : ""}
                   onValueChange={(v) => {
                     if (!v) return;
                     setSubject(v);
                     go(1);
                   }}
-                  groups={SUBJECT_GROUPS}
-                  placeholder={`Another subject (${SUBJECTS.length} in total)`}
+                  groups={groups}
+                  placeholder={`Another subject (${catalog.subjects.length} in total)`}
                   className="w-full"
                 />
               </div>

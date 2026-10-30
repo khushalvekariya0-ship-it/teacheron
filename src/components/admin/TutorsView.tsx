@@ -5,9 +5,9 @@ import Link from "next/link";
 import { BadgeCheck, CircleDashed, CircleX, Clock3, ExternalLink, Sparkles, UserRound } from "lucide-react";
 import type { Tutor, VerificationKind, VerificationStatus } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { useCatalog, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { TUTOR_PLANS } from "@/lib/data/platform";
-import { MODE_LABEL, SUBJECTS, TUTOR_CATEGORY_LABEL, subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
+import { MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
 import { formatCents, formatDate, formatDuration, pluralize } from "@/lib/format";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -104,6 +104,7 @@ export function TutorsView() {
 }
 
 function TutorsInner() {
+  const catalog = useCatalog();
   const tutors = useTutors();
   const subscriptions = useApp((s) => s.subscriptions);
   const [q, setQ] = React.useState("");
@@ -114,8 +115,8 @@ function TutorsInner() {
 
   const subjectOptions = React.useMemo(() => {
     const taught = new Set(tutors.flatMap((t) => t.subjects));
-    return [{ value: "all", label: "Any subject" }, ...SUBJECTS.filter((s) => taught.has(s.slug)).map((s) => ({ value: s.slug, label: s.name })).sort((a, b) => a.label.localeCompare(b.label))];
-  }, [tutors]);
+    return [{ value: "all", label: "Any subject" }, ...catalog.allSubjects.filter((s) => taught.has(s.slug)).map((s) => ({ value: s.slug, label: s.name })).sort((a, b) => a.label.localeCompare(b.label))];
+  }, [catalog, tutors]);
 
   const rows = React.useMemo(
     () =>

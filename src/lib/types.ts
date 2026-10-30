@@ -73,6 +73,8 @@ export interface SubjectCategory {
   slug: string;
   name: string;
   description: string;
+  /** Hidden areas (and their subjects) stay in the data but don't show on the site. */
+  hidden?: boolean;
 }
 
 export interface Subject {
@@ -82,6 +84,8 @@ export interface Subject {
   /** Short SEO-ready summary for subject landing pages. */
   summary: string;
   popular?: boolean;
+  /** Hidden subjects stay in the data (old bookings keep their name) but don't show on the site. */
+  hidden?: boolean;
 }
 
 /* ─── Tutors ────────────────────────────────────────────────────────────────── */

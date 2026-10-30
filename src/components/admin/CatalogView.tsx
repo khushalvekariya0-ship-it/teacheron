@@ -2,17 +2,22 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, BookOpen, MapPin, Search, Star } from "lucide-react";
-import type { Tutor } from "@/lib/types";
-import { useTutors } from "@/lib/store/hooks";
-import { MODE_LABEL, SUBJECTS, SUBJECT_CATEGORIES, US_TIMEZONES } from "@/lib/data/catalog";
+import { ArrowDown, ArrowUp, ArrowUpRight, BookOpen, Eye, EyeOff, MapPin, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
+import type { Subject, SubjectCategory, Tutor } from "@/lib/types";
+import { useApp } from "@/lib/store";
+import { useCatalog, useTutors } from "@/lib/store/hooks";
+import { MODE_LABEL, US_TIMEZONES, slugify } from "@/lib/data/catalog";
 import { METROS, distanceMiles, type Metro } from "@/lib/data/geo";
 import { formatCents, pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
-import { Sheet, SheetContent } from "@/components/ui/Overlay";
+import { ConfirmDialog, Dialog, DialogBody, DialogClose, DialogContent, DialogFooter, Sheet, SheetContent } from "@/components/ui/Overlay";
+import { Button } from "@/components/ui/Button";
+import { Field, Input, Select, Textarea } from "@/components/ui/Input";
+import { Switch } from "@/components/ui/Controls";
+import { toast } from "@/components/ui/Toast";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import {
@@ -33,6 +38,9 @@ interface SubjectRow {
   categoryName: string;
   summary: string;
   popular: boolean;
+  /** Hidden itself or inside a hidden area — either way it doesn't show on the site. */
+  hidden: boolean;
+  ownHidden: boolean;
   tutors: Tutor[];
   inPerson: number;
 }
@@ -44,7 +52,6 @@ interface MetroRow {
   basedOnline: number;
 }
 
-const CATEGORY_NAME = Object.fromEntries(SUBJECT_CATEGORIES.map((c) => [c.slug, c.name])) as Record<string, string>;
 const TZ_LABEL = Object.fromEntries(US_TIMEZONES.map((t) => [t.value, t.label])) as Record<string, string>;
 
 /** Whether a concrete path is served by one of the scanned route patterns ("/subjects/[slug]"). */
@@ -78,26 +85,42 @@ export function CatalogView({ publicRoutes }: { publicRoutes: string[] | null })
 
 function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
   const tutors = useTutors();
+  const catalog = useCatalog();
+  const moveItem = useApp((s) => s.moveCatalogItem);
   const [tab, setTab] = React.useState<TabKey>("subjects");
   const [openId, setOpenId] = useUrlParam("id");
+  // Editors: an area (slug null = new) and a subject (slug null = new, optionally inside an area).
+  const [areaEdit, setAreaEdit] = React.useState<{ slug: string | null } | null>(null);
+  const [subjectEdit, setSubjectEdit] = React.useState<{ slug: string | null; area?: string } | null>(null);
 
+  // Every subject, hidden ones included, in the catalog's order.
   const subjects = React.useMemo<SubjectRow[]>(
     () =>
-      SUBJECTS.map((s) => {
-        const list = tutors.filter((t) => t.subjects.includes(s.slug));
-        return {
-          slug: s.slug,
-          name: s.name,
-          category: s.category,
-          categoryName: CATEGORY_NAME[s.category] ?? s.category,
-          summary: s.summary,
-          popular: !!s.popular,
-          tutors: list,
-          inPerson: list.filter((t) => t.modes.includes("in_person")).length,
-        };
-      }),
-    [tutors],
+      catalog.allCategories.flatMap((c) =>
+        catalog.allSubjects
+          .filter((s) => s.category === c.slug)
+          .map((s) => {
+            const list = tutors.filter((t) => t.subjects.includes(s.slug));
+            return {
+              slug: s.slug,
+              name: s.name,
+              category: s.category,
+              categoryName: c.name,
+              summary: s.summary,
+              popular: !!s.popular,
+              hidden: !!s.hidden || !!c.hidden,
+              ownHidden: !!s.hidden,
+              tutors: list,
+              inPerson: list.filter((t) => t.modes.includes("in_person")).length,
+            };
+          }),
+      ),
+    [tutors, catalog],
   );
+  const move = (kind: "area" | "subject", slug: string, direction: -1 | 1) => {
+    const res = moveItem(kind, slug, direction);
+    if (!res.ok) toast.error(res.error);
+  };
 
   const metros = React.useMemo<MetroRow[]>(
     () =>
@@ -114,7 +137,7 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
   );
 
   const onlineTutors = tutors.filter((t) => t.modes.includes("online")).length;
-  const thinSubjects = subjects.filter((s) => s.tutors.length <= THIN);
+  const thinSubjects = subjects.filter((s) => !s.hidden && s.tutors.length <= THIN);
   const thinMetros = metros.filter((m) => m.inPerson.length <= THIN);
 
   const openSubject = subjects.find((s) => s.slug === openId) ?? null;
@@ -124,14 +147,22 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
     <>
       <PageHeader
         title="Catalog"
-        description="Subjects and metro areas that power search, matching and landing pages, with live tutor supply from current profiles."
+        description="Subject areas, subjects and metro areas that power the menus, search, matching and landing pages, with live tutor supply from current profiles."
         actions={
           tab === "subjects" ? (
-            <ExportButton
-              filename="tutorlink-subjects"
-              headers={["Slug", "Subject", "Category", "Popular", "Tutors", "Tutors offering in person"]}
-              rows={() => subjects.map((s) => [s.slug, s.name, s.categoryName, s.popular, s.tutors.length, s.inPerson])}
-            />
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setAreaEdit({ slug: null })}>
+                <Plus aria-hidden /> New area
+              </Button>
+              <Button size="sm" onClick={() => setSubjectEdit({ slug: null })}>
+                <Plus aria-hidden /> New subject
+              </Button>
+              <ExportButton
+                filename="tutorlink-subjects"
+                headers={["Slug", "Subject", "Area", "Popular", "Shown on site", "Tutors", "Tutors offering in person"]}
+                rows={() => subjects.map((s) => [s.slug, s.name, s.categoryName, s.popular, !s.hidden, s.tutors.length, s.inPerson])}
+              />
+            </div>
           ) : (
             <ExportButton
               filename="tutorlink-metros"
@@ -142,12 +173,12 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
         }
       />
 
-      <InlineAlert tone="info" title="Read-only" className="mb-6">
-        Catalog editing is served by the CMS API in production. Subjects, categories and metros here come from the catalog bundled with this preview; tutor counts are computed from current tutor profiles.
+      <InlineAlert tone="info" title="Changes apply across the whole site" className="mb-6">
+        Areas and subjects you add, rename, reorder or hide here update the menus, search, filters, subject pages, tutor profiles and every subject picker. Until the database is connected, changes are saved in this browser only. Metro areas are read-only.
       </InlineAlert>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MiniStat label="Subjects" value={SUBJECTS.length} hint={`${pluralize(SUBJECT_CATEGORIES.length, "category", "categories")}`} />
+        <MiniStat label="Subjects on the site" value={catalog.subjects.length} hint={`${pluralize(catalog.categories.length, "area")} · ${subjects.filter((s) => s.hidden).length} hidden`} />
         <MiniStat label="Thin subjects" value={thinSubjects.length} tone={thinSubjects.length ? "warning" : undefined} hint={`${THIN} or fewer tutors`} />
         <MiniStat label="Metros" value={METROS.length} hint={`${thinMetros.length} with thin in-person supply`} />
         <MiniStat label="Online tutors" value={onlineTutors} hint={`of ${pluralize(tutors.length, "tutor")} · available everywhere`} />
@@ -155,7 +186,7 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
         <TabsList aria-label="Catalog">
-          <TabsTrigger value="subjects" count={SUBJECTS.length}>
+          <TabsTrigger value="subjects" count={catalog.allSubjects.length}>
             Subjects
           </TabsTrigger>
           <TabsTrigger value="metros" count={METROS.length}>
@@ -163,14 +194,37 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="subjects">
-          <SubjectsTab rows={subjects} thin={thinSubjects} publicRoutes={publicRoutes} onOpen={setOpenId} />
+          <SubjectsTab
+            rows={subjects}
+            areas={catalog.allCategories}
+            thin={thinSubjects}
+            publicRoutes={publicRoutes}
+            onOpen={setOpenId}
+            onEditArea={(slug) => setAreaEdit({ slug })}
+            onAddSubject={(area) => setSubjectEdit({ slug: null, area })}
+            onMove={move}
+          />
         </TabsContent>
         <TabsContent value="metros">
           <MetrosTab rows={metros} onlineTutors={onlineTutors} publicRoutes={publicRoutes} onOpen={setOpenId} />
         </TabsContent>
       </Tabs>
 
-      <SubjectSheet row={openSubject} publicRoutes={publicRoutes} onClose={() => setOpenId(null)} />
+      <SubjectSheet row={openSubject} publicRoutes={publicRoutes} onClose={() => setOpenId(null)} onEdit={(slug) => setSubjectEdit({ slug })} onMove={move} />
+      <AreaDialog
+        open={!!areaEdit}
+        area={areaEdit?.slug ? (catalog.categoryBySlug[areaEdit.slug] ?? null) : null}
+        subjectCount={areaEdit?.slug ? catalog.allSubjects.filter((x) => x.category === areaEdit.slug).length : 0}
+        onOpenChange={(o) => !o && setAreaEdit(null)}
+      />
+      <SubjectDialog
+        open={!!subjectEdit}
+        subject={subjectEdit?.slug ? (catalog.bySlug[subjectEdit.slug] ?? null) : null}
+        defaultArea={subjectEdit?.area}
+        areas={catalog.allCategories}
+        onOpenChange={(o) => !o && setSubjectEdit(null)}
+        onDeleted={() => setOpenId(null)}
+      />
       <MetroSheet row={openMetro} publicRoutes={publicRoutes} onClose={() => setOpenId(null)} />
     </>
   );
@@ -178,7 +232,25 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
 
 /* ─── Subjects ───────────────────────────────────────────────────────────────── */
 
-function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[]; thin: SubjectRow[]; publicRoutes: string[] | null; onOpen: (slug: string) => void }) {
+function SubjectsTab({
+  rows,
+  areas,
+  thin,
+  publicRoutes,
+  onOpen,
+  onEditArea,
+  onAddSubject,
+  onMove,
+}: {
+  rows: SubjectRow[];
+  areas: SubjectCategory[];
+  thin: SubjectRow[];
+  publicRoutes: string[] | null;
+  onOpen: (slug: string) => void;
+  onEditArea: (slug: string) => void;
+  onAddSubject: (area: string) => void;
+  onMove: (kind: "area" | "subject", slug: string, direction: -1 | 1) => void;
+}) {
   const [q, setQ] = React.useState("");
   const [category, setCategory] = React.useState("all");
   const [supply, setSupply] = React.useState<SupplyFilter>("all");
@@ -197,12 +269,12 @@ function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[];
 
   const totals = React.useMemo(
     () =>
-      SUBJECT_CATEGORIES.map((c) => {
+      areas.map((c) => {
         const inCat = rows.filter((s) => s.category === c.slug);
         const tutorIds = new Set(inCat.flatMap((s) => s.tutors.map((t) => t.id)));
         return { ...c, subjects: inCat.length, tutors: tutorIds.size, thin: inCat.filter((s) => s.tutors.length <= THIN).length };
       }),
-    [rows],
+    [rows, areas],
   );
 
   const columns: Column<SubjectRow>[] = [
@@ -212,13 +284,14 @@ function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[];
       sortValue: (s) => s.name,
       cell: (s) => (
         <span className="block min-w-0">
-          <span className="flex items-center gap-1.5 font-medium text-ink">
+          <span className={cn("flex flex-wrap items-center gap-1.5 font-medium", s.hidden ? "text-muted" : "text-ink")}>
             {s.name}
             {s.popular && (
               <Badge tone="accent" size="sm">
                 <Star aria-hidden /> Popular
               </Badge>
             )}
+            {s.hidden && <StatusPill tone="neutral">Hidden</StatusPill>}
           </span>
           <Mono>{s.slug}</Mono>
         </span>
@@ -230,7 +303,8 @@ function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[];
     { key: "page", header: "Public page", cell: (s) => <SubjectLink slug={s.slug} publicRoutes={publicRoutes} compact />, hideOnMobile: true },
   ];
 
-  const groups = SUBJECT_CATEGORIES.map((c) => ({ ...c, rows: visible.filter((s) => s.category === c.slug) })).filter((g) => g.rows.length);
+  // With no filters every area is listed (new, empty ones too); with filters only areas with matches.
+  const groups = areas.map((c) => ({ ...c, rows: visible.filter((s) => s.category === c.slug) })).filter((g) => g.rows.length || (!filtered && category === "all"));
 
   return (
     <>
@@ -254,7 +328,7 @@ function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[];
                 active ? "border-ink bg-brand-soft" : "border-line bg-surface hover:border-ink",
               )}
             >
-              <span className="block truncate text-[13.5px] font-medium text-ink">{c.name}</span>
+              <span className={cn("block truncate text-[13.5px] font-medium", c.hidden ? "text-muted line-through" : "text-ink")}>{c.name}</span>
               <span className="mt-0.5 block text-[12px] tabular-nums text-muted">
                 {pluralize(c.subjects, "subject")} · {pluralize(c.tutors, "tutor")}
                 {c.thin > 0 && <span className="text-warning"> · {c.thin} thin</span>}
@@ -266,7 +340,7 @@ function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[];
 
       <Toolbar summary={pluralize(visible.length, "subject")}>
         <SearchInput value={q} onChange={setQ} placeholder="Search subjects…" label="Search subjects" />
-        <FilterSelect label="Category" value={category} onChange={setCategory} options={[{ value: "all", label: "All categories" }, ...SUBJECT_CATEGORIES.map((c) => ({ value: c.slug, label: c.name }))]} />
+        <FilterSelect label="Area" value={category} onChange={setCategory} options={[{ value: "all", label: "All areas" }, ...areas.map((c) => ({ value: c.slug, label: c.name }))]} />
         <FilterSelect
           label="Supply"
           value={supply}
@@ -295,13 +369,34 @@ function SubjectsTab({ rows, thin, publicRoutes, onOpen }: { rows: SubjectRow[];
         <div className="space-y-8">
           {groups.map((g) => (
             <section key={g.slug} aria-labelledby={`cat-${g.slug}`}>
-              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h2 id={`cat-${g.slug}`} className="text-[14px] font-semibold text-ink">
-                  {g.name}
-                </h2>
-                <p className="text-[12.5px] text-muted">{g.description}</p>
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="min-w-0">
+                  <h2 id={`cat-${g.slug}`} className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink">
+                    {g.name}
+                    {g.hidden && <StatusPill tone="neutral">Hidden area</StatusPill>}
+                  </h2>
+                  {g.description && <p className="mt-0.5 text-[12.5px] text-muted">{g.description}</p>}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button size="icon-sm" variant="ghost" aria-label={`Move ${g.name} up`} onClick={() => onMove("area", g.slug, -1)}>
+                    <ArrowUp aria-hidden />
+                  </Button>
+                  <Button size="icon-sm" variant="ghost" aria-label={`Move ${g.name} down`} onClick={() => onMove("area", g.slug, 1)}>
+                    <ArrowDown aria-hidden />
+                  </Button>
+                  <Button size="xs" variant="secondary" onClick={() => onEditArea(g.slug)}>
+                    <Pencil aria-hidden /> Edit area
+                  </Button>
+                  <Button size="xs" variant="secondary" onClick={() => onAddSubject(g.slug)}>
+                    <Plus aria-hidden /> Add subject
+                  </Button>
+                </div>
               </div>
-              <DataTable rows={g.rows} columns={columns} rowKey={(s) => s.slug} onRowClick={(s) => onOpen(s.slug)} pageSize={50} />
+              {g.rows.length ? (
+                <DataTable rows={g.rows} columns={columns} rowKey={(s) => s.slug} onRowClick={(s) => onOpen(s.slug)} pageSize={50} />
+              ) : (
+                <p className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-[13.5px] text-muted">No subjects in this area yet. Add one and it shows across the site.</p>
+              )}
             </section>
           ))}
         </div>
@@ -454,18 +549,51 @@ function TutorList({ items, empty }: { items: { tutor: Tutor; meta: React.ReactN
   );
 }
 
-function SubjectSheet({ row: current, publicRoutes, onClose }: { row: SubjectRow | null; publicRoutes: string[] | null; onClose: () => void }) {
+function SubjectSheet({
+  row: current,
+  publicRoutes,
+  onClose,
+  onEdit,
+  onMove,
+}: {
+  row: SubjectRow | null;
+  publicRoutes: string[] | null;
+  onClose: () => void;
+  onEdit: (slug: string) => void;
+  onMove: (kind: "area" | "subject", slug: string, direction: -1 | 1) => void;
+}) {
   const row = useSticky(current);
+  const saveSubject = useApp((s) => s.saveSubject);
+  const toggleHidden = (r: SubjectRow) => {
+    const res = saveSubject({ slug: r.slug, name: r.name, category: r.category, summary: r.summary, popular: r.popular, hidden: !r.ownHidden });
+    if (!res.ok) toast.error(res.error);
+    else toast.success(r.ownHidden ? `${r.name} is shown on the site again` : `${r.name} is hidden from the site`);
+  };
   return (
     <Sheet open={!!current} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" title={row?.name ?? "Subject"} description={row ? `${row.categoryName} · ${row.slug}` : undefined} className="sm:w-[34rem]">
         {row && (
           <div className="divide-y divide-line">
             <Section title="Subject">
-              <p className="mb-3 text-[13.5px] leading-relaxed text-ink-2">{row.summary}</p>
+              <div className="mb-4 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => onEdit(row.slug)}>
+                  <Pencil aria-hidden /> Edit
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => toggleHidden(row)}>
+                  {row.ownHidden ? <Eye aria-hidden /> : <EyeOff aria-hidden />} {row.ownHidden ? "Show on site" : "Hide from site"}
+                </Button>
+                <Button size="icon-sm" variant="ghost" aria-label="Move up in its area" onClick={() => onMove("subject", row.slug, -1)}>
+                  <ArrowUp aria-hidden />
+                </Button>
+                <Button size="icon-sm" variant="ghost" aria-label="Move down in its area" onClick={() => onMove("subject", row.slug, 1)}>
+                  <ArrowDown aria-hidden />
+                </Button>
+              </div>
+              {row.summary && <p className="mb-3 text-[13.5px] leading-relaxed text-ink-2">{row.summary}</p>}
               <Facts
                 items={[
-                  { label: "Category", value: row.categoryName },
+                  { label: "On the site", value: row.hidden ? <StatusPill tone="neutral">{row.ownHidden ? "Hidden" : "Hidden (its area is hidden)"}</StatusPill> : <StatusPill tone="success">Shown</StatusPill> },
+                  { label: "Area", value: row.categoryName },
                   { label: "Slug", value: <Mono className="text-ink">{row.slug}</Mono> },
                   { label: "Popular", value: row.popular ? "Yes — featured in popular lists" : "No" },
                   { label: "Supply", value: supplyPill(row.tutors.length, "tutors") },
@@ -516,5 +644,240 @@ function MetroSheet({ row: current, publicRoutes, onClose }: { row: MetroRow | n
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/* ─── Editors ────────────────────────────────────────────────────────────────── */
+
+/** A labelled switch row used in the editors. */
+function SwitchRow({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
+  const id = React.useId();
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-line px-3.5 py-3">
+      <div className="min-w-0">
+        <label htmlFor={id} className="text-[14px] font-medium text-ink">
+          {label}
+        </label>
+        <p className="mt-0.5 text-[12.5px] leading-snug text-muted">{hint}</p>
+      </div>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+function AreaDialog({ open, area, subjectCount, onOpenChange }: { open: boolean; area: SubjectCategory | null; subjectCount: number; onOpenChange: (o: boolean) => void }) {
+  const saveArea = useApp((s) => s.saveSubjectArea);
+  const deleteArea = useApp((s) => s.deleteSubjectArea);
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [shown, setShown] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  // Reset whenever the dialog opens (or switches to another area).
+  const openKey = open ? (area?.slug ?? "new") : null;
+  const [lastKey, setLastKey] = React.useState<string | null>(null);
+  if (lastKey !== openKey) {
+    setLastKey(openKey);
+    if (openKey) {
+      setName(area?.name ?? "");
+      setDescription(area?.description ?? "");
+      setShown(!area?.hidden);
+      setError(null);
+    }
+  }
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = saveArea({ slug: area?.slug, name, description, hidden: !shown });
+    if (!res.ok) return setError(res.error);
+    toast.success(area ? `${res.data.name} updated` : `${res.data.name} added`, { description: shown ? "It now shows across the site." : "It stays hidden until you show it." });
+    onOpenChange(false);
+  };
+  const remove = () => {
+    setConfirmDelete(false);
+    if (!area) return;
+    const res = deleteArea(area.slug);
+    if (!res.ok) return setError(res.error);
+    toast.success(`${area.name} deleted`);
+    onOpenChange(false);
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          title={area ? `Edit ${area.name}` : "New subject area"}
+          description={area ? `${pluralize(subjectCount, "subject")} · /subjects#${area.slug}` : "A top-level group such as Mathematics or World Languages. Add subjects to it next."}
+          size="md"
+        >
+          <form onSubmit={submit} noValidate>
+            <DialogBody className="space-y-4">
+              {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+              <Field label="Name" required hint="2–60 characters.">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setError(null);
+                  }}
+                  maxLength={60}
+                  autoFocus={!area}
+                />
+              </Field>
+              <Field label="Description" optional hint="One line, shown on the subjects page and in the homepage explorer.">
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} showCount rows={3} />
+              </Field>
+              <SwitchRow checked={shown} onChange={setShown} label="Show on the site" hint="A hidden area and its subjects disappear from menus, search and pickers. Nothing is deleted." />
+            </DialogBody>
+            <DialogFooter>
+              {area && (
+                <Button type="button" variant="danger-outline" className="sm:mr-auto" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 aria-hidden /> Delete
+                </Button>
+              )}
+              <DialogClose asChild>
+                <Button variant="secondary">Cancel</Button>
+              </DialogClose>
+              <Button type="submit">{area ? "Save changes" : "Add area"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${area?.name ?? "this area"}?`}
+        description={
+          subjectCount > 0
+            ? `It still has ${pluralize(subjectCount, "subject")}. Move or delete them first, or hide the area instead.`
+            : "This removes the area from the catalog. It can't be undone."
+        }
+        confirmLabel="Delete area"
+        tone="danger"
+        disabled={subjectCount > 0}
+        onConfirm={remove}
+      />
+    </>
+  );
+}
+
+function SubjectDialog({
+  open,
+  subject,
+  defaultArea,
+  areas,
+  onOpenChange,
+  onDeleted,
+}: {
+  open: boolean;
+  subject: Subject | null;
+  defaultArea?: string;
+  areas: SubjectCategory[];
+  onOpenChange: (o: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const saveSubject = useApp((s) => s.saveSubject);
+  const deleteSubject = useApp((s) => s.deleteSubject);
+  const [name, setName] = React.useState("");
+  const [area, setArea] = React.useState("");
+  const [summary, setSummary] = React.useState("");
+  const [popular, setPopular] = React.useState(false);
+  const [shown, setShown] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  // Reset whenever the dialog opens (or switches to another subject).
+  const openKey = open ? (subject?.slug ?? `new:${defaultArea ?? ""}`) : null;
+  const [lastKey, setLastKey] = React.useState<string | null>(null);
+  if (lastKey !== openKey) {
+    setLastKey(openKey);
+    if (openKey) {
+      setName(subject?.name ?? "");
+      setArea(subject?.category ?? defaultArea ?? areas[0]?.slug ?? "");
+      setSummary(subject?.summary ?? "");
+      setPopular(!!subject?.popular);
+      setShown(!subject?.hidden);
+      setError(null);
+    }
+  }
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = saveSubject({ slug: subject?.slug, name, category: area, summary, popular, hidden: !shown });
+    if (!res.ok) return setError(res.error);
+    toast.success(subject ? `${res.data.name} updated` : `${res.data.name} added`, {
+      description: shown ? "It now shows in menus, search, filters and subject pickers across the site." : "It stays hidden until you show it.",
+    });
+    onOpenChange(false);
+  };
+  const remove = () => {
+    setConfirmDelete(false);
+    if (!subject) return;
+    const res = deleteSubject(subject.slug);
+    if (!res.ok) return setError(res.error);
+    toast.success(`${subject.name} deleted`);
+    onOpenChange(false);
+    onDeleted();
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          title={subject ? `Edit ${subject.name}` : "New subject"}
+          description={subject ? `Page: /subjects/${subject.slug}` : `Its page will be /subjects/${slugify(name) || "…"}. The address is set once and stays the same if you rename it.`}
+          size="md"
+        >
+          <form onSubmit={submit} noValidate>
+            <DialogBody className="space-y-4">
+              {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+              <Field label="Name" required hint="2–60 characters, e.g. Organic Chemistry.">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setError(null);
+                  }}
+                  maxLength={60}
+                  autoFocus={!subject}
+                />
+              </Field>
+              <Field label="Area" required hint="The group it's listed under in menus and pickers.">
+                <Select
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  placeholder="Choose an area"
+                  options={areas.map((c) => ({ value: c.slug, label: c.hidden ? `${c.name} (hidden)` : c.name }))}
+                />
+              </Field>
+              <Field label="Summary" optional hint="One line, shown on its subject page and in search.">
+                <Textarea value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={200} showCount rows={3} />
+              </Field>
+              <SwitchRow checked={popular} onChange={setPopular} label="Popular" hint="Featured in the homepage quick picks, the menu, the footer and search suggestions." />
+              <SwitchRow checked={shown} onChange={setShown} label="Show on the site" hint="Hiding keeps it on existing profiles, bookings and requests, but nobody can pick it any more." />
+            </DialogBody>
+            <DialogFooter>
+              {subject && (
+                <Button type="button" variant="danger-outline" className="sm:mr-auto" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 aria-hidden /> Delete
+                </Button>
+              )}
+              <DialogClose asChild>
+                <Button variant="secondary">Cancel</Button>
+              </DialogClose>
+              <Button type="submit">{subject ? "Save changes" : "Add subject"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${subject?.name ?? "this subject"}?`}
+        description="Only possible while no tutor, booking or request uses it; otherwise hide it instead. This can't be undone."
+        confirmLabel="Delete subject"
+        tone="danger"
+        onConfirm={remove}
+      />
+    </>
   );
 }

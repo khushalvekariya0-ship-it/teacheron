@@ -4,7 +4,8 @@ import * as React from "react";
 import { MapPin, Search, X } from "lucide-react";
 import type { Grade, Level, TutorCategory } from "@/lib/types";
 import { RADIUS_OPTIONS, type TutorSearch } from "@/lib/search";
-import { GRADES, LANGUAGES, LEARNING_SUPPORT, LEVELS, SUBJECTS, SUBJECT_CATEGORIES, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
+import { useCatalog } from "@/lib/store/hooks";
 import { isValidZip, resolveLocation } from "@/lib/data/geo";
 import { cn } from "@/lib/utils";
 import { Field, Input, Select } from "@/components/ui/Input";
@@ -253,8 +254,6 @@ function GroupTrigger({ group, value }: { group: FilterGroupKey; value: TutorSea
   );
 }
 
-const SUBJECT_OPTIONS = SUBJECT_CATEGORIES.flatMap((c) => SUBJECTS.filter((s) => s.category === c.slug).map((s) => ({ value: s.slug, label: `${s.name}` })));
-
 export function FilterPanel({
   value,
   onChange,
@@ -267,6 +266,8 @@ export function FilterPanel({
   defaultOpen?: FilterGroupKey[];
 }) {
   const set = (patch: Patch) => onChange(applyPatch(value, patch));
+  // Subjects from the live catalog, in area order.
+  const subjectOptions = useCatalog().subjects.map((s) => ({ value: s.slug, label: s.name }));
   const [open, setOpen] = React.useState<string[]>(() => {
     const withActive = (Object.keys(GROUP_LABEL) as FilterGroupKey[]).filter((g) => groupCount(value, g) > 0);
     return Array.from(new Set([...defaultOpen, ...withActive]));
@@ -282,7 +283,7 @@ export function FilterPanel({
           <GroupTrigger group="subject" value={value} />
           <AccordionContent className="space-y-4 px-1 pb-5 pr-1 text-sm text-ink">
             <Field label="Subject">
-              <Select value={value.subject ?? ""} onChange={(e) => set({ subject: e.target.value || undefined })} placeholder="Any subject" options={SUBJECT_OPTIONS} />
+              <Select value={value.subject ?? ""} onChange={(e) => set({ subject: e.target.value || undefined })} placeholder="Any subject" options={subjectOptions} />
             </Field>
             <Field label="Grade">
               <Select value={value.grade ?? ""} onChange={(e) => set({ grade: (e.target.value || undefined) as Grade | undefined })} placeholder="Any grade" options={GRADES.map((g) => ({ value: g.value, label: g.label }))} />

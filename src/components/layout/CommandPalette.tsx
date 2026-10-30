@@ -6,8 +6,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, BookOpen, CornerDownLeft, FileText, LayoutDashboard, Search, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SUBJECTS, subjectName } from "@/lib/data/catalog";
-import { useSession, useTutors } from "@/lib/store/hooks";
+import { subjectName } from "@/lib/data/catalog";
+import { useCatalog, useSession, useTutors } from "@/lib/store/hooks";
 import { ADMIN_NAV, NAV_BY_ROLE } from "@/components/dashboard/nav";
 import { hasPermission } from "@/lib/permissions";
 import { Avatar } from "@/components/ui/Avatar";
@@ -64,6 +64,7 @@ export function CommandPalette() {
   const [open, setOpenState] = useOpen();
   const router = useRouter();
   const tutors = useTutors();
+  const catalog = useCatalog();
   const me = useSession();
   const [query, setQuery] = React.useState("");
   const [active, setActive] = React.useState(0);
@@ -114,11 +115,11 @@ export function CommandPalette() {
           icon: <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="xs" />,
         }),
       );
-    SUBJECTS.filter((s) => match(s.name, s.summary))
+    catalog.subjects.filter((s) => match(s.name, s.summary))
       .slice(0, q ? 6 : 4)
       .forEach((s) => out.push({ id: `s:${s.slug}`, group: "Subjects", label: s.name, hint: s.summary, href: `/tutors?subject=${s.slug}`, icon: <BookOpen className="size-4" /> }));
     return out;
-  }, [query, tutors, me]);
+  }, [query, tutors, me, catalog]);
 
   // Reset the highlighted row whenever the query changes (reset-on-change, no effect).
   const [lastQuery, setLastQuery] = React.useState(query);

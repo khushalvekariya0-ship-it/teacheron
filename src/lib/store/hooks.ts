@@ -6,6 +6,7 @@ import { TUTORS } from "@/lib/data/tutors";
 import { REVIEWS } from "@/lib/data/reviews";
 import { useApp, resolveTutor } from "./index";
 import { isFlagOn } from "@/lib/flags";
+import { buildCatalog, type Catalog } from "@/lib/data/catalog";
 
 /*
  * IMPORTANT (zustand v5): a selector passed to `useApp` must return a stable reference — a slice of
@@ -31,6 +32,15 @@ export function useReviews(): Review[] {
     const localIds = new Set(local.map((r) => r.id));
     return [...local, ...REVIEWS.filter((r) => !localIds.has(r.id))].filter((r) => r.status === "published");
   }, [local]);
+}
+
+/**
+ * The subject catalog as edited in Admin → Catalog: shown areas and subjects in order, plus lookups.
+ * Use this in components that list subjects so they update when an admin adds or edits one.
+ */
+export function useCatalog(): Catalog {
+  const raw = useApp((s) => s.catalog);
+  return useMemo(() => buildCatalog(raw.categories, raw.subjects), [raw]);
 }
 
 /** Every tutor with local overrides applied and ratings recomputed from real review data. */

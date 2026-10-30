@@ -5,7 +5,7 @@ import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, Eyebrow, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
 import { CardGrid } from "@/components/marketing/Split";
 import { indexableMetros } from "@/components/content/insights";
-import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { CatalogCount } from "@/components/content/SubjectCatalog";
 import { TUTOR_PLANS } from "@/lib/data/platform";
 import { SITE } from "@/lib/site";
 
@@ -89,8 +89,8 @@ export default function AboutPage() {
                 <h2 className="mt-4 font-heading text-[1.75rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink">K–12, college and adult learners.</h2>
                 <Stagger className="mt-6 grid grid-cols-3 gap-3" stagger={0.08}>
                   {[
-                    { v: SUBJECT_CATEGORIES.length, k: "subject areas" },
-                    { v: SUBJECTS.length, k: "subjects" },
+                    { v: <CatalogCount of="areas" />, k: "subject areas" },
+                    { v: <CatalogCount of="subjects" />, k: "subjects" },
                     { v: metros, k: "city pages" },
                   ].map((s) => (
                     <StaggerItem key={s.k} className="rounded-xl bg-surface p-4">

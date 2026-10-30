@@ -1,6 +1,14 @@
 import type { Grade, Level, Subject, SubjectCategory, TeachingMode, TutorCategory } from "@/lib/types";
 
-export const SUBJECT_CATEGORIES: SubjectCategory[] = [
+/*
+ * The subject catalog: subject areas (top level) and the subjects inside them.
+ * DEFAULT_* is the catalog the site ships with. Admins edit it in Admin → Catalog; the edited copy
+ * lives in the store, which keeps the live registry below in sync, so every page reads the same list:
+ * React components use `useCatalog()` (re-renders on change); plain modules use `getCatalog()`,
+ * `getSubject()` and `subjectName()`. Server-only code (static params, metadata) uses the defaults.
+ */
+
+export const DEFAULT_SUBJECT_CATEGORIES: SubjectCategory[] = [
   { slug: "math", name: "Mathematics", description: "From early numeracy to calculus and statistics." },
   { slug: "science", name: "Science", description: "Biology, chemistry, physics and earth science." },
   { slug: "english", name: "English & Writing", description: "Reading, writing, literature and composition." },
@@ -12,7 +20,7 @@ export const SUBJECT_CATEGORIES: SubjectCategory[] = [
   { slug: "learning-support", name: "Learning Support", description: "Study skills, executive function and specialized support." },
 ];
 
-export const SUBJECTS: Subject[] = [
+export const DEFAULT_SUBJECTS: Subject[] = [
   // Math
   { slug: "elementary-math", name: "Elementary Math", category: "math", summary: "Number sense, operations, fractions and early problem solving.", popular: false },
   { slug: "pre-algebra", name: "Pre-Algebra", category: "math", summary: "Ratios, integers, expressions and the bridge to algebra." },
@@ -62,10 +70,77 @@ export const SUBJECTS: Subject[] = [
   { slug: "dyslexia-support", name: "Dyslexia Support", category: "learning-support", summary: "Structured literacy approaches such as Orton-Gillingham." },
 ];
 
-export const SUBJECT_BY_SLUG: Record<string, Subject> = Object.fromEntries(SUBJECTS.map((s) => [s.slug, s]));
+export interface Catalog {
+  /** Subject areas shown on the site, in display order (hidden areas left out). */
+  categories: SubjectCategory[];
+  /** Subjects shown on the site: not hidden and inside a shown area, in display order. */
+  subjects: Subject[];
+  /** Every area and subject, hidden ones included (admin lists). */
+  allCategories: SubjectCategory[];
+  allSubjects: Subject[];
+  /** Lookups over every subject and area, hidden ones included, so old bookings and profiles still show a name. */
+  bySlug: Record<string, Subject>;
+  categoryBySlug: Record<string, SubjectCategory>;
+}
+
+export function buildCatalog(categories: SubjectCategory[], subjects: Subject[]): Catalog {
+  const shownAreas = categories.filter((c) => !c.hidden);
+  const shownAreaSlugs = new Set(shownAreas.map((c) => c.slug));
+  // Subjects follow their area's order, then their own.
+  const ordered = shownAreas.flatMap((c) => subjects.filter((s) => s.category === c.slug));
+  return {
+    categories: shownAreas,
+    subjects: ordered.filter((s) => !s.hidden && shownAreaSlugs.has(s.category)),
+    allCategories: categories,
+    allSubjects: subjects,
+    bySlug: Object.fromEntries(subjects.map((s) => [s.slug, s])),
+    categoryBySlug: Object.fromEntries(categories.map((c) => [c.slug, c])),
+  };
+}
+
+export const DEFAULT_CATALOG: Catalog = buildCatalog(DEFAULT_SUBJECT_CATEGORIES, DEFAULT_SUBJECTS);
+
+let live: Catalog = DEFAULT_CATALOG;
+
+/** Called by the store whenever the catalog changes (and when it loads). */
+export function setLiveCatalog(catalog: Catalog): void {
+  live = catalog;
+}
+
+/** The current catalog, for code outside React components. Components should use `useCatalog()`. */
+export function getCatalog(): Catalog {
+  return live;
+}
+
+export function getSubject(slug: string): Subject | undefined {
+  return live.bySlug[slug];
+}
 
 export function subjectName(slug: string): string {
-  return SUBJECT_BY_SLUG[slug]?.name ?? slug;
+  return live.bySlug[slug]?.name ?? slug;
+}
+
+export function categoryName(slug: string): string {
+  return live.categoryBySlug[slug]?.name ?? slug;
+}
+
+/** Shown subjects grouped by shown area, ready for a grouped dropdown. */
+export function subjectGroups(catalog: Catalog): { label: string; options: { value: string; label: string }[] }[] {
+  return catalog.categories
+    .map((c) => ({ label: c.name, options: catalog.subjects.filter((s) => s.category === c.slug).map((s) => ({ value: s.slug, label: s.name })) }))
+    .filter((g) => g.options.length > 0);
+}
+
+/** "Music & Arts" → "music-arts". */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
 }
 
 export const GRADES: { value: Grade; label: string; level: Level }[] = [

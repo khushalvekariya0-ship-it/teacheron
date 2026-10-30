@@ -1,5 +1,5 @@
 import type { Grade, Level, TeachingMode, Tutor, TutorCategory } from "@/lib/types";
-import { gradeToLevel, subjectName, SUBJECT_BY_SLUG, WEEKDAYS, TIMES_OF_DAY, GRADE_LABEL, LEVEL_LABEL } from "@/lib/data/catalog";
+import { getSubject, gradeToLevel, subjectName, WEEKDAYS, TIMES_OF_DAY, GRADE_LABEL, LEVEL_LABEL } from "@/lib/data/catalog";
 import { distanceMiles, resolveLocation } from "@/lib/data/geo";
 import { rankTutors, type MatchCriteria } from "@/lib/matching";
 import { formatCents } from "@/lib/format";
@@ -73,7 +73,7 @@ export function parseTutorSearch(src: ParamSource): TutorSearch {
   const grade = get(src, "grade") as Grade | undefined;
   return {
     q: get(src, "q")?.trim() || undefined,
-    subject: subject && SUBJECT_BY_SLUG[subject] ? subject : undefined,
+    subject: subject && getSubject(subject) ? subject : undefined,
     grade: grade && GRADE_LABEL[grade] ? grade : undefined,
     level: (get(src, "level") as Level) || undefined,
     location: get(src, "location")?.trim() || undefined,

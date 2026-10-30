@@ -4,7 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowUpRight, BadgeCheck, Check, GraduationCap, HeartHandshake, ScrollText, Sparkles } from "lucide-react";
 import type { Tutor } from "@/lib/types";
-import { LEVELS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES, subjectName, TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
+import { LEVELS, subjectName, TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
+import { useCatalog } from "@/lib/store/hooks";
 import { formatCents, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
@@ -75,8 +76,13 @@ export function AboutSection({ tutor }: { tutor: Tutor }) {
 /* ─── Subjects & levels ─────────────────────────────────────────────────────── */
 
 export function SubjectsSection({ tutor }: { tutor: Tutor }) {
-  const byCategory = SUBJECT_CATEGORIES.map((c) => ({ category: c, subjects: tutor.subjects.filter((s) => SUBJECT_BY_SLUG[s]?.category === c.slug) })).filter((g) => g.subjects.length);
-  const unknown = tutor.subjects.filter((s) => !SUBJECT_BY_SLUG[s]);
+  // Grouped by the live catalog; subjects an admin has hidden are left off the public profile.
+  const catalog = useCatalog();
+  const shown = new Set(catalog.subjects.map((s) => s.slug));
+  const byCategory = catalog.categories
+    .map((c) => ({ category: c, subjects: tutor.subjects.filter((s) => shown.has(s) && catalog.bySlug[s]?.category === c.slug) }))
+    .filter((g) => g.subjects.length);
+  const unknown = tutor.subjects.filter((s) => !catalog.bySlug[s]);
   const levels = LEVELS.filter((l) => tutor.levels.includes(l.value));
   return (
     <ProfileSection id="subjects" title="Subjects & levels">

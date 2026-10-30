@@ -1,5 +1,5 @@
 import type { Subject, Tutor } from "@/lib/types";
-import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { getCatalog } from "@/lib/data/catalog";
 import { METROS, distanceMiles, type Metro } from "@/lib/data/geo";
 import { TUTORS } from "@/lib/data/tutors";
 
@@ -13,29 +13,29 @@ export function tutorsForSubject(slug: string, tutors: Tutor[] = TUTORS): Tutor[
 }
 
 export function tutorCountBySubject(tutors: Tutor[] = TUTORS): Record<string, number> {
-  const counts: Record<string, number> = Object.fromEntries(SUBJECTS.map((s) => [s.slug, 0]));
+  const counts: Record<string, number> = Object.fromEntries(getCatalog().subjects.map((s) => [s.slug, 0]));
   for (const t of tutors) for (const s of t.subjects) if (s in counts) counts[s] += 1;
   return counts;
 }
 
 /** Unique tutors who teach at least one subject in a category. */
 export function tutorsInCategory(category: string, tutors: Tutor[] = TUTORS): Tutor[] {
-  const slugs = new Set(SUBJECTS.filter((s) => s.category === category).map((s) => s.slug));
+  const slugs = new Set(getCatalog().subjects.filter((s) => s.category === category).map((s) => s.slug));
   return tutors.filter((t) => t.subjects.some((s) => slugs.has(s)));
 }
 
 export function subjectsInCategory(category: string): Subject[] {
-  return SUBJECTS.filter((s) => s.category === category);
+  return getCatalog().subjects.filter((s) => s.category === category);
 }
 
 export function categoryName(slug: string): string {
-  return SUBJECT_CATEGORIES.find((c) => c.slug === slug)?.name ?? slug;
+  return getCatalog().categoryBySlug[slug]?.name ?? slug;
 }
 
 /** Subjects with at least one tutor — the only subject pages we ask search engines to index. */
 export function indexableSubjects(tutors: Tutor[] = TUTORS): Subject[] {
   const counts = tutorCountBySubject(tutors);
-  return SUBJECTS.filter((s) => counts[s.slug] > 0);
+  return getCatalog().subjects.filter((s) => counts[s.slug] > 0);
 }
 
 export interface NearbyTutor {

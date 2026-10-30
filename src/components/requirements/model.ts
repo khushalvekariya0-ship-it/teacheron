@@ -2,7 +2,9 @@ import { z } from "zod";
 import type { Resolver, ResolverResult } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Child, Grade, Requirement, TeachingMode, User } from "@/lib/types";
-import { GRADE_LABEL, SUBJECT_BY_SLUG, US_STATES } from "@/lib/data/catalog";
+import { GRADE_LABEL, US_STATES, getCatalog } from "@/lib/data/catalog";
+
+const isShownSubject = (slug: string) => getCatalog().subjects.some((s) => s.slug === slug);
 import { METROS } from "@/lib/data/geo";
 import { defaultTitle, type TimeOfDay } from "@/components/jobs/jobUtils";
 
@@ -68,7 +70,7 @@ export function stepSchema(step: number, role: FamilyRole) {
     case 0:
       return z.object({
         childId: role === "parent" ? z.string().min(1, "Choose which child this requirement is for.") : z.string(),
-        subject: z.string().min(1, "Choose a subject.").refine((v) => !!SUBJECT_BY_SLUG[v], "Choose a subject from the list."),
+        subject: z.string().min(1, "Choose a subject.").refine((v) => isShownSubject(v), "Choose a subject from the list."),
         grade: z.custom<Grade | "">((v) => typeof v === "string").refine((v) => v !== "" && !!GRADE_LABEL[v as Grade], "Choose a grade."),
         title: z
           .string()
@@ -250,7 +252,7 @@ export interface Prefill {
 
 /** A fresh form, prefilled from URL params (concierge / search hand-off) and the family's profile. */
 export function newForm(me: User, children: Child[], prefill: Prefill): ReqForm {
-  const subject = prefill.subject && SUBJECT_BY_SLUG[prefill.subject] ? prefill.subject : "";
+  const subject = prefill.subject && isShownSubject(prefill.subject) ? prefill.subject : "";
   const grade = prefill.grade && GRADE_LABEL[prefill.grade as Grade] ? (prefill.grade as Grade) : "";
   const format: Format = prefill.mode === "online" ? "online" : prefill.mode === "in_person" ? "in_person" : prefill.mode === "both" || prefill.mode === "either" ? "both" : "";
   const zip = prefill.zip && /^\d{5}$/.test(prefill.zip) ? prefill.zip : me.zip && /^\d{5}$/.test(me.zip) ? me.zip : "";

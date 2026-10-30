@@ -4,11 +4,11 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, Check, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { GRADES, SUBJECTS, subjectName } from "@/lib/data/catalog";
+import { GRADES, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, FACTOR_LABEL, type FactorKey } from "@/lib/matching";
 import { SCHEDULE_PRESETS, searchTutors, toQueryString, type SchedulePreset, type TutorSearch } from "@/lib/search";
 import type { Grade, TeachingMode } from "@/lib/types";
-import { useHydrated, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useHydrated, useTutors } from "@/lib/store/hooks";
 import { motion } from "@/components/motion";
 import { SelectMenu, type SelectOption } from "@/components/ui/SelectMenu";
 
@@ -64,14 +64,15 @@ export function QuickMatch() {
   const [budget, setBudget] = React.useState<number | "">(60);
 
   // A typed subject name selects that subject; anything else searches by keyword.
+  const { subjects } = useCatalog();
   const q = text.trim().toLowerCase();
-  const exact = SUBJECTS.find((s) => s.name.toLowerCase() === q);
+  const exact = subjects.find((s) => s.name.toLowerCase() === q);
   const suggestions = React.useMemo(() => {
     if (!q || exact) return [];
-    const starts = SUBJECTS.filter((s) => s.name.toLowerCase().startsWith(q));
-    const contains = SUBJECTS.filter((s) => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q));
+    const starts = subjects.filter((s) => s.name.toLowerCase().startsWith(q));
+    const contains = subjects.filter((s) => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q));
     return [...starts, ...contains].slice(0, 5);
-  }, [q, exact]);
+  }, [q, exact, subjects]);
   const showList = open && suggestions.length > 0;
 
   const params: TutorSearch = {

@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import FlashlightTextReveal from "@/components/ui/flashlight-text-reveal";
 import { SITE } from "@/lib/site";
-import { SUBJECTS } from "@/lib/data/catalog";
+import { FooterSubjects } from "./FooterSubjects";
 import { METROS } from "@/lib/data/geo";
 
 const COLUMNS: { heading: string; links: { label: string; href: string }[] }[] = [
@@ -49,7 +49,6 @@ const COLUMNS: { heading: string; links: { label: string; href: string }[] }[] =
   },
 ];
 
-const POPULAR_SUBJECTS = SUBJECTS.filter((s) => s.popular).slice(0, 10);
 const CITIES = METROS.slice(0, 10);
 
 function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -103,13 +102,7 @@ export function Footer() {
           ))}
           <nav aria-label="Popular subjects">
             <ColumnHeading>Popular subjects</ColumnHeading>
-            <ul className="mt-4 space-y-2.5">
-              {POPULAR_SUBJECTS.slice(0, 6).map((s) => (
-                <li key={s.slug}>
-                  <FooterLink href={`/subjects/${s.slug}`}>{s.name}</FooterLink>
-                </li>
-              ))}
-            </ul>
+            <FooterSubjects />
           </nav>
           <nav aria-label="Tutors near you">
             <ColumnHeading>Tutors near you</ColumnHeading>

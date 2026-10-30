@@ -5,8 +5,8 @@ import Link from "next/link";
 import { ClipboardList, ExternalLink, Paperclip } from "lucide-react";
 import type { Application, ApplicationStatus, Requirement, RequirementStatus } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useViewerTimezone } from "@/lib/store/hooks";
-import { GRADE_LABEL, MODE_LABEL, SUBJECTS, subjectName } from "@/lib/data/catalog";
+import { useCatalog, useViewerTimezone } from "@/lib/store/hooks";
+import { GRADE_LABEL, MODE_LABEL, subjectName } from "@/lib/data/catalog";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { formatCents, formatDate, formatDateTime, pluralize } from "@/lib/format";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
@@ -59,6 +59,7 @@ export function RequirementsView() {
 }
 
 function RequirementsInner() {
+  const catalog = useCatalog();
   const requirements = useApp((s) => s.requirements);
   const applications = useApp((s) => s.applications);
   const dir = useDirectory();
@@ -77,8 +78,8 @@ function RequirementsInner() {
 
   const subjectOptions = React.useMemo(() => {
     const used = new Set(requirements.map((r) => r.subject).filter(Boolean));
-    return [{ value: "all", label: "Any subject" }, ...SUBJECTS.filter((s) => used.has(s.slug)).map((s) => ({ value: s.slug, label: s.name })).sort((a, b) => a.label.localeCompare(b.label))];
-  }, [requirements]);
+    return [{ value: "all", label: "Any subject" }, ...catalog.allSubjects.filter((s) => used.has(s.slug)).map((s) => ({ value: s.slug, label: s.name })).sort((a, b) => a.label.localeCompare(b.label))];
+  }, [catalog, requirements]);
 
   const searched = React.useMemo(
     () =>

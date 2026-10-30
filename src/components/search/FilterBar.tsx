@@ -4,7 +4,8 @@ import * as React from "react";
 import { BookOpen, CalendarClock, Check, ChevronDown, Monitor, Wallet, type LucideIcon } from "lucide-react";
 import type { Grade, Level, TutorCategory } from "@/lib/types";
 import { RADIUS_OPTIONS, type TutorSearch } from "@/lib/search";
-import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, LEVELS, SUBJECTS, SUBJECT_BY_SLUG, SUBJECT_CATEGORIES, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
+import { useCatalog } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/format";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay";
@@ -135,6 +136,7 @@ const PRICE_PRESETS: { label: string; min?: number; max?: number }[] = [
 
 export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (next: TutorSearch) => void }) {
   const set = (patch: Patch) => onChange(applyPatch(value, patch));
+  const catalog = useCatalog();
   const schedule = effectiveSchedule(value);
   const moreCount = [value.verified, value.certified, value.trial, value.instant, value.exp, value.rating, value.support].filter(Boolean).length;
 
@@ -142,7 +144,7 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
     <div className="space-y-3" role="search" aria-label="Filter tutors">
       {/* Row 1 — the four main filters in one connected console */}
       <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-line-strong bg-surface p-1.5 shadow-[0_18px_40px_-28px_rgb(15_23_42/0.45)]">
-        <FilterBox icon={BookOpen} label="I want to learn" value={value.subject ? SUBJECT_BY_SLUG[value.subject]?.name ?? "Any subject" : "Any subject"} active={!!value.subject} panelClassName="w-[380px] p-2">
+        <FilterBox icon={BookOpen} label="I want to learn" value={value.subject ? catalog.bySlug[value.subject]?.name ?? "Any subject" : "Any subject"} active={!!value.subject} panelClassName="w-[380px] p-2">
           {(close) => (
             <div className="max-h-96 overflow-y-auto" data-lenis-prevent>
               <button
@@ -155,10 +157,10 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
               >
                 Any subject {!value.subject && <Check className="size-4" aria-hidden />}
               </button>
-              {SUBJECT_CATEGORIES.map((c) => (
+              {catalog.categories.map((c) => (
                 <div key={c.slug} className="mt-2">
                   <p className="px-3 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">{c.name}</p>
-                  {SUBJECTS.filter((s) => s.category === c.slug).map((s) => {
+                  {catalog.subjects.filter((s) => s.category === c.slug).map((s) => {
                     const selected = value.subject === s.slug;
                     return (
                       <button

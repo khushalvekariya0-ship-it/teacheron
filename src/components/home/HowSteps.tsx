@@ -8,7 +8,7 @@ import { ArrowRight, CalendarDays, Check, Mic, MicOff, Plus, ShieldCheck, Star, 
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { useHydrated, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
-import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
+import { getSubject } from "@/lib/data/catalog";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { formatCents, formatDate, formatTime, sessionPrice, tzAbbrev } from "@/lib/format";
 import { generateSlots, groupSlotsByDay } from "@/lib/time";
@@ -197,7 +197,7 @@ export function CompareStep() {
                     <span className="block truncate text-[13.5px] font-semibold text-ink">
                       {t.firstName} {t.lastName.charAt(0)}.
                     </span>
-                    <span className="block truncate text-[11.5px] font-normal text-muted">{SUBJECT_BY_SLUG[t.subjects[0]]?.name ?? "Tutor"}</span>
+                    <span className="block truncate text-[11.5px] font-normal text-muted">{getSubject(t.subjects[0])?.name ?? "Tutor"}</span>
                   </th>
                 ))}
               </tr>
@@ -289,7 +289,7 @@ export function BookStep() {
           <p className="flex items-center gap-2.5 text-[14px] font-semibold text-ink">
             <Avatar name={`${tutor.firstName} ${tutor.lastName}`} src={tutor.photoUrl} tone={tutor.tone} size="sm" square />
             {tutor.firstName} {tutor.lastName.charAt(0)}.
-            <span className="font-normal text-muted">· {SUBJECT_BY_SLUG[tutor.subjects[0]]?.name ?? "Tutor"}</span>
+            <span className="font-normal text-muted">· {getSubject(tutor.subjects[0])?.name ?? "Tutor"}</span>
           </p>
         )}
         <div role="radiogroup" aria-label="Lesson type" className="inline-flex border border-line bg-surface p-0.5">

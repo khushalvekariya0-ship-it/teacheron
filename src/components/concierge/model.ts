@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Grade, TeachingMode, Tutor } from "@/lib/types";
-import { GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, SUBJECT_BY_SLUG, subjectName } from "@/lib/data/catalog";
+import { GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, getSubject, subjectName } from "@/lib/data/catalog";
 import { resolveLocation } from "@/lib/data/geo";
 import { rankTutors, type MatchCriteria } from "@/lib/matching";
 import { toQueryString, type TutorSearch } from "@/lib/search";
@@ -116,7 +116,7 @@ export function paramsToAnswers(p: URLSearchParams): Answers {
   const exp = p.get("exp") ?? "";
   const lang = p.get("lang") ?? "";
   return {
-    subject: SUBJECT_BY_SLUG[subject] ? subject : "",
+    subject: getSubject(subject) ? subject : "",
     grade: grade && GRADE_LABEL[grade as Grade] ? grade : "",
     goal: (p.get("goal") ?? "").slice(0, 300),
     budgetMax: /^\d{2,3}$/.test(maxRate) ? maxRate : "",

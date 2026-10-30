@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Section, SectionHeading, ArrowLink } from "@/components/marketing/Section";
-import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
+import { subjectName } from "@/lib/data/catalog";
 import { BLOG_POSTS } from "@/lib/data/content";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 
@@ -160,7 +160,7 @@ function GoalCard({ goal }: { goal: Goal }) {
                   href={`/tutors?subject=${slug}`}
                   className="inline-flex rounded-full border border-line px-2.5 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
                 >
-                  {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+                  {subjectName(slug)}
                 </Link>
               </li>
             ))}
@@ -387,7 +387,7 @@ function LearnerCard({ learner: l, index }: { learner: Learner; index: number })
                 </span>
               )}
               <Link href={`/tutors?subject=${slug}`} className="text-ink-2 underline-offset-4 transition-colors hover:text-brand hover:underline">
-                {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+                {subjectName(slug)}
               </Link>
             </React.Fragment>
           ))}

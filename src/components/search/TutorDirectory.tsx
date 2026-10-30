@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ChevronDown, Compass, Search, SearchX, ShieldCheck, SlidersHorizontal, UserPlus, Wallet, type LucideIcon } from "lucide-react";
 import { describeSearch, parseTutorSearch, searchTutors, toQueryString, type TutorSearch } from "@/lib/search";
-import { useTutors } from "@/lib/store/hooks";
+import { useCatalog, useTutors } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,6 @@ import { SaveSearchButton } from "./SaveSearchButton";
 import { SortControl } from "./SortControl";
 import { FilterBar } from "./FilterBar";
 import { SchedulePreview } from "./SchedulePreview";
-import { SUBJECT_BY_SLUG } from "@/lib/data/catalog";
 import { clearedSearch, filterCount } from "./filters";
 
 const PAGE = 8;
@@ -50,6 +49,7 @@ const TRUST_TAGS: { icon: LucideIcon; label: string }[] = [
   { icon: Wallet, label: "Pay per lesson" },
 ];
 
+/** Shortcuts under the filters; kept when still shown in the catalog, topped up with popular subjects. */
 const QUICK_SUBJECTS = ["algebra", "sat", "reading", "spanish", "chemistry", "python"];
 
 const NEXT_STEPS = [
@@ -161,6 +161,13 @@ export function TutorDirectory() {
   const qs = searchParams.toString();
   const params = React.useMemo(() => parseTutorSearch(new URLSearchParams(qs)), [qs]);
   const tutors = useTutors();
+  const catalog = useCatalog();
+  const quickSubjects = React.useMemo(() => {
+    const shown = new Set(catalog.subjects.map((s) => s.slug));
+    const picks = QUICK_SUBJECTS.filter((slug) => shown.has(slug));
+    for (const s of catalog.subjects) if (picks.length < 6 && s.popular && !picks.includes(s.slug)) picks.push(s.slug);
+    return picks;
+  }, [catalog]);
   const results = React.useMemo(() => searchTutors(tutors, params), [tutors, params]);
   const activeCount = filterCount(params);
 
@@ -192,7 +199,7 @@ export function TutorDirectory() {
   };
 
   const calloutAt = Math.min(3, shown.length);
-  const subjectName = params.subject ? SUBJECT_BY_SLUG[params.subject]?.name : undefined;
+  const subjectName = params.subject ? catalog.bySlug[params.subject]?.name : undefined;
   const title = subjectName ? `${subjectName} tutors & teachers for private lessons` : "Online and in-person tutors for private lessons";
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
   const previewTutor = shown.find((r) => r.tutor.id === hoveredId)?.tutor ?? shown[0]?.tutor;
@@ -247,14 +254,14 @@ export function TutorDirectory() {
       {!params.subject && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[13.5px] font-medium text-muted">Popular:</span>
-          {QUICK_SUBJECTS.map((slug) => (
+          {quickSubjects.map((slug) => (
             <button
               key={slug}
               type="button"
               onClick={() => update(applyPatch(params, { subject: slug }))}
               className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-50 hover:text-brand"
             >
-              {SUBJECT_BY_SLUG[slug]?.name ?? slug}
+              {catalog.bySlug[slug]?.name ?? slug}
             </button>
           ))}
         </div>

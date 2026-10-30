@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { Select } from "@/components/ui/Input";
-import { SUBJECTS, SUBJECT_CATEGORIES } from "@/lib/data/catalog";
+import { subjectGroups } from "@/lib/data/catalog";
+import { useCatalog } from "@/lib/store/hooks";
 
 /** aria-describedby value matching the ids `Field` renders for its hint and error. */
 export function fieldDescribedBy(id: string, error?: string, hint?: React.ReactNode): string | undefined {
@@ -16,16 +17,12 @@ export interface SubjectSelectProps extends Omit<React.SelectHTMLAttributes<HTML
   invalid?: boolean;
 }
 
-const SUBJECT_GROUPS = SUBJECT_CATEGORIES.map((c) => ({
-  label: c.name,
-  options: SUBJECTS.filter((s) => s.category === c.slug).map((s) => ({ value: s.slug, label: s.name })),
-}));
-
-/** Subject picker grouped by category, using the site's dropdown (form-compatible via its hidden native select). */
+/** Subject picker grouped by area (from the live catalog), using the site's dropdown (form-compatible via its hidden native select). */
 export const SubjectSelect = React.forwardRef<HTMLSelectElement, SubjectSelectProps>(function SubjectSelect(
   { value, onChange, placeholder = "Choose a subject", invalid, className, ...props },
   ref,
 ) {
+  const groups = subjectGroups(useCatalog());
   return (
     <Select
       ref={ref}
@@ -34,7 +31,7 @@ export const SubjectSelect = React.forwardRef<HTMLSelectElement, SubjectSelectPr
       aria-invalid={invalid || undefined}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      groups={SUBJECT_GROUPS}
+      groups={groups}
       className={className}
     />
   );
