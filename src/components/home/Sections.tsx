@@ -153,7 +153,7 @@ export function Hero() {
               </h3>
               <span className="mono-label hidden sm:block">Smart Match · 1 of 2</span>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4">
+            <div className="grid grid-cols-2 divide-x divide-y divide-line empty:hidden sm:grid-cols-4">
               {quizSubjects.map((s) => (
                 <button key={s.slug} type="button" onClick={() => setQuiz({ open: true, subject: s.slug })} className="group flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-sunken">
                   <CategoryIcon slug={s.category} className="size-4 shrink-0 text-brand" />
@@ -479,6 +479,8 @@ function SubjectExplorer() {
 
 export function SubjectTiles() {
   const catalog = useCatalog();
+  // Nothing to explore until the admin adds subjects (Admin → Subjects).
+  if (catalog.subjects.length === 0) return null;
   return (
     <Section tone="canvas">
       <SectionHeading
@@ -805,6 +807,9 @@ export function GetMatched() {
   const [subject, setSubject] = React.useState("");
   const [grade, setGrade] = React.useState("");
   const [error, setError] = React.useState(false);
+
+  // The form needs subjects to pick from; it appears once the admin adds some.
+  if (catalog.subjects.length === 0) return null;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -251,7 +251,7 @@ export function TutorDirectory() {
         <SortControl value={params.sort} onChange={(sort) => update(applyPatch(params, { sort }))} showLabel={false} className="min-w-0 flex-1 justify-end" />
       </div>
 
-      {!params.subject && (
+      {!params.subject && quickSubjects.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[13.5px] font-medium text-muted">Popular:</span>
           {quickSubjects.map((slug) => (

@@ -22,9 +22,10 @@ const MOSAIC = ["math", "science", "test-prep", "languages"];
 
 export function CatalogFacts() {
   const { subjects, categories } = useCatalog();
+  if (subjects.length === 0) return null;
   const facts = [
-    { icon: BookOpen, label: `${subjects.length} subjects` },
-    { icon: LayoutGrid, label: `${categories.length} areas` },
+    { icon: BookOpen, label: `${subjects.length} ${subjects.length === 1 ? "subject" : "subjects"}` },
+    { icon: LayoutGrid, label: `${categories.length} ${categories.length === 1 ? "area" : "areas"}` },
     { icon: Monitor, label: "Online & in person" },
   ];
   return (
@@ -65,6 +66,17 @@ export function AreaMosaic() {
 export function SubjectAreas() {
   const catalog = useCatalog();
   const tutors = useTutors();
+  if (catalog.categories.length === 0)
+    return (
+      <Section>
+        <div className="rounded-2xl border border-dashed border-line-strong px-6 py-14 text-center">
+          <p className="font-heading text-[24px] font-bold tracking-[-0.02em] text-ink">Subjects are coming soon</p>
+          <p className="mx-auto mt-2 max-w-md text-[15px] leading-relaxed text-muted">
+            We&rsquo;re adding the subjects our tutors teach. Meanwhile, post what you need and tutors can apply.
+          </p>
+        </div>
+      </Section>
+    );
   return (
     <>
       <AreaNav areas={catalog.categories.map((c) => ({ slug: c.slug, name: c.name }))} />
@@ -139,7 +151,10 @@ export function SubjectAreas() {
 /** A hand-picked set of subject tiles (e.g. the student page's list), skipping any an admin has hidden or removed. */
 export function SubjectTileGrid({ slugs, className }: { slugs: string[]; className?: string }) {
   const catalog = useCatalog();
-  const shown = slugs.map((slug) => catalog.subjects.find((s) => s.slug === slug)).filter((s) => !!s);
+  const picked = slugs.map((slug) => catalog.subjects.find((s) => s.slug === slug)).filter((s) => !!s);
+  // None of the hand-picked subjects exist (e.g. the owner built their own list): show the first few instead.
+  const shown = picked.length ? picked : catalog.subjects.slice(0, 8);
+  if (shown.length === 0) return <p className="text-[15px] text-muted">Subjects are being added. You can already browse tutors and post what you need.</p>;
   return (
     <Stagger className={className} stagger={0.04}>
       {shown.map((s) => (

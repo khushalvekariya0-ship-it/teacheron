@@ -90,6 +90,7 @@ function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; ta
   const tutors = useTutors();
   const catalog = useCatalog();
   const moveItem = useApp((s) => s.moveCatalogItem);
+  const loadStarter = useApp((s) => s.loadStarterCatalog);
   const [openId, setOpenId] = useUrlParam("id");
   // Editors: an area (slug null = new) and a subject (slug null = new, optionally inside an area).
   const [areaEdit, setAreaEdit] = React.useState<{ slug: string | null } | null>(null);
@@ -119,6 +120,11 @@ function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; ta
       ),
     [tutors, catalog],
   );
+  const addStarterList = () => {
+    const res = loadStarter();
+    if (!res.ok) return toast.error(res.error);
+    toast.success(`Added ${pluralize(res.data.areas, "subject")} and ${pluralize(res.data.subjects, "sub-category", "sub-categories")}`, { description: "Edit, hide or delete any of them to make the list yours." });
+  };
   const move = (kind: "area" | "subject", slug: string, direction: -1 | 1) => {
     const res = moveItem(kind, slug, direction);
     if (!res.ok) toast.error(res.error);
@@ -184,6 +190,26 @@ function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; ta
           <InlineAlert tone="info" title="What you add here shows on the website" className="mb-6">
             Subjects and sub-categories you add, rename, reorder or hide update the website&rsquo;s menus, search, filters, subject pages, tutor profiles and every subject picker. Until the database is connected, changes are saved in this browser only.
           </InlineAlert>
+          {catalog.allCategories.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-line-strong bg-surface">
+              <EmptyState
+                icon={<BookOpen />}
+                title="No subjects yet"
+                description="Add your first main subject (for example Mathematics), then its sub-categories (Algebra, Geometry…). They appear on the website straight away. Or start from our ready-made list of 9 subjects and 38 sub-categories and edit it."
+                action={
+                  <>
+                    <Button onClick={() => setAreaEdit({ slug: null })}>
+                      <Plus aria-hidden /> Add your first subject
+                    </Button>
+                    <Button variant="secondary" onClick={addStarterList}>
+                      Use the starter list
+                    </Button>
+                  </>
+                }
+              />
+            </div>
+          ) : (
+          <>
           <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MiniStat label="Subjects" value={catalog.categories.length} hint={`${catalog.allCategories.length - catalog.categories.length} hidden`} />
             <MiniStat label="Sub-categories" value={catalog.subjects.length} hint={`${subjects.filter((s) => s.hidden).length} hidden`} />
@@ -200,6 +226,8 @@ function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; ta
             onAddSubject={(area) => setSubjectEdit({ slug: null, area })}
             onMove={move}
           />
+          </>
+          )}
         </>
       ) : (
         <>

@@ -247,7 +247,24 @@ function SubjectsMenu({ pathname }: { pathname: string }) {
   const catalog = useCatalog();
   const [area, setArea] = React.useState<string | null>(null);
   const cat = catalog.categories.find((c) => c.slug === area) ?? catalog.categories[0];
-  if (!cat) return null;
+  if (!cat)
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 4, transition: { duration: 0.12 } }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        className="absolute left-0 top-full z-50 pt-[18px]"
+      >
+        <div className="w-[340px] rounded-2xl border border-line bg-surface p-5 shadow-2xl">
+          <p className="text-[15px] font-semibold text-ink">Subjects are coming soon</p>
+          <p className="mt-1 text-[13.5px] leading-snug text-muted">We&rsquo;re adding the subjects our tutors teach. You can already browse tutors.</p>
+          <Link href="/tutors" className="group mt-3 inline-flex items-center gap-1.5 text-[14px] font-semibold text-brand">
+            Browse tutors <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+      </motion.div>
+    );
   const subjects = catalog.subjects.filter((s) => s.category === cat.slug);
   const popular = catalog.subjects.filter((s) => s.popular).slice(0, 6);
 

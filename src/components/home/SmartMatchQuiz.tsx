@@ -17,10 +17,10 @@ import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent } from "@/components/ui/Overlay";
 import { SelectMenu, type SelectGroup } from "@/components/ui/SelectMenu";
 
-/** The eight most-asked-for (popular) subjects in the live catalog; every other subject is one tap away in the list below them. */
+/** Eight quick picks from the live catalog: popular subjects first, then others; every subject is one tap away in the list below them. */
 export function useQuizSubjects() {
   const { subjects } = useCatalog();
-  return React.useMemo(() => subjects.filter((s) => s.popular).slice(0, 8), [subjects]);
+  return React.useMemo(() => [...subjects.filter((s) => s.popular), ...subjects.filter((s) => !s.popular)].slice(0, 8), [subjects]);
 }
 
 /** The matcher scores a grade, so each level is represented by a grade in the middle of it. */
@@ -105,7 +105,15 @@ function QuizBody({ initialSubject, onClose }: { initialSubject?: string; onClos
                 What subject do you need help with?
               </h3>
               <p className="mt-1.5 text-[14.5px] text-muted">Pick one. You can change it later.</p>
-              <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {catalog.subjects.length === 0 && (
+                <p className="mt-5 rounded-2xl border border-dashed border-line-strong p-5 text-[14.5px] text-muted">
+                  Subjects are being added right now.{" "}
+                  <Link href="/tutors" className="font-semibold text-brand">
+                    Browse tutors instead
+                  </Link>
+                </p>
+              )}
+              <div className="mt-5 grid grid-cols-2 gap-2.5 empty:hidden sm:grid-cols-4">
                 {quizSubjects.map((s) => (
                   <button
                     key={s.slug}
@@ -126,7 +134,7 @@ function QuizBody({ initialSubject, onClose }: { initialSubject?: string; onClos
                   </button>
                 ))}
               </div>
-              <div className="mt-4">
+              <div className="mt-4" hidden={catalog.subjects.length === 0}>
                 <SelectMenu
                   aria-label="Another subject"
                   value={subject && !quizSubjects.some((s) => s.slug === subject) ? subject : ""}

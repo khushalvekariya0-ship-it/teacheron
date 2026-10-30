@@ -1,14 +1,18 @@
 import type { Grade, Level, Subject, SubjectCategory, TeachingMode, TutorCategory } from "@/lib/types";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
- * The subject catalog: subject areas (top level) and the subjects inside them.
- * DEFAULT_* is the catalog the site ships with. Admins edit it in Admin → Catalog; the edited copy
- * lives in the store, which keeps the live registry below in sync, so every page reads the same list:
+ * The subject catalog: main subjects ("categories", e.g. Mathematics) and their sub-categories
+ * ("subjects", e.g. Algebra). Admins manage it in Admin → Subjects; the edited copy lives in the
+ * store, which keeps the live registry below in sync, so every page reads the same list:
  * React components use `useCatalog()` (re-renders on change); plain modules use `getCatalog()`,
  * `getSubject()` and `subjectName()`. Server-only code (static params, metadata) uses the defaults.
+ *
+ * The site starts with NO subjects: the owner adds real ones. STARTER_* is an optional ready-made list
+ * an admin can load with one click (and the demo build's sample tutors are built on it).
  */
 
-export const DEFAULT_SUBJECT_CATEGORIES: SubjectCategory[] = [
+export const STARTER_SUBJECT_CATEGORIES: SubjectCategory[] = [
   { slug: "math", name: "Mathematics", description: "From early numeracy to calculus and statistics." },
   { slug: "science", name: "Science", description: "Biology, chemistry, physics and earth science." },
   { slug: "english", name: "English & Writing", description: "Reading, writing, literature and composition." },
@@ -20,7 +24,7 @@ export const DEFAULT_SUBJECT_CATEGORIES: SubjectCategory[] = [
   { slug: "learning-support", name: "Learning Support", description: "Study skills, executive function and specialized support." },
 ];
 
-export const DEFAULT_SUBJECTS: Subject[] = [
+export const STARTER_SUBJECTS: Subject[] = [
   // Math
   { slug: "elementary-math", name: "Elementary Math", category: "math", summary: "Number sense, operations, fractions and early problem solving.", popular: false },
   { slug: "pre-algebra", name: "Pre-Algebra", category: "math", summary: "Ratios, integers, expressions and the bridge to algebra." },
@@ -97,6 +101,10 @@ export function buildCatalog(categories: SubjectCategory[], subjects: Subject[])
     categoryBySlug: Object.fromEntries(categories.map((c) => [c.slug, c])),
   };
 }
+
+/** What a new site starts with: empty for a real launch; the starter list in the demo (sample tutors teach it). */
+export const DEFAULT_SUBJECT_CATEGORIES: SubjectCategory[] = SAMPLE_DATA ? STARTER_SUBJECT_CATEGORIES : [];
+export const DEFAULT_SUBJECTS: Subject[] = SAMPLE_DATA ? STARTER_SUBJECTS : [];
 
 export const DEFAULT_CATALOG: Catalog = buildCatalog(DEFAULT_SUBJECT_CATEGORIES, DEFAULT_SUBJECTS);
 

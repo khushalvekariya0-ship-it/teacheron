@@ -21,7 +21,7 @@ import { isFlagOn } from "@/lib/flags";
 import { resolveLocation } from "@/lib/data/geo";
 import { canTransition, cancellationRefund, STATUS_META } from "@/lib/booking";
 import { actorFor, hasPermission } from "@/lib/permissions";
-import { DEFAULT_SUBJECTS, DEFAULT_SUBJECT_CATEGORIES, buildCatalog, setLiveCatalog, slugify, subjectName } from "@/lib/data/catalog";
+import { DEFAULT_SUBJECTS, DEFAULT_SUBJECT_CATEGORIES, STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, buildCatalog, setLiveCatalog, slugify, subjectName } from "@/lib/data/catalog";
 import { createSeed, emptySeed } from "./seed";
 import { SAMPLE_DATA } from "@/lib/sample-data";
 
@@ -47,6 +47,18 @@ function definedOnly<T extends object>(obj: T): Partial<T> {
 const shiftIso = (iso: string | undefined, ms: number) => (iso ? new Date(new Date(iso).getTime() + ms).toISOString() : iso);
 
 const uid = (p: string) => `${p}_${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 12)}`;
+/** A saved catalog minus the starter entries that are still exactly as shipped (and areas left empty by that). */
+function withoutUntouchedStarter(c: { categories: SubjectCategory[]; subjects: Subject[] }) {
+  const same = (a: Subject, b: Subject) => a.name === b.name && a.category === b.category && a.summary === b.summary && !!a.popular === !!b.popular && !a.hidden;
+  const subjects = c.subjects.filter((x) => !STARTER_SUBJECTS.some((st) => st.slug === x.slug && same(x, st)));
+  const categories = c.categories.filter((x) => {
+    const starter = STARTER_SUBJECT_CATEGORIES.find((st) => st.slug === x.slug);
+    const untouched = starter && starter.name === x.name && starter.description === x.description && !x.hidden;
+    return !untouched || subjects.some((y) => y.category === x.slug);
+  });
+  return { categories, subjects };
+}
+
 /** "algebra" → "algebra", or "algebra-2" when that slug is taken. Empty when the name has no letters or numbers. */
 const uniqueSlug = (base: string, taken: string[]): string => {
   if (!base) return "";
@@ -148,8 +160,10 @@ interface Data {
   coupons: Coupon[];
   policy: BookingPolicy;
   platformFeeBps: number;
-  /** Subject areas and subjects, as edited in Admin → Catalog. Every page reads this (see useCatalog). */
+  /** Main subjects and their sub-categories, as edited in Admin → Subjects. Every page reads this (see useCatalog). */
   catalog: { categories: SubjectCategory[]; subjects: Subject[] };
+  /** 2 = the catalog no longer starts with the built-in list (see the persist merge below). */
+  catalogSeed: number;
   loginHistory: { userId: string; at: string; device: string; success: boolean }[];
   /** Password-reset links that are still valid (token → account). Stands in for the emailed link. */
   passwordResets: Record<string, { userId: string; expiresAt: string }>;
@@ -257,6 +271,8 @@ interface Actions {
   /** Only for subjects nothing uses yet; otherwise hide it so old records keep its name. */
   deleteSubject(slug: string): Result;
   moveCatalogItem(kind: "area" | "subject", slug: string, direction: -1 | 1): Result;
+  /** Adds the ready-made starter list (skipping anything with the same name), for owners who want a head start. */
+  loadStarterCatalog(): Result<{ areas: number; subjects: number }>;
   logConversationAccess(conversationId: string, reason: string): Result;
   // background jobs & consent
   /** What the BullMQ scheduler does in production: expire stale requests, auto-complete finished lessons. */
@@ -322,6 +338,7 @@ function initialData(): Data {
     policy: DEFAULT_POLICY,
     platformFeeBps: SITE.platformFeeBps,
     catalog: { categories: DEFAULT_SUBJECT_CATEGORIES, subjects: DEFAULT_SUBJECTS },
+    catalogSeed: 2,
     loginHistory: [],
     passwordResets: {},
     emailTokens: {},
@@ -1511,6 +1528,20 @@ export const useApp = create<AppState>()(
           audit("catalog.reorder", kind === "area" ? "subject_area" : "subject", slug, { direction });
           return ok(undefined);
         },
+        loadStarterCatalog() {
+          const r = requireCatalogEditor();
+          if (!r.ok) return r;
+          const { categories, subjects } = get().catalog;
+          const taken = (list: { slug: string; name: string }[], x: { slug: string; name: string }) =>
+            list.some((y) => y.slug === x.slug || y.name.toLowerCase() === x.name.toLowerCase());
+          const newAreas = STARTER_SUBJECT_CATEGORIES.filter((c) => !taken(categories, c));
+          const areaSlugs = new Set([...categories, ...newAreas].map((c) => c.slug));
+          const newSubjects = STARTER_SUBJECTS.filter((x) => areaSlugs.has(x.category) && !taken(subjects, x));
+          if (!newAreas.length && !newSubjects.length) return fail("Everything in the starter list is already here.");
+          set((st) => ({ catalog: { categories: [...st.catalog.categories, ...newAreas], subjects: [...st.catalog.subjects, ...newSubjects] } }));
+          audit("catalog.starter_loaded", "catalog", "starter", { areas: newAreas.length, subjects: newSubjects.length });
+          return ok({ areas: newAreas.length, subjects: newSubjects.length });
+        },
         saveCoupon(input) {
           const r = requireUser(["admin"]);
           if (!r.ok) return r;
@@ -1588,6 +1619,15 @@ export const useApp = create<AppState>()(
       },
       // Older preview data is discarded rather than migrated.
       migrate: () => initialData() as unknown as AppState,
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<Data>;
+        const merged = { ...current, ...saved } as AppState;
+        // One time: catalogs saved before the site stopped starting with the built-in subject list still
+        // hold that list. Drop the entries nobody has edited (anything the admin added or changed stays).
+        if (!SAMPLE_DATA && saved.catalog && saved.catalogSeed !== 2) merged.catalog = withoutUntouchedStarter(saved.catalog);
+        merged.catalogSeed = 2;
+        return merged;
+      },
     },
   ),
 );
