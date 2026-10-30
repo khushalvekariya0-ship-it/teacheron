@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BadgeCheck, BookOpenCheck, BriefcaseBusiness, FlaskConical, GraduationCap, HeartHandshake, ImageUp, MapPin, Monitor, Pencil,
-  Plus, ScrollText, ShieldCheck, Target, Trash2, Users, Clock3,
+  Plus, ScrollText, ShieldCheck, Star, Target, Trash2, Users, Clock3,
 } from "lucide-react";
 import type { User, WeeklyWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { InlineAlert } from "@/components/ui/States";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EASE } from "@/components/motion";
+import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
 import { useFlag } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, US_STATES, US_TIMEZONES, subjectName } from "@/lib/data/catalog";
 import { TUTOR_PLANS } from "@/lib/data/platform";
@@ -162,9 +163,18 @@ const CATEGORY_COPY: Record<string, { description: string; icon: React.ReactNode
 export function ExperienceStep({ formId, defaults, onValid, bindValues }: StepProps<ExperienceValues>) {
   const form = useForm<ExperienceValues>({ resolver: zodResolver(experienceSchema), defaultValues: defaults, mode: "onTouched" });
   useBind(form, bindValues);
-  const { register, control, handleSubmit, formState: { errors } } = form;
   return (
-    <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-8">
+    <form id={formId} noValidate onSubmit={form.handleSubmit(onValid)} className="space-y-8">
+      <ExperienceFields form={form} />
+    </form>
+  );
+}
+
+/** Years of experience, background and (optionally) learning support. Also used in Dashboard → My profile. */
+export function ExperienceFields({ form, support = true }: { form: UseFormReturn<ExperienceValues>; support?: boolean }) {
+  const { register, control, formState: { errors } } = form;
+  return (
+    <>
       <Field label="Years of teaching or tutoring experience" required error={errors.experienceYears?.message} className="max-w-xs">
         <Input type="number" inputMode="numeric" min={0} max={60} step={1} suffix={<span className="pr-1 text-sm">years</span>} {...register("experienceYears", { valueAsNumber: true })} />
       </Field>
@@ -182,16 +192,18 @@ export function ExperienceStep({ formId, defaults, onValid, bindValues }: StepPr
           </GroupField>
         )}
       />
-      <Controller
-        name="learningSupport"
-        control={control}
-        render={({ field }) => (
-          <GroupField legend="Learning support experience" optional hint="Only select areas where you have training or direct experience — families rely on this.">
-            <ChipGroup label="Learning support experience" options={LEARNING_SUPPORT.map((s) => ({ value: s, label: s }))} value={field.value} onChange={field.onChange} />
-          </GroupField>
-        )}
-      />
-    </form>
+      {support && (
+        <Controller
+          name="learningSupport"
+          control={control}
+          render={({ field }) => (
+            <GroupField legend="Learning support experience" optional hint="Only select areas where you have training or direct experience — families rely on this.">
+              <ChipGroup label="Learning support experience" options={LEARNING_SUPPORT.map((s) => ({ value: s, label: s }))} value={field.value} onChange={field.onChange} />
+            </GroupField>
+          )}
+        />
+      )}
+    </>
   );
 }
 
@@ -200,16 +212,24 @@ export function ExperienceStep({ formId, defaults, onValid, bindValues }: StepPr
 export function CredentialsStep({ formId, defaults, onValid, bindValues }: StepProps<CredentialsValues>) {
   const form = useForm<CredentialsValues>({ resolver: zodResolver(credentialsSchema), defaultValues: defaults, mode: "onTouched" });
   useBind(form, bindValues);
-  const { register, control, handleSubmit, formState: { errors } } = form;
+  return (
+    <form id={formId} noValidate onSubmit={form.handleSubmit(onValid)} className="space-y-8">
+      <InlineAlert tone="info" title="Verified separately">
+        Entries you add here start as unverified. Once your profile is live, upload your diploma or certificate in Verification — a badge appears only after our team confirms it.
+      </InlineAlert>
+      <CredentialsFields form={form} />
+    </form>
+  );
+}
+
+/** Education and certification lists (add, edit, remove). Also used in Dashboard → My profile. */
+export function CredentialsFields({ form }: { form: UseFormReturn<CredentialsValues> }) {
+  const { register, control, formState: { errors } } = form;
   const edu = useFieldArray({ control, name: "education" });
   const certs = useFieldArray({ control, name: "certifications" });
 
   return (
-    <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-8">
-      <InlineAlert tone="info" title="Verified separately">
-        Entries you add here start as unverified. Once your profile is live, upload your diploma or certificate in Verification — a badge appears only after our team confirms it.
-      </InlineAlert>
-
+    <>
       <section aria-labelledby="edu-h" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h3 id="edu-h" className="text-[15px] font-semibold text-ink">Education</h3>
@@ -298,7 +318,7 @@ export function CredentialsStep({ formId, defaults, onValid, bindValues }: StepP
           ))}
         </AnimatePresence>
       </section>
-    </form>
+    </>
   );
 }
 
@@ -539,7 +559,10 @@ export function ProfileStep({
   useBind(form, bindValues);
   const { register, control, handleSubmit, setValue, formState: { errors } } = form;
   const [photoError, setPhotoError] = React.useState<string | null>(null);
-  const [bioRaw, headlineRaw, approachRaw, photoName, photoDataUrl] = useWatch({ control, name: ["bio", "headline", "approach", "photoName", "photoDataUrl"] });
+  const [bioRaw, headlineRaw, approachRaw, photoName, photoDataUrl, introVideoUrl, introVideoName] = useWatch({
+    control,
+    name: ["bio", "headline", "approach", "photoName", "photoDataUrl", "introVideoUrl", "introVideoName"],
+  });
   const bio = bioRaw ?? "";
   const headline = headlineRaw ?? "";
   const approach = approachRaw ?? "";
@@ -608,6 +631,30 @@ export function ProfileStep({
           )}
         </div>
       </div>
+
+      <section aria-labelledby="intro-video-h" className="rounded-xl border border-line p-4">
+        <h3 id="intro-video-h" className="text-sm font-semibold text-ink">
+          Intro video <span className="font-normal text-muted">(optional)</span>
+        </h3>
+        <p className="mb-3 mt-0.5 text-[13px] text-muted">
+          One to two minutes: say hello, what you teach and how a lesson with you works. Film in landscape, in good light. It plays on your profile and tutor card.
+        </p>
+        <IntroVideoField
+          ownerId={me.id}
+          value={introVideoUrl}
+          name={introVideoName}
+          onChange={(next) => {
+            setValue("introVideoUrl", next.url, { shouldDirty: true, shouldValidate: true });
+            setValue("introVideoName", next.name, { shouldDirty: true });
+            return true;
+          }}
+        />
+        {errors.introVideoUrl && (
+          <p role="alert" className="mt-2 text-[13px] text-danger">
+            {errors.introVideoUrl.message}
+          </p>
+        )}
+      </section>
 
       <Field label="Headline" required hint={`${headline.length}/90 · e.g. “AP Calculus and SAT Math specialist”`} error={errors.headline?.message}>
         <Input maxLength={90} placeholder="What you teach, in one line" {...register("headline")} />
@@ -847,7 +894,18 @@ export function ReviewStep({
         </Row>
         <Row label="Languages">{data.languages?.length ? data.languages.join(", ") : none}</Row>
         <Row label="Photo">{data.photoName ?? "Initials avatar"}</Row>
+        <Row label="Intro video">{data.introVideoUrl ? (data.introVideoName ?? "Video link added") : "Not added — you can add one later"}</Row>
       </ReviewBlock>
+
+      <section aria-label="Reviews and ratings" className="flex gap-3 rounded-xl border border-line p-4 sm:p-5">
+        <Star className="mt-0.5 size-[18px] shrink-0 text-navy" aria-hidden />
+        <div className="text-sm">
+          <p className="font-semibold text-ink">Reviews &amp; ratings</p>
+          <p className="mt-0.5 leading-relaxed text-muted">
+            Your profile starts with no reviews. After each completed lesson, the student or parent can rate you from 1 to 5 stars and write a review. Your average rating and every review show on your profile.
+          </p>
+        </div>
+      </section>
 
       <div className="rounded-xl border border-line bg-canvas p-4">
         <Controller

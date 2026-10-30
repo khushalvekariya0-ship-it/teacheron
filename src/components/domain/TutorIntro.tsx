@@ -7,6 +7,7 @@ import { subjectName } from "@/lib/data/catalog";
 import { useHydrated, useNow } from "@/lib/store/hooks";
 import { zonedParts } from "@/lib/time";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
+import { usePlayableVideoUrl } from "./IntroVideoPlayer";
 
 /** How long an intro plays on a card before it starts again. */
 export const INTRO_SECONDS = 15;
@@ -85,17 +86,20 @@ export function IntroReel({ tutor, playing, compact }: { tutor: Tutor; playing: 
           className="absolute inset-0 z-[5] overflow-hidden bg-night"
           aria-hidden
         >
-          {tutor.introVideoUrl ? <IntroVideo src={tutor.introVideoUrl} /> : <ProfileReel tutor={tutor} compact={compact} />}
+          {tutor.introVideoUrl ? <IntroVideo value={tutor.introVideoUrl} fallback={<ProfileReel tutor={tutor} compact={compact} />} /> : <ProfileReel tutor={tutor} compact={compact} />}
         </motion.div>
       )}
     </AnimatePresence>
   );
 }
 
-function IntroVideo({ src }: { src: string }) {
+/** An uploaded or linked video file; YouTube and Vimeo links (which can't play muted inline here) show the fallback. */
+function IntroVideo({ value, fallback }: { value: string; fallback: React.ReactNode }) {
+  const { url, loading } = usePlayableVideoUrl(value);
+  if (!url) return loading ? null : fallback;
   return (
     <video
-      src={src}
+      src={url}
       autoPlay
       muted
       playsInline

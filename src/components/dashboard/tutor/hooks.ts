@@ -188,6 +188,7 @@ export function profileChecklist(t: Tutor): ChecklistItem[] {
     { key: "headline", label: "Write a clear headline", done: t.headline.trim().length >= 10, href: "/dashboard/profile#about" },
     { key: "bio", label: "Bio of at least 80 characters", done: t.bio.trim().length >= 80, href: "/dashboard/profile#about" },
     { key: "approach", label: "Describe your teaching approach", done: t.approach.trim().length >= 40, href: "/dashboard/profile#about" },
+    { key: "video", label: "Add an intro video", done: !!t.introVideoUrl, href: "/dashboard/profile#intro-video" },
     { key: "subjects", label: "Subjects and grade levels", done: t.subjects.length > 0 && t.levels.length > 0, href: "/dashboard/profile#subjects" },
     { key: "specialties", label: "Add at least one specialty", done: t.specialties.length > 0, href: "/dashboard/profile#subjects" },
     { key: "languages", label: "Languages you teach in", done: t.languages.length > 0, href: "/dashboard/profile#languages" },

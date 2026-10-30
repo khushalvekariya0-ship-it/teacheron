@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Clock3, GitCompareArrows, Heart, Languages, Link2, MapPin, Monitor, Users, Zap, BookOpenCheck } from "lucide-react";
+import { Check, ChevronRight, Clock3, GitCompareArrows, Heart, Languages, Link2, MapPin, Monitor, PlayCircle, Users, Zap, BookOpenCheck } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
 import { cn } from "@/lib/utils";
@@ -107,6 +107,13 @@ export function ProfileHeader({ tutor, instant }: { tutor: Tutor; instant: boole
           </motion.ul>
 
           <motion.div {...fade(0.28)} className="mt-6 flex flex-wrap gap-2">
+            {tutor.introVideoUrl && (
+              <Button asChild variant="secondary" size="sm">
+                <a href="#intro-video">
+                  <PlayCircle /> Watch intro
+                </a>
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={actions.toggleSave} aria-pressed={actions.saved}>
               <motion.span key={String(actions.saved)} initial={{ scale: 0.6 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5, duration: 0.4 }} className="inline-flex">
                 <Heart className={cn(actions.saved && "fill-ink text-ink")} />

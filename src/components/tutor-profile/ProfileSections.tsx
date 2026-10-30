@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, BadgeCheck, Check, GraduationCap, HeartHandshake, ScrollText, Sparkles } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, Check, GraduationCap, HeartHandshake, Monitor, ScrollText, Sparkles, Users } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { LEVELS, subjectName, TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
 import { useCatalog } from "@/lib/store/hooks";
@@ -10,6 +10,7 @@ import { formatCents, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Badge } from "@/components/ui/Badge";
+import { IntroVideoPlayer } from "@/components/domain/IntroVideoPlayer";
 
 export function ProfileSection({ id, title, description, children, className }: { id: string; title: string; description?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
@@ -30,6 +31,13 @@ export function ProfileSection({ id, title, description, children, className }: 
 export function AboutSection({ tutor }: { tutor: Tutor }) {
   return (
     <ProfileSection id="about" title={`About ${tutor.firstName}`}>
+      {tutor.introVideoUrl && (
+        <Reveal y={10} amount={0.1}>
+          <div id="intro-video" className="mb-8 max-w-2xl scroll-mt-32 empty:hidden">
+            <IntroVideoPlayer value={tutor.introVideoUrl} title={`${tutor.firstName}'s intro video`} hideWhenMissing />
+          </div>
+        </Reveal>
+      )}
       <Reveal y={10} amount={0.1}>
         <p className="max-w-[68ch] whitespace-pre-line text-[15px] leading-relaxed text-ink-2 sm:text-base">{tutor.bio}</p>
       </Reveal>
@@ -125,6 +133,21 @@ export function SubjectsSection({ tutor }: { tutor: Tutor }) {
           <dt className="text-sm font-semibold text-ink">Tutor category</dt>
           <dd className="mt-2.5">
             <Badge tone="outline">{TUTOR_CATEGORY_LABEL[tutor.category]}</Badge>
+          </dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-sm font-semibold text-ink">How lessons happen</dt>
+          <dd className="mt-2.5 flex flex-wrap gap-1.5">
+            {tutor.modes.includes("online") && (
+              <Badge tone="neutral">
+                <Monitor /> Online, by video
+              </Badge>
+            )}
+            {tutor.modes.includes("in_person") && (
+              <Badge tone="neutral">
+                <Users /> In person, within {tutor.serviceRadiusMiles} miles of {tutor.city}
+              </Badge>
+            )}
           </dd>
         </div>
         {tutor.learningSupport.length > 0 && (

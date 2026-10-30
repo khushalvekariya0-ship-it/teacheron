@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { User } from "@/lib/types";
 import { validateWeek } from "@/components/dashboard/tutor/AvailabilityEditor";
+import { parseIntroVideo } from "@/lib/video";
 
 /*
  * Tutor onboarding: one zod schema per step. Keys match what the store's `submitOnboarding()` reads
@@ -105,6 +106,12 @@ export const profileSchema = z.object({
   photoName: z.string().optional(),
   /** The photo itself, shrunk to a small JPEG data URL. */
   photoDataUrl: z.string().optional(),
+  /** Optional intro video: a YouTube/Vimeo/MP4 link, or a file uploaded from this device (see lib/video). */
+  introVideoUrl: z
+    .string()
+    .optional()
+    .refine((v) => !v || !!parseIntroVideo(v), "Use a YouTube or Vimeo link, or upload a video file."),
+  introVideoName: z.string().optional(),
 });
 
 export const verificationSchema = z.object({
@@ -146,7 +153,7 @@ export const STEPS: StepDef[] = [
   { n: 5, title: "Teaching modes", short: "Modes", description: "Teach online, in person, or both.", schema: modesSchema },
   { n: 6, title: "Pricing", short: "Pricing", description: "Set your hourly rate and an optional trial lesson.", schema: pricingSchema },
   { n: 7, title: "Availability", short: "Availability", description: "Your regular weekly hours. Families only see open times.", schema: availabilitySchema },
-  { n: 8, title: "Profile", short: "Profile", description: "Your headline, bio and teaching approach are what families read first.", schema: profileSchema },
+  { n: 8, title: "Photo, video & about you", short: "Profile", description: "Your photo, a short intro video, and the headline, bio and teaching approach families read first.", schema: profileSchema },
   { n: 9, title: "Verification documents", short: "Verification", description: "Start your identity check now, or later from your dashboard.", schema: verificationSchema },
   { n: 10, title: "Review & submit", short: "Review", description: "Check everything, then publish your profile.", schema: null },
 ];

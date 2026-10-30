@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, BookOpen, GraduationCap, Mail, MailCheck, MapPin, ShieldCheck, UserRound, Users } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, BookOpen, BriefcaseBusiness, GraduationCap, Mail, MailCheck, MapPin, Monitor, ShieldCheck, Star, UserRound, Users, Video } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
@@ -71,6 +71,16 @@ const ROLE_HELP: Record<RoleChoice, string> = {
   parent: "Add your children, book lessons for them and follow their progress.",
   tutor: "Create a profile, set your rates and apply to student jobs.",
 };
+
+/** What a tutor fills in right after creating the account (the tutor onboarding steps). */
+const TUTOR_PROFILE_PARTS = [
+  { icon: BookOpen, label: "Subjects you'll teach" },
+  { icon: BriefcaseBusiness, label: "Teaching experience" },
+  { icon: GraduationCap, label: "Education & qualifications" },
+  { icon: Monitor, label: "Online, in person, or both" },
+  { icon: BadgeDollarSign, label: "Your pricing and trial lesson" },
+  { icon: Video, label: "Profile photo & intro video" },
+];
 
 const AGE_OPTIONS: { value: AgeBand; label: string }[] = [
   { value: "18+", label: "18+" },
@@ -304,6 +314,29 @@ export function RegisterView() {
         >
           <Input inputMode="numeric" autoComplete="postal-code" maxLength={5} icon={<MapPin />} placeholder="e.g. 60614" className="sm:max-w-44" {...form.register("zip")} />
         </Field>
+
+        <AnimatePresence initial={false}>
+          {role === "tutor" && (
+            <motion.div key="tutor-next" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
+              <section aria-labelledby="tutor-next-h" className="rounded-xl bg-canvas p-4">
+                <p id="tutor-next-h" className="text-sm font-semibold text-ink">
+                  Next, you&apos;ll build your tutor profile
+                </p>
+                <p className="mt-0.5 text-[13px] text-muted">About 10 minutes. Your progress saves, so you can finish later.</p>
+                <ul className="mt-3 grid gap-x-4 gap-y-2 text-[13.5px] text-ink-2 sm:grid-cols-2">
+                  {TUTOR_PROFILE_PARTS.map((p) => (
+                    <li key={p.label} className="flex items-center gap-2">
+                      <p.icon className="size-4 shrink-0 text-brand" aria-hidden /> {p.label}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-[13px] text-muted">
+                  <Star className="mt-0.5 size-3.5 shrink-0" aria-hidden /> Reviews and ratings come from your students and parents after each lesson.
+                </p>
+              </section>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence initial={false}>
           {role === "student" && (

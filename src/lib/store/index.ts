@@ -23,6 +23,7 @@ import { canTransition, cancellationRefund, STATUS_META } from "@/lib/booking";
 import { actorFor, hasPermission } from "@/lib/permissions";
 import { DEFAULT_SUBJECTS, DEFAULT_SUBJECT_CATEGORIES, STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, buildCatalog, setLiveCatalog, slugify, subjectName } from "@/lib/data/catalog";
 import { createSeed, emptySeed } from "./seed";
+import { parseIntroVideo } from "@/lib/video";
 import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
@@ -248,7 +249,15 @@ interface Actions {
   setTopicStatus(goalId: string, topic: string, status: LearningGoal["topics"][number]["status"]): Result;
   addGoal(input: Omit<LearningGoal, "id" | "createdAt" | "tutorId"> & { tutorId?: string }): Result<LearningGoal>;
   // tutor
-  updateTutorProfile(patch: Partial<Pick<Tutor, "headline" | "bio" | "approach" | "hourlyRateCents" | "modes" | "subjects" | "specialties" | "levels" | "languages" | "serviceRadiusMiles" | "learningSupport" | "photoUrl">>): Result;
+  updateTutorProfile(
+    patch: Partial<
+      Pick<
+        Tutor,
+        | "headline" | "bio" | "approach" | "hourlyRateCents" | "modes" | "subjects" | "specialties" | "levels" | "languages" | "serviceRadiusMiles" | "learningSupport"
+        | "photoUrl" | "introVideoUrl" | "experienceYears" | "category" | "education" | "certifications"
+      >
+    >,
+  ): Result;
   setAvailability(windows: WeeklyWindow[]): Result;
   setExceptions(exceptions: AvailabilityException[]): Result;
   setBookingRules(rules: Partial<BookingRules>): Result;
@@ -1165,7 +1174,31 @@ export const useApp = create<AppState>()(
           if (!r.ok || !r.data.tutorId) return r.ok ? fail("Tutor profile not found.") : r;
           if (patch.hourlyRateCents !== undefined && (!Number.isInteger(patch.hourlyRateCents) || patch.hourlyRateCents < 1500 || patch.hourlyRateCents > 50000)) return fail("Hourly rate must be between $15 and $500.");
           if (patch.bio !== undefined && patch.bio.trim().length < 80) return fail("Your bio should be at least 80 characters.");
-          const clean = { ...patch, ...(patch.bio ? { bio: maskContactInfo(patch.bio).text } : {}), ...(patch.approach ? { approach: maskContactInfo(patch.approach).text } : {}) };
+          if (patch.introVideoUrl !== undefined && !parseIntroVideo(patch.introVideoUrl)) return fail("Use a YouTube or Vimeo link, a direct MP4 link, or upload a video file.");
+          if (patch.experienceYears !== undefined && (!Number.isInteger(patch.experienceYears) || patch.experienceYears < 0 || patch.experienceYears > 60)) return fail("Years of experience must be between 0 and 60.");
+          const maxYear = new Date().getFullYear() + 6;
+          const badYear = (y: number) => !Number.isInteger(y) || y < 1950 || y > maxYear;
+          if (patch.education && (patch.education.length > 6 || patch.education.some((e) => e.degree.trim().length < 2 || e.field.trim().length < 2 || e.institution.trim().length < 2 || badYear(e.year))))
+            return fail("Check your education entries: each needs a degree, field, school and year.");
+          if (patch.certifications && (patch.certifications.length > 6 || patch.certifications.some((c) => c.name.trim().length < 2 || c.issuer.trim().length < 2 || badYear(c.year))))
+            return fail("Check your certifications: each needs a name, issuer and year.");
+          // A verified entry stays verified only while it is unchanged; new or edited entries start unverified.
+          const current = resolveTutor(get(), r.data.tutorId)!;
+          const keepVerified = <T extends { verified: boolean }>(list: T[], before: T[], same: (a: T, b: T) => boolean) =>
+            list.map((x) => ({ ...x, verified: before.some((b) => b.verified && same(b, x)) }));
+          const clean = {
+            ...patch,
+            ...(patch.bio ? { bio: maskContactInfo(patch.bio).text } : {}),
+            ...(patch.approach ? { approach: maskContactInfo(patch.approach).text } : {}),
+            ...(patch.introVideoUrl ? { introVideoUrl: patch.introVideoUrl.trim() } : {}),
+            // Removing the photo or video is saved as "" (an undefined would be dropped when the store is written to disk).
+            ...("photoUrl" in patch && !patch.photoUrl ? { photoUrl: "" } : {}),
+            ...("introVideoUrl" in patch && !patch.introVideoUrl ? { introVideoUrl: "" } : {}),
+            ...(patch.education
+              ? { education: keepVerified(patch.education, current.education, (a, b) => a.degree === b.degree && a.field === b.field && a.institution === b.institution && a.year === b.year) }
+              : {}),
+            ...(patch.certifications ? { certifications: keepVerified(patch.certifications, current.certifications, (a, b) => a.name === b.name && a.issuer === b.issuer && a.year === b.year) } : {}),
+          };
           set((s) => ({ tutorOverrides: { ...s.tutorOverrides, [r.data.tutorId!]: { ...s.tutorOverrides[r.data.tutorId!], ...clean } } }));
           return ok(undefined);
         },
@@ -1246,6 +1279,7 @@ export const useApp = create<AppState>()(
             rating: null, reviewCount: 0, lessonsCompleted: 0, responseTimeHours: null, availability: (d.availability as unknown as WeeklyWindow[]) ?? [], exceptions: [],
             featured: false, joinedAt: nowIso(), tone: 2,
             ...(typeof d.photoDataUrl === "string" && String(d.photoDataUrl).startsWith("data:image/") ? { photoUrl: String(d.photoDataUrl) } : {}),
+            ...(typeof d.introVideoUrl === "string" && parseIntroVideo(d.introVideoUrl) ? { introVideoUrl: String(d.introVideoUrl).trim() } : {}),
           };
           set((s) => ({
             registeredTutors: [...s.registeredTutors, tutor],

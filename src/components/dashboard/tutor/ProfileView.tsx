@@ -11,7 +11,7 @@ import type { Tutor } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { imageFileToDataUrl } from "@/lib/image";
 import { useApp } from "@/lib/store";
-import { useFlag } from "@/lib/store/hooks";
+import { useFlag, useReviews } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
 import { applyBps, formatCents, formatDuration, sessionPrice } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -25,6 +25,9 @@ import { InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { StarRating } from "@/components/ui/StarRating";
 import type { Result } from "@/lib/store";
+import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
+import { CredentialsFields, ExperienceFields } from "@/components/onboarding/steps";
+import { credentialsSchema, experienceSchema, type CredentialsValues, type ExperienceValues } from "@/components/onboarding/schema";
 import { GroupField, NeedsTutorProfile, SubjectPicker, TagInput, ValueList } from "./shared";
 import { completionPercent, profileChecklist, useMyPlan, useMyTutor } from "./hooks";
 
@@ -170,6 +173,70 @@ function AboutSection({ tutor }: { tutor: Tutor }) {
             <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed text-ink-2">{tutor.approach || <span className="text-muted">Not added yet</span>}</p>
           </div>
         </div>
+      )}
+    </Section>
+  );
+}
+
+/* ─── Intro video ───────────────────────────────────────────────────────────── */
+
+function IntroVideoSection({ tutor, ownerId }: { tutor: Tutor; ownerId: string }) {
+  const update = useApp((s) => s.updateTutorProfile);
+  return (
+    <Section
+      id="intro-video"
+      title="Intro video"
+      description="One to two minutes: say hello, what you teach and how a lesson with you works. It plays on your public profile and tutor card."
+      editing={false}
+    >
+      <IntroVideoField
+        ownerId={ownerId}
+        value={tutor.introVideoUrl || undefined}
+        onChange={(next) => {
+          const res = update({ introVideoUrl: next.url });
+          if (!res.ok) {
+            toast.error(res.error);
+            return false;
+          }
+          if (next.url) toast.success("Intro video saved", { description: "It shows on your public profile now." });
+          else toast.success("Intro video removed");
+          return true;
+        }}
+      />
+    </Section>
+  );
+}
+
+/* ─── Teaching experience ───────────────────────────────────────────────────── */
+
+function ExperienceSection({ tutor }: { tutor: Tutor }) {
+  const update = useApp((s) => s.updateTutorProfile);
+  const ed = useEditor();
+  const values = (): ExperienceValues => ({ experienceYears: tutor.experienceYears, category: tutor.category, learningSupport: tutor.learningSupport });
+  const form = useForm<ExperienceValues>({ resolver: zodResolver(experienceSchema), mode: "onTouched", defaultValues: values() });
+  return (
+    <Section
+      id="experience"
+      title="Teaching experience"
+      description="How long you've taught, and what best describes you."
+      editing={ed.editing}
+      onEdit={() => {
+        form.reset(values());
+        ed.open();
+      }}
+    >
+      {ed.editing ? (
+        <form noValidate onSubmit={form.handleSubmit((v) => ed.run(update({ experienceYears: v.experienceYears, category: v.category }), "Experience saved"))} className="space-y-7">
+          <ExperienceFields form={form} support={false} />
+          <FormActions onCancel={ed.close} error={ed.error} />
+        </form>
+      ) : (
+        <dl className="divide-y divide-line">
+          <DetailRow label="Years teaching">
+            {tutor.experienceYears} {tutor.experienceYears === 1 ? "year" : "years"}
+          </DetailRow>
+          <DetailRow label="Background">{TUTOR_CATEGORY_LABEL[tutor.category]}</DetailRow>
+        </dl>
       )}
     </Section>
   );
@@ -615,12 +682,40 @@ function BookingRulesSection({ tutor }: { tutor: Tutor }) {
   );
 }
 
-/* ─── Credentials (read-only) ───────────────────────────────────────────────── */
+/* ─── Education & qualifications ────────────────────────────────────────────── */
 
 function CredentialsSection({ tutor }: { tutor: Tutor }) {
+  const update = useApp((s) => s.updateTutorProfile);
+  const ed = useEditor();
+  const values = (): CredentialsValues => ({
+    education: tutor.education.map(({ degree, field, institution, year }) => ({ degree, field, institution, year })),
+    certifications: tutor.certifications.map(({ name, issuer, year }) => ({ name, issuer, year })),
+  });
+  const form = useForm<CredentialsValues>({ resolver: zodResolver(credentialsSchema), mode: "onTouched", defaultValues: values() });
+  // The store keeps the Verified mark on entries that didn't change; new or edited ones start unverified.
+  const save = (v: CredentialsValues) =>
+    ed.run(
+      update({ education: v.education.map((e) => ({ ...e, verified: false })), certifications: v.certifications.map((c) => ({ ...c, verified: false })) }),
+      "Education and certifications saved",
+    );
   return (
-    <Section id="credentials" title="Education & certifications" description="Verified entries show a check on your public profile." editing={false}>
-      {tutor.education.length + tutor.certifications.length === 0 ? (
+    <Section
+      id="credentials"
+      title="Education & qualifications"
+      description="Degrees and certifications. Verified entries show a check on your public profile."
+      editing={ed.editing}
+      onEdit={() => {
+        form.reset(values());
+        ed.open();
+      }}
+    >
+      {ed.editing ? (
+        <form noValidate onSubmit={form.handleSubmit(save)} className="space-y-8">
+          <CredentialsFields form={form} />
+          <p className="text-[13px] text-muted">Editing an entry removes its Verified mark until the document is checked again in Verification.</p>
+          <FormActions onCancel={ed.close} error={ed.error} />
+        </form>
+      ) : tutor.education.length + tutor.certifications.length === 0 ? (
         <p className="text-sm text-muted">No education or certifications listed.</p>
       ) : (
         <ul className="divide-y divide-line">
@@ -662,8 +757,44 @@ function CredentialsSection({ tutor }: { tutor: Tutor }) {
           ))}
         </ul>
       )}
-      <Link href="/dashboard/verification" className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:underline">
-        Upload documents in Verification <ArrowRight className="size-3.5" aria-hidden />
+      {!ed.editing && (
+        <Link href="/dashboard/verification" className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:underline">
+          Upload documents in Verification <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
+      )}
+    </Section>
+  );
+}
+
+/* ─── Reviews & ratings ─────────────────────────────────────────────────────── */
+
+function ReviewsSection({ tutor }: { tutor: Tutor }) {
+  const all = useReviews();
+  const latest = React.useMemo(() => all.filter((r) => r.tutorId === tutor.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3), [all, tutor.id]);
+  return (
+    <Section id="reviews" title="Reviews & ratings" description="Only students and parents who completed a lesson with you can rate you and leave a review." editing={false}>
+      <div className="flex flex-wrap items-center gap-3">
+        {tutor.rating !== null && tutor.reviewCount > 0 && <span className="text-3xl font-semibold tabular-nums tracking-tight text-ink">{tutor.rating.toFixed(1)}</span>}
+        <StarRating rating={tutor.rating} count={tutor.reviewCount} size="md" />
+      </div>
+      {latest.length ? (
+        <ul className="mt-3 divide-y divide-line">
+          {latest.map((r) => (
+            <li key={r.id} className="py-3 text-sm">
+              <p className="text-[13px] text-muted">
+                <span className="font-medium text-ink">{r.authorName}</span> · {r.rating} of 5 stars · {subjectName(r.subject)}
+              </p>
+              <p className="mt-1 line-clamp-2 leading-relaxed text-ink-2">{r.body}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
+          After each completed lesson, the student or parent can rate you from 1 to 5 stars and write a review. Your average rating and reviews then show here and on your public profile.
+        </p>
+      )}
+      <Link href="/dashboard/reviews" className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:underline">
+        {latest.length ? "See all reviews and reply" : "Open Reviews"} <ArrowRight className="size-3.5" aria-hidden />
       </Link>
     </Section>
   );
@@ -762,12 +893,15 @@ export function ProfileView() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6">
           <AboutSection tutor={tutor} />
+          <IntroVideoSection tutor={tutor} ownerId={me.id} />
           <SubjectsSection tutor={tutor} />
+          <ExperienceSection tutor={tutor} />
+          <CredentialsSection tutor={tutor} />
           <RatesSection tutor={tutor} />
           <TrialSection tutor={tutor} />
           <BookingRulesSection tutor={tutor} />
           <LanguagesSection tutor={tutor} />
-          <CredentialsSection tutor={tutor} />
+          <ReviewsSection tutor={tutor} />
         </div>
 
         <aside className="order-first space-y-6 xl:order-none">
