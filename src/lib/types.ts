@@ -50,6 +50,48 @@ export type Permission =
   | "flags.manage"
   | "audit.read";
 
+export type Gender = "female" | "male" | "non_binary" | "prefer_not";
+
+/**
+ * A student's own learning profile (Dashboard → My profile), filled in after sign-up. Private to the
+ * student; used to suggest matching tutors. Name, phone and location live on the User.
+ */
+export interface StudentProfile {
+  userId: ID;
+  /* Basic information */
+  age?: number;
+  gender?: Gender;
+  photoUrl?: string;
+  /* Learning requirements */
+  grade?: Grade;
+  subjects: string[]; // Subject.slug
+  goals: string[];
+  details?: string;
+  learningSupport: string[];
+  /* Tutor preferences */
+  modes: TeachingMode[];
+  travelMiles: number;
+  tutorGender: "any" | "female" | "male";
+  tutorLanguages: string[];
+  tutorCategories: TutorCategory[];
+  minExperienceYears: number;
+  /* Schedule & availability */
+  days: string[]; // "Mon" … "Sun"
+  timesOfDay: ("morning" | "afternoon" | "evening")[];
+  sessionsPerWeek: number;
+  lessonMinutes: number;
+  startWhen: "asap" | "this_month" | "exploring";
+  /* Budget & payment */
+  budgetMinCents: Cents;
+  budgetMaxCents: Cents;
+  payer: "self" | "parent";
+  payMethod: PayMethod;
+  /** Furthest setup step saved (1–6); completedAt is set when the student finishes setup. */
+  step: number;
+  completedAt?: ISODate;
+  updatedAt: ISODate;
+}
+
 export interface Child {
   id: ID;
   parentId: ID;

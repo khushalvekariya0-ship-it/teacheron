@@ -26,6 +26,7 @@ import { zonedParts } from "@/lib/time";
 import { NotificationRow } from "@/components/dashboard/shared/notificationMeta";
 import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks";
 import { useMyChildren, todayKey } from "./data";
+import { useStudentProfile } from "@/components/student/useStudentProfile";
 import { RequirementStatusBadge, isVisibleApplication } from "./meta";
 
 /* ─── Next lesson hero ──────────────────────────────────────────────────────── */
@@ -250,6 +251,7 @@ function Overview({ me }: { me: User }) {
   const tutorMap = useTutorMap();
   const unreadMessages = useUnreadMessages();
   const isParent = me.role === "parent";
+  const learningProfile = useStudentProfile(me.id);
 
   const childName = React.useCallback((id?: string) => (id ? children.find((c) => c.id === id)?.firstName : undefined), [children]);
 
@@ -340,6 +342,21 @@ function Overview({ me }: { me: User }) {
             </InlineAlert>
           )}
         </div>
+      )}
+
+      {me.role === "student" && !learningProfile.completedAt && (
+        <InlineAlert
+          tone="info"
+          className="mb-6"
+          title={learningProfile.step > 0 ? "Finish your learning profile" : "Set up your learning profile"}
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link href="/onboarding/student">{learningProfile.step > 0 ? "Continue" : "Start"}</Link>
+            </Button>
+          }
+        >
+          Tell us what you want to learn, when you&apos;re free and your budget, so we can suggest tutors who fit you. About 5 minutes.
+        </InlineAlert>
       )}
 
       <Stagger className="space-y-4 lg:space-y-5" stagger={0.07} amount={0.05}>

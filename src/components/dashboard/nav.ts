@@ -48,7 +48,7 @@ const learnerCommon = {
 
 export const NAV_BY_ROLE: Record<Extract<Role, "student" | "parent" | "tutor">, NavSection[]> = {
   student: [
-    { items: learnerCommon.main },
+    { items: [learnerCommon.main[0], { label: "My profile", href: "/dashboard/profile", icon: UserRound }, ...learnerCommon.main.slice(1)] },
     { title: "Lessons", items: learnerCommon.lessons },
     { title: "Saved", items: learnerCommon.saved },
     { title: "Account", items: learnerCommon.account },

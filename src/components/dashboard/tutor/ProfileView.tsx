@@ -31,9 +31,9 @@ import { credentialsSchema, experienceSchema, type CredentialsValues, type Exper
 import { GroupField, NeedsTutorProfile, SubjectPicker, TagInput, ValueList } from "./shared";
 import { completionPercent, profileChecklist, useMyPlan, useMyTutor } from "./hooks";
 
-/* ─── Section shell ─────────────────────────────────────────────────────────── */
+/* ─── Section shell (also used by the student profile) ──────────────────────── */
 
-function Section({
+export function Section({
   id,
   title,
   description,
@@ -72,7 +72,7 @@ function Section({
   );
 }
 
-function FormActions({ onCancel, error, saving }: { onCancel: () => void; error: string | null; saving?: boolean }) {
+export function FormActions({ onCancel, error, saving }: { onCancel: () => void; error: string | null; saving?: boolean }) {
   return (
     <div className="space-y-3 border-t border-line pt-4">
       {error && <InlineAlert tone="danger">{error}</InlineAlert>}
@@ -89,10 +89,10 @@ function FormActions({ onCancel, error, saving }: { onCancel: () => void; error:
 }
 
 /** Shared behaviour for inline-edit sections: open, cancel, save with a store Result. */
-function useEditor() {
+export function useEditor() {
   const [editing, setEditing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const run = (res: Result, success: string) => {
+  const run = (res: Result<unknown>, success: string) => {
     if (!res.ok) {
       setError(res.error);
       return false;

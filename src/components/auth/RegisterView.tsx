@@ -6,7 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, BadgeDollarSign, BookOpen, BriefcaseBusiness, GraduationCap, Mail, MailCheck, MapPin, Monitor, ShieldCheck, Star, UserRound, Users, Video } from "lucide-react";
+import {
+  ArrowRight, BadgeDollarSign, BookOpen, BriefcaseBusiness, CalendarDays, GraduationCap, Lock, Mail, MailCheck, MapPin, Monitor, Search, ShieldCheck, Star,
+  UserRound, Users, Video,
+} from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
@@ -72,15 +75,34 @@ const ROLE_HELP: Record<RoleChoice, string> = {
   tutor: "Create a profile, set your rates and apply to student jobs.",
 };
 
-/** What a tutor fills in right after creating the account (the tutor onboarding steps). */
-const TUTOR_PROFILE_PARTS = [
-  { icon: BookOpen, label: "Subjects you'll teach" },
-  { icon: BriefcaseBusiness, label: "Teaching experience" },
-  { icon: GraduationCap, label: "Education & qualifications" },
-  { icon: Monitor, label: "Online, in person, or both" },
-  { icon: BadgeDollarSign, label: "Your pricing and trial lesson" },
-  { icon: Video, label: "Profile photo & intro video" },
-];
+/** What tutors and students fill in right after creating the account (their setup steps). */
+const NEXT_STEPS: Record<"tutor" | "student", { title: string; time: string; parts: { icon: typeof BookOpen; label: string }[]; note: { icon: typeof Star; text: string } }> = {
+  tutor: {
+    title: "Next, you'll build your tutor profile",
+    time: "About 10 minutes. Your progress saves, so you can finish later.",
+    parts: [
+      { icon: BookOpen, label: "Subjects you'll teach" },
+      { icon: BriefcaseBusiness, label: "Teaching experience" },
+      { icon: GraduationCap, label: "Education & qualifications" },
+      { icon: Monitor, label: "Online, in person, or both" },
+      { icon: BadgeDollarSign, label: "Your pricing and trial lesson" },
+      { icon: Video, label: "Profile photo & intro video" },
+    ],
+    note: { icon: Star, text: "Reviews and ratings come from your students and parents after each lesson." },
+  },
+  student: {
+    title: "Next, you'll set up your learning profile",
+    time: "About 5 minutes. You can skip it and book a tutor straight away.",
+    parts: [
+      { icon: UserRound, label: "Age, city, gender & photo" },
+      { icon: BookOpen, label: "What you want to learn" },
+      { icon: Search, label: "The tutor you'd like" },
+      { icon: CalendarDays, label: "When you're free" },
+      { icon: BadgeDollarSign, label: "Budget & how you'll pay" },
+    ],
+    note: { icon: Lock, text: "Only you can see your profile. We use it to suggest tutors who fit you." },
+  },
+};
 
 const AGE_OPTIONS: { value: AgeBand; label: string }[] = [
   { value: "18+", label: "18+" },
@@ -158,7 +180,8 @@ export function RegisterView() {
 
   /* ─── Success: verify your email ─────────────────────────────── */
   if (created) {
-    const dest = created.role === "tutor" ? "/onboarding/tutor" : destinationFor(created.role, next);
+    const setup = created.role === "tutor" ? "/onboarding/tutor" : created.role === "student" ? `/onboarding/student${next ? `?next=${encodeURIComponent(next)}` : ""}` : null;
+    const dest = setup ?? destinationFor(created.role, next);
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
         <motion.span
@@ -199,8 +222,13 @@ export function RegisterView() {
               router.push(dest);
             }}
           >
-            {created.role === "tutor" ? "Set up your tutor profile" : "Go to your dashboard"} <ArrowRight />
+            {created.role === "tutor" ? "Set up your tutor profile" : created.role === "student" ? "Set up your learning profile" : "Go to your dashboard"} <ArrowRight />
           </Button>
+          {created.role === "student" && (
+            <Button asChild size="lg" variant="ghost" className="w-full">
+              <Link href={destinationFor(created.role, next)}>Skip for now</Link>
+            </Button>
+          )}
         </div>
         <VerificationInbox userId={created.id} email={created.email} />
       </motion.div>
@@ -316,29 +344,6 @@ export function RegisterView() {
         </Field>
 
         <AnimatePresence initial={false}>
-          {role === "tutor" && (
-            <motion.div key="tutor-next" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
-              <section aria-labelledby="tutor-next-h" className="rounded-xl bg-canvas p-4">
-                <p id="tutor-next-h" className="text-sm font-semibold text-ink">
-                  Next, you&apos;ll build your tutor profile
-                </p>
-                <p className="mt-0.5 text-[13px] text-muted">About 10 minutes. Your progress saves, so you can finish later.</p>
-                <ul className="mt-3 grid gap-x-4 gap-y-2 text-[13.5px] text-ink-2 sm:grid-cols-2">
-                  {TUTOR_PROFILE_PARTS.map((p) => (
-                    <li key={p.label} className="flex items-center gap-2">
-                      <p.icon className="size-4 shrink-0 text-brand" aria-hidden /> {p.label}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-[13px] text-muted">
-                  <Star className="mt-0.5 size-3.5 shrink-0" aria-hidden /> Reviews and ratings come from your students and parents after each lesson.
-                </p>
-              </section>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence initial={false}>
           {role === "student" && (
             <motion.div key="age" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
               <fieldset className="space-y-4 rounded-xl bg-canvas p-4">
@@ -410,6 +415,29 @@ export function RegisterView() {
                   )}
                 </AnimatePresence>
               </fieldset>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence initial={false} mode="wait">
+          {(role === "tutor" || (role === "student" && ageBand !== "under13")) && (
+            <motion.div key={`next-${role}`} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
+              <section aria-labelledby="next-steps-h" className="rounded-xl bg-canvas p-4">
+                <p id="next-steps-h" className="text-sm font-semibold text-ink">
+                  {NEXT_STEPS[role].title}
+                </p>
+                <p className="mt-0.5 text-[13px] text-muted">{NEXT_STEPS[role].time}</p>
+                <ul className="mt-3 grid gap-x-4 gap-y-2 text-[13.5px] text-ink-2 sm:grid-cols-2">
+                  {NEXT_STEPS[role].parts.map((p) => (
+                    <li key={p.label} className="flex items-center gap-2">
+                      <p.icon className="size-4 shrink-0 text-brand" aria-hidden /> {p.label}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-[13px] text-muted">
+                  {React.createElement(NEXT_STEPS[role].note.icon, { className: "mt-0.5 size-3.5 shrink-0", "aria-hidden": true })} {NEXT_STEPS[role].note.text}
+                </p>
+              </section>
             </motion.div>
           )}
         </AnimatePresence>

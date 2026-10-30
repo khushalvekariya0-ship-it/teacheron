@@ -7,7 +7,7 @@ import type {
   Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message,
   NotificationPrefs, Payment, Payout, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch,
   Subscription, TeachingMode, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WeeklyWindow,
-  AvailabilityException, BookingRules, TrialConfig, PayMethod, WalletTransaction, Subject, SubjectCategory,
+  AvailabilityException, BookingRules, TrialConfig, PayMethod, WalletTransaction, Subject, SubjectCategory, StudentProfile,
 } from "@/lib/types";
 import { DEMO_CHILDREN, DEMO_USERS, OTHER_USERS } from "@/lib/data/users";
 import { REQUIREMENTS_REFERENCE_TIME, SEED_APPLICATIONS, SEED_REQUIREMENTS } from "@/lib/data/requirements";
@@ -140,6 +140,8 @@ interface Data {
   tutorOverrides: Record<string, Partial<Tutor>>;
   registeredTutors: Tutor[];
   onboarding: Record<string, TutorOnboardingDraft>;
+  /** Students' learning profiles, by user id (Dashboard → My profile). */
+  studentProfiles: Record<string, StudentProfile>;
   favorites: Record<string, string[]>;
   compare: string[];
   savedSearches: SavedSearch[];
@@ -190,6 +192,11 @@ interface Actions {
   register(input: { role: Extract<Role, "student" | "parent" | "tutor">; firstName: string; lastName: string; email: string; password: string; zip: string; ageBand?: "18+" | "13-17"; parentEmail?: string }): Promise<Result<User>>;
   logout(): void;
   updateMe(patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "city" | "state" | "zip" | "timezone">>): Result;
+  /**
+   * Saves part of the signed-in student's learning profile. `step` records setup progress;
+   * `complete` marks setup as finished. Fields left out keep their current values.
+   */
+  saveStudentProfile(patch: Partial<Omit<StudentProfile, "userId" | "step" | "completedAt" | "updatedAt">>, opts?: { step?: number; complete?: boolean }): Result<StudentProfile>;
   changePassword(current: string, next: string): Promise<Result>;
   /** Issues a reset link for the account with this email. Always succeeds, so emails can't be probed; the link only works for a real account. */
   requestPasswordReset(email: string): Result<{ token: string }>;
@@ -325,6 +332,7 @@ function initialData(): Data {
     tutorOverrides: {},
     registeredTutors: [],
     onboarding: {},
+    studentProfiles: {},
     favorites: SAMPLE_DATA ? { usr_student: ["tut_priya_raman", "tut_leah_goldberg"], usr_parent: ["tut_aisha_rahman", "tut_hannah_weiss", "tut_elena_morales"] } : {},
     compare: [],
     savedSearches: seed.savedSearches,
@@ -365,6 +373,17 @@ function initialData(): Data {
 }
 
 /** Resolves a tutor from seed data + local overrides + tutors registered in this browser. */
+/** A student's profile before they've filled anything in. */
+export function emptyStudentProfile(userId: string): StudentProfile {
+  return {
+    userId, subjects: [], goals: [], learningSupport: [],
+    modes: ["online"], travelMiles: 10, tutorGender: "any", tutorLanguages: ["English"], tutorCategories: [], minExperienceYears: 0,
+    days: [], timesOfDay: [], sessionsPerWeek: 1, lessonMinutes: 60, startWhen: "asap",
+    budgetMinCents: 2500, budgetMaxCents: 6000, payer: "self", payMethod: "card",
+    step: 0, updatedAt: "",
+  };
+}
+
 export function resolveTutor(s: Pick<Data, "tutorOverrides" | "registeredTutors">, id: string): Tutor | undefined {
   const base = TUTOR_BY_ID[id] ?? s.registeredTutors.find((t) => t.id === id);
   return base ? { ...base, ...s.tutorOverrides[id] } : undefined;
@@ -565,6 +584,37 @@ export const useApp = create<AppState>()(
           if (!r.ok) return r;
           set((s) => ({ users: s.users.map((u) => (u.id === r.data.id ? { ...u, ...patch } : u)) }));
           return ok(undefined);
+        },
+        saveStudentProfile(patch, opts) {
+          const r = requireUser(["student"]);
+          if (!r.ok) return r;
+          const me = r.data;
+          const current = get().studentProfiles[me.id] ?? emptyStudentProfile(me.id);
+          const next: StudentProfile = { ...current, ...patch, userId: me.id };
+          // Students aged 13–17 signed up with a parent's consent; their age has to match that.
+          const teen = !!me.parentalConsent;
+          if (patch.age !== undefined && (!Number.isInteger(patch.age) || (teen ? patch.age < 13 || patch.age > 17 : patch.age < 18 || patch.age > 99)))
+            return fail(teen ? "You signed up as 13–17, so your age must be between 13 and 17." : "Enter an age between 18 and 99.");
+          if (patch.photoUrl && !patch.photoUrl.startsWith("data:image/")) return fail("Upload a PNG, JPG or WebP photo.");
+          if (next.subjects.length > 5) return fail("Choose up to 5 subjects.");
+          if ((next.details ?? "").length > 600) return fail("Keep the details under 600 characters.");
+          if (next.travelMiles < 1 || next.travelMiles > 50) return fail("Travel distance must be 1–50 miles.");
+          if (!Number.isInteger(next.sessionsPerWeek) || next.sessionsPerWeek < 1 || next.sessionsPerWeek > 7) return fail("Choose 1 to 7 lessons a week.");
+          if (![30, 45, 60, 90, 120].includes(next.lessonMinutes)) return fail("Choose a lesson length.");
+          const cents = (n: number) => Number.isInteger(n) && n >= 1000 && n <= 50000;
+          if (!cents(next.budgetMinCents) || !cents(next.budgetMaxCents)) return fail("Your budget must be between $10 and $500 an hour.");
+          if (next.budgetMinCents > next.budgetMaxCents) return fail("The lowest budget can't be more than the highest.");
+          const saved: StudentProfile = {
+            ...next,
+            // Removing the photo is saved as "" (undefined would be dropped when the store is written to disk).
+            ...("photoUrl" in patch && !patch.photoUrl ? { photoUrl: "" } : {}),
+            ...(patch.details !== undefined ? { details: maskContactInfo(patch.details.trim()).text } : {}),
+            step: Math.max(current.step, opts?.step ?? 0),
+            completedAt: current.completedAt ?? (opts?.complete ? nowIso() : undefined),
+            updatedAt: nowIso(),
+          };
+          set((st) => ({ studentProfiles: { ...st.studentProfiles, [me.id]: saved } }));
+          return ok(saved);
         },
         async changePassword(current, next) {
           const r = requireUser();
