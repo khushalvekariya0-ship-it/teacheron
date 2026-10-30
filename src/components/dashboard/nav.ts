@@ -2,7 +2,7 @@ import {
   Bell, BookOpen, Briefcase, CalendarDays, ClipboardList, Coins, CreditCard, FileCheck2, Flag, Gavel, Heart, Home, Inbox,
   LayoutDashboard, LineChart, MessagesSquare, NotebookPen, Receipt, ScrollText, Search, Settings,
   ShieldCheck, SlidersHorizontal, Star, Tag, ToggleLeft, UserRound, Users, Wallet, BadgeCheck, Clock, Bookmark, Newspaper,
-  MapPin,
+  MapPin, Layers,
 } from "lucide-react";
 import type * as React from "react";
 import type { Permission, Role } from "@/lib/types";
@@ -119,9 +119,10 @@ export const ADMIN_NAV: NavSection[] = [
   {
     title: "Marketplace",
     items: [
+      { label: "Subjects", href: "/admin/subjects", icon: Layers, permission: "content.manage" },
       { label: "Requirements", href: "/admin/requirements", icon: ClipboardList, permission: "users.read" },
       { label: "Bookings", href: "/admin/bookings", icon: BookOpen, permission: "bookings.manage" },
-      { label: "Catalog", href: "/admin/catalog", icon: MapPin, permission: "content.manage" },
+      { label: "Locations", href: "/admin/catalog", icon: MapPin, permission: "content.manage" },
     ],
   },
   {

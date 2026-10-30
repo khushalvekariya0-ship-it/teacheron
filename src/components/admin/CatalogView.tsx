@@ -12,7 +12,6 @@ import { formatCents, pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
 import { ConfirmDialog, Dialog, DialogBody, DialogClose, DialogContent, DialogFooter, Sheet, SheetContent } from "@/components/ui/Overlay";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
@@ -75,19 +74,22 @@ function supplyPill(n: number, noun: string) {
   return <StatusPill tone="success">Covered</StatusPill>;
 }
 
-export function CatalogView({ publicRoutes }: { publicRoutes: string[] | null }) {
+/**
+ * Admin → Subjects (main subjects and their sub-categories, editable) and Admin → Locations (metro areas,
+ * read-only). In the site's data a main subject is a "category" and a sub-category is a "subject".
+ */
+export function CatalogView({ publicRoutes, section }: { publicRoutes: string[] | null; section: TabKey }) {
   return (
     <PermissionGate permission="content.manage">
-      <CatalogInner publicRoutes={publicRoutes} />
+      <CatalogInner publicRoutes={publicRoutes} tab={section} />
     </PermissionGate>
   );
 }
 
-function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
+function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; tab: TabKey }) {
   const tutors = useTutors();
   const catalog = useCatalog();
   const moveItem = useApp((s) => s.moveCatalogItem);
-  const [tab, setTab] = React.useState<TabKey>("subjects");
   const [openId, setOpenId] = useUrlParam("id");
   // Editors: an area (slug null = new) and a subject (slug null = new, optionally inside an area).
   const [areaEdit, setAreaEdit] = React.useState<{ slug: string | null } | null>(null);
@@ -146,20 +148,24 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
   return (
     <>
       <PageHeader
-        title="Catalog"
-        description="Subject areas, subjects and metro areas that power the menus, search, matching and landing pages, with live tutor supply from current profiles."
+        title={tab === "subjects" ? "Subjects" : "Locations"}
+        description={
+          tab === "subjects"
+            ? "Add main subjects (like Mathematics) and their sub-categories (like Algebra or Geometry). They show on the website's menus, search, filters and subject pages."
+            : "Metro areas that power location search and city pages, with live in-person tutor supply from current profiles."
+        }
         actions={
           tab === "subjects" ? (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setAreaEdit({ slug: null })}>
-                <Plus aria-hidden /> New area
+              <Button size="sm" onClick={() => setAreaEdit({ slug: null })}>
+                <Plus aria-hidden /> Add subject
               </Button>
-              <Button size="sm" onClick={() => setSubjectEdit({ slug: null })}>
-                <Plus aria-hidden /> New subject
+              <Button size="sm" variant="secondary" onClick={() => setSubjectEdit({ slug: null })}>
+                <Plus aria-hidden /> Add sub-category
               </Button>
               <ExportButton
                 filename="tutorlink-subjects"
-                headers={["Slug", "Subject", "Area", "Popular", "Shown on site", "Tutors", "Tutors offering in person"]}
+                headers={["Slug", "Sub-category", "Subject", "Popular", "Shown on site", "Tutors", "Tutors offering in person"]}
                 rows={() => subjects.map((s) => [s.slug, s.name, s.categoryName, s.popular, !s.hidden, s.tutors.length, s.inPerson])}
               />
             </div>
@@ -173,27 +179,17 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
         }
       />
 
-      <InlineAlert tone="info" title="Changes apply across the whole site" className="mb-6">
-        Areas and subjects you add, rename, reorder or hide here update the menus, search, filters, subject pages, tutor profiles and every subject picker. Until the database is connected, changes are saved in this browser only. Metro areas are read-only.
-      </InlineAlert>
-
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MiniStat label="Subjects on the site" value={catalog.subjects.length} hint={`${pluralize(catalog.categories.length, "area")} · ${subjects.filter((s) => s.hidden).length} hidden`} />
-        <MiniStat label="Thin subjects" value={thinSubjects.length} tone={thinSubjects.length ? "warning" : undefined} hint={`${THIN} or fewer tutors`} />
-        <MiniStat label="Metros" value={METROS.length} hint={`${thinMetros.length} with thin in-person supply`} />
-        <MiniStat label="Online tutors" value={onlineTutors} hint={`of ${pluralize(tutors.length, "tutor")} · available everywhere`} />
-      </div>
-
-      <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
-        <TabsList aria-label="Catalog">
-          <TabsTrigger value="subjects" count={catalog.allSubjects.length}>
-            Subjects
-          </TabsTrigger>
-          <TabsTrigger value="metros" count={METROS.length}>
-            Metro areas
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="subjects">
+      {tab === "subjects" ? (
+        <>
+          <InlineAlert tone="info" title="What you add here shows on the website" className="mb-6">
+            Subjects and sub-categories you add, rename, reorder or hide update the website&rsquo;s menus, search, filters, subject pages, tutor profiles and every subject picker. Until the database is connected, changes are saved in this browser only.
+          </InlineAlert>
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MiniStat label="Subjects" value={catalog.categories.length} hint={`${catalog.allCategories.length - catalog.categories.length} hidden`} />
+            <MiniStat label="Sub-categories" value={catalog.subjects.length} hint={`${subjects.filter((s) => s.hidden).length} hidden`} />
+            <MiniStat label="Thin sub-categories" value={thinSubjects.length} tone={thinSubjects.length ? "warning" : undefined} hint={`${THIN} or fewer tutors`} />
+            <MiniStat label="Tutors" value={tutors.length} hint={`${onlineTutors} teach online`} />
+          </div>
           <SubjectsTab
             rows={subjects}
             areas={catalog.allCategories}
@@ -204,11 +200,20 @@ function CatalogInner({ publicRoutes }: { publicRoutes: string[] | null }) {
             onAddSubject={(area) => setSubjectEdit({ slug: null, area })}
             onMove={move}
           />
-        </TabsContent>
-        <TabsContent value="metros">
+        </>
+      ) : (
+        <>
+          <InlineAlert tone="info" title="Read-only" className="mb-6">
+            Metro areas come from the list built into the site. Tutor counts are computed from current tutor profiles.
+          </InlineAlert>
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <MiniStat label="Metros" value={METROS.length} hint={`${thinMetros.length} with thin in-person supply`} />
+            <MiniStat label="Online tutors" value={onlineTutors} hint={`of ${pluralize(tutors.length, "tutor")} · available everywhere`} />
+            <MiniStat label="In-person tutors" value={tutors.filter((t) => t.modes.includes("in_person")).length} hint="Counted in every metro their radius reaches" />
+          </div>
           <MetrosTab rows={metros} onlineTutors={onlineTutors} publicRoutes={publicRoutes} onOpen={setOpenId} />
-        </TabsContent>
-      </Tabs>
+        </>
+      )}
 
       <SubjectSheet row={openSubject} publicRoutes={publicRoutes} onClose={() => setOpenId(null)} onEdit={(slug) => setSubjectEdit({ slug })} onMove={move} />
       <AreaDialog
@@ -280,7 +285,7 @@ function SubjectsTab({
   const columns: Column<SubjectRow>[] = [
     {
       key: "name",
-      header: "Subject",
+      header: "Sub-category",
       sortValue: (s) => s.name,
       cell: (s) => (
         <span className="block min-w-0">
@@ -309,8 +314,8 @@ function SubjectsTab({
   return (
     <>
       {thin.length > 0 && (
-        <InlineAlert tone="warning" title={`${pluralize(thin.length, "subject")} with thin supply`} className="mb-5">
-          {thin.filter((s) => s.tutors.length === 0).length} with no tutors and {thin.filter((s) => s.tutors.length === 1).length} with one. Landing pages and search for these subjects will show few or no results — recruit tutors before promoting them.
+        <InlineAlert tone="warning" title={`${pluralize(thin.length, "sub-category", "sub-categories")} with thin supply`} className="mb-5">
+          {thin.filter((s) => s.tutors.length === 0).length} with no tutors and {thin.filter((s) => s.tutors.length === 1).length} with one. Their pages and search results will show few or no tutors — recruit tutors before promoting them.
         </InlineAlert>
       )}
 
@@ -330,7 +335,7 @@ function SubjectsTab({
             >
               <span className={cn("block truncate text-[13.5px] font-medium", c.hidden ? "text-muted line-through" : "text-ink")}>{c.name}</span>
               <span className="mt-0.5 block text-[12px] tabular-nums text-muted">
-                {pluralize(c.subjects, "subject")} · {pluralize(c.tutors, "tutor")}
+                {pluralize(c.subjects, "sub-category", "sub-categories")} · {pluralize(c.tutors, "tutor")}
                 {c.thin > 0 && <span className="text-warning"> · {c.thin} thin</span>}
               </span>
             </button>
@@ -338,9 +343,9 @@ function SubjectsTab({
         })}
       </div>
 
-      <Toolbar summary={pluralize(visible.length, "subject")}>
-        <SearchInput value={q} onChange={setQ} placeholder="Search subjects…" label="Search subjects" />
-        <FilterSelect label="Area" value={category} onChange={setCategory} options={[{ value: "all", label: "All areas" }, ...areas.map((c) => ({ value: c.slug, label: c.name }))]} />
+      <Toolbar summary={pluralize(visible.length, "sub-category", "sub-categories")}>
+        <SearchInput value={q} onChange={setQ} placeholder="Search sub-categories…" label="Search sub-categories" />
+        <FilterSelect label="Subject" value={category} onChange={setCategory} options={[{ value: "all", label: "All subjects" }, ...areas.map((c) => ({ value: c.slug, label: c.name }))]} />
         <FilterSelect
           label="Supply"
           value={supply}
@@ -363,7 +368,7 @@ function SubjectsTab({
 
       {groups.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface">
-          <EmptyState icon={<BookOpen />} title="No subjects match these filters" description="Try a different name, or clear the filters." />
+          <EmptyState icon={<BookOpen />} title="Nothing matches these filters" description="Try a different name, or clear the filters." />
         </div>
       ) : (
         <div className="space-y-8">
@@ -373,7 +378,7 @@ function SubjectsTab({
                 <div className="min-w-0">
                   <h2 id={`cat-${g.slug}`} className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink">
                     {g.name}
-                    {g.hidden && <StatusPill tone="neutral">Hidden area</StatusPill>}
+                    {g.hidden && <StatusPill tone="neutral">Hidden</StatusPill>}
                   </h2>
                   {g.description && <p className="mt-0.5 text-[12.5px] text-muted">{g.description}</p>}
                 </div>
@@ -385,17 +390,17 @@ function SubjectsTab({
                     <ArrowDown aria-hidden />
                   </Button>
                   <Button size="xs" variant="secondary" onClick={() => onEditArea(g.slug)}>
-                    <Pencil aria-hidden /> Edit area
+                    <Pencil aria-hidden /> Edit subject
                   </Button>
                   <Button size="xs" variant="secondary" onClick={() => onAddSubject(g.slug)}>
-                    <Plus aria-hidden /> Add subject
+                    <Plus aria-hidden /> Add sub-category
                   </Button>
                 </div>
               </div>
               {g.rows.length ? (
                 <DataTable rows={g.rows} columns={columns} rowKey={(s) => s.slug} onRowClick={(s) => onOpen(s.slug)} pageSize={50} />
               ) : (
-                <p className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-[13.5px] text-muted">No subjects in this area yet. Add one and it shows across the site.</p>
+                <p className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-[13.5px] text-muted">No sub-categories yet. Add one and it shows on the website.</p>
               )}
             </section>
           ))}
@@ -574,7 +579,7 @@ function SubjectSheet({
       <SheetContent side="right" title={row?.name ?? "Subject"} description={row ? `${row.categoryName} · ${row.slug}` : undefined} className="sm:w-[34rem]">
         {row && (
           <div className="divide-y divide-line">
-            <Section title="Subject">
+            <Section title="Sub-category">
               <div className="mb-4 flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => onEdit(row.slug)}>
                   <Pencil aria-hidden /> Edit
@@ -582,18 +587,18 @@ function SubjectSheet({
                 <Button size="sm" variant="secondary" onClick={() => toggleHidden(row)}>
                   {row.ownHidden ? <Eye aria-hidden /> : <EyeOff aria-hidden />} {row.ownHidden ? "Show on site" : "Hide from site"}
                 </Button>
-                <Button size="icon-sm" variant="ghost" aria-label="Move up in its area" onClick={() => onMove("subject", row.slug, -1)}>
+                <Button size="icon-sm" variant="ghost" aria-label="Move up" onClick={() => onMove("subject", row.slug, -1)}>
                   <ArrowUp aria-hidden />
                 </Button>
-                <Button size="icon-sm" variant="ghost" aria-label="Move down in its area" onClick={() => onMove("subject", row.slug, 1)}>
+                <Button size="icon-sm" variant="ghost" aria-label="Move down" onClick={() => onMove("subject", row.slug, 1)}>
                   <ArrowDown aria-hidden />
                 </Button>
               </div>
               {row.summary && <p className="mb-3 text-[13.5px] leading-relaxed text-ink-2">{row.summary}</p>}
               <Facts
                 items={[
-                  { label: "On the site", value: row.hidden ? <StatusPill tone="neutral">{row.ownHidden ? "Hidden" : "Hidden (its area is hidden)"}</StatusPill> : <StatusPill tone="success">Shown</StatusPill> },
-                  { label: "Area", value: row.categoryName },
+                  { label: "On the site", value: row.hidden ? <StatusPill tone="neutral">{row.ownHidden ? "Hidden" : "Hidden (its subject is hidden)"}</StatusPill> : <StatusPill tone="success">Shown</StatusPill> },
+                  { label: "Subject", value: row.categoryName },
                   { label: "Slug", value: <Mono className="text-ink">{row.slug}</Mono> },
                   { label: "Popular", value: row.popular ? "Yes — featured in popular lists" : "No" },
                   { label: "Supply", value: supplyPill(row.tutors.length, "tutors") },
@@ -603,7 +608,7 @@ function SubjectSheet({
             </Section>
             <Section title={`Tutors (${row.tutors.length})`} description={`${row.inPerson} of them also teach in person.`}>
               <TutorList
-                empty="No tutor teaches this subject yet."
+                empty="No tutor teaches this yet."
                 items={row.tutors.map((t) => ({ tutor: t, meta: `${t.city}, ${t.state} · ${t.modes.map((m) => MODE_LABEL[m]).join(" & ")}` }))}
               />
             </Section>
@@ -706,8 +711,8 @@ function AreaDialog({ open, area, subjectCount, onOpenChange }: { open: boolean;
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          title={area ? `Edit ${area.name}` : "New subject area"}
-          description={area ? `${pluralize(subjectCount, "subject")} · /subjects#${area.slug}` : "A top-level group such as Mathematics or World Languages. Add subjects to it next."}
+          title={area ? `Edit ${area.name}` : "New subject"}
+          description={area ? `${pluralize(subjectCount, "sub-category", "sub-categories")} · /subjects#${area.slug}` : "A main subject such as Mathematics or Music. Add its sub-categories next."}
           size="md"
         >
           <form onSubmit={submit} noValidate>
@@ -724,10 +729,10 @@ function AreaDialog({ open, area, subjectCount, onOpenChange }: { open: boolean;
                   autoFocus={!area}
                 />
               </Field>
-              <Field label="Description" optional hint="One line, shown on the subjects page and in the homepage explorer.">
+              <Field label="Description" optional hint="One line, shown on the website's subjects page and homepage.">
                 <Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} showCount rows={3} />
               </Field>
-              <SwitchRow checked={shown} onChange={setShown} label="Show on the site" hint="A hidden area and its subjects disappear from menus, search and pickers. Nothing is deleted." />
+              <SwitchRow checked={shown} onChange={setShown} label="Show on the site" hint="A hidden subject and its sub-categories disappear from the website's menus, search and pickers. Nothing is deleted." />
             </DialogBody>
             <DialogFooter>
               {area && (
@@ -738,7 +743,7 @@ function AreaDialog({ open, area, subjectCount, onOpenChange }: { open: boolean;
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button type="submit">{area ? "Save changes" : "Add area"}</Button>
+              <Button type="submit">{area ? "Save changes" : "Add subject"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -746,13 +751,13 @@ function AreaDialog({ open, area, subjectCount, onOpenChange }: { open: boolean;
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title={`Delete ${area?.name ?? "this area"}?`}
+        title={`Delete ${area?.name ?? "this subject"}?`}
         description={
           subjectCount > 0
-            ? `It still has ${pluralize(subjectCount, "subject")}. Move or delete them first, or hide the area instead.`
-            : "This removes the area from the catalog. It can't be undone."
+            ? `It still has ${pluralize(subjectCount, "sub-category", "sub-categories")}. Move or delete them first, or hide the subject instead.`
+            : "This removes the subject. It can't be undone."
         }
-        confirmLabel="Delete area"
+        confirmLabel="Delete subject"
         tone="danger"
         disabled={subjectCount > 0}
         onConfirm={remove}
@@ -823,7 +828,7 @@ function SubjectDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          title={subject ? `Edit ${subject.name}` : "New subject"}
+          title={subject ? `Edit ${subject.name}` : "New sub-category"}
           description={subject ? `Page: /subjects/${subject.slug}` : `Its page will be /subjects/${slugify(name) || "…"}. The address is set once and stays the same if you rename it.`}
           size="md"
         >
@@ -841,11 +846,11 @@ function SubjectDialog({
                   autoFocus={!subject}
                 />
               </Field>
-              <Field label="Area" required hint="The group it's listed under in menus and pickers.">
+              <Field label="Subject" required hint="The main subject it belongs to.">
                 <Select
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
-                  placeholder="Choose an area"
+                  placeholder="Choose a subject"
                   options={areas.map((c) => ({ value: c.slug, label: c.hidden ? `${c.name} (hidden)` : c.name }))}
                 />
               </Field>
@@ -864,7 +869,7 @@ function SubjectDialog({
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button type="submit">{subject ? "Save changes" : "Add subject"}</Button>
+              <Button type="submit">{subject ? "Save changes" : "Add sub-category"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -872,9 +877,9 @@ function SubjectDialog({
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title={`Delete ${subject?.name ?? "this subject"}?`}
+        title={`Delete ${subject?.name ?? "this sub-category"}?`}
         description="Only possible while no tutor, booking or request uses it; otherwise hide it instead. This can't be undone."
-        confirmLabel="Delete subject"
+        confirmLabel="Delete sub-category"
         tone="danger"
         onConfirm={remove}
       />

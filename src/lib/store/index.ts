@@ -1412,13 +1412,13 @@ export const useApp = create<AppState>()(
           if (!r.ok) return r;
           const name = input.name.trim().replace(/\s+/g, " ");
           const description = input.description.trim();
-          if (name.length < 2 || name.length > 60) return fail("Give the area a name of 2–60 characters.");
+          if (name.length < 2 || name.length > 60) return fail("Give the subject a name of 2–60 characters.");
           if (description.length > 200) return fail("Keep the description under 200 characters.");
           const { categories } = get().catalog;
-          if (categories.some((c) => c.slug !== input.slug && c.name.toLowerCase() === name.toLowerCase())) return fail("An area with that name already exists.");
+          if (categories.some((c) => c.slug !== input.slug && c.name.toLowerCase() === name.toLowerCase())) return fail("A subject with that name already exists.");
           if (input.slug) {
             const existing = categories.find((c) => c.slug === input.slug);
-            if (!existing) return fail("That area no longer exists.");
+            if (!existing) return fail("That subject no longer exists.");
             const updated: SubjectCategory = { ...existing, name, description, hidden: !!input.hidden };
             set((st) => ({ catalog: { ...st.catalog, categories: st.catalog.categories.map((c) => (c.slug === updated.slug ? updated : c)) } }));
             audit("catalog.area.update", "subject_area", updated.slug, { name, hidden: !!input.hidden });
@@ -1435,9 +1435,9 @@ export const useApp = create<AppState>()(
           const r = requireCatalogEditor();
           if (!r.ok) return r;
           const area = get().catalog.categories.find((c) => c.slug === slug);
-          if (!area) return fail("That area no longer exists.");
+          if (!area) return fail("That subject no longer exists.");
           const inside = get().catalog.subjects.filter((x) => x.category === slug).length;
-          if (inside > 0) return fail(`Move or delete the ${inside} ${inside === 1 ? "subject" : "subjects"} in ${area.name} first — or hide the area instead.`);
+          if (inside > 0) return fail(`Move or delete the ${inside} ${inside === 1 ? "sub-category" : "sub-categories"} in ${area.name} first, or hide it instead.`);
           set((st) => ({ catalog: { ...st.catalog, categories: st.catalog.categories.filter((c) => c.slug !== slug) } }));
           audit("catalog.area.delete", "subject_area", slug, { name: area.name });
           return ok(undefined);
@@ -1447,14 +1447,14 @@ export const useApp = create<AppState>()(
           if (!r.ok) return r;
           const name = input.name.trim().replace(/\s+/g, " ");
           const summary = input.summary.trim();
-          if (name.length < 2 || name.length > 60) return fail("Give the subject a name of 2–60 characters.");
+          if (name.length < 2 || name.length > 60) return fail("Give the sub-category a name of 2–60 characters.");
           if (summary.length > 200) return fail("Keep the summary under 200 characters.");
           const { categories, subjects } = get().catalog;
-          if (!categories.some((c) => c.slug === input.category)) return fail("Choose the area this subject belongs to.");
-          if (subjects.some((x) => x.slug !== input.slug && x.name.toLowerCase() === name.toLowerCase())) return fail("A subject with that name already exists.");
+          if (!categories.some((c) => c.slug === input.category)) return fail("Choose the subject it belongs to.");
+          if (subjects.some((x) => x.slug !== input.slug && x.name.toLowerCase() === name.toLowerCase())) return fail("A sub-category with that name already exists.");
           if (input.slug) {
             const existing = subjects.find((x) => x.slug === input.slug);
-            if (!existing) return fail("That subject no longer exists.");
+            if (!existing) return fail("That sub-category no longer exists.");
             const updated: Subject = { ...existing, name, summary, category: input.category, popular: !!input.popular, hidden: !!input.hidden };
             set((st) => ({ catalog: { ...st.catalog, subjects: st.catalog.subjects.map((x) => (x.slug === updated.slug ? updated : x)) } }));
             audit("catalog.subject.update", "subject", updated.slug, { name, category: input.category, hidden: !!input.hidden, popular: !!input.popular });
@@ -1471,7 +1471,7 @@ export const useApp = create<AppState>()(
           const r = requireCatalogEditor();
           if (!r.ok) return r;
           const subject = get().catalog.subjects.find((x) => x.slug === slug);
-          if (!subject) return fail("That subject no longer exists.");
+          if (!subject) return fail("That sub-category no longer exists.");
           const st = get();
           const tutorIds = [...Object.keys(TUTOR_BY_ID), ...st.registeredTutors.map((t) => t.id)];
           const tutors = tutorIds.filter((id) => resolveTutor(st, id)?.subjects.includes(slug)).length;

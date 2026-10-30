@@ -5,7 +5,7 @@ import { PageSkeleton } from "@/components/ui/Skeleton";
 import { CatalogView } from "@/components/admin/CatalogView";
 import { publicRoutePatterns, scanSeo } from "@/components/admin/seo-scan";
 
-export const metadata: Metadata = { title: "Catalog" };
+export const metadata: Metadata = { title: "Locations" };
 
 export default async function AdminCatalogPage() {
   // Public page links are only shown for routes that exist, so read the route table per request.
@@ -13,7 +13,7 @@ export default async function AdminCatalogPage() {
   const publicRoutes = publicRoutePatterns(await scanSeo());
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <CatalogView publicRoutes={publicRoutes} />
+      <CatalogView publicRoutes={publicRoutes} section="metros" />
     </Suspense>
   );
 }
