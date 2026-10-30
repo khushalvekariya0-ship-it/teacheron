@@ -24,6 +24,7 @@ import { DEMO_ACCOUNTS, useDemoLogin } from "@/components/layout/DemoSwitcher";
 import { ADMIN_NAV, NAV_BY_ROLE, type NavSection } from "./nav";
 import type { Role, User } from "@/lib/types";
 import { toast } from "@/components/ui/Toast";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 
 function sectionsFor(user: User, area: "app" | "admin"): NavSection[] {
   if (area === "admin") {
@@ -125,23 +126,29 @@ function SidebarFooter({ user }: { user: User }) {
         <p className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
           <span className="size-1.5 animate-pulse-dot rounded-full bg-success" aria-hidden /> Preview environment
         </p>
-        <p className="mt-0.5 text-[11.5px] leading-snug text-muted">Sample data, stored only in this browser.</p>
+        <p className="mt-0.5 text-[11.5px] leading-snug text-muted">
+          {SAMPLE_DATA ? "Sample data, stored only in this browser." : "Saved only in this browser until the database is connected."}
+        </p>
         <button type="button" onClick={() => setConfirm(true)} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-ink underline-offset-2 hover:underline">
-          <RotateCcw className="size-3" /> Reset demo data
+          <RotateCcw className="size-3" /> {SAMPLE_DATA ? "Reset demo data" : "Clear this browser's data"}
         </button>
       </div>
       <AccountMenu user={user} />
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title="Reset demo data?"
-        description="All bookings, messages and changes you've made in this preview will be replaced with the original sample data."
+        title={SAMPLE_DATA ? "Reset demo data?" : "Clear this browser's data?"}
+        description={
+          SAMPLE_DATA
+            ? "All bookings, messages and changes you've made in this preview will be replaced with the original sample data."
+            : "All accounts, bookings, messages and changes saved in this browser will be removed."
+        }
         confirmLabel="Reset data"
         tone="danger"
         onConfirm={() => {
           reset();
           setConfirm(false);
-          toast.success("Demo data reset");
+          toast.success(SAMPLE_DATA ? "Demo data reset" : "Browser data cleared");
           router.push("/login");
         }}
       />

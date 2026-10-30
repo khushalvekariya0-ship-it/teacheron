@@ -16,6 +16,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { SAMPLE_DATA } from "@/lib/sample-data";
 import { Mono, PermissionNotice, formatAge, humanize, settledNet, useDirectory, useStaff } from "./kit";
 
 const DAY = 86_400_000;
@@ -110,7 +111,7 @@ export function OverviewView() {
       <PageHeader
         eyebrow={<p className="text-[13px] font-medium text-muted">{formatDate(new Date(now).toISOString(), tz, { weekday: "long", month: "long", day: "numeric" })}</p>}
         title={<>{greeting}, <span className="marker">{me?.firstName ?? "there"}</span></>}
-        description="Marketplace health and the queues that need a decision. Figures come from this preview's sample data."
+        description={`Marketplace health and the queues that need a decision.${SAMPLE_DATA ? " Figures come from this preview's sample data." : ""}`}
       />
 
       <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" stagger={0.05}>
