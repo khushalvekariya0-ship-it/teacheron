@@ -47,16 +47,25 @@ function definedOnly<T extends object>(obj: T): Partial<T> {
 const shiftIso = (iso: string | undefined, ms: number) => (iso ? new Date(new Date(iso).getTime() + ms).toISOString() : iso);
 
 const uid = (p: string) => `${p}_${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 12)}`;
-/** A saved catalog minus the starter entries that are still exactly as shipped (and areas left empty by that). */
-function withoutUntouchedStarter(c: { categories: SubjectCategory[]; subjects: Subject[] }) {
-  const same = (a: Subject, b: Subject) => a.name === b.name && a.category === b.category && a.summary === b.summary && !!a.popular === !!b.popular && !a.hidden;
-  const subjects = c.subjects.filter((x) => !STARTER_SUBJECTS.some((st) => st.slug === x.slug && same(x, st)));
-  const categories = c.categories.filter((x) => {
-    const starter = STARTER_SUBJECT_CATEGORIES.find((st) => st.slug === x.slug);
-    const untouched = starter && starter.name === x.name && starter.description === x.description && !x.hidden;
-    return !untouched || subjects.some((y) => y.category === x.slug);
-  });
-  return { categories, subjects };
+/**
+ * Adds the starter subjects and sub-categories a catalog is missing, keeping everything already there.
+ * A starter subject whose name the admin already uses (e.g. their own "Mathematics") receives the
+ * starter sub-categories instead of getting a duplicate.
+ */
+function withStarter(c: { categories: SubjectCategory[]; subjects: Subject[] }) {
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const areaFor = new Map<string, string>();
+  const newAreas: SubjectCategory[] = [];
+  for (const st of STARTER_SUBJECT_CATEGORIES) {
+    const existing = c.categories.find((x) => x.slug === st.slug) ?? c.categories.find((x) => same(x.name, st.name));
+    areaFor.set(st.slug, existing?.slug ?? st.slug);
+    if (!existing) newAreas.push(st);
+  }
+  const newSubjects = STARTER_SUBJECTS.filter((st) => !c.subjects.some((x) => x.slug === st.slug || same(x.name, st.name))).map((st) => ({
+    ...st,
+    category: areaFor.get(st.category) ?? st.category,
+  }));
+  return { catalog: { categories: [...c.categories, ...newAreas], subjects: [...c.subjects, ...newSubjects] }, areas: newAreas.length, subjects: newSubjects.length };
 }
 
 /** "algebra" → "algebra", or "algebra-2" when that slug is taken. Empty when the name has no letters or numbers. */
@@ -162,7 +171,7 @@ interface Data {
   platformFeeBps: number;
   /** Main subjects and their sub-categories, as edited in Admin → Subjects. Every page reads this (see useCatalog). */
   catalog: { categories: SubjectCategory[]; subjects: Subject[] };
-  /** 2 = the catalog no longer starts with the built-in list (see the persist merge below). */
+  /** 3 = the starter list has been restored once into catalogs saved while the site started empty (see the persist merge below). */
   catalogSeed: number;
   loginHistory: { userId: string; at: string; device: string; success: boolean }[];
   /** Password-reset links that are still valid (token → account). Stands in for the emailed link. */
@@ -338,7 +347,7 @@ function initialData(): Data {
     policy: DEFAULT_POLICY,
     platformFeeBps: SITE.platformFeeBps,
     catalog: { categories: DEFAULT_SUBJECT_CATEGORIES, subjects: DEFAULT_SUBJECTS },
-    catalogSeed: 2,
+    catalogSeed: 3,
     loginHistory: [],
     passwordResets: {},
     emailTokens: {},
@@ -1531,16 +1540,11 @@ export const useApp = create<AppState>()(
         loadStarterCatalog() {
           const r = requireCatalogEditor();
           if (!r.ok) return r;
-          const { categories, subjects } = get().catalog;
-          const taken = (list: { slug: string; name: string }[], x: { slug: string; name: string }) =>
-            list.some((y) => y.slug === x.slug || y.name.toLowerCase() === x.name.toLowerCase());
-          const newAreas = STARTER_SUBJECT_CATEGORIES.filter((c) => !taken(categories, c));
-          const areaSlugs = new Set([...categories, ...newAreas].map((c) => c.slug));
-          const newSubjects = STARTER_SUBJECTS.filter((x) => areaSlugs.has(x.category) && !taken(subjects, x));
-          if (!newAreas.length && !newSubjects.length) return fail("Everything in the starter list is already here.");
-          set((st) => ({ catalog: { categories: [...st.catalog.categories, ...newAreas], subjects: [...st.catalog.subjects, ...newSubjects] } }));
-          audit("catalog.starter_loaded", "catalog", "starter", { areas: newAreas.length, subjects: newSubjects.length });
-          return ok({ areas: newAreas.length, subjects: newSubjects.length });
+          const res = withStarter(get().catalog);
+          if (!res.areas && !res.subjects) return fail("Everything in the starter list is already here.");
+          set({ catalog: res.catalog });
+          audit("catalog.starter_loaded", "catalog", "starter", { areas: res.areas, subjects: res.subjects });
+          return ok({ areas: res.areas, subjects: res.subjects });
         },
         saveCoupon(input) {
           const r = requireUser(["admin"]);
@@ -1622,10 +1626,10 @@ export const useApp = create<AppState>()(
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<Data>;
         const merged = { ...current, ...saved } as AppState;
-        // One time: catalogs saved before the site stopped starting with the built-in subject list still
-        // hold that list. Drop the entries nobody has edited (anything the admin added or changed stays).
-        if (!SAMPLE_DATA && saved.catalog && saved.catalogSeed !== 2) merged.catalog = withoutUntouchedStarter(saved.catalog);
-        merged.catalogSeed = 2;
+        // One time: a catalog saved while the site briefly started with no subjects gets the starter list
+        // back. Everything the admin added or edited stays; later deletions are respected (it runs once).
+        if (saved.catalog && (saved.catalogSeed ?? 0) < 3) merged.catalog = withStarter(saved.catalog).catalog;
+        merged.catalogSeed = 3;
         return merged;
       },
     },

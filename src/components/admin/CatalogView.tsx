@@ -195,14 +195,14 @@ function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; ta
               <EmptyState
                 icon={<BookOpen />}
                 title="No subjects yet"
-                description="Add your first main subject (for example Mathematics), then its sub-categories (Algebra, Geometry…). They appear on the website straight away. Or start from our ready-made list of 9 subjects and 38 sub-categories and edit it."
+                description="Add a main subject (for example Mathematics), then its sub-categories (Algebra, Geometry…). They appear on the website straight away. Or bring back the original list of 9 subjects and 38 sub-categories."
                 action={
                   <>
                     <Button onClick={() => setAreaEdit({ slug: null })}>
                       <Plus aria-hidden /> Add your first subject
                     </Button>
                     <Button variant="secondary" onClick={addStarterList}>
-                      Use the starter list
+                      Restore the original list
                     </Button>
                   </>
                 }

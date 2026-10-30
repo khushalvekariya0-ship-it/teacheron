@@ -1,5 +1,4 @@
 import type { Grade, Level, Subject, SubjectCategory, TeachingMode, TutorCategory } from "@/lib/types";
-import { SAMPLE_DATA } from "@/lib/sample-data";
 
 /*
  * The subject catalog: main subjects ("categories", e.g. Mathematics) and their sub-categories
@@ -8,8 +7,8 @@ import { SAMPLE_DATA } from "@/lib/sample-data";
  * React components use `useCatalog()` (re-renders on change); plain modules use `getCatalog()`,
  * `getSubject()` and `subjectName()`. Server-only code (static params, metadata) uses the defaults.
  *
- * The site starts with NO subjects: the owner adds real ones. STARTER_* is an optional ready-made list
- * an admin can load with one click (and the demo build's sample tutors are built on it).
+ * The site ships with the STARTER_* list (9 subjects, 38 sub-categories); admins edit, hide or delete
+ * any of it and add their own. "Use the starter list" in admin restores anything missing from it.
  */
 
 export const STARTER_SUBJECT_CATEGORIES: SubjectCategory[] = [
@@ -102,9 +101,9 @@ export function buildCatalog(categories: SubjectCategory[], subjects: Subject[])
   };
 }
 
-/** What a new site starts with: empty for a real launch; the starter list in the demo (sample tutors teach it). */
-export const DEFAULT_SUBJECT_CATEGORIES: SubjectCategory[] = SAMPLE_DATA ? STARTER_SUBJECT_CATEGORIES : [];
-export const DEFAULT_SUBJECTS: Subject[] = SAMPLE_DATA ? STARTER_SUBJECTS : [];
+/** What a new site starts with: the full starter list. */
+export const DEFAULT_SUBJECT_CATEGORIES: SubjectCategory[] = STARTER_SUBJECT_CATEGORIES;
+export const DEFAULT_SUBJECTS: Subject[] = STARTER_SUBJECTS;
 
 export const DEFAULT_CATALOG: Catalog = buildCatalog(DEFAULT_SUBJECT_CATEGORIES, DEFAULT_SUBJECTS);
 
