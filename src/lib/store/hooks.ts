@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { Review, Tutor, User } from "@/lib/types";
-import { TUTORS } from "@/lib/data/tutors";
-import { REVIEWS } from "@/lib/data/reviews";
 import { useApp, resolveTutor } from "./index";
 import { isFlagOn } from "@/lib/flags";
 import { buildCatalog, type Catalog } from "@/lib/data/catalog";
@@ -25,13 +23,10 @@ export function useSession(): User | null {
   return useMemo(() => (hydrated ? users.find((u) => u.id === id) ?? null : null), [users, id, hydrated]);
 }
 
-/** All published reviews (sample reviews + reviews created in this browser). */
+/** All published reviews the viewer can see. */
 export function useReviews(): Review[] {
-  const local = useApp((s) => s.reviews);
-  return useMemo(() => {
-    const localIds = new Set(local.map((r) => r.id));
-    return [...local, ...REVIEWS.filter((r) => !localIds.has(r.id))].filter((r) => r.status === "published");
-  }, [local]);
+  const all = useApp((s) => s.reviews);
+  return useMemo(() => all.filter((r) => r.status === "published"), [all]);
 }
 
 /**
@@ -43,7 +38,7 @@ export function useCatalog(): Catalog {
   return useMemo(() => buildCatalog(raw.categories, raw.subjects), [raw]);
 }
 
-/** Every tutor with local overrides applied and ratings recomputed from real review data. */
+/** Every tutor the viewer can see, with ratings computed from published reviews. */
 export function useTutors(): Tutor[] {
   const overrides = useApp((s) => s.tutorOverrides);
   const registered = useApp((s) => s.registeredTutors);
@@ -51,7 +46,7 @@ export function useTutors(): Tutor[] {
   return useMemo(() => {
     const byTutor = new Map<string, number[]>();
     for (const r of reviews) byTutor.set(r.tutorId, [...(byTutor.get(r.tutorId) ?? []), r.rating]);
-    return [...TUTORS, ...registered].map((t) => {
+    return registered.map((t) => {
       const merged = resolveTutor({ tutorOverrides: overrides, registeredTutors: registered }, t.id)!;
       const ratings = byTutor.get(t.id) ?? [];
       return {
@@ -61,6 +56,12 @@ export function useTutors(): Tutor[] {
       };
     });
   }, [overrides, registered, reviews]);
+}
+
+/** Tutors families can discover: everyone except profiles staff have hidden from search. */
+export function useListedTutors(): Tutor[] {
+  const tutors = useTutors();
+  return useMemo(() => tutors.filter((t) => !t.hidden), [tutors]);
 }
 
 export function useTutor(idOrSlug: string | undefined): Tutor | undefined {

@@ -58,9 +58,9 @@ function Inner() {
     return m;
   }, [kids, bookings, requirements, me.id, now]);
 
-  const confirmRemove = () => {
+  const confirmRemove = async () => {
     if (!removing) return;
-    const res = removeChild(removing.id);
+    const res = await removeChild(removing.id);
     if (!res.ok) toast.error(res.error);
     else toast.success(`${removing.firstName}'s profile was removed`);
     setRemoving(null);
@@ -282,8 +282,8 @@ function ChildForm({ existing, currentYear, onDone }: { existing: Child | null; 
   });
   const { errors, isSubmitting } = form.formState;
 
-  const onSubmit = form.handleSubmit((v) => {
-    const res = saveChild({
+  const onSubmit = form.handleSubmit(async (v) => {
+    const res = await saveChild({
       ...(existing ? { id: existing.id } : {}),
       firstName: v.firstName,
       grade: v.grade,

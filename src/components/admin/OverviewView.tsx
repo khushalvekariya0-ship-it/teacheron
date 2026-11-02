@@ -14,9 +14,10 @@ import { PageHeader } from "@/components/dashboard/Shell";
 import { AreaChart, ColumnChart, StatTile } from "@/components/charts";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { InlineAlert } from "@/components/ui/States";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { cn } from "@/lib/utils";
-import { SAMPLE_DATA } from "@/lib/sample-data";
 import { Mono, PermissionNotice, formatAge, humanize, settledNet, useDirectory, useStaff } from "./kit";
 
 const DAY = 86_400_000;
@@ -111,8 +112,23 @@ export function OverviewView() {
       <PageHeader
         eyebrow={<p className="text-[13px] font-medium text-muted">{formatDate(new Date(now).toISOString(), tz, { weekday: "long", month: "long", day: "numeric" })}</p>}
         title={<>{greeting}, <span className="marker">{me?.firstName ?? "there"}</span></>}
-        description={`Marketplace health and the queues that need a decision.${SAMPLE_DATA ? " Figures come from this preview's sample data." : ""}`}
+        description="Marketplace health and the queues that need a decision."
       />
+
+      {me && !me.mfaEnabled && (
+        <InlineAlert
+          tone="warning"
+          title="Turn on two-step login"
+          className="mb-6"
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link href="/admin/security">Set it up</Link>
+            </Button>
+          }
+        >
+          Your account can see member data. Add a code from an authenticator app to every sign-in so a stolen password isn&apos;t enough.
+        </InlineAlert>
+      )}
 
       <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" stagger={0.05}>
         {can("payments.read") && (

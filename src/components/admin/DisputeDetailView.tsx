@@ -22,6 +22,7 @@ import { toast } from "@/components/ui/Toast";
 import { ConversationAccess, Facts, Mono, PermissionButton, PermissionNotice, StatusPill, TextLink, Timeline, formatAge, humanize, useDirectory, useStaff } from "./kit";
 import { PaymentRows, bookingHistoryItems } from "./BookingsView";
 import { DISPUTE_REASON_LABEL, DISPUTE_STATUS_META, RESOLUTION_LABEL, bookingPaid, isDisputeOpen, parseDollars, refundedCents } from "./money";
+import { FileLink } from "@/components/domain/FileLink";
 
 type Outcome = NonNullable<Dispute["resolution"]>["outcome"];
 
@@ -75,7 +76,7 @@ function DisputeInner({ id }: { id: string }) {
             title="Dispute not found"
             description={
               <>
-                There&apos;s no dispute with the ID <span className="font-mono text-[13px] text-ink">{id}</span>. Preview data lives in this browser, so records created elsewhere won&apos;t appear here.
+                There&apos;s no dispute with the ID <span className="font-mono text-[13px] text-ink">{id}</span>. It may have been removed, or the link is wrong.
               </>
             }
             action={
@@ -140,7 +141,7 @@ function DisputeInner({ id }: { id: string }) {
                       <li key={f.name} className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-[13px]">
                         <span className="flex min-w-0 items-center gap-2">
                           <Paperclip className="size-3.5 shrink-0 text-muted" aria-hidden />
-                          <span className="truncate text-ink">{f.name}</span>
+                          <FileLink path={f.path} className="truncate text-ink">{f.name}</FileLink>
                         </span>
                         <span className="shrink-0 tabular-nums text-muted">{fileSize(f.sizeKb)}</span>
                       </li>
@@ -175,7 +176,7 @@ function DisputeInner({ id }: { id: string }) {
                 </>
               ) : (
                 <p className="text-[13px] text-muted">
-                  Booking <Mono>{d.bookingId}</Mono> isn&apos;t in this preview&apos;s data.
+                  Booking <Mono>{d.bookingId}</Mono> couldn&apos;t be found.
                 </p>
               )}
             </CardContent>
@@ -372,7 +373,7 @@ function MessageList({ conversationId }: { conversationId: string }) {
           <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-2">{m.body}</p>
           {m.attachment && (
             <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted">
-              <Paperclip className="size-3" aria-hidden /> {m.attachment.name} · {fileSize(m.attachment.sizeKb)}
+              <Paperclip className="size-3" aria-hidden /> <FileLink path={m.attachment.path}>{m.attachment.name}</FileLink> · {fileSize(m.attachment.sizeKb)}
             </p>
           )}
           {m.moderation && (
@@ -397,10 +398,10 @@ function StatusControl({ dispute: d }: { dispute: Dispute }) {
   return (
     <form
       className="space-y-2.5"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         if (value === d.status) return;
-        const res = setStatus(d.id, value);
+        const res = await setStatus(d.id, value);
         if (!res.ok) {
           toast.error(res.error);
           return;
@@ -427,11 +428,11 @@ function NoteForm({ disputeId }: { disputeId: string }) {
     <form
       noValidate
       className="space-y-2.5 border-t border-line pt-4"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         setTouched(true);
         if (body.trim().length < 3) return;
-        const res = addNote(disputeId, body);
+        const res = await addNote(disputeId, body);
         if (!res.ok) {
           toast.error(res.error);
           return;
@@ -516,11 +517,11 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
 
   const cents = outcome === "full_refund" ? paid : needsAmount && parsed.ok ? parsed.cents : 0;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched({ outcome: true, amount: true, note: true });
     if (outcomeError || amountError || noteError || !outcome) return;
-    const res = resolve(d.id, outcome, cents, note.trim());
+    const res = await resolve(d.id, outcome, cents, note.trim());
     if (!res.ok) {
       toast.error(res.error);
       return;
@@ -578,7 +579,7 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
                 label={outcome === "credit" ? "Credit amount" : "Refund amount"}
                 required
                 error={touched.amount ? amountError : undefined}
-                hint={outcome === "credit" ? `Booking policy credit for a tutor no-show: ${formatCents(policy.tutorNoShowCreditCents)}. Credit balances aren't simulated in this preview.` : `Up to ${formatCents(paid)}.`}
+                hint={outcome === "credit" ? `Booking policy credit for a tutor no-show: ${formatCents(policy.tutorNoShowCreditCents)}. Added to the booker's Study Credits.` : `Up to ${formatCents(paid)}.`}
               >
                 <Input
                   inputMode="decimal"

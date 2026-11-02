@@ -24,10 +24,10 @@ export function BookingSuccessSheet({ tutor, booking, onClose }: { tutor: Tutor;
   const child = booking?.childId ? children.find((c) => c.id === booking.childId) : undefined;
   const learnerName = child?.firstName ?? (me ? `You (${me.firstName})` : "—");
 
-  const message = () => {
+  const message = async () => {
     if (!booking) return;
     setMessaging(true);
-    const r = startConversation(tutor.id, { childId: booking.childId, subject: booking.subject });
+    const r = await startConversation(tutor.id, { childId: booking.childId, subject: booking.subject });
     if (!r.ok) {
       setMessaging(false);
       toast.error(r.error);

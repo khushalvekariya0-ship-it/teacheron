@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { BadgeCheck, CircleDashed, CircleX, Clock3, ExternalLink, Sparkles, UserRound } from "lucide-react";
+import { BadgeCheck, CircleDashed, CircleX, Clock3, Eye, EyeOff, ExternalLink, Sparkles, UserRound } from "lucide-react";
 import type { Tutor, VerificationKind, VerificationStatus } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useCatalog, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
@@ -16,11 +16,12 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StarRating } from "@/components/ui/StarRating";
-import { EmptyState } from "@/components/ui/States";
+import { EmptyState, InlineAlert } from "@/components/ui/States";
+import { toast } from "@/components/ui/Toast";
 import { VERIFICATION_LABEL, VERIFICATION_STATUS_META, VerificationStatusBadge } from "@/components/domain/Badges";
 import { cn } from "@/lib/utils";
 import {
-  ClearFilters, ExportButton, Facts, FilterSelect, MiniStat, RowOpen, SearchInput, Section, TextLink, Toolbar, centsToDecimal, fullName, humanize,
+  ClearFilters, ExportButton, Facts, FilterSelect, MiniStat, PermissionButton, ReasonDialog, RowOpen, SearchInput, Section, TextLink, Toolbar, centsToDecimal, fullName, humanize,
   matches, useDirectory, useSticky, useUrlParam,
 } from "./kit";
 
@@ -149,7 +150,7 @@ function TutorsInner() {
           <Avatar name={fullName(t)} src={t.photoUrl} tone={t.tone} size="sm" className="hidden md:inline-flex" />
           <span className="min-w-0">
             <RowOpen onOpen={() => setOpenId(t.id)} label={`Open ${fullName(t)}`} className="block truncate font-medium text-ink">{fullName(t)}</RowOpen>
-            <span className="block truncate text-[12px] text-muted">{t.city}, {t.state}</span>
+            <span className="block truncate text-[12px] text-muted">{t.city}, {t.state}{t.hidden ? " · Hidden from search" : ""}</span>
           </span>
         </span>
       ),
@@ -239,11 +240,14 @@ function TutorSheet({ tutor: current, onClose }: { tutor: Tutor | null; onClose:
         footer={
           tutor ? (
             <div className="flex flex-wrap justify-end gap-2">
-              <Button asChild variant="secondary">
-                <Link href={`/tutors/${tutor.slug}`} target="_blank" rel="noopener">
-                  Public profile <ExternalLink />
-                </Link>
-              </Button>
+              <ListingActions tutor={tutor} />
+              {!tutor.hidden && (
+                <Button asChild variant="secondary">
+                  <Link href={`/tutors/${tutor.slug}`} target="_blank" rel="noopener">
+                    Public profile <ExternalLink />
+                  </Link>
+                </Button>
+              )}
             </div>
           ) : undefined
         }
@@ -290,9 +294,16 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StarRating rating={tutor.rating} count={tutor.reviewCount} />
             {tutor.featured && <Badge size="sm" tone="accent"><Sparkles /> Featured</Badge>}
+            {tutor.hidden && <Badge size="sm" tone="danger"><EyeOff /> Hidden from search</Badge>}
           </div>
         </div>
       </div>
+
+      {tutor.hidden && (
+        <div className="px-5 py-4">
+          <InlineAlert tone="warning">Families can&apos;t find, message or book this tutor. Lessons already booked go ahead.</InlineAlert>
+        </div>
+      )}
 
       <Section title="Verification" action={d.requests.some((r) => r.status === "submitted" || r.status === "under_review") ? <TextLink href="/admin/verification" className="text-[13px]">Queue</TextLink> : undefined}>
         <ul className="divide-y divide-line rounded-lg border border-line">
@@ -346,7 +357,7 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
             { label: "Booking commission", value: <span className="tabular-nums">{formatBps(commissionBps)}</span> },
             { label: "Lead credit balance", value: <span className="tabular-nums">{d.credits}</span> },
             { label: "Lessons completed (profile)", value: tutor.lessonsCompleted.toLocaleString("en-US") },
-            { label: "Bookings in this preview", value: `${d.total} total · ${d.completed} completed · ${d.upcoming} upcoming` },
+            { label: "Bookings", value: `${d.total} total · ${d.completed} completed · ${d.upcoming} upcoming` },
           ]}
         />
       </Section>
@@ -358,7 +369,7 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
             <TextLink href={`/admin/users?id=${account.id}`}>Open account</TextLink>
           </p>
         ) : (
-          <p className="text-[13px] text-muted">This sample profile has no sign-in account in the preview, so account status can&apos;t be changed here.</p>
+          <p className="text-[13px] text-muted">This profile has no sign-in account, so account status can&apos;t be changed here.</p>
         )}
       </Section>
 
@@ -384,5 +395,55 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
         )}
       </Section>
     </div>
+  );
+}
+
+/** Feature a tutor on the home page and search, or hide their profile from families. */
+function ListingActions({ tutor }: { tutor: Tutor }) {
+  const setListing = useApp((s) => s.setTutorListing);
+  const [hiding, setHiding] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+
+  const apply = async (patch: { featured?: boolean; hidden?: boolean }, reason = "", done: string) => {
+    setBusy(true);
+    const r = await setListing(tutor.id, patch, reason);
+    setBusy(false);
+    if (!r.ok) {
+      toast.error(r.error);
+      return false;
+    }
+    toast.success(done, { description: "Recorded in the audit log." });
+    return true;
+  };
+
+  return (
+    <>
+      {!tutor.hidden && (
+        <PermissionButton permission="users.write" variant="secondary" loading={busy} onClick={() => void apply({ featured: !tutor.featured }, "", tutor.featured ? "No longer featured" : "Tutor featured")}>
+          <Sparkles /> {tutor.featured ? "Unfeature" : "Feature"}
+        </PermissionButton>
+      )}
+      {tutor.hidden ? (
+        <PermissionButton permission="users.write" variant="primary" loading={busy} onClick={() => void apply({ hidden: false }, "", "Profile visible again")}>
+          <Eye /> Show in search
+        </PermissionButton>
+      ) : (
+        <PermissionButton permission="users.write" variant="danger-outline" onClick={() => setHiding(true)}>
+          <EyeOff /> Hide from search
+        </PermissionButton>
+      )}
+      <ReasonDialog
+        open={hiding}
+        onOpenChange={setHiding}
+        title={`Hide ${fullName(tutor)} from search?`}
+        description="Their profile disappears from search, the home page and their public page. Families can't message or book them; lessons already booked go ahead. The tutor sees your reason."
+        label="Reason (shown to the tutor)"
+        hint="Shown to the tutor and recorded in the audit log."
+        placeholder="e.g. Profile photo doesn't meet our guidelines — please upload a clear headshot"
+        confirmLabel="Hide profile"
+        tone="danger"
+        onConfirm={(reason) => apply({ hidden: true }, reason, "Profile hidden from search")}
+      />
+    </>
   );
 }

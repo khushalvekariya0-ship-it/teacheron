@@ -89,7 +89,7 @@ export function JobDetail({ id }: { id: string }) {
   const gateKind = !me ? "guest" : isOwner ? "owner" : family ? "family" : isTutor ? (tutor ? null : "no-profile") : "staff";
   const showMobileBar = job.status === "published" && !isOwner && !existing && (!me || (isTutor && !!tutor));
 
-  const onSave = () => {
+  const onSave = async () => {
     if (!me) {
       toast("Sign in to save jobs", { description: "Saving jobs is available to tutor accounts.", action: { label: "Sign in", onClick: () => router.push(`/login?next=${encodeURIComponent(`/tutor-jobs/${job.id}`)}`) } });
       return;
@@ -98,7 +98,7 @@ export function JobDetail({ id }: { id: string }) {
       toast.error("Only tutor accounts can save jobs.");
       return;
     }
-    const r = toggleSavedJob(job.id);
+    const r = await toggleSavedJob(job.id);
     if (!r.ok) toast.error(r.error);
     else toast.success(r.data ? "Job saved" : "Removed from saved jobs");
   };

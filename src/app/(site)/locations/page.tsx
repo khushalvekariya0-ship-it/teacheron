@@ -6,8 +6,12 @@ import { CtaBand, Section, SectionHeading } from "@/components/marketing/Section
 import { MetroMap, type MapMetro } from "@/components/marketing/MetroMap";
 import { ZipSearch } from "@/components/content/ZipSearch";
 import { inPersonTutorsForMetro, onlineTutors } from "@/components/content/insights";
+import { listedTutors } from "@/server/public";
 import { Button } from "@/components/ui/Button";
 import { METROS } from "@/lib/data/geo";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Tutors by city",
@@ -29,9 +33,10 @@ const LOCAL_STEPS = [
   { title: "Meet where you agree", body: "At home, a library or another place you both choose." },
 ];
 
-export default function LocationsPage() {
-  const metros = METROS.map((m) => ({ ...m, inPerson: inPersonTutorsForMetro(m).length }));
-  const online = onlineTutors().length;
+export default async function LocationsPage() {
+  const tutors = await listedTutors();
+  const metros = METROS.map((m) => ({ ...m, inPerson: inPersonTutorsForMetro(m, tutors).length }));
+  const online = onlineTutors(tutors).length;
   const mapMetros: MapMetro[] = metros.map((m) => ({ slug: m.slug, city: m.city, state: m.state, lat: m.lat, lng: m.lng, inPerson: m.inPerson }));
   const facts = [
     { icon: MapPin, label: `${METROS.length} city pages` },

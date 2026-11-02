@@ -3,38 +3,21 @@
 import * as React from "react";
 import { Film, Link2, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MAX_VIDEO_MB, MAX_VIDEO_SECONDS, checkVideoFile, discardIntroVideo, loadDeviceVideo, parseIntroVideo, saveDeviceVideo, videoDuration } from "@/lib/video";
+import { MAX_VIDEO_MB, MAX_VIDEO_SECONDS, checkVideoFile, parseIntroVideo, videoDuration } from "@/lib/video";
+import { uploadFile } from "@/lib/upload";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Controls";
 
-/** A URL a <video> element can play for a stored intro-video value: direct file links as-is, uploads from this browser. */
+/** A URL a <video> element can play for a stored intro-video value (uploads and direct file links). */
 export function usePlayableVideoUrl(value: string | undefined): { url: string | null; loading: boolean } {
   const src = parseIntroVideo(value);
-  const key = src?.kind === "device" ? src.key : null;
-  const [loaded, setLoaded] = React.useState<{ key: string; url: string | null } | null>(null);
-  React.useEffect(() => {
-    if (!key) return;
-    let cancelled = false;
-    let url: string | null = null;
-    void loadDeviceVideo(key).then((blob) => {
-      if (cancelled) return;
-      url = blob ? URL.createObjectURL(blob) : null;
-      setLoaded({ key, url });
-    });
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [key]);
-  if (src?.kind === "file") return { url: src.url, loading: false };
-  if (!key) return { url: null, loading: false };
-  return loaded?.key === key ? { url: loaded.url, loading: false } : { url: null, loading: true };
+  return { url: src?.kind === "file" ? src.url : null, loading: false };
 }
 
 /**
  * Plays a tutor's intro video: YouTube and Vimeo links in their own player, files in a <video>.
- * With hideWhenMissing, an upload that isn't in this browser renders nothing instead of a notice.
+ * With hideWhenMissing, a value that can't be played renders nothing.
  */
 export function IntroVideoPlayer({ value, title, hideWhenMissing, className }: { value: string; title: string; hideWhenMissing?: boolean; className?: string }) {
   const src = parseIntroVideo(value);
@@ -56,9 +39,7 @@ export function IntroVideoPlayer({ value, title, hideWhenMissing, className }: {
       ) : url ? (
         <video src={url} controls playsInline preload="metadata" aria-label={title} className="absolute inset-0 size-full object-contain" />
       ) : (
-        <p className="absolute inset-0 grid place-items-center p-6 text-center text-[13.5px] text-white/75">
-          {loading ? "Loading video…" : "This video was uploaded on another device, so it can't play here."}
-        </p>
+        <p className="absolute inset-0 grid place-items-center p-6 text-center text-[13.5px] text-white/75">{loading ? "Loading video…" : "This video can't be played."}</p>
       )}
     </div>
   );
@@ -75,21 +56,18 @@ function describe(value: string, name?: string): string {
 const minutes = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 /**
- * Add, preview, replace or remove an intro video: upload a file or paste a YouTube/Vimeo link.
- * onChange receives the new value (none when removed) and returns false if it couldn't be saved;
- * the old upload is deleted from this browser only after the new value is saved.
+ * Add, preview, replace or remove an intro video: upload a file (stored in Supabase Storage) or paste
+ * a YouTube/Vimeo link. onChange receives the new value (none when removed) and resolves to false if
+ * it couldn't be saved; the server removes a replaced upload once the new value is saved.
  */
 export function IntroVideoField({
   value,
   name,
-  ownerId,
   onChange,
 }: {
   value?: string;
   name?: string;
-  /** Who the upload belongs to (user id), used in the stored file's key. */
-  ownerId: string;
-  onChange: (next: { url?: string; name?: string }) => boolean;
+  onChange: (next: { url?: string; name?: string }) => boolean | Promise<boolean>;
 }) {
   const [mode, setMode] = React.useState<"upload" | "link">("upload");
   const [link, setLink] = React.useState("");
@@ -99,10 +77,8 @@ export function IntroVideoField({
   const inputId = React.useId();
   const current = value && parseIntroVideo(value) ? value : null;
 
-  const commit = (next: { url?: string; name?: string }) => {
-    const prev = value;
-    if (!onChange(next)) return false;
-    if (prev && prev !== next.url) void discardIntroVideo(prev);
+  const commit = async (next: { url?: string; name?: string }) => {
+    if (!(await onChange(next))) return false;
     setReplacing(false);
     setLink("");
     setError(null);
@@ -120,8 +96,9 @@ export function IntroVideoField({
       const seconds = await videoDuration(file);
       if (Number.isNaN(seconds)) return setError("This browser can't play that video. Try an MP4 file, or paste a YouTube link instead.");
       if (Number.isFinite(seconds) && seconds > MAX_VIDEO_SECONDS + 1) return setError(`Keep your video under ${MAX_VIDEO_SECONDS / 60} minutes. This one is ${minutes(seconds)}.`);
-      const ref = await saveDeviceVideo(ownerId, file);
-      if (!commit({ url: ref, name: file.name })) void discardIntroVideo(ref);
+      const up = await uploadFile("video", file);
+      if (!up.ok || !up.file.publicUrl) return setError(up.ok ? "That video couldn't be saved. Please try again." : up.error);
+      await commit({ url: up.file.publicUrl, name: file.name });
     } catch {
       setError("That video couldn't be saved. Try a smaller file, or paste a YouTube link instead.");
     } finally {
@@ -131,8 +108,8 @@ export function IntroVideoField({
 
   const addLink = () => {
     const src = parseIntroVideo(link);
-    if (!src || src.kind === "device") return setError("Paste a YouTube or Vimeo link, or a direct link to an MP4 file.");
-    commit({ url: link.trim() });
+    if (!src) return setError("Paste a YouTube or Vimeo link, or a direct link to an MP4 file.");
+    void commit({ url: link.trim() });
   };
 
   return (
@@ -145,7 +122,7 @@ export function IntroVideoField({
             <Button variant="secondary" size="sm" onClick={() => setReplacing(true)}>
               Replace
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => commit({})}>
+            <Button variant="ghost" size="sm" onClick={() => void commit({})}>
               Remove
             </Button>
           </div>
@@ -174,7 +151,7 @@ export function IntroVideoField({
               )}
             >
               <Film className="size-6 text-navy" aria-hidden />
-              <span className="text-sm font-semibold text-ink">{busy ? "Saving your video…" : "Choose a video"}</span>
+              <span className="text-sm font-semibold text-ink">{busy ? "Uploading your video…" : "Choose a video"}</span>
               <span className="text-[12.5px] text-muted">
                 MP4, WebM or MOV · up to {MAX_VIDEO_SECONDS / 60} minutes · {MAX_VIDEO_MB} MB
               </span>
@@ -214,7 +191,7 @@ export function IntroVideoField({
           )}
           <p className="text-[12.5px] leading-relaxed text-muted">
             {mode === "upload"
-              ? "Preview build: an uploaded file is saved in this browser until file storage is connected. A YouTube or Vimeo link works on every device."
+              ? "Your video is uploaded securely and plays on your public profile."
               : "YouTube (including unlisted videos), Vimeo, or a direct link to an MP4 file."}
           </p>
           {replacing && (

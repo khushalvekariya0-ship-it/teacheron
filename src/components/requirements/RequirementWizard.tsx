@@ -211,15 +211,19 @@ function WizardForm({
   });
   const { getValues, trigger, setError, subscribe } = methods;
 
-  /** Saves the draft. Live (published/paused) requirements only save when `force` is set. */
-  const persist = React.useCallback(
-    (opts: { explicit?: boolean; force?: boolean } = {}): Requirement | null => {
+  /**
+   * Saves the draft. Live (published/paused) requirements only save when `force` is set. Saves run one
+   * after another, so an autosave still in flight can't create a second draft before the first has an id.
+   */
+  const queue = React.useRef<Promise<unknown>>(Promise.resolve());
+  const persistNow = React.useCallback(
+    async (opts: { explicit?: boolean; force?: boolean } = {}): Promise<Requirement | null> => {
       if (live && !opts.force) return null;
       const v = getValues();
       if (!draftIdRef.current && !(v.subject && v.grade)) return null;
       setSave({ status: "saving" });
       // Only send `id` when it exists — the store spreads input over its defaults, so `id: undefined` would erase the new id.
-      const r = saveDraft({
+      const r = await saveDraft({
         ...toPayload(v, role),
         ...(draftIdRef.current ? { id: draftIdRef.current } : {}),
         ...(live ? {} : { draftStep: completedRef.current }),
@@ -237,6 +241,14 @@ function WizardForm({
       return r.data;
     },
     [live, getValues, role, saveDraft, onCreated],
+  );
+  const persist = React.useCallback(
+    (opts: { explicit?: boolean; force?: boolean } = {}): Promise<Requirement | null> => {
+      const next = queue.current.then(() => persistNow(opts));
+      queue.current = next.catch(() => null);
+      return next;
+    },
+    [persistNow],
   );
 
   // Debounced autosave while typing (drafts only). Live requirements track unsaved changes instead.
@@ -299,14 +311,14 @@ function WizardForm({
     focusHeading();
   };
 
-  const saveAndExit = () => {
+  const saveAndExit = async () => {
     clearTimeout(timer.current);
     if (live) {
       if (save.status === "unsaved") setConfirmDiscard(true);
       else router.push(`/dashboard/requirements/${requirement!.id}`);
       return;
     }
-    const saved = persist({ explicit: true });
+    const saved = await persist({ explicit: true });
     if (saved) {
       toast.success("Draft saved", { description: "Pick up where you left off from My requirements." });
       router.push("/dashboard/requirements");
@@ -315,7 +327,7 @@ function WizardForm({
     }
   };
 
-  const publish = () => {
+  const publish = async () => {
     setPublishError(null);
     const bad = firstInvalidStep(getValues(), role);
     if (bad) {
@@ -326,7 +338,7 @@ function WizardForm({
     clearTimeout(timer.current);
     setPublishing(true);
     completedRef.current = PREVIEW_STEP;
-    const saved = persist({ explicit: true, force: true });
+    const saved = await persist({ explicit: true, force: true });
     if (!saved) {
       setPublishing(false);
       return;
@@ -337,7 +349,7 @@ function WizardForm({
       setPublished({ req: saved, outcome: "saved" });
       return;
     }
-    const r = publishRequirement(saved.id);
+    const r = await publishRequirement(saved.id);
     setPublishing(false);
     if (!r.ok) {
       setPublishError(r.error);

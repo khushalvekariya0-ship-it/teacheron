@@ -6,7 +6,6 @@ import type { Review, Tutor } from "@/lib/types";
 import { subjectName } from "@/lib/data/catalog";
 import { formatDate } from "@/lib/format";
 import { useHydrated, useReviews, useViewerTimezone } from "@/lib/store/hooks";
-import { REVIEWS } from "@/lib/data/reviews";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -19,7 +18,6 @@ import { ProfileSection } from "./ProfileSections";
 type ReviewSort = "newest" | "highest" | "lowest";
 const PAGE = 4;
 /** Reviews created in this browser depend on persisted data, so they join after hydration (keeps SSR deterministic). */
-const SAMPLE_IDS = new Set(REVIEWS.map((r) => r.id));
 
 function Stars({ rating }: { rating: number }) {
   return (
@@ -82,7 +80,7 @@ export function ReviewsSection({ tutor }: { tutor: Tutor }) {
   const [sort, setSort] = React.useState<ReviewSort>("newest");
   const [visible, setVisible] = React.useState(PAGE);
 
-  const reviews = React.useMemo(() => all.filter((r) => r.tutorId === tutor.id && (hydrated || SAMPLE_IDS.has(r.id))), [all, tutor.id, hydrated]);
+  const reviews = React.useMemo(() => (hydrated ? all.filter((r) => r.tutorId === tutor.id) : []), [all, tutor.id, hydrated]);
   const sorted = React.useMemo(() => {
     const list = [...reviews];
     if (sort === "newest") list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

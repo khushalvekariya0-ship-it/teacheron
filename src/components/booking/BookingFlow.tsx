@@ -183,8 +183,8 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
     bodyRef.current?.scrollIntoView({ block: "start" });
   };
 
-  const revalidateCoupon = (code: string, amount: number): boolean => {
-    const r = validateCoupon(code, amount);
+  const revalidateCoupon = async (code: string, amount: number): Promise<boolean> => {
+    const r = await validateCoupon(code, amount);
     if (!r.ok) {
       setCoupon(null);
       setCouponError(r.error);
@@ -197,7 +197,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
 
   const toReview = () => {
     if (!draft.startUtc) return;
-    if (coupon && subtotal > 0) revalidateCoupon(coupon.code, subtotal);
+    if (coupon && subtotal > 0) void revalidateCoupon(coupon.code, subtotal);
     else if (coupon) setCoupon(null);
     setAgreeError(false);
     go("review");
@@ -212,9 +212,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
     if (!idem.current || idem.current.session !== session) idem.current = { session, key: idempotencyKey("book") };
     const key = idem.current.key;
     setSubmitting(true);
-    // Stand-in for the payment round trip (Stripe test mode in the preview build).
-    await new Promise((r) => setTimeout(r, 700));
-    const res = createBooking({
+    const res = await createBooking({
       tutorId: tutor.id,
       startUtc: draft.startUtc,
       durationMin: minutes,
@@ -244,10 +242,10 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
     go("success");
   };
 
-  const message = () => {
+  const message = async () => {
     if (!booking) return;
     setMessaging(true);
-    const r = startConversation(tutor.id, { childId: booking.childId, subject: booking.subject });
+    const r = await startConversation(tutor.id, { childId: booking.childId, subject: booking.subject });
     if (!r.ok) {
       setMessaging(false);
       toast.error(r.error);

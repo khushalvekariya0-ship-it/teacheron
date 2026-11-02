@@ -37,9 +37,9 @@ export function DeclineDialog({ booking, open, onOpenChange, counterpart }: { bo
       confirmLabel="Decline request"
       tone="danger"
       loading={busy}
-      onConfirm={() => {
+      onConfirm={async () => {
         setBusy(true);
-        const res = transition(booking.id, "cancelled_by_tutor", note.trim() || undefined);
+        const res = await transition(booking.id, "cancelled_by_tutor", note.trim() || undefined);
         setBusy(false);
         if (!res.ok) return void toast.error(res.error);
         toast.success("Request declined", { description: `${counterpart} has been notified.` });
@@ -96,8 +96,8 @@ export function CancelDialog({ booking, actor, open, onOpenChange, counterpart, 
       description={`${counterpart} will be notified right away.`}
       confirmLabel="Cancel lesson"
       tone="danger"
-      onConfirm={() => {
-        const res = transition(booking.id, to, note.trim() || undefined);
+      onConfirm={async () => {
+        const res = await transition(booking.id, to, note.trim() || undefined);
         if (!res.ok) return void toast.error(res.error);
         toast.success("Lesson cancelled", { description: captured ? rule : booking.paymentStatus === "authorized" ? "The card hold was released." : undefined });
         onOpenChange(false);
@@ -170,9 +170,9 @@ export function RescheduleDialog({
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!slot) return setError("Choose a new time first.");
-    const res = reschedule(booking.id, slot);
+    const res = await reschedule(booking.id, slot);
     if (!res.ok) return setError(res.error);
     toast.success(res.data.status === "confirmed" ? "Lesson rescheduled" : "New time requested", {
       description: formatDateTime(res.data.startUtc, tz),
@@ -295,9 +295,9 @@ export function TransitionDialog({
       description={c?.description}
       confirmLabel={c?.confirm}
       tone={c?.danger ? "danger" : "default"}
-      onConfirm={() => {
+      onConfirm={async () => {
         if (!to || !c) return;
-        const res = transition(booking.id, to, note.trim() || undefined);
+        const res = await transition(booking.id, to, note.trim() || undefined);
         if (!res.ok) return void toast.error(res.error);
         toast.success(c.success);
         onOpenChange(false);

@@ -1,25 +1,24 @@
 import type { Subject, Tutor } from "@/lib/types";
 import { getCatalog } from "@/lib/data/catalog";
 import { METROS, distanceMiles, type Metro } from "@/lib/data/geo";
-import { TUTORS } from "@/lib/data/tutors";
 
 /*
- * Figures shown on public marketing pages. Everything here is computed from the sample data in
- * src/lib/data — nothing is typed in by hand — so the pages stay honest as the catalog changes.
+ * Figures shown on public marketing pages, always computed from the tutors actually listed (passed in
+ * by the page: listedTutors() on the server, useListedTutors() in the browser) — nothing is typed in by hand.
  */
 
-export function tutorsForSubject(slug: string, tutors: Tutor[] = TUTORS): Tutor[] {
+export function tutorsForSubject(slug: string, tutors: Tutor[]): Tutor[] {
   return tutors.filter((t) => t.subjects.includes(slug));
 }
 
-export function tutorCountBySubject(tutors: Tutor[] = TUTORS): Record<string, number> {
+export function tutorCountBySubject(tutors: Tutor[]): Record<string, number> {
   const counts: Record<string, number> = Object.fromEntries(getCatalog().subjects.map((s) => [s.slug, 0]));
   for (const t of tutors) for (const s of t.subjects) if (s in counts) counts[s] += 1;
   return counts;
 }
 
 /** Unique tutors who teach at least one subject in a category. */
-export function tutorsInCategory(category: string, tutors: Tutor[] = TUTORS): Tutor[] {
+export function tutorsInCategory(category: string, tutors: Tutor[]): Tutor[] {
   const slugs = new Set(getCatalog().subjects.filter((s) => s.category === category).map((s) => s.slug));
   return tutors.filter((t) => t.subjects.some((s) => slugs.has(s)));
 }
@@ -33,7 +32,7 @@ export function categoryName(slug: string): string {
 }
 
 /** Subjects with at least one tutor — the only subject pages we ask search engines to index. */
-export function indexableSubjects(tutors: Tutor[] = TUTORS): Subject[] {
+export function indexableSubjects(tutors: Tutor[]): Subject[] {
   const counts = tutorCountBySubject(tutors);
   return getCatalog().subjects.filter((s) => counts[s.slug] > 0);
 }
@@ -47,7 +46,7 @@ export interface NearbyTutor {
  * Tutors who teach in person and whose own service radius covers the metro centroid.
  * Sorted by distance, then lessons completed — never by featured status or plan.
  */
-export function inPersonTutorsForMetro(metro: Pick<Metro, "lat" | "lng">, tutors: Tutor[] = TUTORS): NearbyTutor[] {
+export function inPersonTutorsForMetro(metro: Pick<Metro, "lat" | "lng">, tutors: Tutor[]): NearbyTutor[] {
   return tutors
     .filter((t) => t.modes.includes("in_person") && t.serviceRadiusMiles > 0)
     .map((t) => ({ tutor: t, distance: Math.round(distanceMiles(metro, t) * 10) / 10 }))
@@ -55,12 +54,12 @@ export function inPersonTutorsForMetro(metro: Pick<Metro, "lat" | "lng">, tutors
     .sort((a, b) => a.distance - b.distance || b.tutor.lessonsCompleted - a.tutor.lessonsCompleted || a.tutor.lastName.localeCompare(b.tutor.lastName));
 }
 
-export function onlineTutors(tutors: Tutor[] = TUTORS): Tutor[] {
+export function onlineTutors(tutors: Tutor[]): Tutor[] {
   return tutors.filter((t) => t.modes.includes("online"));
 }
 
 /** Metros with at least one in-person tutor — the only location pages we index. */
-export function indexableMetros(tutors: Tutor[] = TUTORS): Metro[] {
+export function indexableMetros(tutors: Tutor[]): Metro[] {
   return METROS.filter((m) => inPersonTutorsForMetro(m, tutors).length > 0);
 }
 
@@ -71,12 +70,12 @@ export function rateRange(tutors: Tutor[]): { min: number; max: number } | null 
 }
 
 /** Median hourly rate in cents (lower middle for even counts, so it is always a real listed rate). */
-export function medianRate(tutors: Tutor[] = TUTORS): number {
+export function medianRate(tutors: Tutor[]): number {
   const sorted = tutors.map((t) => t.hourlyRateCents).sort((a, b) => a - b);
   return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
 }
 
-export function trialStats(tutors: Tutor[] = TUTORS): { offering: number; free: number } {
+export function trialStats(tutors: Tutor[]): { offering: number; free: number } {
   const offering = tutors.filter((t) => t.trial.enabled);
   return { offering: offering.length, free: offering.filter((t) => t.trial.priceCents === 0).length };
 }

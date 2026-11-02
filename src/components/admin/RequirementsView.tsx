@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ClipboardList, ExternalLink, Paperclip } from "lucide-react";
+import { Ban, ClipboardList, ExternalLink, Paperclip } from "lucide-react";
 import type { Application, ApplicationStatus, Requirement, RequirementStatus } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useCatalog, useViewerTimezone } from "@/lib/store/hooks";
@@ -16,10 +16,12 @@ import { Sheet, SheetContent } from "@/components/ui/Overlay";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
+import { toast } from "@/components/ui/Toast";
 import {
-  ClearFilters, ExportButton, Facts, FilterSelect, PersonCell, RowOpen, SearchInput, Section, StatusPill, TextLink, Timeline, Toolbar, centsToDecimal,
+  ClearFilters, ExportButton, Facts, FilterSelect, PermissionButton, PersonCell, ReasonDialog, RowOpen, SearchInput, Section, StatusPill, TextLink, Timeline, Toolbar, centsToDecimal,
   humanize, matches, useDirectory, useSticky, useUrlParam,
 } from "./kit";
+import { FileLink } from "@/components/domain/FileLink";
 
 type TabKey = "all" | RequirementStatus;
 const TABS: { value: TabKey; label: string }[] = [
@@ -121,7 +123,7 @@ function RequirementsInner() {
     <>
       <PageHeader
         title="Requirements"
-        description="Tutor jobs posted by students and parents, with the applications they received. Owners manage their own posts; problems are handled through reports."
+        description="Tutor jobs posted by students and parents, with the applications they received. Owners manage their own posts; staff can take down a post that breaks the rules."
         actions={
           <ExportButton
             filename="tutorlink-requirements"
@@ -188,7 +190,8 @@ function RequirementSheet({ requirement: current, onClose }: { requirement: Requ
         className="sm:w-[34rem]"
         footer={
           r && r.status !== "draft" ? (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              {r.status !== "closed" && <TakeDown r={r} />}
               <Button asChild variant="secondary">
                 <Link href={`/tutor-jobs/${r.id}`} target="_blank" rel="noopener">
                   Public job page <ExternalLink />
@@ -265,7 +268,7 @@ function RequirementDetail({ r }: { r: Requirement }) {
           <ul className="mt-3 space-y-1.5 text-[13px]">
             {r.attachments.map((a) => (
               <li key={a.name} className="flex items-center gap-2 text-ink-2">
-                <Paperclip className="size-3.5 text-muted" aria-hidden /> {a.name} <span className="text-muted">· {a.sizeKb} KB</span>
+                <Paperclip className="size-3.5 text-muted" aria-hidden /> <FileLink path={a.path}>{a.name}</FileLink> <span className="text-muted">· {a.sizeKb} KB</span>
               </li>
             ))}
           </ul>
@@ -309,5 +312,39 @@ function ApplicationRow({ a }: { a: Application }) {
       </div>
       <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-2">{a.message}</p>
     </li>
+  );
+}
+
+/** Close a live job post that breaks the rules; the family is told why. */
+function TakeDown({ r }: { r: Requirement }) {
+  const takeDown = useApp((s) => s.takeDownRequirement);
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <PermissionButton permission="reports.moderate" variant="danger-outline" onClick={() => setOpen(true)}>
+        <Ban /> Take down
+      </PermissionButton>
+      <ReasonDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Take down this job post?"
+        description="The post closes right away and open applications are closed. The family sees your reason; tutors who applied are told the job closed."
+        label="Reason (shown to the family)"
+        hint="Shown to the family and recorded in the audit log."
+        minLength={10}
+        placeholder="e.g. Posts can't ask tutors to pay or share contact details outside TutorLink"
+        confirmLabel="Take down post"
+        tone="danger"
+        onConfirm={async (reason) => {
+          const res = await takeDown(r.id, reason);
+          if (!res.ok) {
+            toast.error(res.error);
+            return false;
+          }
+          toast.success("Job post taken down", { description: "Recorded in the audit log." });
+          return true;
+        }}
+      />
+    </>
   );
 }

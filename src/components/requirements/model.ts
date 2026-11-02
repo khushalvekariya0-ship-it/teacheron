@@ -19,6 +19,8 @@ export type FamilyRole = "student" | "parent";
 export interface Attachment {
   name: string;
   sizeKb: number;
+  /** Where the uploaded file is kept in private storage. */
+  path?: string;
 }
 
 export interface ReqForm {
@@ -120,7 +122,7 @@ export function stepSchema(step: number, role: FamilyRole) {
           languages: z.array(z.string()).min(1, "Choose at least one language."),
           preferences: z.string().max(LIMITS.preferencesMax, `Keep this under ${LIMITS.preferencesMax} characters.`),
           details: z.string().max(LIMITS.detailsMax, `Keep this under ${LIMITS.detailsMax.toLocaleString("en-US")} characters.`),
-          attachments: z.array(z.object({ name: z.string(), sizeKb: z.number() })).max(LIMITS.maxFiles, `Attach up to ${LIMITS.maxFiles} files.`),
+          attachments: z.array(z.object({ name: z.string(), sizeKb: z.number(), path: z.string().optional() })).max(LIMITS.maxFiles, `Attach up to ${LIMITS.maxFiles} files.`),
         })
         .superRefine((v, ctx) => {
           if (/^\d+$/.test(v.budgetMin) && /^\d+$/.test(v.budgetMax) && +v.budgetMax < +v.budgetMin) {

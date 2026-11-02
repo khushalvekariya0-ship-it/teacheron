@@ -2,17 +2,17 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, FileSearch, FileWarning, HelpCircle, MessageSquareQuote, Newspaper } from "lucide-react";
+import { ArrowUpRight, FileSearch, FileWarning } from "lucide-react";
 import type { MetaSource, ScannedRoute, SeoScan } from "./seo-scan";
-import { BLOG_POSTS, FAQS, SAMPLE_TESTIMONIALS, type BlogPost, type Faq } from "@/lib/data/content";
+import { useApp } from "@/lib/store";
+import { BlogEditorTab, FaqEditorTab, TestimonialsEditorTab } from "./ContentEditors";
 import { useViewerTimezone } from "@/lib/store/hooks";
-import { formatDate, formatDateTime, pluralize } from "@/lib/format";
+import { formatDateTime, pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
 import { Sheet, SheetContent } from "@/components/ui/Overlay";
-import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { ClearFilters, ExportButton, Facts, FilterSelect, MiniStat, Mono, SearchInput, Section, StatusPill, Toolbar, matches, useSticky, useUrlParam } from "./kit";
@@ -20,8 +20,7 @@ import { ClearFilters, ExportButton, Facts, FilterSelect, MiniStat, Mono, Search
 type TabKey = "pages" | "blog" | "faqs" | "testimonials";
 const TAB_KEYS: TabKey[] = ["pages", "blog", "faqs", "testimonials"];
 
-const AUDIENCE_LABEL: Record<Faq["audience"], string> = { families: "Families", tutors: "Tutors", payments: "Payments", safety: "Safety" };
-const AUDIENCES = Object.keys(AUDIENCE_LABEL) as Faq["audience"][];
+const AUDIENCE_LABEL: Record<"families" | "tutors" | "payments" | "safety", string> = { families: "Families", tutors: "Tutors", payments: "Payments", safety: "Safety" };
 
 /** Whether a concrete path is served by one of the scanned route patterns ("/blog/[slug]"). */
 function hasRoute(patterns: string[] | null, pathname: string): boolean {
@@ -68,6 +67,9 @@ function ContentInner({ scan }: { scan: SeoScan }) {
   const [tabParam, setTabParam] = useUrlParam("tab");
   const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : "pages";
   const routes = scan.ok ? scan.routes.filter((r) => r.kind !== "private").map((r) => r.route) : null;
+  const posts = useApp((s) => s.blogPosts);
+  const faqs = useApp((s) => s.faqs);
+  const testimonials = useApp((s) => s.testimonials);
 
   return (
     <>
@@ -84,17 +86,17 @@ function ContentInner({ scan }: { scan: SeoScan }) {
           ) : tab === "blog" ? (
             <ExportButton
               filename="tutorlink-blog"
-              headers={["Slug", "Title", "Category", "Author", "Date", "Read minutes"]}
-              rows={() => BLOG_POSTS.map((p) => [p.slug, p.title, p.category, p.author, p.date, p.readMinutes])}
+              headers={["Slug", "Title", "Category", "Author", "Date", "Status"]}
+              rows={() => posts.map((p) => [p.slug, p.title, p.category, p.author, p.date, p.status])}
             />
           ) : tab === "faqs" ? (
-            <ExportButton filename="tutorlink-faqs" headers={["Audience", "Question", "Answer"]} rows={() => FAQS.map((f) => [AUDIENCE_LABEL[f.audience], f.q, f.a])} />
+            <ExportButton filename="tutorlink-faqs" headers={["Audience", "Question", "Answer", "Shown"]} rows={() => faqs.map((f) => [AUDIENCE_LABEL[f.audience], f.q, f.a, f.published ? "yes" : "no"])} />
           ) : null
         }
       />
 
-      <InlineAlert tone="info" title="Read-only" className="mb-6">
-        Editing is powered by the CMS API in production. Page metadata below is read from the app&apos;s route files; blog posts, FAQs and testimonials come from the content bundled with this preview.
+      <InlineAlert tone="info" title="Changes go live within a minute" className="mb-6">
+        Blog posts, FAQs and customer stories are saved to the database and every change is recorded in the audit log. Page titles and descriptions are read from the app&apos;s route files.
       </InlineAlert>
 
       <Tabs value={tab} onValueChange={(v) => setTabParam(v === "pages" ? null : v)}>
@@ -102,13 +104,13 @@ function ContentInner({ scan }: { scan: SeoScan }) {
           <TabsTrigger value="pages" count={scan.ok ? scan.routes.length : undefined}>
             Pages & SEO
           </TabsTrigger>
-          <TabsTrigger value="blog" count={BLOG_POSTS.length}>
+          <TabsTrigger value="blog" count={posts.length}>
             Blog posts
           </TabsTrigger>
-          <TabsTrigger value="faqs" count={FAQS.length}>
+          <TabsTrigger value="faqs" count={faqs.length}>
             FAQs
           </TabsTrigger>
-          <TabsTrigger value="testimonials" count={SAMPLE_TESTIMONIALS.length}>
+          <TabsTrigger value="testimonials" count={testimonials.length}>
             Testimonials
           </TabsTrigger>
         </TabsList>
@@ -116,13 +118,13 @@ function ContentInner({ scan }: { scan: SeoScan }) {
           <PagesTab scan={scan} />
         </TabsContent>
         <TabsContent value="blog">
-          <BlogTab routes={routes} />
+          <BlogEditorTab publicLink={(href) => <PublicLink href={href} routes={routes}>View</PublicLink>} />
         </TabsContent>
         <TabsContent value="faqs">
-          <FaqTab routes={routes} />
+          <FaqEditorTab publicLink={(href) => <PublicLink href={href} routes={routes} />} />
         </TabsContent>
         <TabsContent value="testimonials">
-          <TestimonialsTab />
+          <TestimonialsEditorTab />
         </TabsContent>
       </Tabs>
     </>
@@ -426,150 +428,5 @@ function RouteSheet({ route: current, onClose }: { route: ScannedRoute | null; o
         )}
       </SheetContent>
     </Sheet>
-  );
-}
-
-/* ─── Blog ───────────────────────────────────────────────────────────────────── */
-
-function BlogTab({ routes }: { routes: string[] | null }) {
-  const [q, setQ] = React.useState("");
-  const [category, setCategory] = React.useState<"all" | BlogPost["category"]>("all");
-  const categories = Array.from(new Set(BLOG_POSTS.map((p) => p.category)));
-  const rows = BLOG_POSTS.filter((p) => matches(q, p.title, p.excerpt, p.slug) && (category === "all" || p.category === category)).sort((a, b) => b.date.localeCompare(a.date));
-  const filtered = q.trim() !== "" || category !== "all";
-
-  const columns: Column<BlogPost>[] = [
-    {
-      key: "title",
-      header: "Post",
-      sortValue: (p) => p.title,
-      cell: (p) => (
-        <span className="block max-w-xl min-w-0">
-          <span className="block font-medium text-ink">{p.title}</span>
-          <span className="line-clamp-1 text-[12.5px] text-muted">{p.excerpt}</span>
-        </span>
-      ),
-    },
-    { key: "category", header: "Category", sortValue: (p) => p.category, cell: (p) => <Badge size="sm">{p.category}</Badge> },
-    { key: "author", header: "Author", sortValue: (p) => p.author, cell: (p) => p.author, hideOnMobile: true },
-    { key: "date", header: "Published", sortValue: (p) => p.date, cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatDate(`${p.date}T12:00:00Z`, "UTC")}</span> },
-    { key: "read", header: "Read time", align: "right", sortValue: (p) => p.readMinutes, cell: (p) => `${p.readMinutes} min`, hideOnMobile: true },
-    { key: "link", header: "Public page", cell: (p) => <PublicLink href={`/blog/${p.slug}`} routes={routes}>View</PublicLink> },
-  ];
-
-  return (
-    <>
-      <Toolbar summary={pluralize(rows.length, "post")}>
-        <SearchInput value={q} onChange={setQ} placeholder="Search posts…" label="Search blog posts" />
-        <FilterSelect label="Category" value={category} onChange={setCategory} options={[{ value: "all", label: "All categories" }, ...categories.map((c) => ({ value: c, label: c }))]} />
-        <ClearFilters
-          active={filtered}
-          onClear={() => {
-            setQ("");
-            setCategory("all");
-          }}
-        />
-      </Toolbar>
-      <DataTable
-        rows={rows}
-        columns={columns}
-        rowKey={(p) => p.slug}
-        pageSize={10}
-        empty={
-          <EmptyState
-            icon={<Newspaper />}
-            title={filtered ? "No posts match these filters" : "No blog posts yet"}
-            description={filtered ? "Try another title or category, or clear the filters." : "Posts are published from the CMS."}
-          />
-        }
-      />
-    </>
-  );
-}
-
-/* ─── FAQs ───────────────────────────────────────────────────────────────────── */
-
-function FaqTab({ routes }: { routes: string[] | null }) {
-  const [q, setQ] = React.useState("");
-  const [audience, setAudience] = React.useState<"all" | Faq["audience"]>("all");
-  const rows = FAQS.filter((f) => matches(q, f.q, f.a) && (audience === "all" || f.audience === audience));
-  const filtered = q.trim() !== "" || audience !== "all";
-  const groups = AUDIENCES.map((a) => ({ audience: a, items: rows.filter((f) => f.audience === a) })).filter((g) => g.items.length);
-
-  return (
-    <>
-      <Toolbar summary={pluralize(rows.length, "question")}>
-        <SearchInput value={q} onChange={setQ} placeholder="Search questions and answers…" label="Search FAQs" />
-        <FilterSelect label="Audience" value={audience} onChange={setAudience} options={[{ value: "all", label: "All audiences" }, ...AUDIENCES.map((a) => ({ value: a, label: AUDIENCE_LABEL[a] }))]} />
-        <ClearFilters
-          active={filtered}
-          onClear={() => {
-            setQ("");
-            setAudience("all");
-          }}
-        />
-      </Toolbar>
-      <p className="-mt-1 mb-4 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-        Public page: <PublicLink href="/faq" routes={routes} />
-      </p>
-      {groups.length === 0 ? (
-        <div className="rounded-xl border border-line bg-surface">
-          <EmptyState icon={<HelpCircle />} title={filtered ? "No questions match these filters" : "No FAQs yet"} description={filtered ? "Try other words, or clear the filters." : "FAQs are published from the CMS."} />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {groups.map((g) => (
-            <section key={g.audience} aria-labelledby={`faq-${g.audience}`}>
-              <h2 id={`faq-${g.audience}`} className="mb-2.5 flex items-center gap-2 text-[14px] font-semibold text-ink">
-                {AUDIENCE_LABEL[g.audience]}
-                <span className="rounded-md bg-canvas px-1.5 py-px text-[11px] font-semibold tabular-nums text-ink-2">{g.items.length}</span>
-              </h2>
-              <Card>
-                <dl className="divide-y divide-line">
-                  {g.items.map((f) => (
-                    <div key={f.q} className="px-4 py-3.5">
-                      <dt className="text-[14px] font-medium text-ink">{f.q}</dt>
-                      <dd className="mt-1 text-[13.5px] leading-relaxed text-ink-2">{f.a}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </Card>
-            </section>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-/* ─── Testimonials ───────────────────────────────────────────────────────────── */
-
-function TestimonialsTab() {
-  return (
-    <>
-      <InlineAlert tone="warning" title="Illustrative samples — not real customers" className="mb-5">
-        These quotes were written for the preview build. Replace every one with a consented, verified testimonial (with written permission to publish, and the reviewer&apos;s approval of the exact wording) before launch.
-      </InlineAlert>
-      {SAMPLE_TESTIMONIALS.length === 0 ? (
-        <div className="rounded-xl border border-line bg-surface">
-          <EmptyState icon={<MessageSquareQuote />} title="No testimonials" description="Add consented testimonials in the CMS." />
-        </div>
-      ) : (
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {SAMPLE_TESTIMONIALS.map((t) => (
-            <li key={t.quote}>
-              <Card className="flex h-full flex-col p-5">
-                <Badge tone="warning" size="sm" className="self-start">
-                  Sample — replace before launch
-                </Badge>
-                <blockquote className="mt-3 flex-1 text-[14px] leading-relaxed text-ink-2">“{t.quote}”</blockquote>
-                <p className="mt-4 text-[13px] font-medium text-ink">{t.name}</p>
-                <p className="text-[12.5px] text-muted">{t.context}</p>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
   );
 }

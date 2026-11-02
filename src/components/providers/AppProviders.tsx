@@ -10,30 +10,42 @@ import { BackToTop } from "@/components/layout/BackToTop";
 import { useApp, STORE_KEY } from "@/lib/store";
 import { clearRememberMe, sessionShouldEnd } from "@/lib/remember";
 
-/** Rehydrates the persisted store after mount so server and first client render always match. */
+/**
+ * Loads the viewer's data from the server after mount (so server and first client render match) and
+ * keeps it current: again when the tab regains focus, and every 30 seconds while signed in.
+ */
 function StoreHydrator() {
   React.useEffect(() => {
-    const done = () => {
+    void useApp.persist.rehydrate(); // the compare tray
+    let last = Date.now();
+    const refresh = () => {
+      last = Date.now();
+      return useApp.getState().refresh();
+    };
+    void refresh().then(async () => {
       // "Remember me" was unticked and the browser was closed since: end that session.
       if (sessionShouldEnd() && useApp.getState().sessionUserId) {
-        useApp.getState().logout();
+        await useApp.getState().logout();
         clearRememberMe();
       }
-      useApp.getState().setHydrated();
-      // Stand-in for the backend scheduler: expire stale requests, auto-complete finished lessons.
-      useApp.getState().runScheduledJobs();
+    });
+    const onReturn = () => {
+      if (document.visibilityState === "visible" && Date.now() - last > 10_000) void refresh();
     };
-    const res = useApp.persist.rehydrate();
-    if (res && typeof (res as Promise<void>).then === "function") (res as Promise<void>).then(done, done);
-    else done();
-    const timer = setInterval(() => useApp.getState().runScheduledJobs(), 60_000);
-    // Keep tabs in sync: another tab writing to the store updates this one.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible" && useApp.getState().sessionUserId && Date.now() - last > 25_000) void refresh();
+    }, 30_000);
+    // The compare tray is shared between this browser's tabs.
     const onStorage = (e: StorageEvent) => {
-      if (e.key === STORE_KEY) useApp.persist.rehydrate();
+      if (e.key === STORE_KEY) void useApp.persist.rehydrate();
     };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
     window.addEventListener("storage", onStorage);
     return () => {
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
       window.removeEventListener("storage", onStorage);
     };
   }, []);

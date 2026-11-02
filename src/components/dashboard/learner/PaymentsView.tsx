@@ -246,7 +246,7 @@ function Inner() {
                 )}
                 <p className="mt-4 flex items-start gap-2 text-[12.5px] leading-relaxed text-muted">
                   <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                  Payments are handled by the payment gateway, never stored here. Test mode in this preview.
+                  Card details are never stored on TutorLink.
                 </p>
               </CardContent>
             </Card>
@@ -285,7 +285,7 @@ function ReceiptDialog({ payment, booking, tutorMap, tz, me, onClose }: { paymen
       "",
       `Amount: ${signedAmount(payment.amountCents)} USD`,
       "",
-      "Payments are processed by Stripe. Preview build — sample data, no real charge was made.",
+      "Card details are never stored by TutorLink.",
     ];
     downloadText(`tutorlink-receipt-${payment.id}.txt`, lines.join("\n"));
   };
@@ -323,7 +323,7 @@ function ReceiptDialog({ payment, booking, tutorMap, tz, me, onClose }: { paymen
                 {me.firstName} {me.lastName}
               </DetailRow>
             </dl>
-            <p className="mt-4 text-[12.5px] text-muted">Payments are processed by Stripe. Preview build — sample data, no real charge was made.</p>
+            <p className="mt-4 text-[12.5px] text-muted">Card details are never stored by TutorLink.</p>
           </DialogBody>
           <DialogFooter>
             {booking && (

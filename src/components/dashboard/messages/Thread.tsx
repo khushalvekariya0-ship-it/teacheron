@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Ban, BookOpen, CalendarPlus, Ellipsis, FileText, Flag, Info, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, Ban, BookOpen, CalendarPlus, Ellipsis, FileText, Flag, ShieldCheck, UserRound } from "lucide-react";
 import type { Message } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useSession } from "@/lib/store/hooks";
@@ -20,7 +20,8 @@ import {
 import { toast } from "@/components/ui/Toast";
 import { addDays, fmtKey } from "@/components/dashboard/calendar/model";
 import { Composer } from "./Composer";
-import { automatedReply, formatSize, type ConversationView } from "./shared";
+import { formatSize, type ConversationView } from "./shared";
+import { FileLink } from "@/components/domain/FileLink";
 
 const RUN_GAP_MS = 10 * 60_000;
 
@@ -29,19 +30,24 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
   const router = useRouter();
   const markRead = useApp((s) => s.markConversationRead);
   const toggleBlock = useApp((s) => s.toggleBlock);
-  const simulateReply = useApp((s) => s.simulateReply);
   const { c, messages, selfId } = view;
-  const [typing, setTyping] = React.useState(false);
   const [blockOpen, setBlockOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
-  const pendingReply = React.useRef(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const atBottom = React.useRef(true);
 
   // Opening a thread (and new incoming messages while it's open) marks them read.
   React.useEffect(() => {
-    if (view.unread > 0) markRead(c.id);
+    if (view.unread > 0) void markRead(c.id);
   }, [c.id, view.unread, markRead]);
+
+  // While a conversation is open, check for new messages every few seconds.
+  React.useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void useApp.getState().refresh();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [c.id]);
 
   React.useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -53,7 +59,7 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
   React.useEffect(() => {
     const el = scrollRef.current;
     if (el && (atBottom.current || lastMine)) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [last?.id, lastMine, typing]);
+  }, [last?.id, lastMine]);
 
   const groups = React.useMemo(() => {
     const out: { day: string; items: Message[] }[] = [];
@@ -75,21 +81,12 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
   const tutorSlug = view.tutor?.slug;
   const context = [view.subjectLabel, view.childName && `for ${view.childName}`].filter(Boolean).join(" · ");
 
-  const onSent = (msg: Message, text: string) => {
+  const onSent = () => {
     atBottom.current = true;
-    if (!view.automated || pendingReply.current) return;
-    pendingReply.current = true;
-    const reply = automatedReply(text, { subject: view.subjectLabel, hasAttachment: !!msg.attachment, learnerFirstName: me.firstName });
-    window.setTimeout(() => setTyping(true), 450);
-    window.setTimeout(() => {
-      simulateReply(c.id, reply);
-      setTyping(false);
-      pendingReply.current = false;
-    }, 450 + 1500);
   };
 
-  const unblock = () => {
-    const res = toggleBlock(c.id);
+  const unblock = async () => {
+    const res = await toggleBlock(c.id);
     if (!res.ok) return void toast.error(res.error);
     toast.success(`${view.counterpart} unblocked`);
   };
@@ -179,11 +176,6 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
         aria-live="polite"
         aria-label={`Conversation with ${view.counterpart}`}
       >
-        {view.automated && (
-          <p className="mx-auto mt-4 flex w-fit max-w-full items-center gap-1.5 rounded-lg bg-canvas px-3 py-1 text-center text-[11.5px] text-muted">
-            <Info className="size-3.5 shrink-0" aria-hidden /> Sample tutor profile — replies in this preview are automated.
-          </p>
-        )}
         {messages.length === 0 && (
           <div className="mx-auto mt-10 max-w-xs text-center">
             <p className="text-sm font-medium text-ink">Start the conversation</p>
@@ -225,7 +217,7 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
                         {m.attachment && (
                           <span className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px]", m.body && "mt-2", mine ? "border-white/25 bg-white/10 text-white" : "border-line bg-canvas text-ink-2")} title="File previews aren't available in this demo">
                             <FileText className="size-4 shrink-0 opacity-80" aria-hidden />
-                            <span className="min-w-0 truncate font-medium">{m.attachment.name}</span>
+                            <FileLink path={m.attachment.path} className="min-w-0 truncate font-medium">{m.attachment.name}</FileLink>
                             <span className="shrink-0 opacity-70">{formatSize(m.attachment.sizeKb)}</span>
                           </span>
                         )}
@@ -248,18 +240,6 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
             </ul>
           </section>
         ))}
-        <AnimatePresence>
-          {typing && (
-            <motion.div key="typing" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.25, ease: EASE }} className="flex items-center gap-2 pt-1">
-              <div className="flex gap-1 rounded-2xl rounded-bl-md border border-line bg-surface px-3.5 py-3" aria-hidden>
-                {[0, 1, 2].map((i) => (
-                  <motion.span key={i} className="size-1.5 rounded-full bg-muted" animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }} />
-                ))}
-              </div>
-              <span className="text-[11.5px] text-muted">{view.tutor?.firstName ?? view.counterpart} is typing…</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Composer or blocked state */}
@@ -286,8 +266,8 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
         description="Neither of you can send new messages here until you unblock. Existing messages stay visible, and lessons you've booked aren't affected."
         confirmLabel="Block"
         tone="danger"
-        onConfirm={() => {
-          const res = toggleBlock(c.id);
+        onConfirm={async () => {
+          const res = await toggleBlock(c.id);
           if (!res.ok) return void toast.error(res.error);
           setBlockOpen(false);
           toast.success(`${view.counterpart} blocked`, { description: "You can unblock from the conversation menu at any time." });
@@ -321,11 +301,11 @@ function ReportDialog({ open, onOpenChange, view }: { open: boolean; onOpenChang
     }
   };
   const target = [...view.messages].reverse().find((m) => m.senderId !== view.selfId) ?? view.last;
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason) return setError("Choose a reason.");
     if (!target) return setError("There are no messages to report yet.");
-    const res = report({ targetType: "message", targetId: target.id, reason, details: details.trim() });
+    const res = await report({ targetType: "message", targetId: target.id, reason, details: details.trim() });
     if (!res.ok) return setError(res.error);
     toast.success("Report sent", { description: "Trust & Safety will review this conversation. You can also block this person." });
     close(false);

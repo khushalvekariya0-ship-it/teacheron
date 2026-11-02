@@ -568,8 +568,8 @@ function AccountArea() {
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onSelect={() => {
-              logout();
+            onSelect={async () => {
+              await logout();
               router.push("/");
             }}
           >
@@ -603,7 +603,7 @@ function MobileAccount() {
         <p className="text-xs text-muted">{ROLE_LABEL[me.role]}</p>
       </div>
       <Button asChild size="sm"><Link href={homeFor(me.role)}>Dashboard</Link></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Sign out" onClick={logout}><LogOut /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="Sign out" onClick={() => void logout()}><LogOut /></Button>
     </div>
   );
 }

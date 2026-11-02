@@ -17,7 +17,7 @@ import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, Dropdow
 import { EmptyState } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { useApp } from "@/lib/store";
-import { useSession, useTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { useSession, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { parseTutorSearch, searchTutors, SCHEDULE_PRESETS, SORT_OPTIONS, type TutorSearch } from "@/lib/search";
 import { GRADE_LABEL, LEVEL_LABEL, MODE_LABEL, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
 import { formatCents, formatDate } from "@/lib/format";
@@ -80,7 +80,7 @@ function Inner({ me }: { me: User }) {
   const requirements = useApp((s) => s.requirements);
   const updateSavedSearch = useApp((s) => s.updateSavedSearch);
   const deleteSavedSearch = useApp((s) => s.deleteSavedSearch);
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const [renaming, setRenaming] = React.useState<SavedSearch | null>(null);
   const [deleting, setDeleting] = React.useState<SavedSearch | null>(null);
   const isTutor = me.role === "tutor";
@@ -104,15 +104,15 @@ function Inner({ me }: { me: User }) {
     [saved, me.id, tutors, requirements, isTutor],
   );
 
-  const setFrequency = (s: SavedSearch, frequency: AlertFrequency) => {
-    const res = updateSavedSearch(s.id, { frequency });
+  const setFrequency = async (s: SavedSearch, frequency: AlertFrequency) => {
+    const res = await updateSavedSearch(s.id, { frequency });
     if (!res.ok) toast.error(res.error);
     else toast.success(frequency === "off" ? "Alerts turned off" : `Alerts set to ${FREQUENCY_OPTIONS.find((f) => f.value === frequency)!.label.toLowerCase()}`, { description: s.label });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleting) return;
-    const res = deleteSavedSearch(deleting.id);
+    const res = await deleteSavedSearch(deleting.id);
     if (!res.ok) toast.error(res.error);
     else toast.success("Saved search deleted");
     setDeleting(null);
@@ -267,8 +267,8 @@ function RenameDialog({ search, onClose }: { search: SavedSearch | null; onClose
 function RenameForm({ search, onDone }: { search: SavedSearch; onDone: () => void }) {
   const updateSavedSearch = useApp((s) => s.updateSavedSearch);
   const form = useForm({ resolver: zodResolver(renameSchema), mode: "onTouched", defaultValues: { label: search.label } });
-  const onSubmit = form.handleSubmit(({ label }) => {
-    const res = updateSavedSearch(search.id, { label: label.trim() });
+  const onSubmit = form.handleSubmit(async ({ label }) => {
+    const res = await updateSavedSearch(search.id, { label: label.trim() });
     if (!res.ok) return void toast.error(res.error);
     toast.success("Saved search renamed");
     onDone();

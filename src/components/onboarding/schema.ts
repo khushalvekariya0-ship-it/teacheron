@@ -117,6 +117,8 @@ export const profileSchema = z.object({
 export const verificationSchema = z.object({
   idDocument: z.string().optional(),
   idDocumentSizeKb: z.number().optional(),
+  /** Where the uploaded ID lives in private storage. */
+  idDocumentPath: z.string().optional(),
 });
 
 export const reviewSchema = z.object({

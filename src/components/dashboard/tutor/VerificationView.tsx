@@ -19,6 +19,7 @@ import { EASE } from "@/components/motion";
 import { VERIFICATION_LABEL, VerificationStatusBadge } from "@/components/domain/Badges";
 import { FileList, FilePicker, NeedsTutorProfile, formatKb, toPicked, validateDocs, type PickedFile } from "./shared";
 import { useMyTutor } from "./hooks";
+import { uploadAll } from "@/lib/upload";
 
 const KINDS: VerificationKind[] = ["identity", "education", "certification", "background"];
 
@@ -128,7 +129,7 @@ function CheckCard({
   status: VerificationStatus;
   latest?: VerificationRequest;
   tz: string;
-  onSubmit: (docs: PickedFile[]) => { ok: true } | { ok: false; error: string };
+  onSubmit: (docs: { name: string; sizeKb: number; path: string }[]) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   const { icon: Icon, involves, upload } = COPY[kind];
   const [files, setFiles] = React.useState<PickedFile[]>([]);
@@ -146,11 +147,12 @@ function CheckCard({
     if (!err) setFiles(next);
   };
 
-  const send = () => {
+  const send = async () => {
     const err = validateDocs(files);
     if (err) return setError(err);
     setBusy(true);
-    const res = onSubmit(files);
+    const up = await uploadAll("verification", files);
+    const res = up.ok ? await onSubmit(up.files) : up;
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setFiles([]);

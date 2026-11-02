@@ -92,7 +92,8 @@ export function FormActions({ onCancel, error, saving }: { onCancel: () => void;
 export function useEditor() {
   const [editing, setEditing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const run = (res: Result<unknown>, success: string) => {
+  const run = async (pending: Result<unknown> | Promise<Result<unknown>>, success: string) => {
+    const res = await pending;
     if (!res.ok) {
       setError(res.error);
       return false;
@@ -180,7 +181,7 @@ function AboutSection({ tutor }: { tutor: Tutor }) {
 
 /* ─── Intro video ───────────────────────────────────────────────────────────── */
 
-function IntroVideoSection({ tutor, ownerId }: { tutor: Tutor; ownerId: string }) {
+function IntroVideoSection({ tutor }: { tutor: Tutor }) {
   const update = useApp((s) => s.updateTutorProfile);
   return (
     <Section
@@ -190,10 +191,9 @@ function IntroVideoSection({ tutor, ownerId }: { tutor: Tutor; ownerId: string }
       editing={false}
     >
       <IntroVideoField
-        ownerId={ownerId}
         value={tutor.introVideoUrl || undefined}
-        onChange={(next) => {
-          const res = update({ introVideoUrl: next.url });
+        onChange={async (next) => {
+          const res = await update({ introVideoUrl: next.url });
           if (!res.ok) {
             toast.error(res.error);
             return false;
@@ -814,7 +814,7 @@ function PhotoPicker({ hasPhoto }: { hasPhoto: boolean }) {
     setBusy(true);
     try {
       const photoUrl = await imageFileToDataUrl(file);
-      const res = update({ photoUrl });
+      const res = await update({ photoUrl });
       if (!res.ok) toast.error(res.error);
       else toast.success("Profile photo updated", { description: "It shows on your cards and profile straight away." });
     } catch {
@@ -846,8 +846,8 @@ function PhotoPicker({ hasPhoto }: { hasPhoto: boolean }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            const res = update({ photoUrl: undefined });
+          onClick={async () => {
+            const res = await update({ photoUrl: undefined });
             if (!res.ok) toast.error(res.error);
             else toast.success("Photo removed");
           }}
@@ -893,7 +893,7 @@ export function ProfileView() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6">
           <AboutSection tutor={tutor} />
-          <IntroVideoSection tutor={tutor} ownerId={me.id} />
+          <IntroVideoSection tutor={tutor} />
           <SubjectsSection tutor={tutor} />
           <ExperienceSection tutor={tutor} />
           <CredentialsSection tutor={tutor} />

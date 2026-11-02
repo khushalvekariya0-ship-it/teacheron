@@ -1,5 +1,4 @@
-import type { Coupon, FeatureFlag, PayMethod } from "@/lib/types";
-import { SAMPLE_DATA } from "@/lib/sample-data";
+import type { FeatureFlag, PayMethod } from "@/lib/types";
 
 /**
  * Booking policies. These are DEFAULTS pending product-owner approval — see docs/DECISIONS.md.
@@ -79,9 +78,9 @@ export const STUDY_CREDIT_PACKS = [
   { id: "sc_200", amountCents: 20000 },
 ];
 
-/** What a payment record shows as its method. Test instruments only in the preview build. */
+/** What a payment record shows as its method. */
 export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
-  card: "Visa •••• 4242",
+  card: "Card",
   upi: "UPI",
   wallet: "Study Credits",
 };
@@ -102,10 +101,3 @@ export const DEFAULT_FLAGS: FeatureFlag[] = [
   { key: "sms_notifications", label: "SMS notifications", description: "Send reminders by SMS via Twilio.", enabled: false, rolloutPercent: 0 },
   { key: "featured_tutors", label: "Featured tutors", description: "Show featured placement on the homepage and search.", enabled: true, rolloutPercent: 100 },
 ];
-
-const SAMPLE_COUPONS: Coupon[] = [
-  { id: "cpn_01", code: "WELCOME15", kind: "percent", value: 15, minPurchaseCents: 5000, maxRedemptions: 1000, redemptions: 214, expiresAt: "2026-12-31T23:59:59Z", firstBookingOnly: true, active: true },
-  { id: "cpn_02", code: "FALL10", kind: "fixed", value: 1000, minPurchaseCents: 4000, maxRedemptions: 500, redemptions: 92, expiresAt: "2026-11-30T23:59:59Z", firstBookingOnly: false, active: true },
-  { id: "cpn_03", code: "SUMMER20", kind: "percent", value: 20, minPurchaseCents: 6000, maxRedemptions: 300, redemptions: 300, expiresAt: "2026-08-31T23:59:59Z", firstBookingOnly: false, active: false },
-];
-export const SEED_COUPONS: Coupon[] = SAMPLE_DATA ? SAMPLE_COUPONS : [];

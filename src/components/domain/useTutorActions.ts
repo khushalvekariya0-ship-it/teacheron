@@ -41,9 +41,9 @@ export function useTutorActions(tutor: Pick<Tutor, "id" | "firstName" | "slug">)
     saved: !!favorites?.includes(tutor.id),
     comparing: compare.includes(tutor.id),
     compareFull: compare.length >= 3 && !compare.includes(tutor.id),
-    toggleSave() {
+    async toggleSave() {
       if (!requireLearner("save tutors")) return;
-      const r = toggleFavorite(tutor.id);
+      const r = await toggleFavorite(tutor.id);
       if (!r.ok) toast.error(r.error);
       else toast.success(r.data ? `${tutor.firstName} saved to favorites` : `Removed ${tutor.firstName} from favorites`);
     },
@@ -51,9 +51,9 @@ export function useTutorActions(tutor: Pick<Tutor, "id" | "firstName" | "slug">)
       const r = toggleCompare(tutor.id);
       if (!r.ok) toast.error(r.error);
     },
-    contact() {
+    async contact() {
       if (!requireLearner("message tutors")) return;
-      const r = startConversation(tutor.id);
+      const r = await startConversation(tutor.id);
       if (!r.ok) toast.error(r.error);
       else router.push(`/dashboard/messages?c=${r.data.id}`);
     },

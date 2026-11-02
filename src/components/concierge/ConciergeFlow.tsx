@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, ArrowRight, ClipboardList, Lock, Pencil, Plus, RotateCcw, Search, SearchX, Sparkles, Wand2, X } from "lucide-react";
 import { parseNaturalLanguage, rankTutors } from "@/lib/matching";
 import { subjectName } from "@/lib/data/catalog";
-import { useFlag, useTutors } from "@/lib/store/hooks";
+import { useFlag, useListedTutors } from "@/lib/store/hooks";
 import { pluralize } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -54,7 +54,7 @@ export function ConciergeFlow() {
   const nlEnabled = useFlag("ai_matching");
   const params = useSearchParams();
   const router = useRouter();
-  const tutors = useTutors();
+  const tutors = useListedTutors();
 
   // Restore results from the URL once (e.g. coming back from a tutor profile).
   const [boot] = React.useState(() => {
@@ -414,7 +414,7 @@ function Results({
   onSuggestion,
 }: {
   answers: Answers;
-  tutors: ReturnType<typeof useTutors>;
+  tutors: ReturnType<typeof useListedTutors>;
   onAdjust: () => void;
   onStartOver: () => void;
   onSuggestion: (patch: Partial<Answers>) => void;

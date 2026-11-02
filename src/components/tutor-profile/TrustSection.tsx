@@ -37,14 +37,14 @@ function ReportDialog({ tutor, open, onOpenChange }: { tutor: Tutor; open: boole
   const [details, setDetails] = React.useState("");
   const [errors, setErrors] = React.useState<{ reason?: string; details?: string }>({});
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next: typeof errors = {};
     if (!reason) next.reason = "Choose a reason.";
     if (details.trim().length < 10) next.details = "Add a few words so our team can look into it (10+ characters).";
     setErrors(next);
     if (next.reason || next.details) return;
-    const r = report({ targetType: "tutor", targetId: tutor.id, reason, details: details.trim() });
+    const r = await report({ targetType: "tutor", targetId: tutor.id, reason, details: details.trim() });
     if (!r.ok) return toast.error(r.error);
     onOpenChange(false);
     setReason("");

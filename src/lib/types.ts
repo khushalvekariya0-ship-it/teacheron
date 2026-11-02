@@ -239,6 +239,8 @@ export interface Tutor {
   photoUrl?: string;
   /** Short intro clip the tutor uploaded; cards play its first 15 seconds on hover. */
   introVideoUrl?: string;
+  /** Hidden from search and the public profile by staff (the tutor still sees and edits it). */
+  hidden?: boolean;
 }
 
 export interface Review {
@@ -281,7 +283,7 @@ export interface Requirement {
   preferences: string;
   details: string;
   /** File metadata only in the preview build; production stores files in S3 via signed uploads. */
-  attachments?: { name: string; sizeKb: number }[];
+  attachments?: { name: string; sizeKb: number; path?: string }[];
   /** Learning-support needs, e.g. "ADHD". */
   learningSupport?: string[];
   status: RequirementStatus;
@@ -395,7 +397,8 @@ export interface Message {
   body: string;
   createdAt: ISODate;
   readAt?: ISODate;
-  attachment?: { name: string; sizeKb: number };
+  /** `path` is where the file is kept in private storage (open it through /api/files). */
+  attachment?: { name: string; sizeKb: number; path?: string };
   /** Set when contact details were detected and masked. */
   moderation?: "contact_info_masked" | "flagged";
 }
@@ -419,7 +422,8 @@ export type NotificationType =
   | "review_request"
   | "homework"
   | "progress"
-  | "security";
+  | "security"
+  | "announcement";
 
 export interface AppNotification {
   id: ID;
@@ -485,7 +489,8 @@ export interface Homework {
   instructions: string;
   dueDate: string;
   status: "assigned" | "submitted" | "reviewed" | "overdue";
-  submission?: { body: string; fileName?: string; submittedAt: ISODate };
+  /** `filePath` is where an attached file is kept in private storage. */
+  submission?: { body: string; fileName?: string; filePath?: string; submittedAt: ISODate };
   feedback?: { body: string; grade?: string; at: ISODate };
   createdAt: ISODate;
 }
@@ -500,7 +505,8 @@ export interface WalletTransaction {
   id: ID;
   userId: ID;
   deltaCents: Cents;
-  kind: "top_up" | "lesson" | "refund";
+  /** credit = platform credit given by TutorLink (tutor no-show, dispute decision). */
+  kind: "top_up" | "lesson" | "refund" | "credit";
   description: string;
   bookingId?: ID;
   createdAt: ISODate;
@@ -569,7 +575,7 @@ export interface Dispute {
     | "refund_issue"
     | "other";
   details: string;
-  evidence: { name: string; sizeKb: number }[];
+  evidence: { name: string; sizeKb: number; path?: string }[];
   status: DisputeStatus;
   resolution?: { outcome: "full_refund" | "partial_refund" | "credit" | "no_refund"; amountCents: Cents; note: string };
   adminNotes: { by: ID; body: string; at: ISODate }[];
@@ -582,7 +588,7 @@ export interface VerificationRequest {
   tutorId: ID;
   kind: VerificationKind;
   status: VerificationStatus;
-  documents: { name: string; sizeKb: number }[];
+  documents: { name: string; sizeKb: number; path?: string }[];
   submittedAt: ISODate;
   reviewedBy?: ID;
   reviewedAt?: ISODate;

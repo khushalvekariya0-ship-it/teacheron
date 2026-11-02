@@ -9,10 +9,12 @@ import { CreditPacks, PlanCards, PlanComparison } from "@/components/marketing/P
 import { EarningsCalculator } from "@/components/marketing/EarningsCalculator";
 import { medianRate, rateRange } from "@/components/content/insights";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
-import { FAQS } from "@/lib/data/content";
-import { TUTORS } from "@/lib/data/tutors";
+import { listedTutors, publishedFaqs } from "@/server/public";
 import { CREDITS_PER_APPLICATION, TUTOR_PLANS } from "@/lib/data/platform";
 import { applyBps, formatCents } from "@/lib/format";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -60,9 +62,10 @@ const PRICING_SECTIONS = [
   { slug: "faq", name: "Questions" },
 ];
 
-export default function PricingPage() {
-  const range = rateRange(TUTORS);
-  const median = medianRate();
+export default async function PricingPage() {
+  const tutors = await listedTutors();
+  const range = rateRange(tutors);
+  const median = medianRate(tutors);
   const starter = TUTOR_PLANS[0];
   // Example bill: the median listed rate when tutors exist, otherwise a round example rate.
   const exampleRate = median || 5000;
@@ -76,7 +79,7 @@ export default function PricingPage() {
     { q: "When is commission charged to tutors?", a: "Commission is calculated on each paid lesson. There's nothing to pay on a free trial, because nothing is charged." },
     { q: "Does a paid plan improve my ranking?", a: "No. Search order and match scores use the same factors for every tutor. Premium tutors are eligible for featured placement in highlighted spots, which is labelled and does not change ranking." },
     { q: `What if I don't need job credits?`, a: `You don't have to use them. Families can always contact you directly for free. Credits are only used when you apply to a student job (${CREDITS_PER_APPLICATION} credit per application). The ${starter.name} plan includes ${starter.monthlyLeadCredits} a month.` },
-    ...FAQS.filter((f) => f.audience === "payments"),
+    ...(await publishedFaqs()).filter((f) => f.audience === "payments"),
   ];
 
   return (

@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Hero, Statement, ThreeSteps, SubjectTiles, HowItWorks, GetMatched, FeaturedTutors, WhyTutorLink, Stories, BecomeTutor, HomeFaq, ClosingCta } from "@/components/home/Sections";
 import { Programs, LessonModes, Audiences, Resources } from "@/components/home/MoreSections";
 import { BentoFeatures } from "@/components/home/BentoFeatures";
-import { FAQS } from "@/lib/data/content";
+import { publishedFaqs } from "@/server/public";
 import { SITE } from "@/lib/site";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: { absolute: `${SITE.name} — Learn With the Right Tutor. Grow With Every Lesson.` },
@@ -11,7 +14,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const faqs = await publishedFaqs();
   const jsonLd = [
     {
       "@context": "https://schema.org",
@@ -31,7 +35,7 @@ export default function HomePage() {
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
-      mainEntity: FAQS.filter((f) => f.audience !== "tutors").slice(0, 7).map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+      mainEntity: faqs.filter((f) => f.audience !== "tutors").slice(0, 7).map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
     },
   ];
   return (

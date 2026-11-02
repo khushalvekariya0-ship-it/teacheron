@@ -9,8 +9,8 @@ import { ArrowLeft, Mail, MailCheck } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
+import { InlineAlert } from "@/components/ui/States";
 import { useApp } from "@/lib/store";
-import { PreviewInbox } from "./PreviewInbox";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -20,18 +20,21 @@ const schema = z.object({
 
 /**
  * Always shows the same confirmation, whether or not an account exists, so the form can't be used
- * to discover who has an account. Latency is simulated to match a real request.
+ * to discover who has an account. Supabase Auth sends the email; its link signs the person in and
+ * opens /reset-password.
  */
 export function ForgotPasswordView() {
-  const [sentTo, setSentTo] = React.useState<{ email: string; token: string } | null>(null);
+  const [sentTo, setSentTo] = React.useState<{ email: string } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
   const requestPasswordReset = useApp((s) => s.requestPasswordReset);
   const form = useForm({ resolver: zodResolver(schema), mode: "onTouched", defaultValues: { email: "" } });
   const { errors, isSubmitting } = form.formState;
 
   const onSubmit = form.handleSubmit(async ({ email }) => {
-    await new Promise((r) => setTimeout(r, 900 + Math.round(Math.random() * 400)));
-    const res = requestPasswordReset(email);
-    setSentTo({ email: email.trim(), token: res.ok ? res.data.token : "" });
+    setError(null);
+    const res = await requestPasswordReset(email);
+    if (!res.ok) return setError(res.error);
+    setSentTo({ email: email.trim() });
   });
 
   return (
@@ -66,7 +69,6 @@ export function ForgotPasswordView() {
               Use a different email
             </Button>
           </div>
-          <PreviewInbox className="mt-6" to={sentTo.email} subject="Reset your TutorLink password" href={`/reset-password?token=${encodeURIComponent(sentTo.token)}`} cta="Open the reset link" />
         </motion.div>
       ) : (
         <motion.div key="form" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.4, ease: EASE }}>
@@ -76,6 +78,7 @@ export function ForgotPasswordView() {
           <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Reset your password</h1>
           <p className="mt-2 text-[15px] leading-relaxed text-muted">Enter the email you signed up with and we&apos;ll send you a link to choose a new password.</p>
           <form onSubmit={onSubmit} noValidate className="mt-8 space-y-5">
+            {error && <InlineAlert tone="danger" title={error} />}
             <Field label="Email" error={errors.email?.message}>
               <Input type="email" autoComplete="email" inputMode="email" icon={<Mail />} placeholder="you@example.com" autoFocus {...form.register("email")} />
             </Field>

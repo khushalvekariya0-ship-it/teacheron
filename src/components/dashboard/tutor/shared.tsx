@@ -183,14 +183,18 @@ export function SubjectPicker({ value, onChange, max = 10 }: { value: string[]; 
   );
 }
 
-/* ─── File picker (metadata only in the preview build) ──────────────────────── */
+/* ─── File picker ───────────────────────────────────────────────────────────── */
 
 export interface PickedFile {
   name: string;
   sizeKb: number;
+  /** The chosen file, until it's uploaded. */
+  file?: File;
+  /** Where it was stored once uploaded. */
+  path?: string;
 }
 
-export const toPicked = (f: File): PickedFile => ({ name: f.name, sizeKb: Math.max(1, Math.ceil(f.size / 1024)) });
+export const toPicked = (f: File): PickedFile => ({ name: f.name, sizeKb: Math.max(1, Math.ceil(f.size / 1024)), file: f });
 
 export function formatKb(kb: number): string {
   return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
@@ -210,7 +214,7 @@ export function validateDocs(files: PickedFile[]): string | null {
 
 /**
  * Accessible file picker: a visually styled label wrapping a real (visually hidden) file input.
- * Supports drag and drop. Only file names and sizes are kept in this preview build.
+ * Supports drag and drop. Files are uploaded when the form they belong to is submitted.
  */
 export function FilePicker({
   id,
@@ -226,7 +230,7 @@ export function FilePicker({
   id: string;
   accept?: string;
   multiple?: boolean;
-  onFiles: (files: File[]) => void;
+  onFiles: (files: File[]) => void | Promise<void>;
   title?: string;
   hint?: string;
   disabled?: boolean;

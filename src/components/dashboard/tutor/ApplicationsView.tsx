@@ -172,9 +172,9 @@ export function ApplicationsView() {
         description={withdraw?.req ? `“${withdraw.req.title}”. The family will no longer see your application. Credits spent on it aren't refunded.` : undefined}
         confirmLabel="Withdraw application"
         tone="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!withdraw) return;
-          const res = setStatus(withdraw.app.id, "withdrawn");
+          const res = await setStatus(withdraw.app.id, "withdrawn");
           if (!res.ok) toast.error(res.error);
           else toast.success("Application withdrawn");
           setWithdraw(null);

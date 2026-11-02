@@ -6,7 +6,7 @@ import { ArrowRight, ExternalLink, Plus, Search } from "lucide-react";
 import type { Requirement } from "@/lib/types";
 import { rankTutors } from "@/lib/matching";
 import { formatCents } from "@/lib/format";
-import { useTutors } from "@/lib/store/hooks";
+import { useListedTutors } from "@/lib/store/hooks";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { motion, EASE, EASE_EXPO } from "@/components/motion";
@@ -47,7 +47,7 @@ function AnimatedCheck() {
 }
 
 export function PublishSuccess({ req, outcome, onPostAnother }: { req: Requirement; outcome: "published" | "updated" | "saved"; onPostAnother: () => void }) {
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const top = React.useMemo(() => rankTutors(tutors, criteriaFromRequirement(req)).filter((r) => !r.disqualified).slice(0, 3), [tutors, req]);
   const tutorsHref = `/tutors?${new URLSearchParams({ subject: req.subject, grade: req.grade, sort: "match" }).toString()}`;
   const heading = outcome === "published" ? "Your requirement is live" : outcome === "updated" ? "Your changes are live" : "Your changes are saved";

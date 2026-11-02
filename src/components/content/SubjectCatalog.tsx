@@ -7,7 +7,7 @@ import { Section } from "@/components/marketing/Section";
 import { SubjectTile } from "@/components/content/SubjectTile";
 import { AreaNav } from "@/components/content/AreaNav";
 import { CategoryIcon } from "@/components/content/icons";
-import { useCatalog, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useListedTutors } from "@/lib/store/hooks";
 import type { SubjectCategory } from "@/lib/types";
 
 /*
@@ -65,7 +65,7 @@ export function AreaMosaic() {
 
 export function SubjectAreas() {
   const catalog = useCatalog();
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   if (catalog.categories.length === 0)
     return (
       <Section>

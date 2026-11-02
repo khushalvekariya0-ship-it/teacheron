@@ -181,9 +181,9 @@ export function CreditsView() {
         title={pack ? `Buy ${pack.credits} credits?` : ""}
         description={pack ? `${formatCents(pack.priceCents)} is charged to your card on file. Credits are added to your balance right away.` : undefined}
         confirmLabel={pack ? `Pay ${formatCents(pack.priceCents)}` : "Confirm"}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!pack) return;
-          const res = buyCredits(pack.id);
+          const res = await buyCredits(pack.id);
           if (!res.ok) toast.error(res.error);
           else toast.success(`${pack.credits} credits added`, { description: `New balance: ${balance + pack.credits} credits` });
           setPack(null);

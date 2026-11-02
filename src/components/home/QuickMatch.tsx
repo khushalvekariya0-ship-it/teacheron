@@ -8,7 +8,7 @@ import { GRADES, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, FACTOR_LABEL, type FactorKey } from "@/lib/matching";
 import { SCHEDULE_PRESETS, searchTutors, toQueryString, type SchedulePreset, type TutorSearch } from "@/lib/search";
 import type { Grade, TeachingMode } from "@/lib/types";
-import { useCatalog, useHydrated, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useHydrated, useListedTutors } from "@/lib/store/hooks";
 import { motion } from "@/components/motion";
 import { SelectMenu, type SelectOption } from "@/components/ui/SelectMenu";
 
@@ -53,7 +53,7 @@ export function QuickMatch() {
   const router = useRouter();
   const id = React.useId();
   const hydrated = useHydrated();
-  const tutors = useTutors();
+  const tutors = useListedTutors();
 
   const [text, setText] = React.useState("Algebra");
   const [open, setOpen] = React.useState(false);

@@ -174,11 +174,11 @@ function RespondDialog({ review, onClose }: { review: Review | null; onClose: ()
   }
   const bodyError = body.trim().length < 10 ? "Write at least 10 characters." : null;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (!review || bodyError) return;
-    const res = respond(review.id, body);
+    const res = await respond(review.id, body);
     if (!res.ok) return setError(res.error);
     toast.success("Reply posted", { description: "It now shows under the review on your public profile." });
     onClose();

@@ -60,9 +60,9 @@ export function SubscriptionView() {
     },
   ];
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!target) return;
-    const res = changePlan(target.id);
+    const res = await changePlan(target.id);
     if (!res.ok) toast.error(res.error);
     else
       toast.success(`You're on ${target.name}`, {

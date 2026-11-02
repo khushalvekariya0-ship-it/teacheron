@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   BadgeCheck, Bell, BookOpen, Briefcase, CalendarCheck2, CalendarClock, CalendarX2, CreditCard, Inbox, LineChart, MessageSquare,
-  NotebookPen, ReceiptText, RefreshCcw, ShieldAlert, Star, Wallet, type LucideIcon,
+  Megaphone, NotebookPen, ReceiptText, RefreshCcw, ShieldAlert, Star, Wallet, type LucideIcon,
 } from "lucide-react";
 import type { AppNotification, NotificationType } from "@/lib/types";
 import { formatRelative } from "@/lib/format";
@@ -27,6 +27,7 @@ export const NOTIFICATION_ICON: Record<NotificationType, LucideIcon> = {
   homework: NotebookPen,
   progress: LineChart,
   security: ShieldAlert,
+  announcement: Megaphone,
 };
 
 export const NOTIFICATION_CATEGORIES: { value: string; label: string; types: NotificationType[] }[] = [
@@ -36,6 +37,7 @@ export const NOTIFICATION_CATEGORIES: { value: string; label: string; types: Not
   { value: "learning", label: "Homework, progress & reviews", types: ["homework", "progress", "review_request"] },
   { value: "payments", label: "Payments", types: ["payment", "refund", "payout"] },
   { value: "account", label: "Account & security", types: ["verification", "security"] },
+  { value: "announcements", label: "Announcements", types: ["announcement"] },
 ];
 
 export function NotificationRow({

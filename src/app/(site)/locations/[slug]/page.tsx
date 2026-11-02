@@ -12,6 +12,10 @@ import { subjectName, US_TIMEZONES } from "@/lib/data/catalog";
 import { METROS, METRO_BY_SLUG, distanceMiles } from "@/lib/data/geo";
 import { formatCents } from "@/lib/format";
 import { SITE } from "@/lib/site";
+import { listedTutors } from "@/server/public";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -23,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const metro = METRO_BY_SLUG[slug];
   if (!metro) return { title: "Location not found", robots: { index: false } };
-  const count = inPersonTutorsForMetro(metro).length;
+  const count = inPersonTutorsForMetro(metro, await listedTutors()).length;
   const place = `${metro.city}, ${metro.state}`;
   return {
     title: `Tutors in ${place}`,
@@ -43,16 +47,17 @@ export default async function LocationPage({ params }: Props) {
   if (!metro) notFound();
 
   const place = `${metro.city}, ${metro.state}`;
-  const nearby = inPersonTutorsForMetro(metro);
+  const tutors = await listedTutors();
+  const nearby = inPersonTutorsForMetro(metro, tutors);
   const nearbyIds = new Set(nearby.map((n) => n.tutor.id));
   const tzLabel = US_TIMEZONES.find((z) => z.value === metro.timezone)?.label ?? metro.timezone;
-  const online = onlineTutors().filter((t) => !nearbyIds.has(t.id));
+  const online = onlineTutors(tutors).filter((t) => !nearbyIds.has(t.id));
   const sameZone = neutralOrder(online.filter((t) => t.timezone === metro.timezone));
   const onlineShown = [...sameZone, ...neutralOrder(online.filter((t) => t.timezone !== metro.timezone))].slice(0, 4);
   const localSubjects = Array.from(new Set(nearby.flatMap((n) => n.tutor.subjects))).slice(0, 12);
   const range = rateRange(nearby.map((n) => n.tutor));
   const otherMetros = METROS.filter((m) => m.slug !== slug)
-    .map((m) => ({ m, d: distanceMiles(metro, m), n: inPersonTutorsForMetro(m).length }))
+    .map((m) => ({ m, d: distanceMiles(metro, m), n: inPersonTutorsForMetro(m, tutors).length }))
     .sort((a, b) => a.d - b.d)
     .slice(0, 4);
   const inPersonHref = `/tutors?location=${metro.zip}&mode=in_person`;
@@ -69,7 +74,7 @@ export default async function LocationPage({ params }: Props) {
   const stats = [
     { k: "In-person tutors", v: String(nearby.length) },
     { k: "In-person rates", v: range ? (range.min === range.max ? `${formatCents(range.min)}/hr` : `${formatCents(range.min)}–${formatCents(range.max)}`) : "—" },
-    { k: "Online tutors", v: String(onlineTutors().length) },
+    { k: "Online tutors", v: String(onlineTutors(tutors).length) },
     { k: "Local time zone", v: tzLabel.replace(/ \(.+\)$/, "") },
   ];
 

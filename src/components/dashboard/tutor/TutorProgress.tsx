@@ -198,8 +198,8 @@ function StudentPanel({ student, tutorId, tutorSubjects }: { student: Learner; t
                             size="sm"
                             label={`Status for ${t.name}`}
                             value={t.status}
-                            onChange={(v) => {
-                              const res = setTopicStatus(g.id, t.name, v);
+                            onChange={async (v) => {
+                              const res = await setTopicStatus(g.id, t.name, v);
                               if (!res.ok) toast.error(res.error);
                             }}
                             options={TOPIC_OPTIONS}
@@ -234,11 +234,11 @@ function NotesCard({ student, notes, now, tz }: { student: Learner; notes: Progr
   const lessons = student.bookings.filter((b) => b.status === "completed");
   const bodyError = body.trim().length < 10 ? "Write a short note (10+ characters)." : null;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (bodyError) return;
-    const res = addNote(student.id, body, rating ? (Number(rating) as ProgressNote["rating"]) : undefined, lesson || undefined);
+    const res = await addNote(student.id, body, rating ? (Number(rating) as ProgressNote["rating"]) : undefined, lesson || undefined);
     if (!res.ok) return setError(res.error);
     setBody("");
     setRating("");
@@ -336,11 +336,11 @@ function GoalDialog({ open, onOpenChange, student, tutorSubjects }: { open: bool
   };
   const invalid = Object.values(errs).some(Boolean);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (invalid) return;
-    const res = addGoal({ learnerId: student.id, subject, title: title.trim(), topics: topics.map((name) => ({ name, status: "not_started" as const })), ...(target ? { targetDate: target } : {}) });
+    const res = await addGoal({ learnerId: student.id, subject, title: title.trim(), topics: topics.map((name) => ({ name, status: "not_started" as const })), ...(target ? { targetDate: target } : {}) });
     if (!res.ok) return setError(res.error);
     toast.success("Goal added");
     onOpenChange(false);

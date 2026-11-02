@@ -1,28 +1,21 @@
 /**
- * Tutor intro videos. A video is either a link (YouTube, Vimeo or a direct MP4/WebM/MOV file) or a file
- * the tutor uploaded from their device. Until file storage is connected, an uploaded file is kept in
- * this browser (IndexedDB) and referenced as "device-video:<key>"; production uploads it to object
- * storage instead and stores the returned URL.
+ * Tutor intro videos. A video is either a link (YouTube, Vimeo or a direct MP4/WebM/MOV file) or a
+ * file the tutor uploaded, which is stored in Supabase Storage and referenced by its public URL.
  */
 
-export const DEVICE_VIDEO_PREFIX = "device-video:";
-export const MAX_VIDEO_MB = 100;
+/** Matches the public-media bucket's file size limit (Supabase's free plan allows up to 50 MB per file). */
+export const MAX_VIDEO_MB = 50;
 export const MAX_VIDEO_SECONDS = 180;
 
 export type IntroVideoSource =
   | { kind: "youtube"; id: string; embedUrl: string }
   | { kind: "vimeo"; id: string; embedUrl: string }
-  | { kind: "file"; url: string }
-  | { kind: "device"; key: string };
+  | { kind: "file"; url: string };
 
 /** What a stored intro-video value points at, or null when it isn't one we can play. */
 export function parseIntroVideo(value: string | null | undefined): IntroVideoSource | null {
   const v = value?.trim();
   if (!v) return null;
-  if (v.startsWith(DEVICE_VIDEO_PREFIX)) {
-    const key = v.slice(DEVICE_VIDEO_PREFIX.length);
-    return /^[\w-]{1,120}$/.test(key) ? { kind: "device", key } : null;
-  }
   let url: URL;
   try {
     url = new URL(/^https?:\/\//i.test(v) ? v : `https://${v}`);
@@ -39,7 +32,9 @@ export function parseIntroVideo(value: string | null | undefined): IntroVideoSou
     const id = url.pathname.match(/(?:^|\/)(\d{6,12})(?:\/|$)/)?.[1];
     return id ? { kind: "vimeo", id, embedUrl: `https://player.vimeo.com/video/${id}` } : null;
   }
-  if (url.protocol === "https:" && /\.(mp4|webm|mov)$/i.test(url.pathname)) return { kind: "file", url: url.toString() };
+  // Files must be served over HTTPS — except from this machine (a local Supabase runs on http://127.0.0.1).
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if ((url.protocol === "https:" || local) && /\.(mp4|webm|mov)$/i.test(url.pathname)) return { kind: "file", url: url.toString() };
   return null;
 }
 
@@ -64,57 +59,4 @@ export function videoDuration(file: Blob): Promise<number> {
     el.onerror = () => done(Number.NaN);
     el.src = url;
   });
-}
-
-/* ─── Files kept in this browser ─────────────────────────────────────────────── */
-
-const DB_NAME = "tutorlink-media";
-const STORE = "videos";
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest): Promise<T> {
-  const db = await openDb();
-  try {
-    return await new Promise<T>((resolve, reject) => {
-      const req = fn(db.transaction(STORE, mode).objectStore(STORE));
-      req.onsuccess = () => resolve(req.result as T);
-      req.onerror = () => reject(req.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-/** Saves an uploaded video in this browser and returns the value to store on the profile. */
-export async function saveDeviceVideo(ownerId: string, file: Blob): Promise<string> {
-  const key = `intro-${ownerId.replace(/[^\w-]/g, "")}-${Date.now().toString(36)}`;
-  await run("readwrite", (s) => s.put(file, key));
-  return DEVICE_VIDEO_PREFIX + key;
-}
-
-export async function loadDeviceVideo(key: string): Promise<Blob | null> {
-  try {
-    return (await run<Blob | undefined>("readonly", (s) => s.get(key))) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** Removes an uploaded file when its value is replaced or cleared (links are left alone). */
-export async function discardIntroVideo(value: string | null | undefined): Promise<void> {
-  const src = parseIntroVideo(value);
-  if (src?.kind !== "device") return;
-  try {
-    await run("readwrite", (s) => s.delete(src.key));
-  } catch {
-    // Nothing to clean up.
-  }
 }

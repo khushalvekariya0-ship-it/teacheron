@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
 import { Panel } from "@/components/marketing/Section";
-import { TUTORS, TUTOR_BY_SLUG } from "@/lib/data/tutors";
-import { subjectName } from "@/lib/data/catalog";
+import { setLiveCatalog, subjectName } from "@/lib/data/catalog";
+import { listedTutors, publicCatalog, tutorBySlug } from "@/server/public";
 import { truncate } from "@/lib/utils";
 import { SITE } from "@/lib/site";
 import { TutorProfileView } from "@/components/tutor-profile/TutorProfileView";
 
-export function generateStaticParams() {
-  return TUTORS.map((t) => ({ slug: t.slug }));
+/** Profiles come from the database and are refreshed at most once a minute; new tutors render on demand. */
+export const revalidate = 60;
+
+export async function generateStaticParams() {
+  return (await listedTutors()).map((t) => ({ slug: t.slug }));
 }
 
 export async function generateMetadata(props: PageProps<"/tutors/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;
-  const tutor = TUTOR_BY_SLUG[slug];
-  // Tutors who registered in this browser only exist client-side; keep them out of search indexes.
+  const tutor = await tutorBySlug(slug);
+  // Unknown, unlisted or suspended tutors stay out of search indexes.
   if (!tutor) return { title: "Tutor profile", alternates: { canonical: `/tutors/${slug}` }, robots: { index: false } };
   const title = `${tutor.firstName} ${tutor.lastName} — ${tutor.headline}`;
   const description = truncate(tutor.bio.replace(/\s+/g, " "), 158);
@@ -27,7 +30,8 @@ export async function generateMetadata(props: PageProps<"/tutors/[slug]">): Prom
 
 export default async function TutorProfilePage(props: PageProps<"/tutors/[slug]">) {
   const { slug } = await props.params;
-  const tutor = TUTOR_BY_SLUG[slug];
+  const tutor = await tutorBySlug(slug);
+  setLiveCatalog(await publicCatalog());
   const jsonLd = tutor
     ? {
         "@context": "https://schema.org",

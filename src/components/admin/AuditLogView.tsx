@@ -111,6 +111,26 @@ export function describeAudit(a: AuditLog): string {
       return `Coupon ${s("code")} updated`;
     case "conversation.access":
       return "Private conversation opened";
+    case "file.view":
+      return "Private file opened";
+    case "user.staff_access":
+      return m.role === "student" ? "Staff access removed" : `Staff access set to ${s("role")}`;
+    case "user.update":
+      return "Account details edited";
+    case "user.delete":
+      return "Account deleted";
+    case "user.mfa_reset":
+      return "Two-step login reset";
+    case "security.mfa_on":
+      return "Two-step login turned on";
+    case "security.mfa_off":
+      return "Two-step login turned off";
+    case "tutor.listing":
+      return m.hidden === true ? "Tutor hidden from search" : m.hidden === false ? "Tutor shown in search again" : m.featured === true ? "Tutor featured" : m.featured === false ? "Tutor unfeatured" : "Tutor listing changed";
+    case "requirement.takedown":
+      return "Job post taken down";
+    case "announcement.send":
+      return `Announcement sent to ${s("recipients")} ${a.targetId === "everyone" ? "people" : a.targetId}`;
     default:
       return humanize(a.action);
   }
@@ -118,11 +138,11 @@ export function describeAudit(a: AuditLog): string {
 
 export function auditTone(a: AuditLog): "default" | "accent" | "success" | "warning" | "danger" {
   const m = a.meta ?? {};
-  if (a.action === "user.suspend" || a.action === "verification.reject") return "danger";
+  if (a.action === "user.suspend" || a.action === "verification.reject" || a.action === "user.delete" || a.action === "requirement.takedown" || a.action === "security.mfa_off") return "danger";
   if (a.action === "review.moderate") return m.status === "removed" ? "danger" : m.status === "flagged" ? "warning" : "success";
   if (a.action === "report.status") return m.status === "actioned" ? "success" : m.status === "dismissed" ? "default" : "accent";
   if (a.action === "user.reactivate" || a.action === "verification.approve" || a.action === "dispute.resolve") return "success";
-  if (a.action === "conversation.access") return "warning";
+  if (a.action === "conversation.access" || a.action === "file.view" || a.action === "user.mfa_reset") return "warning";
   return "accent";
 }
 

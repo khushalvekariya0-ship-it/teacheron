@@ -61,10 +61,11 @@ import { QuickMatch } from "./QuickMatch";
 import { BookStep, CompareStep, HowStepsProvider, LearnStep } from "./HowSteps";
 import { SmartMatchQuiz, useQuizSubjects } from "./SmartMatchQuiz";
 import { GRADES, subjectGroups } from "@/lib/data/catalog";
-import { FAQS, SAMPLE_TESTIMONIALS } from "@/lib/data/content";
+import type { TestimonialItem } from "@/lib/domain/data";
+import { useApp } from "@/lib/store";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_WEIGHTS } from "@/lib/matching";
-import { useCatalog, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useListedTutors } from "@/lib/store/hooks";
 
 /* ═══ 1 · Hero — what TutorLink is and the first Smart Match question, on a blackboard ═══ */
 
@@ -254,7 +255,7 @@ export function ThreeSteps() {
 const AREA_PHOTOS = new Set(["arts", "computer-science", "english", "languages", "learning-support", "math", "science", "social-studies", "test-prep"]);
 
 function SubjectExplorer() {
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const catalog = useCatalog();
   // Areas and their subjects come from the live catalog (Admin → Catalog), in the admin's order.
   const areas = React.useMemo(() => catalog.categories.map((c) => ({ slug: c.slug, label: c.name, body: c.description })), [catalog]);
@@ -949,7 +950,7 @@ export function GetMatched() {
 /* ═══ 6 · Featured tutors ═══════════════════════════════════════════════════════ */
 
 export function FeaturedTutors() {
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const featured = tutors
     .filter((t) => t.featured && t.verification.identity === "verified")
     .slice(0, 4);
@@ -1057,10 +1058,10 @@ export function WhyTutorLink() {
   );
 }
 
-/* ═══ 8 · Stories (illustrative, clearly labelled) ═══════════════════════════════ */
+/* ═══ 8 · Stories (real, consented customer stories from Admin → Content) ══════════ */
 
 /** One story: a numbered mono label, the quote in serif, who said it, and a link to the feature it is about. */
-function Story({ t, index, featured }: { t: (typeof SAMPLE_TESTIMONIALS)[number]; index: number; featured?: boolean }) {
+function Story({ t, index, featured }: { t: TestimonialItem; index: number; featured?: boolean }) {
   return (
     <figure className={cn("relative flex h-full flex-col overflow-hidden bg-surface", featured ? "p-7 sm:p-10 lg:p-12" : "p-7 sm:p-8")}>
       {/* A large quote mark sits behind the words, like a pull quote on a magazine page. */}
@@ -1075,18 +1076,22 @@ function Story({ t, index, featured }: { t: (typeof SAMPLE_TESTIMONIALS)[number]
       </blockquote>
       <figcaption className="relative mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-t border-line pt-5">
         <span className="block text-[15px] font-semibold text-ink">{t.name}</span>
-        <ArrowLink href={t.used.href} className="text-[14px]">
-          {t.used.label}
-        </ArrowLink>
+        {t.used.href && t.used.label && (
+          <ArrowLink href={t.used.href} className="text-[14px]">
+            {t.used.label}
+          </ArrowLink>
+        )}
       </figcaption>
     </figure>
   );
 }
 
 export function Stories() {
-  // Only real (or, in the demo, clearly labelled) stories — the section hides when there are none.
-  if (SAMPLE_TESTIMONIALS.length === 0) return null;
-  const [first, ...rest] = SAMPLE_TESTIMONIALS;
+  // Only real stories the customer agreed to share — the section hides when there are none.
+  const all = useApp((s) => s.testimonials);
+  const stories = React.useMemo(() => all.filter((t) => t.published && t.consentConfirmed), [all]);
+  if (stories.length === 0) return null;
+  const [first, ...rest] = stories;
   return (
     <Section tone="canvas">
       <SectionHeading align="center" eyebrow="Stories" title="What families and students tell us" />
@@ -1105,7 +1110,6 @@ export function Stories() {
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[13px] text-muted">Illustrative stories for this preview. Published testimonials will come from verified, consenting customers.</p>
     </Section>
   );
 }
@@ -1188,7 +1192,8 @@ export function BecomeTutor() {
 /* ═══ 10 · FAQ ══════════════════════════════════════════════════════════════════ */
 
 export function HomeFaq() {
-  const faqs = FAQS.filter((f) => f.audience !== "tutors").slice(0, 7);
+  const all = useApp((s) => s.faqs);
+  const faqs = React.useMemo(() => all.filter((f) => f.published && f.audience !== "tutors").slice(0, 7), [all]);
   return (
     <Section>
       <div className="grid gap-10 lg:grid-cols-[1fr_1.6fr] lg:gap-20">

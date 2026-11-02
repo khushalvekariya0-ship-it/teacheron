@@ -8,7 +8,7 @@ import type { Child, Grade, Role } from "@/lib/types";
 import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, US_STATES, subjectName } from "@/lib/data/catalog";
 import { resolveLocation } from "@/lib/data/geo";
 import { formatCents } from "@/lib/format";
-import { useTutors } from "@/lib/store/hooks";
+import { useListedTutors } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
@@ -21,6 +21,7 @@ import { DAY_ORDER, EXPERIENCE_OPTIONS, defaultTitle, type TimeOfDay } from "@/c
 import { cn } from "@/lib/utils";
 import { SubjectSelect, fieldDescribedBy } from "./SubjectSelect";
 import { LIMITS, STEPS, cityForZip, formatToModes, type Attachment, type Format, type ReqForm } from "./model";
+import { uploadFile } from "@/lib/upload";
 
 /* ─── Step 1 · Learner & subject ───────────────────────────────────────────── */
 
@@ -386,6 +387,7 @@ function AttachmentsField() {
   const { control } = useFormContext<ReqForm>();
   const [errs, setErrs] = React.useState<string[]>([]);
   const [dragging, setDragging] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   return (
@@ -394,24 +396,32 @@ function AttachmentsField() {
       name="attachments"
       render={({ field }) => {
         const files: Attachment[] = field.value;
-        const add = (list: FileList | null) => {
+        const add = async (list: FileList | null) => {
           if (!list) return;
+          const picked = Array.from(list);
+          if (inputRef.current) inputRef.current.value = "";
           const next = [...files];
           const problems: string[] = [];
-          for (const f of Array.from(list)) {
+          setUploading(true);
+          for (const f of picked) {
             const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
             if (!ACCEPTED.includes(ext)) problems.push(`“${f.name}” isn't a supported type. Use PDF, PNG, JPG, DOC or DOCX.`);
             else if (f.size > LIMITS.maxFileMb * 1024 * 1024) problems.push(`“${f.name}” is larger than ${LIMITS.maxFileMb} MB.`);
             else if (next.some((x) => x.name === f.name)) problems.push(`“${f.name}” is already attached.`);
             else if (next.length >= LIMITS.maxFiles) problems.push(`You can attach up to ${LIMITS.maxFiles} files — “${f.name}” wasn't added.`);
-            else next.push({ name: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)) });
+            else {
+              // Stored privately: only you and our team can open it.
+              const up = await uploadFile("requirements", f);
+              if (up.ok) next.push({ name: up.file.name, sizeKb: up.file.sizeKb, path: up.file.path });
+              else problems.push(`“${f.name}”: ${up.error}`);
+            }
           }
+          setUploading(false);
           setErrs(problems);
           if (next.length !== files.length) field.onChange(next);
-          if (inputRef.current) inputRef.current.value = "";
         };
         return (
-          <GroupField legend="Attachments" optional hint={`Up to ${LIMITS.maxFiles} files, ${LIMITS.maxFileMb} MB each — PDF, PNG, JPG, DOC or DOCX. In this preview only the file name and size are saved.`}>
+          <GroupField legend="Attachments" optional hint={`Up to ${LIMITS.maxFiles} files, ${LIMITS.maxFileMb} MB each — PDF, PNG, JPG, DOC or DOCX. Files are stored privately.`}>
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -421,7 +431,7 @@ function AttachmentsField() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                add(e.dataTransfer.files);
+                void add(e.dataTransfer.files);
               }}
               className={cn("flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-6 text-center transition-colors", dragging ? "border-ink bg-brand-soft" : "border-line-strong bg-canvas")}
             >
@@ -439,11 +449,11 @@ function AttachmentsField() {
                 multiple
                 accept={ACCEPTED.join(",")}
                 className="sr-only"
-                disabled={files.length >= LIMITS.maxFiles}
-                onChange={(e) => add(e.target.files)}
+                disabled={files.length >= LIMITS.maxFiles || uploading}
+                onChange={(e) => void add(e.target.files)}
               />
               <p className="text-[12px] tabular-nums text-muted">
-                {files.length}/{LIMITS.maxFiles} attached
+                {uploading ? "Uploading…" : `${files.length}/${LIMITS.maxFiles} attached`}
               </p>
             </div>
             {errs.length > 0 && (
@@ -487,7 +497,7 @@ function AttachmentsField() {
 }
 
 function RateContext({ subject }: { subject: string }) {
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const rates = React.useMemo(() => tutors.filter((t) => t.subjects.includes(subject)).map((t) => t.hourlyRateCents).sort((a, b) => a - b), [tutors, subject]);
   if (!subject || rates.length < 2) return null;
   return (

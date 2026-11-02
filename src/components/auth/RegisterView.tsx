@@ -16,12 +16,11 @@ import { Field, Input } from "@/components/ui/Input";
 import { Checkbox, RadioCards } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
 import { Avatar } from "@/components/ui/Avatar";
-import { useApp } from "@/lib/store";
+import { useApp, type SignUpOutcome } from "@/lib/store";
 import { useHydrated, useSession } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
-import type { User } from "@/lib/types";
+import { toast } from "@/components/ui/Toast";
 import { destinationFor, safeNext } from "./authUtils";
-import { PreviewInbox } from "./PreviewInbox";
 import { PasswordInput, PasswordStrengthMeter } from "./PasswordField";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -110,13 +109,6 @@ const AGE_OPTIONS: { value: AgeBand; label: string }[] = [
   { value: "under13", label: "Under 13" },
 ];
 
-/** The verification email, shown in the preview inbox. */
-function VerificationInbox({ userId, email }: { userId: string; email: string }) {
-  const token = useApp((s) => s.emailTokens[userId]);
-  if (!token) return null;
-  return <PreviewInbox className="mt-6" to={email} subject="Verify your TutorLink email" href={`/verify-email?user=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`} cta="Open the verification link" />;
-}
-
 function isRole(v: string | null): v is RoleChoice {
   return v === "student" || v === "parent" || v === "tutor";
 }
@@ -128,11 +120,13 @@ export function RegisterView() {
   const router = useRouter();
   const hydrated = useHydrated();
   const me = useSession();
-  const register = useApp((s) => s.register);
+  const signUp = useApp((s) => s.signUp);
+  const resend = useApp((s) => s.resendConfirmation);
   const logout = useApp((s) => s.logout);
   const [serverError, setServerError] = React.useState<string | null>(null);
-  const [created, setCreated] = React.useState<User | null>(null);
+  const [created, setCreated] = React.useState<(SignUpOutcome & { role: RoleChoice; firstName: string; email: string; parentEmail?: string }) | null>(null);
   const [continuing, setContinuing] = React.useState(false);
+  const [resending, setResending] = React.useState(false);
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -155,9 +149,14 @@ export function RegisterView() {
   const password = useWatch({ control: form.control, name: "password" }) ?? "";
   const blocked = role === "student" && ageBand === "under13";
 
+  /** Where the account continues after sign-up (and after the email confirmation link). */
+  const setupFor = (r: RoleChoice) =>
+    r === "tutor" ? "/onboarding/tutor" : r === "student" ? `/onboarding/student${next ? `?next=${encodeURIComponent(next)}` : ""}` : destinationFor(r, next);
+
   const onSubmit = form.handleSubmit(async (v) => {
     setServerError(null);
-    const res = await register({
+    const parentEmail = v.role === "student" && v.ageBand === "13-17" ? v.parentEmail?.trim() : undefined;
+    const res = await signUp({
       role: v.role,
       firstName: v.firstName,
       lastName: v.lastName,
@@ -165,7 +164,8 @@ export function RegisterView() {
       password: v.password,
       zip: v.zip,
       ...(v.role === "student" && v.ageBand && v.ageBand !== "under13" ? { ageBand: v.ageBand } : {}),
-      ...(v.role === "student" && v.ageBand === "13-17" ? { parentEmail: v.parentEmail?.trim() } : {}),
+      ...(parentEmail ? { parentEmail } : {}),
+      next: setupFor(v.role),
     });
     if (!res.ok) {
       setServerError(res.error);
@@ -173,15 +173,67 @@ export function RegisterView() {
       else if (/parent or guardian/i.test(res.error)) form.setError("parentEmail", { message: res.error });
       return;
     }
-    setCreated(res.data);
+    setCreated({ ...res.data, role: v.role, firstName: v.firstName.trim(), email: v.email.trim().toLowerCase(), parentEmail });
   });
 
   const signInHref = `/login${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
-  /* ─── Success: verify your email ─────────────────────────────── */
+  /* ─── Success: confirm your email, or continue ───────────────── */
   if (created) {
-    const setup = created.role === "tutor" ? "/onboarding/tutor" : created.role === "student" ? `/onboarding/student${next ? `?next=${encodeURIComponent(next)}` : ""}` : null;
-    const dest = setup ?? destinationFor(created.role, next);
+    const dest = setupFor(created.role);
+    const consent = created.parentEmail && (
+      <InlineAlert className="mt-6" tone={created.consent?.sent ? "info" : "warning"} title="Waiting for a parent or guardian">
+        {created.consent?.sent ? (
+          <>
+            We emailed your parent or guardian at <span className="font-medium text-ink">{created.parentEmail}</span>. Until they approve, you can browse tutors and save favorites, but messaging, booking and publishing requirements are paused.
+          </>
+        ) : (
+          <>
+            We couldn&apos;t email your parent or guardian yet{created.consent?.error ? ` (${created.consent.error.replace(/\.$/, "")})` : ""}. You can send the request again from your dashboard once you&apos;re signed in.
+          </>
+        )}
+      </InlineAlert>
+    );
+    if (created.needsConfirmation) {
+      return (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", bounce: 0.4, duration: 0.6, delay: 0.1 }}
+            className="grid size-12 place-items-center rounded-xl bg-brand-soft text-brand"
+          >
+            <MailCheck className="size-5" aria-hidden />
+          </motion.span>
+          <h1 className="mt-6 font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Confirm your email</h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted">
+            Welcome to TutorLink, {created.firstName}. We sent a link to <span className="font-medium text-ink">{created.email}</span>. Open it to finish creating your account
+            {created.role === "tutor" ? " — it takes you straight to your tutor profile setup." : created.role === "student" ? " — it takes you to your learning profile." : "."}
+          </p>
+          {consent}
+          <div className="mt-8 space-y-3">
+            <Button
+              size="lg"
+              variant="secondary"
+              className="w-full"
+              loading={resending}
+              onClick={async () => {
+                setResending(true);
+                const r = await resend(created.email);
+                setResending(false);
+                if (r.ok) toast.success("Email sent again", { description: "Check your spam folder if it doesn't arrive in a few minutes." });
+                else toast.error(r.error);
+              }}
+            >
+              Send the link again
+            </Button>
+            <Button asChild size="lg" variant="ghost" className="w-full">
+              <Link href={signInHref}>I&apos;ve confirmed — sign in</Link>
+            </Button>
+          </div>
+        </motion.div>
+      );
+    }
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
         <motion.span
@@ -192,25 +244,9 @@ export function RegisterView() {
         >
           <MailCheck className="size-5" aria-hidden />
         </motion.span>
-        <h1 className="mt-6 font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Verify your email</h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-muted">
-          Welcome to TutorLink, {created.firstName}. We sent a verification link to <span className="font-medium text-ink">{created.email}</span>. You can keep going in the meantime.
-        </p>
-
-        {created.parentalConsent && (
-          <InlineAlert
-            className="mt-6"
-            tone="info"
-            title="Waiting for a parent or guardian"
-            action={
-              <Button asChild size="sm" variant="secondary">
-                <Link href={`/consent?user=${encodeURIComponent(created.id)}`}>Open approval link</Link>
-              </Button>
-            }
-          >
-            We emailed your parent or guardian at <span className="font-medium text-ink">{created.parentalConsent.parentEmail}</span>. Until they approve, you can browse tutors and save favorites, but messaging, booking and publishing requirements are paused. Preview: open the approval link to act as the parent.
-          </InlineAlert>
-        )}
+        <h1 className="mt-6 font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Welcome to TutorLink</h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-muted">Your account is ready, {created.firstName}.</p>
+        {consent}
 
         <div className="mt-8 space-y-3">
           <Button
@@ -230,7 +266,6 @@ export function RegisterView() {
             </Button>
           )}
         </div>
-        <VerificationInbox userId={created.id} email={created.email} />
       </motion.div>
     );
   }
@@ -257,7 +292,7 @@ export function RegisterView() {
               Go to dashboard <ArrowRight />
             </Link>
           </Button>
-          <Button size="lg" variant="secondary" className="flex-1" onClick={logout}>
+          <Button size="lg" variant="secondary" className="flex-1" onClick={() => void logout()}>
             Sign out to create a new account
           </Button>
         </div>

@@ -100,8 +100,8 @@ function FlagsInner() {
   const zero = flags.filter(reachesNobody);
   const filtered = q.trim() !== "" || view !== "all";
 
-  const apply = (flag: FeatureFlag, patch: Partial<Pick<FeatureFlag, "enabled" | "rolloutPercent">>, message: string) => {
-    const res = setFlag(flag.key, patch);
+  const apply = async (flag: FeatureFlag, patch: Partial<Pick<FeatureFlag, "enabled" | "rolloutPercent">>, message: string) => {
+    const res = await setFlag(flag.key, patch);
     if (!res.ok) {
       toast.error(res.error);
       return false;
@@ -110,12 +110,12 @@ function FlagsInner() {
     return true;
   };
 
-  const toggle = (flag: FeatureFlag, next: boolean) => {
+  const toggle = async (flag: FeatureFlag, next: boolean) => {
     if (!next && CORE[flag.key]) {
       setConfirmKey(flag.key);
       return;
     }
-    const ok = apply(flag, { enabled: next }, `${flag.label} turned ${next ? "on" : "off"}`);
+    const ok = await apply(flag, { enabled: next }, `${flag.label} turned ${next ? "on" : "off"}`);
     if (ok && next && flag.rolloutPercent <= 0) toast("Rollout is at 0%", { description: `${flag.label} reaches no accounts until you raise the rollout.` });
   };
 
@@ -197,9 +197,9 @@ function FlagsInner() {
         description="This is a core flag. The change applies to everyone on the platform immediately."
         confirmLabel={confirmFlag ? `Turn off ${confirmFlag.label.toLowerCase()}` : "Turn off"}
         tone="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           const f = flags.find((x) => x.key === confirmKey);
-          if (f && apply(f, { enabled: false }, `${f.label} turned off`)) setConfirmKey(null);
+          if (f && (await apply(f, { enabled: false }, `${f.label} turned off`))) setConfirmKey(null);
         }}
       >
         {confirmFlag && (
@@ -213,7 +213,7 @@ function FlagsInner() {
               {CORE[confirmFlag.key]?.impact}
             </p>
             {CORE[confirmFlag.key] && !CORE[confirmFlag.key].enforced && (
-              <p className="text-[13px] text-muted">This preview doesn&apos;t enforce this flag yet; in production the feature-flag service applies it.</p>
+              <p className="text-[13px] text-muted">This flag isn&apos;t connected to a feature yet, so changing it has no effect for now.</p>
             )}
           </div>
         )}
@@ -239,7 +239,7 @@ function FlagRow({
   last?: AuditLog;
   viewerOn: boolean;
   onToggle: (v: boolean) => void;
-  onRollout: (n: number) => boolean;
+  onRollout: (n: number) => Promise<boolean>;
 }) {
   const dir = useDirectory();
   const tz = useViewerTimezone();
@@ -303,7 +303,7 @@ function FlagRow({
   );
 }
 
-function RolloutControl({ flag, disabled, onApply }: { flag: FeatureFlag; disabled: boolean; onApply: (n: number) => boolean }) {
+function RolloutControl({ flag, disabled, onApply }: { flag: FeatureFlag; disabled: boolean; onApply: (n: number) => Promise<boolean> }) {
   const id = React.useId();
   const [draft, setDraft] = React.useState(String(flag.rolloutPercent));
   const [error, setError] = React.useState<string>();
@@ -336,7 +336,7 @@ function RolloutControl({ flag, disabled, onApply }: { flag: FeatureFlag; disabl
       reset();
       return;
     }
-    onApply(n);
+    void onApply(n);
   };
 
   return (

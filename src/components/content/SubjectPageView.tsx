@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/States";
 import { LEVELS } from "@/lib/data/catalog";
 import { formatCents } from "@/lib/format";
-import { useCatalog, useHydrated, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useHydrated, useListedTutors } from "@/lib/store/hooks";
 
 const SHOW = 8;
 
@@ -25,7 +25,7 @@ const SHOW = 8;
 export function SubjectPageView({ slug }: { slug: string }) {
   const hydrated = useHydrated();
   const catalog = useCatalog();
-  const allTutors = useTutors();
+  const allTutors = useListedTutors();
   const subject = catalog.subjects.find((s) => s.slug === slug);
 
   if (!subject) {

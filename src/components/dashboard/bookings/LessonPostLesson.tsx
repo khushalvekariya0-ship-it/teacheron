@@ -4,7 +4,6 @@ import * as React from "react";
 import { FileText, Flag, Gavel, Paperclip, ShieldCheck, Star, X } from "lucide-react";
 import type { Booking, Dispute, Review } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { REVIEWS } from "@/lib/data/reviews";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { formatCents, formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,6 +15,8 @@ import { Field, Select, Textarea } from "@/components/ui/Input";
 import { Dialog, DialogBody, DialogClose, DialogContent, DialogFooter } from "@/components/ui/Overlay";
 import { StarInput } from "@/components/ui/StarRating";
 import { toast } from "@/components/ui/Toast";
+import { FileLink } from "@/components/domain/FileLink";
+import { uploadAll } from "@/lib/upload";
 
 /* ─── Review ────────────────────────────────────────────────────────────────── */
 
@@ -23,7 +24,7 @@ export function useLessonReview(b: Booking): Review | undefined {
   const local = useApp((s) => s.reviews);
   return React.useMemo(() => {
     if (!b.reviewId) return local.find((r) => r.bookingId === b.id);
-    return local.find((r) => r.id === b.reviewId) ?? REVIEWS.find((r) => r.id === b.reviewId);
+    return local.find((r) => r.id === b.reviewId);
   }, [local, b.reviewId, b.id]);
 }
 
@@ -35,13 +36,13 @@ export function ReviewForm({ booking: b, tutorFirstName }: { booking: Booking; t
   const [busy, setBusy] = React.useState(false);
   const checkBody = (v: string) => (v.trim().length < 20 ? `Write at least 20 characters (${v.trim().length}/20).` : undefined);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next = { rating: rating ? undefined : "Choose a star rating.", body: checkBody(body) };
     setErrors(next);
     if (next.rating || next.body) return;
     setBusy(true);
-    const res = submitReview(b.id, rating as Review["rating"], body);
+    const res = await submitReview(b.id, rating as Review["rating"], body);
     setBusy(false);
     if (!res.ok) return void toast.error(res.error);
     toast.success("Thanks for your review", { description: `It's now on ${tutorFirstName}'s profile.` });
@@ -160,7 +161,7 @@ export function DisputeCard({ dispute: d, myId, tz }: { dispute: Dispute; myId: 
             <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Evidence">
               {d.evidence.map((f) => (
                 <li key={f.name} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[12px] text-ink-2">
-                  <FileText className="size-3.5 text-muted" aria-hidden /> {f.name} <span className="text-muted">{f.sizeKb} KB</span>
+                  <FileText className="size-3.5 text-muted" aria-hidden /> <FileLink path={f.path}>{f.name}</FileLink> <span className="text-muted">{f.sizeKb} KB</span>
                 </li>
               ))}
             </ul>
@@ -218,7 +219,8 @@ export function DisputeDialog({ booking, open, onOpenChange, isTutor }: { bookin
   const openDispute = useApp((s) => s.openDispute);
   const [reason, setReason] = React.useState<Dispute["reason"] | "">("");
   const [details, setDetails] = React.useState("");
-  const [files, setFiles] = React.useState<Dispute["evidence"]>([]);
+  const [files, setFiles] = React.useState<{ name: string; sizeKb: number; file: File }[]>([]);
+  const [submitting, setSubmitting] = React.useState(false);
   const [errors, setErrors] = React.useState<{ reason?: string; details?: string; files?: string; form?: string }>({});
   const fileRef = React.useRef<HTMLInputElement>(null);
   const checkDetails = (v: string) => (v.trim().length < 30 ? `Describe what happened in at least 30 characters (${v.trim().length}/30).` : undefined);
@@ -235,7 +237,7 @@ export function DisputeDialog({ booking, open, onOpenChange, isTutor }: { bookin
 
   const onFiles = (list: FileList | null) => {
     if (!list) return;
-    const picked = Array.from(list).map((f) => ({ name: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
+    const picked = Array.from(list).map((f) => ({ name: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f }));
     const tooBig = picked.filter((f) => f.sizeKb > MAX_KB);
     const ok = picked.filter((f) => f.sizeKb <= MAX_KB && !files.some((x) => x.name === f.name));
     const next = [...files, ...ok].slice(0, MAX_FILES);
@@ -244,12 +246,16 @@ export function DisputeDialog({ booking, open, onOpenChange, isTutor }: { bookin
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next = { reason: reason ? undefined : "Choose what went wrong.", details: checkDetails(details) };
     setErrors(next);
     if (next.reason || next.details || !reason) return;
-    const res = openDispute(booking.id, reason, details, files);
+    setSubmitting(true);
+    // Evidence is uploaded to private storage; only the people in this lesson and our team can open it.
+    const up = await uploadAll("disputes", files);
+    const res = up.ok ? await openDispute(booking.id, reason, details, up.files) : up;
+    setSubmitting(false);
     if (!res.ok) return setErrors({ form: res.error });
     toast.success("Problem reported", { description: "Our Trust & Safety team will review it and contact you." });
     close(false);
@@ -297,7 +303,7 @@ export function DisputeDialog({ booking, open, onOpenChange, isTutor }: { bookin
           </DialogBody>
           <DialogFooter>
             <DialogClose asChild><Button variant="secondary">Cancel</Button></DialogClose>
-            <Button type="submit"><Flag /> Submit report</Button>
+            <Button type="submit" loading={submitting}><Flag /> Submit report</Button>
           </DialogFooter>
         </form>
       </DialogContent>

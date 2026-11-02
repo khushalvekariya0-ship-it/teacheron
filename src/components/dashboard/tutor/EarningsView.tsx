@@ -278,7 +278,7 @@ export function EarningsView() {
                 </span>
               </li>
             </ol>
-            <p className="rounded-lg bg-canvas px-3 py-2 text-[12.5px]">Preview build: no real money moves. Figures are computed from the lessons and payouts recorded here, so payouts can include lessons from before this sample history.</p>
+            <p className="rounded-lg bg-canvas px-3 py-2 text-[12.5px]">Payouts to your bank aren&apos;t connected yet. Figures are computed from your lessons and the payouts recorded here.</p>
           </CardContent>
         </Card>
       </div>

@@ -2,28 +2,29 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { ArrowRight, LinkIcon, MailCheck } from "lucide-react";
+import { ArrowRight, Mail, MailCheck } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { useHydrated, useSession } from "@/lib/store/hooks";
 import { homeFor } from "@/lib/permissions";
 import { motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { toast } from "@/components/ui/Toast";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-/** Confirms an email address from its link (`?user=&token=`). */
+/**
+ * Email confirmation. The link in the sign-up email goes through /auth/callback, which confirms the
+ * address with Supabase Auth and signs the person in; this page confirms the outcome, or lets them
+ * ask for a new link.
+ */
 export function VerifyEmailView() {
-  const params = useSearchParams();
-  const userId = params.get("user") ?? "";
-  const token = params.get("token") ?? "";
   const hydrated = useHydrated();
   const me = useSession();
-  const verifyEmail = useApp((s) => s.verifyEmail);
-  const users = useApp((s) => s.users);
-  const target = users.find((u) => u.id === userId);
-  const [result, setResult] = React.useState<{ ok: true } | { ok: false; error: string } | null>(null);
+  const resend = useApp((s) => s.resendConfirmation);
+  const [email, setEmail] = React.useState("");
+  const [sending, setSending] = React.useState(false);
 
   if (!hydrated) {
     return (
@@ -34,14 +35,7 @@ export function VerifyEmailView() {
     );
   }
 
-  const verified = target?.emailVerified ?? false;
-  const confirm = () => {
-    const r = verifyEmail(userId, token);
-    setResult(r.ok ? { ok: true } : { ok: false, error: r.error });
-  };
-  const home = me ? homeFor(me.role) : "/login";
-
-  if (verified || result?.ok) {
+  if (me?.emailVerified) {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }} role="status">
         <span className="grid size-12 place-items-center bg-success-50 text-success">
@@ -49,33 +43,26 @@ export function VerifyEmailView() {
         </span>
         <h1 className="mt-6 font-heading text-[2rem] leading-[1.05] text-ink">Email verified</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted">
-          Thanks{target ? `, ${target.firstName}` : ""} — <span className="font-medium text-ink">{target?.email}</span> is confirmed.
+          Thanks, {me.firstName} — <span className="font-medium text-ink">{me.email}</span> is confirmed.
         </p>
         <Button asChild size="lg" className="mt-8">
-          <Link href={home}>
-            {me ? "Go to your dashboard" : "Sign in"} <ArrowRight />
+          <Link href={homeFor(me.role)}>
+            Go to your dashboard <ArrowRight />
           </Link>
         </Button>
       </motion.div>
     );
   }
 
-  if (!target || (result && !result.ok)) {
-    return (
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}>
-        <span className="grid size-12 place-items-center bg-brand-soft text-brand">
-          <LinkIcon className="size-5" aria-hidden />
-        </span>
-        <h1 className="mt-6 font-heading text-[2rem] leading-[1.05] text-ink">This link isn&rsquo;t valid</h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-muted">{result && !result.ok ? result.error : "Verification links work once. You can request a new one from Settings."}</p>
-        <Button asChild size="lg" className="mt-8">
-          <Link href={me ? "/dashboard/settings" : "/login"}>
-            {me ? "Open Settings" : "Sign in"} <ArrowRight />
-          </Link>
-        </Button>
-      </motion.div>
-    );
-  }
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return toast.error("Enter a valid email address.");
+    setSending(true);
+    const r = await resend(email.trim());
+    setSending(false);
+    if (r.ok) toast.success("If that email has an account waiting for confirmation, we sent a new link.");
+    else toast.error(r.error);
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}>
@@ -84,11 +71,22 @@ export function VerifyEmailView() {
       </span>
       <h1 className="mt-6 font-heading text-[2rem] leading-[1.05] text-ink">Confirm your email</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-muted">
-        Confirm that <span className="font-medium text-ink">{target.email}</span> belongs to you, {target.firstName}.
+        Open the link we emailed you when you signed up. Links work once — if yours expired, we can send a new one.
       </p>
-      <Button size="lg" className="mt-8 w-full" onClick={confirm}>
-        Yes, this is my email <ArrowRight />
-      </Button>
+      <form onSubmit={send} noValidate className="mt-8 space-y-4">
+        <Field label="Email">
+          <Input type="email" autoComplete="email" inputMode="email" icon={<Mail />} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+        </Field>
+        <Button type="submit" size="lg" className="w-full" loading={sending}>
+          Send a new link
+        </Button>
+      </form>
+      <p className="mt-5 text-center text-[14px] text-muted">
+        Already confirmed?{" "}
+        <Link href="/login" className="font-medium text-ink underline underline-offset-4">
+          Sign in
+        </Link>
+      </p>
     </motion.div>
   );
 }

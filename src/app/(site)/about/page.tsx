@@ -5,9 +5,13 @@ import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, Eyebrow, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
 import { CardGrid } from "@/components/marketing/Split";
 import { indexableMetros } from "@/components/content/insights";
+import { listedTutors } from "@/server/public";
 import { CatalogCount } from "@/components/content/SubjectCatalog";
 import { TUTOR_PLANS } from "@/lib/data/platform";
 import { SITE } from "@/lib/site";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "About",
@@ -16,9 +20,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
   const commissions = TUTOR_PLANS.map((p) => p.commissionBps / 100);
-  const metros = indexableMetros().length;
+  const metros = indexableMetros(await listedTutors()).length;
   return (
     <>
       <PageHero
@@ -42,7 +46,7 @@ export default function AboutPage() {
               TutorLink is our answer: a marketplace where search results come with reasons, credentials are checked before they&rsquo;re displayed, policies are shown before you pay, and tutors get the tools of a professional practice without the overhead.
             </p>
             <p className="text-muted">
-              We&rsquo;re early. This site is a preview build — the tutors, reviews and figures you see are sample data while we prepare for launch. We&rsquo;d rather tell you that plainly than dress it up.
+              We&rsquo;re early. Every tutor, review and figure on this site comes from real people who have signed up — nothing is padded with sample data. We&rsquo;d rather show you a small, honest marketplace than dress it up.
             </p>
           </Reveal>
         </div>

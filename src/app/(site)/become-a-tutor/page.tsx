@@ -14,9 +14,12 @@ import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
 import { medianRate } from "@/components/content/insights";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
-import { FAQS } from "@/lib/data/content";
+import { listedTutors, publishedFaqs } from "@/server/public";
 import { CREDITS_PER_APPLICATION } from "@/lib/data/platform";
 import { cn } from "@/lib/utils";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Become a tutor",
@@ -199,11 +202,11 @@ function TutorWhy() {
   );
 }
 
-export default function BecomeATutorPage() {
+export default async function BecomeATutorPage() {
   // The median listed rate when tutors exist; otherwise a round example rate for the commission table.
-  const median = medianRate();
+  const median = medianRate(await listedTutors());
   const rate = median || 5000;
-  const tutorFaqs = FAQS.filter((f) => f.audience === "tutors");
+  const tutorFaqs = (await publishedFaqs()).filter((f) => f.audience === "tutors");
 
   return (
     <>

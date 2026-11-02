@@ -10,8 +10,11 @@ import { FamilyVignette, MessageVignette, NotificationsVignette, ProgressVignett
 import { PostCard } from "@/components/content/Blog";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
-import { BLOG_POSTS } from "@/lib/data/content";
+import { publishedPosts } from "@/server/public";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Tutoring for parents",
@@ -20,8 +23,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/for-parents" },
 };
 
-export default function ForParentsPage() {
-  const reading = BLOG_POSTS.filter((p) => p.category === "Parents").slice(0, 3);
+export default async function ForParentsPage() {
+  const reading = (await publishedPosts()).filter((p) => p.category === "Parents").slice(0, 3);
   return (
     <>
       <PageHero
@@ -91,7 +94,7 @@ export default function ForParentsPage() {
           reverse
           eyebrow="Notification controls"
           title="Hear about what matters. Mute the rest."
-          description="Choose which updates you receive. Try the switches — this preview doesn't save anything."
+          description="Choose which updates you receive. Try the switches — this is an example; your own settings are in your account."
           features={[
             { icon: <Bell />, title: "Reminders before lessons", body: "So nobody is scrambling for the meeting link at 4:59." },
             { icon: <BellOff />, title: "Fewer, better updates", body: "Turn off progress notes or homework updates if you'd rather check in on your own schedule." },

@@ -95,7 +95,7 @@ export function LegalDocument({
               <div role="note" className="mb-10 flex max-w-[68ch] items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3.5">
                 <FileExclamationPoint className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
                 <p className="text-sm leading-relaxed text-ink-2">
-                  <span className="font-semibold text-ink">Template pending legal review.</span> This document is a working draft for the preview build. It is not legal advice and will be reviewed by counsel before launch.
+                  <span className="font-semibold text-ink">Template pending legal review.</span> This document is a working draft. It is not legal advice and must be reviewed by a lawyer before launch.
                 </p>
               </div>
             </Reveal>

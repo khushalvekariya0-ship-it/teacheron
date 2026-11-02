@@ -1,23 +1,24 @@
 import type { Metadata } from "next";
 import { Panel } from "@/components/marketing/Section";
-import { SEED_REQUIREMENTS } from "@/lib/data/requirements";
-import { GRADE_LABEL, subjectName } from "@/lib/data/catalog";
+import { GRADE_LABEL, setLiveCatalog, subjectName } from "@/lib/data/catalog";
+import { publicCatalog, publishedRequirements } from "@/server/public";
 import { truncate } from "@/lib/utils";
 import { JobDetail } from "@/components/jobs/JobDetail";
 import { budgetRange, locationLabel, modesLabel } from "@/components/jobs/jobUtils";
 
 type Props = { params: Promise<{ id: string }> };
 
-/** Only public, published sample jobs are pre-rendered. Jobs posted in this browser render on demand. */
-const PUBLISHED = SEED_REQUIREMENTS.filter((r) => r.status === "published");
+/** Published jobs come from the database (refreshed at most once a minute); new ones render on demand. */
+export const revalidate = 60;
 
-export function generateStaticParams() {
-  return PUBLISHED.map((r) => ({ id: r.id }));
+export async function generateStaticParams() {
+  return (await publishedRequirements()).map((r) => ({ id: r.id }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const job = PUBLISHED.find((r) => r.id === id);
+  const job = (await publishedRequirements()).find((r) => r.id === id);
+  setLiveCatalog(await publicCatalog());
   if (!job) {
     return { title: "Tutor job", description: "A tutoring requirement posted on TutorLink.", robots: { index: false } };
   }

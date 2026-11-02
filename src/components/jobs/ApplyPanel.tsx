@@ -141,9 +141,9 @@ export function ApplyPanel({ job, tutor, existing, now }: { job: Requirement; tu
   const len = message.trim().length;
   const overBudget = typeof rate === "number" && !Number.isNaN(rate) && rate * 100 > job.budgetMaxCents;
 
-  const onSubmit = (v: ApplyValues) => {
+  const onSubmit = async (v: ApplyValues) => {
     setServerError(null);
-    const r = applyToJob(job.id, v.message, Math.round(v.rate * 100));
+    const r = await applyToJob(job.id, v.message, Math.round(v.rate * 100));
     if (!r.ok) {
       setServerError(r.error);
       toast.error(r.error);

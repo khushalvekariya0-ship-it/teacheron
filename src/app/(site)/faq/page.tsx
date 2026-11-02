@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { PageHero, Section, CtaBand } from "@/components/marketing/Section";
 import { Reveal } from "@/components/motion";
 import { FaqView } from "@/components/content/FaqView";
-import { FAQS } from "@/lib/data/content";
+import { publishedFaqs } from "@/server/public";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Frequently asked questions",
@@ -10,11 +13,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/faq" },
 };
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const faqs = await publishedFaqs();
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: FAQS.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+    mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
   };
   return (
     <>
@@ -22,7 +26,7 @@ export default function FaqPage() {
       <PageHero eyebrow="FAQ" title="Questions, answered." description="Everything families and tutors ask most — about finding a tutor, payments, verification and safety. Search, or browse by topic." />
       <Section className="pt-12 sm:pt-14 lg:pt-16">
         <Reveal>
-          <FaqView faqs={FAQS} />
+          <FaqView faqs={faqs} />
         </Reveal>
       </Section>
       <CtaBand title="Still have a question?" description="Our team reads every message and replies by email." primary={{ href: "/contact", label: "Contact support" }} secondary={{ href: "/how-it-works", label: "How it works" }} />

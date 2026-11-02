@@ -21,7 +21,7 @@ import { toast } from "@/components/ui/Toast";
 
 export const PERMISSION_META: Record<Permission, { label: string; description: string }> = {
   "users.read": { label: "View users", description: "Browse member, tutor and staff accounts and their activity." },
-  "users.write": { label: "Change account status", description: "Suspend and reactivate accounts." },
+  "users.write": { label: "Manage accounts", description: "Suspend, reactivate, edit and delete accounts; administrators also manage staff access." },
   "tutors.verify": { label: "Review verification", description: "Approve or reject identity, education, certification and background checks." },
   "bookings.manage": { label: "Manage bookings", description: "View all bookings and apply admin status changes." },
   "payments.read": { label: "View payments", description: "Payments, refunds and tutor payouts." },
@@ -514,8 +514,8 @@ export function ConversationAccess({ conversationId, context, children }: { conv
           label="Reason for access"
           placeholder={context ? `e.g. Investigating ${context}` : "e.g. Investigating a report"}
           confirmLabel="Log access and view"
-          onConfirm={(reason) => {
-            const res = logAccess(conversationId, reason);
+          onConfirm={async (reason) => {
+            const res = await logAccess(conversationId, reason);
             if (!res.ok) {
               toast.error(res.error);
               return false;

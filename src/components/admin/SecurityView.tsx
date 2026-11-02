@@ -16,7 +16,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Progress } from "@/components/ui/Controls";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
-import { ConfirmDialog } from "@/components/ui/Overlay";
+import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/Overlay";
+import { Field, Input } from "@/components/ui/Input";
+import { toast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { ALL_PERMISSIONS, FilterSelect, MiniStat, PERMISSION_META, PermissionNotice, TextLink, fullName, useDirectory, useStaff } from "./kit";
 
@@ -126,13 +128,7 @@ export function SecurityView() {
         <Card className="lg:col-span-1">
           <CardHeader title="Your account" description={`${fullName(me)} · ${ROLE_LABEL[me.role]}`} />
           <div className="space-y-4 p-5 pt-4">
-            <div className={cn("flex items-start gap-3 rounded-lg border px-3.5 py-3", me.mfaEnabled ? "border-success-200 bg-success-50" : "border-warning-200 bg-warning-50")}>
-              {me.mfaEnabled ? <ShieldCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden /> : <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />}
-              <div>
-                <p className={cn("text-[13.5px] font-semibold", me.mfaEnabled ? "text-success" : "text-warning")}>{me.mfaEnabled ? "Multi-factor authentication is on" : "Multi-factor authentication is off"}</p>
-                <p className="mt-0.5 text-[12.5px] text-ink-2">{me.mfaEnabled ? "Sign-ins require a second factor." : "Staff accounts must enable MFA before handling member data."} Enrollment is managed by the auth service in production.</p>
-              </div>
-            </div>
+            <TwoStepLogin on={!!me.mfaEnabled} />
             <dl className="space-y-2 text-[13px]">
               <div className="flex justify-between gap-3">
                 <dt className="text-muted">Email</dt>
@@ -182,7 +178,7 @@ export function SecurityView() {
                 <p className="mt-0.5 text-[12.5px] text-muted">Signed in {me.lastLoginAt ? formatDateTime(me.lastLoginAt, tz) : "earlier"}</p>
               </div>
             </div>
-            <p className="mt-3 text-[12.5px] leading-relaxed text-muted">The preview keeps a single session in this browser. Cross-device session listing and revocation come from the auth service in production.</p>
+            <p className="mt-3 text-[12.5px] leading-relaxed text-muted">Sessions are managed by Supabase Auth. Each person can sign out of every device from their own Settings.</p>
             <Button variant="secondary" size="sm" className="mt-3" onClick={() => setSignOut(true)}>
               <LogOut /> Sign out of this session
             </Button>
@@ -230,7 +226,7 @@ export function SecurityView() {
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 id="login-history" className="text-[15px] font-semibold tracking-tight text-ink">Login history</h2>
-            <p className="mt-0.5 text-[13px] text-muted">Successful and failed sign-ins recorded in this browser.</p>
+            <p className="mt-0.5 text-[13px] text-muted">Successful and failed password sign-ins, newest first.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {canSeeAll && (
@@ -261,7 +257,7 @@ export function SecurityView() {
           columns={columns}
           rowKey={(l) => l.key}
           pageSize={8}
-          empty={<EmptyState compact icon={<KeyRound />} title="No sign-ins recorded" description="Attempts appear here after signing in with a password or a demo account." />}
+          empty={<EmptyState compact icon={<KeyRound />} title="No sign-ins recorded" description="Attempts appear here after people sign in." />}
         />
       </section>
 
@@ -274,7 +270,7 @@ export function SecurityView() {
                 { label: "Minimum length", value: "10 characters" },
                 { label: "Applies to", value: "Registration and password changes" },
                 { label: "Wrong email or password", value: "One generic error (no account enumeration)" },
-                { label: "Staff accounts", value: "MFA expected for every staff account" },
+                { label: "Staff accounts", value: "Two-step login (authenticator app) expected for every staff account" },
                 { label: "Storage", value: "Hashed; never stored or logged in plain text" },
               ]}
             />
@@ -285,20 +281,20 @@ export function SecurityView() {
           <div className="p-5 pt-4">
             <ConfigList
               items={[
-                { label: "Sign-in attempts", value: "Throttled per account and IP in production" },
-                { label: "Messaging & applications", value: "Throttled per account in production" },
-                { label: "Preview build", value: "Not simulated. Failed attempts are recorded and flagged above" },
+                { label: "Sign-in attempts", value: "8 per email and address every 10 minutes" },
+                { label: "Sign-ups", value: "6 per address every hour" },
+                { label: "Everything else", value: "120 actions per account every minute" },
               ]}
             />
             <InlineAlert tone="info" className="mt-4">
-              Limits are changed through infrastructure configuration with review, not from this panel.
+              Limits are set in the server code (src/server/http.ts and the API routes), not from this panel.
             </InlineAlert>
           </div>
         </Card>
       </div>
 
       <Card className="mt-6">
-        <CardHeader title="Roles & permissions" description="Proposed role templates for staff, compared with each account's actual permissions. Changes go through a super admin." />
+        <CardHeader title="Roles & permissions" description="Suggested role templates for staff, compared with each account's actual permissions. Administrators change an account's access from Users." />
         <div className="overflow-x-auto p-5 pt-4">
           <table className="w-full min-w-[36rem] text-[13px]">
             <caption className="sr-only">Permission matrix by staff role</caption>
@@ -346,7 +342,7 @@ export function SecurityView() {
           <div>
             <h2 className="text-[15px] font-semibold tracking-tight text-ink">Sensitive data access logging</h2>
             <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">
-              Private conversations open only after staff record a reason, and each access is written to the audit log with the staff member&apos;s name. Verification documents open from secure storage (S3 signed URLs) in production, and every document view is logged the same way. Staff can&apos;t edit or delete audit entries.
+              Private conversations open only after staff record a reason, and each access is written to the audit log with the staff member&apos;s name. Verification documents, dispute evidence and message files open from private storage through short-lived links, and every time staff open one it&apos;s logged the same way. Staff can&apos;t edit or delete audit entries.
             </p>
             {!can("audit.read") && (
               <div className="mt-3">
@@ -363,9 +359,9 @@ export function SecurityView() {
         title="Sign out of this session?"
         description="You'll need to sign in again to use the admin panel."
         confirmLabel="Sign out"
-        onConfirm={() => {
+        onConfirm={async () => {
           setSignOut(false);
-          logout();
+          await logout();
           router.push("/login");
         }}
       />
@@ -399,5 +395,105 @@ function StaffAccess({ user }: { user: User }) {
         {ROLE_LABEL[user.role]} · {perms.length} of {ALL_PERMISSIONS.length} permissions
       </p>
     </div>
+  );
+}
+
+/** Turn two-step login on (scan a QR code, confirm a code) or off (confirm a code). */
+function TwoStepLogin({ on }: { on: boolean }) {
+  const enroll = useApp((s) => s.enrollMfa);
+  const verify = useApp((s) => s.verifyMfa);
+  const disable = useApp((s) => s.disableMfa);
+  const [setup, setSetup] = React.useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
+  const [turningOff, setTurningOff] = React.useState(false);
+  const [code, setCode] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const close = () => {
+    setSetup(null);
+    setTurningOff(false);
+    setCode("");
+    setError(null);
+  };
+  const start = async () => {
+    setBusy(true);
+    const r = await enroll();
+    setBusy(false);
+    if (!r.ok) return toast.error(r.error);
+    setSetup(r.data);
+  };
+  const confirm = async () => {
+    if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code from your authenticator app.");
+    setBusy(true);
+    const r = setup ? await verify(code, setup.factorId) : await disable(code);
+    setBusy(false);
+    if (!r.ok) {
+      setCode("");
+      return setError(r.error);
+    }
+    toast.success(setup ? "Two-step login is on" : "Two-step login is off");
+    close();
+  };
+
+  const codeField = (
+    <Field label="6-digit code" error={error ?? undefined}>
+      <Input
+        value={code}
+        onChange={(e) => {
+          setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+          setError(null);
+        }}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        placeholder="123456"
+        className="font-mono tracking-[0.3em]"
+      />
+    </Field>
+  );
+
+  return (
+    <>
+      <div className={cn("flex items-start gap-3 rounded-lg border px-3.5 py-3", on ? "border-success-200 bg-success-50" : "border-warning-200 bg-warning-50")}>
+        {on ? <ShieldCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden /> : <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />}
+        <div className="min-w-0">
+          <p className={cn("text-[13.5px] font-semibold", on ? "text-success" : "text-warning")}>{on ? "Two-step login is on" : "Two-step login is off"}</p>
+          <p className="mt-0.5 text-[12.5px] text-ink-2">
+            {on ? "Each sign-in asks for a code from your authenticator app." : "Staff accounts should turn this on before handling member data. You'll need an authenticator app such as Google Authenticator or 1Password."}
+          </p>
+          <Button variant={on ? "secondary" : "brand"} size="sm" className="mt-2.5" loading={busy && !setup && !turningOff} onClick={on ? () => setTurningOff(true) : start}>
+            {on ? "Turn off" : "Turn on two-step login"}
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={!!setup || turningOff} onOpenChange={(o) => !o && close()}>
+        <DialogContent
+          size="sm"
+          title={setup ? "Set up two-step login" : "Turn off two-step login?"}
+          description={setup ? "Scan the QR code with your authenticator app, then enter the code it shows." : "Enter a code from your authenticator app to confirm."}
+        >
+          <DialogBody className="space-y-4">
+            {setup && (
+              <>
+                {/* The QR code is an SVG data URL from Supabase Auth. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={setup.qrCode} alt="QR code for your authenticator app" className="mx-auto size-44 rounded-lg border border-line bg-white p-2" />
+                <div className="text-[12.5px] text-muted">
+                  Can&apos;t scan? Enter this key in the app instead:
+                  <code className="mt-1 block break-all rounded-md bg-sunken px-2.5 py-1.5 font-mono text-[12.5px] text-ink">{setup.secret}</code>
+                </div>
+              </>
+            )}
+            {codeField}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondary" onClick={close}>Cancel</Button>
+            <Button variant={setup ? "brand" : "danger"} loading={busy} onClick={confirm}>
+              {setup ? "Turn on" : "Turn off"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

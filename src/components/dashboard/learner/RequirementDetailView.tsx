@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks";
 import { useMyChildren } from "./data";
 import { APPLICATION_STATUS_META, ApplicationStatusBadge, REQUIREMENT_STATUS_META, RequirementStatusBadge, isVisibleApplication } from "./meta";
+import { FileLink } from "@/components/domain/FileLink";
 
 const ACTIVE: ApplicationStatus[] = ["applied", "viewed", "shortlisted", "contacted", "trial_requested"];
 
@@ -155,7 +156,8 @@ function Detail({ id }: { id: string }) {
   const closed = req.status === "closed";
   const compareFromHere = compare.filter((t) => apps.some((a) => a.tutorId === t)).length;
 
-  const report = (res: Result<unknown>, success?: string) => {
+  const report = async (pending: Result<unknown> | Promise<Result<unknown>>, success?: string) => {
+    const res = await pending;
     if (!res.ok) {
       toast.error(res.error);
       return false;
@@ -164,34 +166,34 @@ function Detail({ id }: { id: string }) {
     return true;
   };
 
-  const message = (a: Application, tutor?: Tutor) => {
+  const message = async (a: Application, tutor?: Tutor) => {
     setBusyId(a.id);
-    const conv = startConversation(a.tutorId, { childId: req.childId, subject: req.subject || undefined });
-    if (!report(conv)) return setBusyId(null);
-    if (["applied", "viewed", "shortlisted"].includes(a.status)) setApplicationStatus(a.id, "contacted");
+    const conv = await startConversation(a.tutorId, { childId: req.childId, subject: req.subject || undefined });
+    if (!(await report(conv))) return setBusyId(null);
+    if (["applied", "viewed", "shortlisted"].includes(a.status)) void setApplicationStatus(a.id, "contacted");
     if (conv.ok) {
       toast.success(`Opening your conversation with ${tutor?.firstName ?? "the tutor"}`);
       router.push(`/dashboard/messages?c=${conv.data.id}`);
     }
   };
 
-  const requestTrial = (a: Application, tutor: Tutor) => {
+  const requestTrial = async (a: Application, tutor: Tutor) => {
     setBusyId(a.id);
-    if (!report(setApplicationStatus(a.id, "trial_requested"))) return setBusyId(null);
+    if (!(await report(setApplicationStatus(a.id, "trial_requested")))) return setBusyId(null);
     router.push(`/tutors/${tutor.slug}?book=trial`);
   };
 
-  const confirmDialog = () => {
+  const confirmDialog = async () => {
     if (!dialog) return;
     if (dialog.kind === "hire") {
-      const ok = report(setApplicationStatus(dialog.app.id, "hired"), `You hired ${dialog.name}`);
+      const ok = await report(setApplicationStatus(dialog.app.id, "hired"), `You hired ${dialog.name}`);
       setDialog(ok && req.status !== "closed" ? { kind: "close-after-hire", name: dialog.name } : null);
       return;
     }
-    if (dialog.kind === "reject") report(setApplicationStatus(dialog.app.id, "rejected"), `Declined ${dialog.name}'s application`);
-    if (dialog.kind === "close" || dialog.kind === "close-after-hire") report(setRequirementStatus(req.id, "closed"), "Requirement closed");
+    if (dialog.kind === "reject") await report(setApplicationStatus(dialog.app.id, "rejected"), `Declined ${dialog.name}'s application`);
+    if (dialog.kind === "close" || dialog.kind === "close-after-hire") await report(setRequirementStatus(req.id, "closed"), "Requirement closed");
     if (dialog.kind === "delete") {
-      if (report(deleteRequirement(req.id), "Requirement deleted")) router.push("/dashboard/requirements");
+      if (await report(deleteRequirement(req.id), "Requirement deleted")) router.push("/dashboard/requirements");
     }
     setDialog(null);
   };
@@ -305,7 +307,7 @@ function Detail({ id }: { id: string }) {
                 <ul className="mt-4 space-y-1.5">
                   {req.attachments.map((f) => (
                     <li key={f.name} className="flex items-center gap-2 text-[13px] text-ink-2">
-                      <Paperclip className="size-3.5 text-subtle" aria-hidden /> {f.name} <span className="text-muted">· {f.sizeKb} KB</span>
+                      <Paperclip className="size-3.5 text-subtle" aria-hidden /> <FileLink path={f.path}>{f.name}</FileLink> <span className="text-muted">· {f.sizeKb} KB</span>
                     </li>
                   ))}
                 </ul>

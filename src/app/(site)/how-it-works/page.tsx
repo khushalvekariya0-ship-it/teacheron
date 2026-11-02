@@ -11,8 +11,11 @@ import { MatchingWeights } from "@/components/marketing/MatchingWeights";
 import { PolicyDetails } from "@/components/marketing/Policies";
 import { RefundTimeline } from "@/components/marketing/RefundTimeline";
 import { trialStats } from "@/components/content/insights";
-import { TUTORS } from "@/lib/data/tutors";
+import { listedTutors } from "@/server/public";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "How it works",
@@ -95,8 +98,9 @@ const JOURNEY: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: LineChart, title: "Learn and grow", body: "Notes, homework and goals after every lesson" },
 ];
 
-export default function HowItWorksPage() {
-  const trials = trialStats();
+export default async function HowItWorksPage() {
+  const tutors = await listedTutors();
+  const trials = trialStats(tutors);
   return (
     <>
       <section className="relative isolate border-b border-line bg-page">
@@ -264,11 +268,11 @@ export default function HowItWorksPage() {
           </div>
         </Reveal>
 
-        {TUTORS.length > 0 && (
+        {tutors.length > 0 && (
           <Reveal delay={0.1}>
             <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-canvas px-5 py-3.5 text-[14.5px] text-ink-2">
               <span>
-                <span className="font-semibold tabular-nums text-ink">{trials.offering}</span> of the <span className="tabular-nums">{TUTORS.length}</span> tutors listed today offer a trial —{" "}
+                <span className="font-semibold tabular-nums text-ink">{trials.offering}</span> of the <span className="tabular-nums">{tutors.length}</span> tutors listed today offer a trial —{" "}
                 <span className="font-semibold tabular-nums text-ink">{trials.free}</span> of them for free.
               </span>
               <Link href="/tutors?trial=1" className="font-semibold text-brand underline-offset-4 hover:underline">

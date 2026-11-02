@@ -11,39 +11,58 @@ import { Field, Input } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Controls";
 import { EmptyState } from "@/components/ui/States";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useApp } from "@/lib/store";
-import { useHydrated } from "@/lib/store/hooks";
+
+type Student = { firstName: string; lastInitial: string; status: "pending" | "granted" };
 
 /**
- * Parental consent for students aged 13–17. In production this page is reached from a signed,
- * expiring link emailed to the parent; here the student's pending request is looked up locally.
+ * Parental consent for students aged 13–17, reached from the link emailed to the parent
+ * (`?token=`). The token is checked on the server; it works once and expires after 14 days.
  */
 export function ConsentView() {
   const params = useSearchParams();
-  const userId = params.get("user") ?? "";
-  const hydrated = useHydrated();
-  const users = useApp((s) => s.users);
-  const confirm = useApp((s) => s.confirmParentalConsent);
-  const student = React.useMemo(() => users.find((u) => u.id === userId), [users, userId]);
+  const token = params.get("token") ?? "";
+  const [student, setStudent] = React.useState<Student | null | undefined>(undefined);
   const [email, setEmail] = React.useState("");
   const [agree, setAgree] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const granted = student?.parentalConsent?.status === "granted";
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!token) return;
+    fetch(`/api/consent?token=${encodeURIComponent(token)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((b: { ok?: boolean; student?: Student }) => !cancelled && setStudent(b.ok && b.student ? b.student : null))
+      .catch(() => !cancelled && setStudent(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agree) {
       setError("Please confirm you are the student's parent or legal guardian.");
       return;
     }
     setSubmitting(true);
-    const res = confirm(userId, email);
-    setSubmitting(false);
-    if (!res.ok) setError(res.error);
-    else setError(null);
+    try {
+      const res = await fetch("/api/consent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, email }) });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!body?.ok) setError(body?.error ?? "We couldn't approve the account. Please try again.");
+      else {
+        setError(null);
+        setStudent((s) => (s ? { ...s, status: "granted" } : s));
+      }
+    } catch {
+      setError("We couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const loading = !!token && student === undefined;
+  const granted = student?.status === "granted";
 
   return (
     <main id="main" className="grid min-h-dvh place-items-center bg-page px-4 py-10">
@@ -52,13 +71,13 @@ export function ConsentView() {
           <Logo />
         </div>
         <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-          {!hydrated ? (
+          {loading ? (
             <div className="space-y-3 p-8">
               <Skeleton className="h-6 w-2/3" />
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-10 w-full" />
             </div>
-          ) : !student?.parentalConsent ? (
+          ) : !student ? (
             <EmptyState icon={<ShieldCheck />} title="This approval link isn't valid" description="It may have expired or already been used. Ask your student to send a new request from their account." action={<Button asChild variant="secondary"><Link href="/">Go to TutorLink</Link></Button>} />
           ) : (
             <AnimatePresence mode="wait" initial={false}>
@@ -81,7 +100,7 @@ export function ConsentView() {
                   <p className="eyebrow">Parental consent</p>
                   <h1 className="mt-2 font-heading text-2xl font-bold tracking-[-0.025em]">Approve {student.firstName}&rsquo;s TutorLink account</h1>
                   <p className="mt-2 text-sm leading-relaxed text-muted">
-                    {student.firstName} {student.lastName.charAt(0)}. signed up as a student and listed you as their parent or guardian. Students under 18 need your approval before they can message tutors or book lessons.
+                    {student.firstName} {student.lastInitial}. signed up as a student and listed you as their parent or guardian. Students under 18 need your approval before they can message tutors or book lessons.
                   </p>
                   <ul className="mt-5 space-y-2.5 rounded-xl bg-canvas p-4 text-[13.5px] text-ink-2">
                     <li className="flex gap-2.5"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink" /> Phone numbers and emails are hidden automatically in messages.</li>

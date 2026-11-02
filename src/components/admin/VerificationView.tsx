@@ -22,6 +22,7 @@ import {
   ClearFilters, Facts, FilterSelect, MiniStat, PermissionButton, ReasonDialog, RowOpen, SearchInput, Section, TextLink, Timeline, Toolbar, formatAge,
   fullName, matches, useDirectory, useSticky, useUrlParam,
 } from "./kit";
+import { FileLink } from "@/components/domain/FileLink";
 
 /** Queue target used to flag slow reviews. A UI setting for the preview, not a published SLA. */
 const REVIEW_TARGET_HOURS = 48;
@@ -341,7 +342,7 @@ function ReviewDetail({ request }: { request: VerificationRequest }) {
             return (
               <li key={d.name} className="flex items-center gap-3 px-3.5 py-2.5 text-[13.5px]">
                 <Icon className="size-4 shrink-0 text-muted" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-ink">{d.name}</span>
+                <FileLink path={d.path} className="min-w-0 flex-1 truncate text-ink">{d.name}</FileLink>
                 <span className="shrink-0 tabular-nums text-muted">{d.sizeKb >= 1024 ? `${(d.sizeKb / 1024).toFixed(1)} MB` : `${d.sizeKb} KB`}</span>
               </li>
             );
@@ -349,7 +350,7 @@ function ReviewDetail({ request }: { request: VerificationRequest }) {
         </ul>
         <p className="mt-2.5 flex items-start gap-2 text-[12.5px] leading-relaxed text-muted">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Document viewer opens the secure S3 object in production; access is logged. The preview build stores file names only.
+          Open a document to check it. Each link is private and expires after two minutes.
         </p>
       </Section>
 
@@ -411,9 +412,9 @@ function ReviewActions({ request }: { request: VerificationRequest }) {
     );
   }
 
-  const run = (decision: "verified" | "rejected" | "under_review", note?: string) => {
+  const run = async (decision: "verified" | "rejected" | "under_review", note?: string) => {
     setBusy(true);
-    const res = review(request.id, decision, note);
+    const res = await review(request.id, decision, note);
     setBusy(false);
     if (!res.ok) {
       toast.error(res.error);
@@ -448,8 +449,8 @@ function ReviewActions({ request }: { request: VerificationRequest }) {
         description={`The ${label.toLowerCase()} check shows as verified on their public profile immediately and expires in 2 years. Only approve after checking every document against the profile.`}
         confirmLabel="Approve"
         loading={busy}
-        onConfirm={() => {
-          if (run("verified")) setApprove(false);
+        onConfirm={async () => {
+          if (await run("verified")) setApprove(false);
         }}
       />
       <ReasonDialog

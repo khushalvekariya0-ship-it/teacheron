@@ -120,13 +120,13 @@ function CatalogInner({ publicRoutes, tab }: { publicRoutes: string[] | null; ta
       ),
     [tutors, catalog],
   );
-  const addStarterList = () => {
-    const res = loadStarter();
+  const addStarterList = async () => {
+    const res = await loadStarter();
     if (!res.ok) return toast.error(res.error);
     toast.success(`Added ${pluralize(res.data.areas, "subject")} and ${pluralize(res.data.subjects, "sub-category", "sub-categories")}`, { description: "Edit, hide or delete any of them to make the list yours." });
   };
-  const move = (kind: "area" | "subject", slug: string, direction: -1 | 1) => {
-    const res = moveItem(kind, slug, direction);
+  const move = async (kind: "area" | "subject", slug: string, direction: -1 | 1) => {
+    const res = await moveItem(kind, slug, direction);
     if (!res.ok) toast.error(res.error);
   };
 
@@ -597,8 +597,8 @@ function SubjectSheet({
 }) {
   const row = useSticky(current);
   const saveSubject = useApp((s) => s.saveSubject);
-  const toggleHidden = (r: SubjectRow) => {
-    const res = saveSubject({ slug: r.slug, name: r.name, category: r.category, summary: r.summary, popular: r.popular, hidden: !r.ownHidden });
+  const toggleHidden = async (r: SubjectRow) => {
+    const res = await saveSubject({ slug: r.slug, name: r.name, category: r.category, summary: r.summary, popular: r.popular, hidden: !r.ownHidden });
     if (!res.ok) toast.error(res.error);
     else toast.success(r.ownHidden ? `${r.name} is shown on the site again` : `${r.name} is hidden from the site`);
   };
@@ -719,17 +719,17 @@ function AreaDialog({ open, area, subjectCount, onOpenChange }: { open: boolean;
     }
   }
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = saveArea({ slug: area?.slug, name, description, hidden: !shown });
+    const res = await saveArea({ slug: area?.slug, name, description, hidden: !shown });
     if (!res.ok) return setError(res.error);
     toast.success(area ? `${res.data.name} updated` : `${res.data.name} added`, { description: shown ? "It now shows across the site." : "It stays hidden until you show it." });
     onOpenChange(false);
   };
-  const remove = () => {
+  const remove = async () => {
     setConfirmDelete(false);
     if (!area) return;
-    const res = deleteArea(area.slug);
+    const res = await deleteArea(area.slug);
     if (!res.ok) return setError(res.error);
     toast.success(`${area.name} deleted`);
     onOpenChange(false);
@@ -833,19 +833,19 @@ function SubjectDialog({
     }
   }
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = saveSubject({ slug: subject?.slug, name, category: area, summary, popular, hidden: !shown });
+    const res = await saveSubject({ slug: subject?.slug, name, category: area, summary, popular, hidden: !shown });
     if (!res.ok) return setError(res.error);
     toast.success(subject ? `${res.data.name} updated` : `${res.data.name} added`, {
       description: shown ? "It now shows in menus, search, filters and subject pickers across the site." : "It stays hidden until you show it.",
     });
     onOpenChange(false);
   };
-  const remove = () => {
+  const remove = async () => {
     setConfirmDelete(false);
     if (!subject) return;
-    const res = deleteSubject(subject.slug);
+    const res = await deleteSubject(subject.slug);
     if (!res.ok) return setError(res.error);
     toast.success(`${subject.name} deleted`);
     onOpenChange(false);

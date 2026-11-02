@@ -1,13 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { Subject } from "@/lib/types";
 import { formatCents } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useListedTutors } from "@/lib/store/hooks";
 import { rateRange, tutorsForSubject } from "./insights";
 
 /** Subject link card. Shows real tutor counts and the starting rate when tutors teach it. */
 export function SubjectTile({ subject, className, showSummary = true }: { subject: Subject; className?: string; showSummary?: boolean }) {
-  const tutors = tutorsForSubject(subject.slug);
+  const tutors = tutorsForSubject(subject.slug, useListedTutors());
   const range = rateRange(tutors);
   return (
     <Link

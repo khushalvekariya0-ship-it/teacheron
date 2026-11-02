@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ChevronDown, Compass, Search, SearchX, ShieldCheck, SlidersHorizontal, UserPlus, Wallet, type LucideIcon } from "lucide-react";
 import { describeSearch, parseTutorSearch, searchTutors, toQueryString, type TutorSearch } from "@/lib/search";
-import { useCatalog, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useListedTutors } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
@@ -160,7 +160,7 @@ export function TutorDirectory() {
   const searchParams = useSearchParams();
   const qs = searchParams.toString();
   const params = React.useMemo(() => parseTutorSearch(new URLSearchParams(qs)), [qs]);
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const catalog = useCatalog();
   const quickSubjects = React.useMemo(() => {
     const shown = new Set(catalog.subjects.map((s) => s.slug));

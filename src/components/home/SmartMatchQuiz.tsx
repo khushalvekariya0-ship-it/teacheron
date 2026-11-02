@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, BadgeCheck, Check, SearchX, Star } from "lucide-
 import type { Grade, Level } from "@/lib/types";
 import { LEVELS, subjectGroups, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, rankTutors, type MatchResult } from "@/lib/matching";
-import { useCatalog, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useListedTutors } from "@/lib/store/hooks";
 import { formatCents } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
@@ -58,7 +58,7 @@ export function SmartMatchQuiz({ open, onOpenChange, initialSubject }: { open: b
 }
 
 function QuizBody({ initialSubject, onClose }: { initialSubject?: string; onClose: () => void }) {
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const catalog = useCatalog();
   const quizSubjects = useQuizSubjects();
   const groups: SelectGroup[] = subjectGroups(catalog);

@@ -7,7 +7,6 @@ import type { Report, Review } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
-import { REVIEWS } from "@/lib/data/reviews";
 import { subjectName } from "@/lib/data/catalog";
 import { formatDate, formatDateTime, pluralize } from "@/lib/format";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
@@ -32,13 +31,9 @@ export const REVIEW_STATUS_META: Record<Review["status"], { label: string; tone:
   removed: { label: "Removed", tone: "danger" },
 };
 
-/** Sample reviews merged with the store; the store copy wins (moderation copies a sample review into the store). */
+/** Every review staff can see (all statuses), from the server. */
 export function useAllReviews(): Review[] {
-  const local = useApp((s) => s.reviews);
-  return React.useMemo(() => {
-    const ids = new Set(local.map((r) => r.id));
-    return [...local, ...REVIEWS.filter((r) => !ids.has(r.id))];
-  }, [local]);
+  return useApp((s) => s.reviews);
 }
 
 /** "4 ★" with a proper screen-reader label. */
@@ -320,7 +315,7 @@ function ReviewDetail({ review }: { review: Review }) {
           </>
         ) : (
           <p className="text-[13px] text-muted">
-            Tutor <Mono>{review.tutorId}</Mono> isn&apos;t in this preview&apos;s data.
+            Tutor <Mono>{review.tutorId}</Mono> no longer exists.
           </p>
         )}
       </Section>
@@ -339,7 +334,7 @@ function ReviewDetail({ review }: { review: Review }) {
           <Facts
             items={[
               { label: "Booking", value: <Mono>{review.bookingId}</Mono> },
-              { label: "Record", value: <span className="font-normal text-muted">Historical sample booking — not present in this preview&apos;s data</span> },
+              { label: "Record", value: <span className="font-normal text-muted">The booking for this review no longer exists</span> },
             ]}
           />
         )}
@@ -413,9 +408,9 @@ function ReviewActions({ review }: { review: Review }) {
   const shown = useSticky(pending);
   const tutorFirst = dir.tutorById.get(review.tutorId)?.firstName ?? "the tutor";
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!pending) return;
-    const res = moderateReview(review.id, pending);
+    const res = await moderateReview(review.id, pending);
     if (!res.ok) {
       toast.error(res.error);
       return;

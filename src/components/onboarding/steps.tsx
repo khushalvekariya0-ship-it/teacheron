@@ -19,6 +19,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EASE } from "@/components/motion";
 import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
+import { uploadFile } from "@/lib/upload";
 import { useFlag } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, US_STATES, US_TIMEZONES, subjectName } from "@/lib/data/catalog";
 import { TUTOR_PLANS } from "@/lib/data/platform";
@@ -640,7 +641,6 @@ export function ProfileStep({
           One to two minutes: say hello, what you teach and how a lesson with you works. Film in landscape, in good light. It plays on your profile and tutor card.
         </p>
         <IntroVideoField
-          ownerId={me.id}
           value={introVideoUrl}
           name={introVideoName}
           onChange={(next) => {
@@ -698,6 +698,7 @@ export function VerificationStep({ formId, defaults, onValid, bindValues }: Step
   useBind(form, bindValues);
   const { handleSubmit, control, setValue } = form;
   const [error, setError] = React.useState<string | null>(null);
+  const [uploading, setUploading] = React.useState(false);
   const [idDocument, sizeKb] = useWatch({ control, name: ["idDocument", "idDocumentSizeKb"] });
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-6">
@@ -727,20 +728,27 @@ export function VerificationStep({ formId, defaults, onValid, bindValues }: Step
           <FileList files={[{ name: idDocument, sizeKb: sizeKb ?? 0 }]} onRemove={() => {
             setValue("idDocument", undefined);
             setValue("idDocumentSizeKb", undefined);
+            setValue("idDocumentPath", undefined);
           }} />
         ) : (
           <FilePicker
             id="id-document"
-            title="Choose your ID"
+            title={uploading ? "Uploading…" : "Choose your ID"}
             describedBy={error ? "id-error" : "id-hint"}
             invalid={!!error}
-            onFiles={(files) => {
+            disabled={uploading}
+            onFiles={async (files) => {
               const picked = toPicked(files[0]);
               const err = validateDocs([picked]);
               setError(err);
               if (err) return;
+              setUploading(true);
+              const up = await uploadFile("verification", files[0]);
+              setUploading(false);
+              if (!up.ok) return setError(up.error);
               setValue("idDocument", picked.name, { shouldDirty: true });
               setValue("idDocumentSizeKb", picked.sizeKb, { shouldDirty: true });
+              setValue("idDocumentPath", up.file.path, { shouldDirty: true });
             }}
           />
         )}

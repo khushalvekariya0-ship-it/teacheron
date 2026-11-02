@@ -1,9 +1,11 @@
 import type { MetadataRoute } from "next";
-import { BLOG_POSTS } from "@/lib/data/content";
-import { SEED_REQUIREMENTS } from "@/lib/data/requirements";
-import { TUTORS } from "@/lib/data/tutors";
 import { indexableMetros, indexableSubjects } from "@/components/content/insights";
+import { setLiveCatalog } from "@/lib/data/catalog";
 import { SITE } from "@/lib/site";
+import { listedTutors, publicCatalog, publishedPosts, publishedRequirements } from "@/server/public";
+
+/** Rebuilt from the database at most once an hour. */
+export const revalidate = 3600;
 
 const STATIC_ROUTES: { path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }[] = [
   { path: "/", changeFrequency: "daily", priority: 1 },
@@ -34,18 +36,20 @@ const url = (path: string) => `${SITE.url.replace(/\/$/, "")}${path === "/" ? ""
  * Only pages with real content are listed: subjects with at least one tutor, metros with at least
  * one in-person tutor, published jobs, and every tutor profile. Thin pages are also noindexed.
  */
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [tutorList, posts0, jobs0, catalog] = await Promise.all([listedTutors(), publishedPosts(), publishedRequirements(), publicCatalog()]);
+  setLiveCatalog(catalog);
   const staticEntries = STATIC_ROUTES.map((r) => ({ url: url(r.path), changeFrequency: r.changeFrequency, priority: r.priority }));
 
-  const posts = BLOG_POSTS.map((p) => ({ url: url(`/blog/${p.slug}`), lastModified: new Date(`${p.date}T00:00:00Z`), changeFrequency: "yearly" as const, priority: 0.5 }));
+  const posts = posts0.map((p) => ({ url: url(`/blog/${p.slug}`), lastModified: new Date(`${p.date}T00:00:00Z`), changeFrequency: "yearly" as const, priority: 0.5 }));
 
-  const subjects = indexableSubjects().map((s) => ({ url: url(`/subjects/${s.slug}`), changeFrequency: "weekly" as const, priority: 0.7 }));
+  const subjects = indexableSubjects(tutorList).map((s) => ({ url: url(`/subjects/${s.slug}`), changeFrequency: "weekly" as const, priority: 0.7 }));
 
-  const metros = indexableMetros().map((m) => ({ url: url(`/locations/${m.slug}`), changeFrequency: "weekly" as const, priority: 0.7 }));
+  const metros = indexableMetros(tutorList).map((m) => ({ url: url(`/locations/${m.slug}`), changeFrequency: "weekly" as const, priority: 0.7 }));
 
-  const tutors = TUTORS.map((t) => ({ url: url(`/tutors/${t.slug}`), changeFrequency: "weekly" as const, priority: 0.6 }));
+  const tutors = tutorList.map((t) => ({ url: url(`/tutors/${t.slug}`), changeFrequency: "weekly" as const, priority: 0.6 }));
 
-  const jobs = SEED_REQUIREMENTS.filter((r) => r.status === "published").map((r) => ({
+  const jobs = jobs0.map((r) => ({
     url: url(`/tutor-jobs/${r.id}`),
     lastModified: new Date(r.updatedAt),
     changeFrequency: "daily" as const,

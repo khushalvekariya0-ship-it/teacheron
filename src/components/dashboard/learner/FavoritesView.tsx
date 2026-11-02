@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/States";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { useApp } from "@/lib/store";
-import { useSession, useTutors } from "@/lib/store/hooks";
+import { useSession, useListedTutors } from "@/lib/store/hooks";
 import { pluralize } from "@/lib/format";
 
 export function FavoritesView() {
@@ -26,7 +26,7 @@ function Inner() {
   const me = useSession() as User;
   const saved = useApp((s) => s.favorites[me.id]);
   const compare = useApp((s) => s.compare);
-  const tutors = useTutors();
+  const tutors = useListedTutors();
 
   // Most recently saved first.
   const list = React.useMemo(() => {

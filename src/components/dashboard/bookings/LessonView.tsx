@@ -98,8 +98,8 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     ? conversations.find((c) => c.tutorId === b.tutorId && c.userId === b.bookerId && (c.childId ?? null) === (b.childId ?? null)) ?? conversations.find((c) => c.tutorId === b.tutorId && c.userId === b.bookerId)
     : conversations.find((c) => c.tutorId === b.tutorId && c.userId === me.id && (c.childId ?? null) === (b.childId ?? null)) ?? conversations.find((c) => c.tutorId === b.tutorId && c.userId === me.id);
 
-  const accept = () => {
-    const res = transition(b.id, "confirmed");
+  const accept = async () => {
+    const res = await transition(b.id, "confirmed");
     if (!res.ok) return void toast.error(res.error);
     toast.success("Booking accepted", { description: `${people.counterpart} has been notified.` });
   };
@@ -108,8 +108,8 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
     el?.focus({ preventScroll: true });
   };
-  const message = () => {
-    const res = startConversation(b.tutorId, { childId: b.childId, subject: b.subject });
+  const message = async () => {
+    const res = await startConversation(b.tutorId, { childId: b.childId, subject: b.subject });
     if (!res.ok) return void toast.error(res.error);
     router.push(`/dashboard/messages?c=${res.data.id}`);
   };

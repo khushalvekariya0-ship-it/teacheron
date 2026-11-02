@@ -297,7 +297,7 @@ function MonetizationInner() {
                   </tbody>
                 </table>
               </div>
-              {packs.every((p) => !p.purchases) && <p className="mt-3 text-[12.5px] text-muted">No credit packs have been bought yet in this preview.</p>}
+              {packs.every((p) => !p.purchases) && <p className="mt-3 text-[12.5px] text-muted">No credit packs have been bought yet.</p>}
             </CardContent>
           </Card>
 

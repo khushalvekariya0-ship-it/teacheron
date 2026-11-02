@@ -18,6 +18,7 @@ import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { NeedsTutorProfile } from "./shared";
 import { formatDateKey, todayKey, useLearnerName, useMyStudents, useMyTutor } from "./hooks";
+import { FileLink } from "@/components/domain/FileLink";
 
 type Status = Homework["status"];
 type Tab = "all" | Status;
@@ -133,7 +134,7 @@ export function TutorHomework() {
                           {h.submission.body && <p className="mt-0.5 line-clamp-2 text-ink-2">“{h.submission.body}”</p>}
                           {h.submission.fileName && (
                             <p className="mt-1 inline-flex items-center gap-1 text-muted">
-                              <FileText className="size-3.5" aria-hidden /> {h.submission.fileName}
+                              <FileText className="size-3.5" aria-hidden /> <FileLink path={h.submission.filePath}>{h.submission.fileName}</FileLink>
                             </p>
                           )}
                         </div>
@@ -214,11 +215,11 @@ function AssignDialog({
   };
   const show = (k: keyof typeof errs) => (touched ? errs[k] ?? undefined : undefined);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (Object.values(errs).some(Boolean)) return;
-    const res = assign({ learnerId, subject, title: title.trim(), instructions: instructions.trim(), dueDate: due });
+    const res = await assign({ learnerId, subject, title: title.trim(), instructions: instructions.trim(), dueDate: due });
     if (!res.ok) return setError(res.error);
     toast.success("Homework assigned", { description: `${students.find((s) => s.id === learnerId)?.name ?? "Your student"} has been notified.` });
     onOpenChange(false);
@@ -276,11 +277,11 @@ function ReviewDialog({ hw, learner, onClose, tz }: { hw: Homework | null; learn
   }
   const fbError = feedback.trim().length < 10 ? "Write a little feedback (10+ characters)." : null;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (!hw || fbError) return;
-    const res = review(hw.id, feedback, grade.trim() || undefined);
+    const res = await review(hw.id, feedback, grade.trim() || undefined);
     if (!res.ok) return setError(res.error);
     toast.success("Feedback sent", { description: `${learner} can see your review.` });
     onClose();
@@ -298,7 +299,7 @@ function ReviewDialog({ hw, learner, onClose, tz }: { hw: Homework | null; learn
                 <p className="mt-1 whitespace-pre-line leading-relaxed text-ink">{hw.submission?.body || <span className="text-muted">No written note.</span>}</p>
                 {hw.submission?.fileName && (
                   <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[13px] text-ink-2">
-                    <FileText className="size-3.5 text-muted" aria-hidden /> {hw.submission.fileName}
+                    <FileText className="size-3.5 text-muted" aria-hidden /> <FileLink path={hw.submission.filePath}>{hw.submission.fileName}</FileLink>
                   </p>
                 )}
               </section>

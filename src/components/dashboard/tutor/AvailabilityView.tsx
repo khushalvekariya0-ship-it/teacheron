@@ -57,23 +57,23 @@ export function AvailabilityView() {
   const today = todayKey(now, tutor.timezone);
   const upcomingExceptions = [...tutor.exceptions].filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
 
-  const save = () => {
+  const save = async () => {
     setSaving(true);
-    const res = setAvailability(normalizeWeek(draft));
+    const res = await setAvailability(normalizeWeek(draft));
     setSaving(false);
     if (!res.ok) toast.error(res.error);
     else toast.success("Availability saved", { description: `${formatHours(minutes)} per week. Families see the new times right away.` });
   };
 
-  const removeException = (ex: AvailabilityException) => {
+  const removeException = async (ex: AvailabilityException) => {
     const before = tutor.exceptions;
-    const res = setExceptions(before.filter((e) => e.date !== ex.date));
+    const res = await setExceptions(before.filter((e) => e.date !== ex.date));
     if (!res.ok) return toast.error(res.error);
     toast.success(`${formatDateKey(ex.date)} removed`, {
       action: {
         label: "Undo",
-        onClick: () => {
-          const r = setExceptions(before);
+        onClick: async () => {
+          const r = await setExceptions(before);
           if (!r.ok) toast.error(r.error);
         },
       },
@@ -226,8 +226,8 @@ export function AvailabilityView() {
         today={today}
         maxDays={tutor.rules.maxAdvanceDays}
         existing={tutor.exceptions}
-        onSave={(ex) => {
-          const res = setExceptions([...tutor.exceptions.filter((e) => e.date !== ex.date), ex].sort((a, b) => a.date.localeCompare(b.date)));
+        onSave={async (ex) => {
+          const res = await setExceptions([...tutor.exceptions.filter((e) => e.date !== ex.date), ex].sort((a, b) => a.date.localeCompare(b.date)));
           if (!res.ok) {
             toast.error(res.error);
             return false;
@@ -334,7 +334,7 @@ function ExceptionDialog({
   today: string;
   maxDays: number;
   existing: AvailabilityException[];
-  onSave: (ex: AvailabilityException) => boolean;
+  onSave: (ex: AvailabilityException) => Promise<boolean>;
 }) {
   const [date, setDate] = React.useState("");
   const [type, setType] = React.useState<AvailabilityException["type"]>("blocked");
@@ -358,11 +358,11 @@ function ExceptionDialog({
   const rangeError = type === "custom" ? (ranges.length ? validateRanges(ranges) : "Add at least one time range.") : null;
   const replaces = date && existing.some((e) => e.date === date);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
     if (dateError || rangeError) return;
-    const ok = onSave({ date, type, ...(type === "custom" ? { windows: [...ranges].sort((a, b) => a.start.localeCompare(b.start)) } : {}), ...(note.trim() ? { note: note.trim() } : {}) });
+    const ok = await onSave({ date, type, ...(type === "custom" ? { windows: [...ranges].sort((a, b) => a.start.localeCompare(b.start)) } : {}), ...(note.trim() ? { note: note.trim() } : {}) });
     if (ok) onOpenChange(false);
   };
 

@@ -6,22 +6,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Check, ChevronDown, Copy, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
-import { DEMO_ACCOUNTS, useDemoLogin } from "@/components/layout/DemoSwitcher";
-import { DEMO_PASSWORD, useApp } from "@/lib/store";
+import { useApp } from "@/lib/store";
 import { useHydrated, useSession } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
-import { cn } from "@/lib/utils";
 import { destinationFor, safeNext } from "./authUtils";
 import { PasswordInput } from "./PasswordField";
-import { AppleIcon, FacebookIcon, GoogleIcon } from "./SocialIcons";
-import { ProviderSignIn } from "./ProviderSignIn";
+import { SocialSignIn, useEnabledProviders } from "./ProviderSignIn";
 import { setRememberMe } from "@/lib/remember";
 
 const schema = z.object({
@@ -31,60 +27,63 @@ const schema = z.object({
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
+/** Messages for ?error= when a link from an email or a provider sign-in didn't work. */
+const LINK_ERRORS: Record<string, string> = {
+  link: "That sign-in link has expired or was already used. Sign in below, or request a new link.",
+  reset: "That password reset link has expired or was already used. Request a new one from “Forgot your password?”.",
+  provider: "That sign-in option isn't available right now. Use your email and password instead.",
+  suspended: "This account is suspended. Contact support for help.",
+};
+
 export function LoginView() {
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
   const router = useRouter();
   const hydrated = useHydrated();
   const me = useSession();
-  const loginWithPassword = useApp((s) => s.loginWithPassword);
+  const signIn = useApp((s) => s.signIn);
+  const resend = useApp((s) => s.resendConfirmation);
   const logout = useApp((s) => s.logout);
-  const demoLogin = useDemoLogin();
-  const [error, setError] = React.useState<string | null>(null);
+  const providers = useEnabledProviders();
+  const linkError = LINK_ERRORS[params.get("error") ?? ""] ?? null;
+  const [error, setError] = React.useState<{ title: string; detail: string; unconfirmed?: string } | null>(null);
   const [redirecting, setRedirecting] = React.useState(false);
-  const [pendingDemo, setPendingDemo] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
-  const [provider, setProvider] = React.useState<{ name: string; icon?: React.ReactNode } | null>(null);
+  const mfaRequired = useApp((s) => s.mfaRequired);
 
   const form = useForm({ resolver: zodResolver(schema), mode: "onTouched", defaultValues: { email: "", password: "" } });
   const { errors, isSubmitting } = form.formState;
 
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null);
-    const res = await loginWithPassword(values.email, values.password);
+    const res = await signIn(values.email, values.password);
     if (!res.ok) {
-      setError("Email or password is incorrect.");
+      if (res.code === "email_not_confirmed") {
+        setError({ title: "Confirm your email first", detail: "Open the link we emailed you when you signed up.", unconfirmed: values.email });
+        return;
+      }
+      setError({ title: res.error, detail: /incorrect/i.test(res.error) ? "Check for typos, or reset your password if you've forgotten it." : "" });
       form.resetField("password");
       form.setFocus("password");
       return;
     }
     setRememberMe(remember);
+    if (res.data.mfaRequired) return; // the code step below takes over
     setRedirecting(true);
     toast.success(`Welcome back, ${res.data.firstName}`);
     router.push(destinationFor(res.data.role, next));
   });
 
-  const copyPassword = async () => {
-    try {
-      await navigator.clipboard.writeText(DEMO_PASSWORD);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      toast.error("Couldn't copy — select the password and copy it manually.");
-    }
+  const resendLink = async (email: string) => {
+    const r = await resend(email);
+    if (r.ok) toast.success("We sent the link again", { description: "Check your spam folder if it doesn't arrive in a few minutes." });
+    else toast.error(r.error);
   };
 
   const busy = isSubmitting || redirecting;
   const signupHref = (role: "student" | "tutor") => `/register?role=${role}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
-  const openProvider = (name: string, icon?: React.ReactNode) => setProvider({ name, icon });
-  const onProviderSignedIn = (user: { firstName: string; role: Parameters<typeof destinationFor>[0] }, isNew: boolean) => {
-    setProvider(null);
-    setRememberMe(remember);
-    setRedirecting(true);
-    toast.success(isNew ? `Welcome, ${user.firstName}` : `Welcome back, ${user.firstName}`);
-    router.push(destinationFor(user.role, next));
-  };
+
+  if (mfaRequired) return <MfaStep next={next} />;
 
   return (
     <div>
@@ -114,7 +113,7 @@ export function LoginView() {
               }
             >
               {ROLE_LABEL[me.role]} account.{" "}
-              <button type="button" onClick={logout} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
+              <button type="button" onClick={() => void logout()} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
                 Sign out
               </button>{" "}
               to use a different account.
@@ -123,37 +122,22 @@ export function LoginView() {
         )}
       </AnimatePresence>
 
-      <ProviderSignIn provider={provider?.name ?? null} icon={provider?.icon} open={!!provider} onOpenChange={(o) => !o && setProvider(null)} onSignedIn={onProviderSignedIn} />
+      {linkError && !error && (
+        <InlineAlert className="mt-6" tone="warning" title={linkError} />
+      )}
 
-      {/* Social sign-in */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE, delay: 0.05 }} className="mt-7 space-y-3">
-        {[
-          { name: "Google", icon: <GoogleIcon className="size-5" /> },
-          { name: "Facebook", icon: <FacebookIcon className="size-5" /> },
-          { name: "Apple", icon: <AppleIcon className="size-5 text-ink" /> },
-        ].map((p) => (
-          <button
-            key={p.name}
-            type="button"
-            onClick={() => openProvider(p.name, p.icon)}
-            className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line-strong bg-surface text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle hover:bg-canvas active:translate-y-px"
-          >
-            {p.icon}
-            Continue with {p.name}
-          </button>
-        ))}
-        <p className="pt-1 text-center">
-          <button type="button" onClick={() => openProvider("your organisation (SSO)")} className="text-[14px] font-medium text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
-            Continue with corporate login (SSO)
-          </button>
-        </p>
-      </motion.div>
-
-      <div className="my-6 flex items-center gap-4" aria-hidden>
-        <span className="h-px flex-1 bg-line" />
-        <span className="text-[14px] text-muted">or</span>
-        <span className="h-px flex-1 bg-line" />
-      </div>
+      <SocialSignIn
+        next={next}
+        providers={providers ?? []}
+        divider={
+          <div className="my-6 flex items-center gap-4" aria-hidden>
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-[14px] text-muted">or</span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        }
+      />
+      {providers !== null && providers.length === 0 && <div className="mt-7" />}
 
       <motion.form
         initial={{ opacity: 0, y: 8 }}
@@ -167,8 +151,18 @@ export function LoginView() {
         <AnimatePresence initial={false}>
           {error && (
             <motion.div key="err" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <InlineAlert tone="danger" title={error}>
-                <span id="login-error">Check for typos, or reset your password if you&apos;ve forgotten it.</span>
+              <InlineAlert
+                tone="danger"
+                title={error.title}
+                action={
+                  error.unconfirmed ? (
+                    <Button size="sm" variant="secondary" onClick={() => void resendLink(error.unconfirmed!)}>
+                      Send it again
+                    </Button>
+                  ) : undefined
+                }
+              >
+                <span id="login-error">{error.detail}</span>
               </InlineAlert>
             </motion.div>
           )}
@@ -205,60 +199,62 @@ export function LoginView() {
         </Link>
       </p>
 
-      {/* Preview build only: demo accounts, tucked away below the real form */}
-      {DEMO_ACCOUNTS.length > 0 && (
-        <details className="group mt-8 rounded-xl border border-line bg-canvas">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-[13.5px] font-semibold text-ink-2 [&::-webkit-details-marker]:hidden">
-            Preview: sign in with a demo account
-            <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
-          </summary>
-          <div className="border-t border-line px-4 pb-4 pt-3">
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {DEMO_ACCOUNTS.map((a) => {
-                const pending = pendingDemo === a.id;
-                return (
-                  <li key={a.id} className={cn(a.id === DEMO_ACCOUNTS[DEMO_ACCOUNTS.length - 1].id && DEMO_ACCOUNTS.length % 2 === 1 && "sm:col-span-2")}>
-                    <button
-                      type="button"
-                      disabled={!hydrated || !!pendingDemo}
-                      onClick={() => {
-                        setPendingDemo(a.id);
-                        setRedirecting(true);
-                        setRememberMe(true);
-                        demoLogin(a.id, destinationFor(a.role, next));
-                        // demoLogin reports failures with a toast; re-enable the cards if no session was created.
-                        if (useApp.getState().sessionUserId !== a.id) {
-                          setPendingDemo(null);
-                          setRedirecting(false);
-                        }
-                      }}
-                      className="group/demo flex min-h-12 w-full items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-left transition-colors hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-canvas text-ink">
-                        {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <a.icon className="size-4" />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[13px] font-semibold text-ink">{a.label}</span>
-                        <span className="block text-[11.5px] leading-snug text-muted">{a.description}</span>
-                      </span>
-                      <span className="sr-only">Sign in as the demo {a.label.toLowerCase()}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-muted">
-              <p>
-                Demo password <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[12px] text-ink ring-1 ring-line">{DEMO_PASSWORD}</code>
-              </p>
-              <button type="button" onClick={copyPassword} className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-semibold text-ink hover:bg-sunken" aria-live="polite">
-                {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
-          </div>
-        </details>
-      )}
     </div>
+  );
+}
+
+/** Second step for accounts with two-step login: the 6-digit code from their authenticator app. */
+function MfaStep({ next }: { next: string | null }) {
+  const router = useRouter();
+  const verify = useApp((s) => s.verifyMfa);
+  const logout = useApp((s) => s.logout);
+  const [code, setCode] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code from your authenticator app.");
+    setBusy(true);
+    const r = await verify(code);
+    if (!r.ok) {
+      setBusy(false);
+      setCode("");
+      return setError(r.error);
+    }
+    toast.success(`Welcome back, ${r.data.firstName}`);
+    router.push(destinationFor(r.data.role, next));
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}>
+      <h1 className="font-heading text-[2.25rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Enter your code</h1>
+      <p className="mt-3 text-[15px] leading-relaxed text-ink-2">Open your authenticator app (for example Google Authenticator) and enter the 6-digit code for TutorLink.</p>
+      <form onSubmit={submit} noValidate className="mt-8 space-y-5">
+        <Field label="6-digit code" error={error ?? undefined}>
+          <Input
+            value={code}
+            onChange={(e) => {
+              setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+              setError(null);
+            }}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            placeholder="123456"
+            className="text-center font-mono text-lg tracking-[0.4em]"
+          />
+        </Field>
+        <Button type="submit" variant="brand" size="lg" className="w-full" loading={busy}>
+          Verify and continue
+        </Button>
+      </form>
+      <p className="mt-5 text-center text-[14px] text-muted">
+        Lost your phone? Ask another administrator to reset your two-step login.{" "}
+        <button type="button" onClick={() => void logout()} className="font-medium text-ink underline underline-offset-4">
+          Use a different account
+        </button>
+      </p>
+    </motion.div>
   );
 }

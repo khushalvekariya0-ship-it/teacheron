@@ -74,7 +74,7 @@ const GROUPS: { title: string; description: string; icon: React.ReactNode; field
         label: "Tutor no-show credit",
         unit: "dollars",
         hint: "Platform credit the learner is told they've received after a tutor no-show.",
-        previewNote: "Learners are notified of this credit, but credit balances aren't simulated in this preview.",
+        previewNote: "Added to the learner's Study Credits, and they're notified.",
       },
     ],
   },
@@ -212,13 +212,13 @@ function SettingsInner() {
     setConfirmOpen(true);
   };
 
-  const confirm = () => {
+  const confirm = async () => {
     const patch: Partial<BookingPolicy> = {};
     for (const f of changed) {
       const p = parsed[f.key];
       if (p.ok) patch[f.key] = p.value;
     }
-    const res = updatePolicy(patch);
+    const res = await updatePolicy(patch);
     if (!res.ok) {
       toast.error(res.error);
       return;

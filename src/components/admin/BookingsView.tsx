@@ -9,7 +9,6 @@ import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { availableTransitions, cancellationRefund, endMs, STATUS_META } from "@/lib/booking";
 import { subjectName } from "@/lib/data/catalog";
-import { REVIEWS } from "@/lib/data/reviews";
 import { formatCents, formatDateTime, formatDuration, formatTime, percentOf, pluralize, tzAbbrev } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
@@ -352,7 +351,7 @@ function BookingDetail({ booking: b, onOpen }: { booking: Booking; onOpen: (id: 
     const rows = payments.filter((p) => p.bookingId === b.id).sort((x, y) => x.createdAt.localeCompare(y.createdAt));
     const linkedDisputes = disputes.filter((d) => d.bookingId === b.id).sort((x, y) => y.createdAt.localeCompare(x.createdAt));
     const movedTo = bookings.find((x) => x.rescheduledFromId === b.id);
-    const review = b.reviewId ? (localReviews.find((r) => r.id === b.reviewId) ?? REVIEWS.find((r) => r.id === b.reviewId)) : undefined;
+    const review = b.reviewId ? localReviews.find((r) => r.id === b.reviewId) : undefined;
     return { rows, linkedDisputes, movedTo, review };
   }, [payments, disputes, bookings, localReviews, b]);
 
@@ -513,7 +512,7 @@ function consequence(b: Booking, to: BookingStatus, now: number, policy: Booking
       return { summary: `${lead}${money} The booker is notified.`, refundCents: cents };
     case "no_show_tutor":
       return {
-        summary: `${lead}${money}${policy.tutorNoShowCreditCents > 0 ? ` The booker is also told ${formatCents(policy.tutorNoShowCreditCents)} platform credit was added (credit balances aren't simulated in this preview).` : ""}`,
+        summary: `${lead}${money}${policy.tutorNoShowCreditCents > 0 ? ` The booker also gets ${formatCents(policy.tutorNoShowCreditCents)} platform credit in their Study Credits.` : ""}`,
         refundCents: cents,
       };
     case "no_show_student":
@@ -597,9 +596,9 @@ function BookingActions({ booking: b }: { booking: Booking }) {
         placeholder="e.g. Tutor emailed support — family illness, can't attend"
         confirmLabel={chosen ? adminTransitionLabel(b.status, chosen) : "Confirm"}
         tone={chosen && isDestructiveTransition(chosen) ? "danger" : "default"}
-        onConfirm={(note) => {
+        onConfirm={async (note) => {
           if (!chosen) return false;
-          const res = transition(b.id, chosen, note);
+          const res = await transition(b.id, chosen, note);
           if (!res.ok) {
             toast.error(res.error);
             return false;

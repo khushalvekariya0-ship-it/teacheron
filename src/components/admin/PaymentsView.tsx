@@ -201,7 +201,7 @@ function PaymentsInner() {
         }
       >
         Refunds are issued by resolving a dispute (requires <span className="font-mono text-[12px]">payments.refund</span>) or automatically by the booking policy when a booking is cancelled or a tutor
-        no-show is recorded. Card data is handled by Stripe — this preview stores only a masked payment method label.
+        no-show is recorded. Card payments aren&apos;t connected yet; records show only a payment method label, never card details.
       </InlineAlert>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
@@ -391,7 +391,7 @@ function PaymentFooter({ payment: p }: { payment: Payment }) {
           ) : p.bookingId ? (
             "Refunds are issued by resolving a dispute on the booking."
           ) : (
-            "Refunds for subscription and credit charges aren't simulated in this preview."
+            "Refunds for subscription and credit charges aren't available yet."
           )}
         </p>
         {open ? (

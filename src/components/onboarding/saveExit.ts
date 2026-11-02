@@ -7,7 +7,7 @@ import { useSyncExternalStore } from "react";
  * without the layout needing to know about form state.
  */
 
-type Handler = () => void;
+type Handler = () => void | Promise<void>;
 
 let handler: Handler | null = null;
 const listeners = new Set<() => void>();

@@ -7,8 +7,11 @@ import { Split } from "@/components/marketing/Split";
 import { ProgressVignette, SearchVignette, SlotVignette } from "@/components/marketing/Vignettes";
 import { SubjectTileGrid } from "@/components/content/SubjectCatalog";
 import { Button } from "@/components/ui/Button";
-import { TUTORS } from "@/lib/data/tutors";
+import { listedTutors } from "@/server/public";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Tutoring for students",
@@ -19,10 +22,11 @@ export const metadata: Metadata = {
 
 const STUDENT_SUBJECTS = ["sat", "act", "ap-exams", "calculus", "chemistry", "physics", "statistics", "college-essays", "python", "spanish", "gre", "lsat"];
 
-export default function ForStudentsPage() {
-  const college = TUTORS.filter((t) => t.levels.includes("college")).length;
-  const adult = TUTORS.filter((t) => t.levels.includes("adult")).length;
-  const high = TUTORS.filter((t) => t.levels.includes("high")).length;
+export default async function ForStudentsPage() {
+  const tutors = await listedTutors();
+  const college = tutors.filter((t) => t.levels.includes("college")).length;
+  const adult = tutors.filter((t) => t.levels.includes("adult")).length;
+  const high = tutors.filter((t) => t.levels.includes("high")).length;
 
   return (
     <>

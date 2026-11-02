@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, BookOpen, CornerDownLeft, FileText, LayoutDashboard, Search, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { subjectName } from "@/lib/data/catalog";
-import { useCatalog, useSession, useTutors } from "@/lib/store/hooks";
+import { useCatalog, useSession, useListedTutors } from "@/lib/store/hooks";
 import { ADMIN_NAV, NAV_BY_ROLE } from "@/components/dashboard/nav";
 import { hasPermission } from "@/lib/permissions";
 import { Avatar } from "@/components/ui/Avatar";
@@ -54,7 +54,7 @@ const PAGES: { label: string; href: string; hint: string }[] = [
   { label: "Blog & resources", href: "/blog", hint: "Guides" },
   { label: "About", href: "/about", hint: "Our principles" },
   { label: "Contact support", href: "/contact", hint: "Get help" },
-  { label: "Sign in", href: "/login", hint: "Demo accounts available" },
+  { label: "Sign in", href: "/login", hint: "Your account" },
   { label: "Create an account", href: "/register", hint: "Students, parents and tutors" },
 ];
 
@@ -63,7 +63,7 @@ type Item = { id: string; group: string; label: string; hint?: string; href: str
 export function CommandPalette() {
   const [open, setOpenState] = useOpen();
   const router = useRouter();
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const catalog = useCatalog();
   const me = useSession();
   const [query, setQuery] = React.useState("");

@@ -26,6 +26,8 @@ import { subjectName } from "@/lib/data/catalog";
 import { cn } from "@/lib/utils";
 import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks";
 import { daysBetween, formatDateKey, todayKey, useLearners } from "./data";
+import { uploadFile } from "@/lib/upload";
+import { FileLink } from "@/components/domain/FileLink";
 
 type TabKey = "todo" | "submitted" | "reviewed";
 
@@ -180,7 +182,7 @@ function HomeworkInner({ me }: { me: User }) {
                                 {h.submission.body && <p className="mt-1 whitespace-pre-line text-[13.5px] text-ink-2">{h.submission.body}</p>}
                                 {h.submission.fileName && (
                                   <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[12.5px] text-ink-2">
-                                    <FileText className="size-3.5 text-subtle" aria-hidden /> {h.submission.fileName}
+                                    <FileText className="size-3.5 text-subtle" aria-hidden /> <FileLink path={h.submission.filePath}>{h.submission.fileName}</FileLink>
                                   </p>
                                 )}
                               </div>
@@ -274,9 +276,20 @@ function SubmitForm({ homework, onDone, onSubmitted }: { homework: Homework; onD
   });
   const { errors, isSubmitting } = form.formState;
   const fileName = useWatch({ control: form.control, name: "fileName" });
+  // A newly chosen file is uploaded on submit; an earlier upload keeps its stored copy.
+  const [picked, setPicked] = React.useState<File | null>(null);
 
-  const onSubmit = form.handleSubmit((v) => {
-    const res = submitHomework(homework.id, v.body, v.fileName);
+  const onSubmit = form.handleSubmit(async (v) => {
+    let filePath = v.fileName && v.fileName === homework.submission?.fileName ? homework.submission?.filePath : undefined;
+    if (v.fileName && picked && picked.name === v.fileName) {
+      const up = await uploadFile("homework", picked);
+      if (!up.ok) {
+        setFileError(up.error);
+        return;
+      }
+      filePath = up.file.path;
+    }
+    const res = await submitHomework(homework.id, v.body, v.fileName, filePath);
     if (!res.ok) {
       toast.error(res.error);
       return;
@@ -321,6 +334,7 @@ function SubmitForm({ homework, onDone, onSubmitted }: { homework: Homework; onD
                 return;
               }
               setFileError(null);
+              setPicked(f);
               form.setValue("fileName", f.name, { shouldValidate: true });
             }}
           />
@@ -343,7 +357,7 @@ function SubmitForm({ homework, onDone, onSubmitted }: { homework: Homework; onD
               {fileError}
             </p>
           ) : (
-            <p className="mt-1.5 text-[12.5px] text-muted">PDF, image, Word or text file up to 10 MB. In this preview only the file name is saved — nothing is uploaded.</p>
+            <p className="mt-1.5 text-[12.5px] text-muted">PDF, image, Word or text file up to 10 MB. Only you and your tutor can open it.</p>
           )}
         </div>
       </DialogBody>

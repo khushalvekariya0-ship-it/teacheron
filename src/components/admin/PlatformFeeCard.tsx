@@ -84,9 +84,9 @@ export function PlatformFeeCard({ className, id }: { className?: string; id?: st
     setConfirmOpen(true);
   };
 
-  const confirm = () => {
+  const confirm = async () => {
     if (nextBps === null) return;
-    const res = setPlatformFee(nextBps);
+    const res = await setPlatformFee(nextBps);
     if (!res.ok) {
       toast.error(res.error);
       return;

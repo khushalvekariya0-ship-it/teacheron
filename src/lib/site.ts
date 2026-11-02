@@ -11,5 +11,5 @@ export const SITE = {
   defaultTimezone: "America/New_York",
 } as const;
 
-/** Shown in the preview banner. Everything in this build runs on sample data. */
-export const IS_PREVIEW = true;
+
+

@@ -2,6 +2,8 @@
 
 TutorLink is a US tutoring marketplace. Students, parents and tutors find each other, message, book and pay for online or in-person lessons, and track learning progress. Administrators and support staff run verification, trust & safety, payments and content.
 
+> **Update (November 2026):** the browser-only preview store has been replaced by a real backend — Supabase (Postgres, Auth, Storage) with the business rules running in Next.js API routes. See [BACKEND.md](BACKEND.md) and [SUPABASE_SETUP.md](SUPABASE_SETUP.md). The NestJS/AWS plan below is kept as the longer-term reference.
+
 This document describes **what exists today (the preview build)** and **the production system it is designed to become**. Companion documents:
 
 | Doc | Contents |

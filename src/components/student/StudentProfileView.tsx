@@ -44,7 +44,7 @@ function ProfilePart<T extends FieldValues>({
   rows: SummaryRow[];
   schema: z.ZodTypeAny;
   values: () => T;
-  onSave: (v: T) => Result<unknown>;
+  onSave: (v: T) => Promise<Result<unknown>>;
   render: (form: UseFormReturn<T>) => React.ReactNode;
 }) {
   const ed = useEditor();
@@ -103,8 +103,8 @@ function Profile({ me }: { me: User }) {
   const pct = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
   const query = toQueryString(tutorSearchFor(me, profile));
 
-  const saveBasic = (v: BasicValues): Result<unknown> => {
-    const u = updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), city: v.city.trim(), state: v.state, zip: v.zip.trim() });
+  const saveBasic = async (v: BasicValues): Promise<Result<unknown>> => {
+    const u = await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), city: v.city.trim(), state: v.state, zip: v.zip.trim() });
     return u.ok ? save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }) : u;
   };
 

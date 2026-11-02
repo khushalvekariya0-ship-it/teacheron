@@ -26,7 +26,7 @@ export function ChatPanel({
 }: {
   lines: ChatLine[];
   /** Returns an error message when the message couldn't be sent. */
-  onSend: (body: string) => string | null;
+  onSend: (body: string) => string | null | Promise<string | null>;
   /** When set, the composer is replaced by this explanation. */
   disabledReason?: string;
   peerName: string;
@@ -43,11 +43,11 @@ export function ChatPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines.length]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const body = draft.trim();
     if (!body) return;
-    const err = onSend(body);
+    const err = await onSend(body);
     setError(err);
     if (!err) setDraft("");
   };

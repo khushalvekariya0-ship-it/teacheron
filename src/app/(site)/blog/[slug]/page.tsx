@@ -5,22 +5,26 @@ import { ArrowLeft } from "lucide-react";
 import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
 import { ArrowLink, CtaBand, Panel, Section, SectionHeading } from "@/components/marketing/Section";
 import { PostCard, PostCover, PostMeta } from "@/components/content/Blog";
-import { BLOG_POSTS, type BlogPost } from "@/lib/data/content";
+import type { BlogPost } from "@/lib/data/content";
 import { SITE } from "@/lib/site";
+import { publishedPosts } from "@/server/public";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 type Props = { params: Promise<{ slug: string }> };
 
-function getPost(slug: string): BlogPost | undefined {
-  return BLOG_POSTS.find((p) => p.slug === slug);
+async function getPost(slug: string): Promise<BlogPost | undefined> {
+  return (await publishedPosts()).find((p) => p.slug === slug);
 }
 
-export function generateStaticParams() {
-  return BLOG_POSTS.map((p) => ({ slug: p.slug }));
+export async function generateStaticParams() {
+  return (await publishedPosts()).map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = await getPost(slug);
   if (!post) return { title: "Article not found", robots: { index: false } };
   return {
     title: post.title,
@@ -40,10 +44,11 @@ const CTA: Record<BlogPost["category"], { title: string; description: string; pr
 
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = await getPost(slug);
   if (!post) notFound();
 
-  const related = [...BLOG_POSTS.filter((p) => p.slug !== post.slug && p.category === post.category), ...BLOG_POSTS.filter((p) => p.slug !== post.slug && p.category !== post.category)].slice(0, 3);
+  const all = await publishedPosts();
+  const related = [...all.filter((p) => p.slug !== post.slug && p.category === post.category), ...all.filter((p) => p.slug !== post.slug && p.category !== post.category)].slice(0, 3);
   const url = `${SITE.url}/blog/${post.slug}`;
   const jsonLd = {
     "@context": "https://schema.org",

@@ -92,8 +92,8 @@ export function TutorOverview() {
 
   const checklist = profileChecklist(tutor);
   const completion = completionPercent(checklist);
-  const act = (b: Booking, to: BookingStatus, success: string) => {
-    const res = transition(b.id, to);
+  const act = async (b: Booking, to: BookingStatus, success: string) => {
+    const res = await transition(b.id, to);
     if (!res.ok) toast.error(res.error);
     else toast.success(success);
   };

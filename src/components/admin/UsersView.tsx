@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BadgeCheck, CircleSlash, CircleX, Mail, RotateCcw, ShieldCheck, UserRoundX, Users } from "lucide-react";
-import type { Role, User } from "@/lib/types";
+import { BadgeCheck, CircleSlash, CircleX, KeyRound, Mail, Megaphone, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, ShieldOff, Trash2, UserRoundX, Users } from "lucide-react";
+import type { Permission, Role, User } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
@@ -13,13 +13,17 @@ import { formatCents, formatDate, formatDateTime, formatRelative, pluralize } fr
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
-import { Sheet, SheetContent } from "@/components/ui/Overlay";
+import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Sheet, SheetContent } from "@/components/ui/Overlay";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { EmptyState } from "@/components/ui/States";
+import { Button } from "@/components/ui/Button";
+import { Checkbox, RadioCards } from "@/components/ui/Controls";
+import { Field, Input, Textarea } from "@/components/ui/Input";
+import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
+import { describeAudit } from "./AuditLogView";
 import {
-  BulkBar, ClearFilters, ExportButton, Facts, FilterSelect, PermissionButton, PermissionNotice, ReasonDialog, SearchInput, Section,
+  ALL_PERMISSIONS, BulkBar, ClearFilters, ExportButton, Facts, FilterSelect, PERMISSION_META, PermissionButton, PermissionNotice, ReasonDialog, SearchInput, Section,
   RowOpen, StatusPill, TextLink, Timeline, Toolbar, fullName, humanize, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam,
 } from "./kit";
 
@@ -77,6 +81,7 @@ function UsersInner() {
   const [status, setStatus] = React.useState<StatusFilter>("all");
   const [selected, setSelected] = React.useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = React.useState(false);
+  const [announce, setAnnounce] = React.useState(false);
   const [openId, setOpenId] = useUrlParam("id");
 
   const searched = React.useMemo(
@@ -136,13 +141,20 @@ function UsersInner() {
     <>
       <PageHeader
         title="Users"
-        description="Every account on TutorLink — learners, parents, tutors and staff. Status changes are written to the audit log."
+        description="Every account on TutorLink — learners, parents, tutors and staff. Every change is written to the audit log."
         actions={
-          <ExportButton
-            filename="tutorlink-users"
-            headers={["ID", "First name", "Last name", "Email", "Role", "City", "State", "Joined", "Email verified", "Status"]}
-            rows={() => rows.map((u) => [u.id, u.firstName, u.lastName, u.email, ROLE_LABEL[u.role], u.city, u.state, u.createdAt, u.emailVerified, u.status])}
-          />
+          <>
+            {me?.role === "admin" && (
+              <PermissionButton permission="content.manage" variant="secondary" onClick={() => setAnnounce(true)}>
+                <Megaphone /> Send announcement
+              </PermissionButton>
+            )}
+            <ExportButton
+              filename="tutorlink-users"
+              headers={["ID", "First name", "Last name", "Email", "Role", "City", "State", "Joined", "Email verified", "Status"]}
+              rows={() => rows.map((u) => [u.id, u.firstName, u.lastName, u.email, ROLE_LABEL[u.role], u.city, u.state, u.createdAt, u.emailVerified, u.status])}
+            />
+          </>
         }
       />
 
@@ -200,6 +212,7 @@ function UsersInner() {
       </Tabs>
 
       <UserSheet user={open} onClose={() => setOpenId(null)} />
+      <AnnounceDialog open={announce} onOpenChange={setAnnounce} />
 
       <ReasonDialog
         open={bulkOpen}
@@ -210,11 +223,11 @@ function UsersInner() {
         placeholder="e.g. Coordinated spam messages reported on Sep 30"
         confirmLabel="Suspend accounts"
         tone="danger"
-        onConfirm={(reason) => {
+        onConfirm={async (reason) => {
           let done = 0;
           const errors: string[] = [];
           for (const u of bulkTargets) {
-            const res = setUserStatus(u.id, "suspended", reason);
+            const res = await setUserStatus(u.id, "suspended", reason);
             if (res.ok) done++;
             else errors.push(`${fullName(u)}: ${res.error}`);
           }
@@ -306,7 +319,7 @@ function UserDetail({ user }: { user: User }) {
         <Facts
           items={[
             { label: "Email", value: <span className="inline-flex items-center gap-1">{user.emailVerified ? <><BadgeCheck className="size-3.5 text-success" aria-hidden /> Verified</> : "Not verified"}</span> },
-            { label: "Phone", value: user.phone ?? "—" },
+            { label: "Phone", value: user.phone || "—" },
             { label: "Location", value: [user.city, user.state, user.zip].filter(Boolean).join(", ") || "—" },
             { label: "Time zone", value: user.timezone },
             { label: "Joined", value: formatDate(user.createdAt, tz) },
@@ -384,7 +397,7 @@ function UserDetail({ user }: { user: User }) {
         </Section>
       )}
 
-      <Section title="Recent sign-ins" description={data.failures24h >= 3 ? undefined : "Attempts recorded in this browser."}>
+      <Section title="Recent sign-ins" description={data.failures24h >= 3 ? undefined : "The latest sign-in attempts on this account."}>
         {data.failures24h >= 3 && (
           <p className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-2 text-[13px] text-warning">{data.failures24h} failed sign-ins in the last 24 hours — possible credential stuffing.</p>
         )}
@@ -411,7 +424,7 @@ function UserDetail({ user }: { user: User }) {
           items={data.history.map((a) => ({
             key: a.id,
             tone: a.action === "user.suspend" ? "danger" : a.action === "user.reactivate" ? "success" : "default",
-            title: a.action === "user.suspend" ? "Suspended" : a.action === "user.reactivate" ? "Reactivated" : a.action,
+            title: describeAudit(a),
             meta: `${dir.name(a.actorId)} · ${formatDateTime(a.createdAt, tz)}`,
             body: a.meta?.reason ? `“${String(a.meta.reason)}”` : undefined,
           }))}
@@ -441,8 +454,9 @@ function StatusActions({ user }: { user: User }) {
 
   return (
     <div className="space-y-3">
-      {!can("users.write") && <PermissionNotice permission="users.write">Suspending or reactivating accounts requires</PermissionNotice>}
-      <div className="flex justify-end">
+      {!can("users.write") && <PermissionNotice permission="users.write">Suspending, editing or deleting accounts requires</PermissionNotice>}
+      <div className="flex flex-wrap justify-end gap-2">
+        <AccountMenu user={user} />
         <PermissionButton permission="users.write" variant={suspending ? "danger-outline" : "primary"} onClick={() => setOpen(true)}>
           {suspending ? <><UserRoundX /> Suspend account</> : <><RotateCcw /> Reactivate account</>}
         </PermissionButton>
@@ -455,8 +469,8 @@ function StatusActions({ user }: { user: User }) {
         placeholder={suspending ? "e.g. Repeated off-platform payment requests (report rpt_04)" : "e.g. Identity confirmed with support"}
         confirmLabel={suspending ? "Suspend account" : "Reactivate account"}
         tone={suspending ? "danger" : "default"}
-        onConfirm={(reason) => {
-          const res = setUserStatus(user.id, suspending ? "suspended" : "active", reason);
+        onConfirm={async (reason) => {
+          const res = await setUserStatus(user.id, suspending ? "suspended" : "active", reason);
           if (!res.ok) {
             toast.error(res.error);
             return false;
@@ -466,5 +480,323 @@ function StatusActions({ user }: { user: User }) {
         }}
       />
     </div>
+  );
+}
+
+/* ─── More account actions ───────────────────────────────────────────────────── */
+
+type AccountDialog = "edit" | "staff" | "delete" | "mfa" | null;
+
+function AccountMenu({ user }: { user: User }) {
+  const { me, can } = useStaff();
+  const resend = useApp((s) => s.resendConfirmation);
+  const resetMfa = useApp((s) => s.resetStaffMfa);
+  const deleteAccount = useApp((s) => s.deleteAccount);
+  const [dialog, setDialog] = React.useState<AccountDialog>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const admin = me?.role === "admin" && can("users.write");
+  const staffTarget = user.role === "admin" || user.role === "support";
+  const canEdit = can("users.write") && (!staffTarget || me?.role === "admin");
+  const items = {
+    edit: canEdit,
+    resend: can("users.write") && !user.emailVerified && user.status !== "suspended",
+    staff: admin && !user.tutorId,
+    mfa: admin && staffTarget && !!user.mfaEnabled,
+    delete: admin,
+  };
+  if (!Object.values(items).some(Boolean)) return null;
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="secondary" aria-label={`More actions for ${fullName(user)}`}>
+            <MoreHorizontal /> More
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          {items.edit && (
+            <DropdownMenuItem onSelect={() => setDialog("edit")}>
+              <Pencil /> Edit details
+            </DropdownMenuItem>
+          )}
+          {items.resend && (
+            <DropdownMenuItem
+              onSelect={async () => {
+                const r = await resend(user.email);
+                if (r.ok) toast.success("Confirmation email sent", { description: user.email });
+                else toast.error(r.error);
+              }}
+            >
+              <Send /> Resend confirmation email
+            </DropdownMenuItem>
+          )}
+          {items.staff && (
+            <DropdownMenuItem onSelect={() => setDialog("staff")}>
+              <KeyRound /> {staffTarget ? "Change staff access" : "Make staff"}
+            </DropdownMenuItem>
+          )}
+          {items.mfa && (
+            <DropdownMenuItem onSelect={() => setDialog("mfa")}>
+              <ShieldOff /> Reset two-step login
+            </DropdownMenuItem>
+          )}
+          {items.delete && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem tone="danger" onSelect={() => setDialog("delete")}>
+                <Trash2 /> Delete account
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <EditDetailsDialog user={user} open={dialog === "edit"} onOpenChange={(o) => setDialog(o ? "edit" : null)} />
+      <StaffAccessDialog user={user} open={dialog === "staff"} onOpenChange={(o) => setDialog(o ? "staff" : null)} />
+      <ConfirmDialog
+        open={dialog === "mfa"}
+        onOpenChange={(o) => setDialog(o ? "mfa" : null)}
+        title={`Reset two-step login for ${fullName(user)}?`}
+        description="Use this when they've lost their phone. Their authenticator app is removed and they sign in with just their password until they set it up again."
+        confirmLabel="Reset two-step login"
+        tone="danger"
+        loading={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          const r = await resetMfa(user.id);
+          setBusy(false);
+          if (!r.ok) return toast.error(r.error);
+          toast.success("Two-step login reset", { description: "They've been notified. Recorded in the audit log." });
+          setDialog(null);
+        }}
+      />
+      <ReasonDialog
+        open={dialog === "delete"}
+        onOpenChange={(o) => setDialog(o ? "delete" : null)}
+        title={`Delete ${fullName(user)}'s account?`}
+        description="This can't be undone. Their sign-in, profile and personal details are removed. Lessons, payments and reviews stay on record without their name. Accounts with upcoming lessons or unpaid earnings can't be deleted."
+        placeholder="e.g. Requested by email on Nov 2 (ticket 1182)"
+        confirmLabel="Delete account"
+        tone="danger"
+        onConfirm={async (reason) => {
+          const r = await deleteAccount(user.id, reason);
+          if (!r.ok) {
+            toast.error(r.error);
+            return false;
+          }
+          toast.success("Account deleted", { description: "Recorded in the audit log." });
+          return true;
+        }}
+      />
+    </>
+  );
+}
+
+function EditDetailsDialog({ user, open, onOpenChange }: { user: User; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const update = useApp((s) => s.updateUserDetails);
+  const initial = React.useMemo(
+    () => ({ firstName: user.firstName, lastName: user.lastName, phone: user.phone ?? "", city: user.city ?? "", state: user.state ?? "", zip: user.zip ?? "" }),
+    [user],
+  );
+  const [form, setForm] = React.useState(initial);
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setForm(initial);
+      setError(null);
+    }
+  }
+  const field = (k: keyof typeof form) => ({ value: form[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value })) });
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const patch = Object.fromEntries(Object.entries(form).filter(([k, v]) => v.trim() !== initial[k as keyof typeof form])) as Partial<typeof form>;
+    if (!Object.keys(patch).length) return onOpenChange(false);
+    setBusy(true);
+    const r = await update(user.id, Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, v!.trim()])));
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    toast.success("Details saved", { description: "Recorded in the audit log." });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title={`Edit ${fullName(user)}`} description="Fix a name, phone number or location. Email and password are changed by the account owner." size="md">
+        <form onSubmit={save} noValidate>
+          <DialogBody className="space-y-4">
+            {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="First name" required><Input {...field("firstName")} maxLength={60} autoComplete="off" /></Field>
+              <Field label="Last name" required><Input {...field("lastName")} maxLength={60} autoComplete="off" /></Field>
+            </div>
+            <Field label="Phone" optional><Input {...field("phone")} maxLength={30} inputMode="tel" autoComplete="off" /></Field>
+            <div className="grid gap-4 sm:grid-cols-[1fr_6rem_7rem]">
+              <Field label="City" optional><Input {...field("city")} maxLength={60} autoComplete="off" /></Field>
+              <Field label="State" optional><Input {...field("state")} maxLength={20} placeholder="CA" autoComplete="off" /></Field>
+              <Field label="ZIP" optional><Input {...field("zip")} maxLength={5} inputMode="numeric" autoComplete="off" /></Field>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={busy}>Save details</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const SUPPORT_DEFAULT: Permission[] = ["users.read", "bookings.manage", "reports.moderate", "disputes.manage", "payments.read"];
+
+function StaffAccessDialog({ user, open, onOpenChange }: { user: User; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const setStaffAccess = useApp((s) => s.setStaffAccess);
+  const current: "admin" | "support" | "none" = user.role === "admin" || user.role === "support" ? user.role : "none";
+  const [role, setRole] = React.useState(current);
+  const [perms, setPerms] = React.useState<Permission[]>(user.permissions ?? []);
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setRole(current);
+      setPerms(user.permissions?.length ? user.permissions : SUPPORT_DEFAULT);
+      setError(null);
+    }
+  }
+  const pickRole = (r: typeof role) => {
+    setRole(r);
+    if (r === "admin" && current !== "admin") setPerms(ALL_PERMISSIONS);
+    if (r === "support" && current !== "support") setPerms(SUPPORT_DEFAULT);
+  };
+  const toggle = (p: Permission, on: boolean) => setPerms((list) => (on ? [...new Set([...list, p])] : list.filter((x) => x !== p)));
+
+  const save = async () => {
+    setBusy(true);
+    const r = await setStaffAccess(user.id, role, role === "none" ? [] : perms);
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    toast.success(role === "none" ? "Staff access removed" : "Staff access saved", { description: `${fullName(user)} has been notified. Recorded in the audit log.` });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title={`Staff access for ${fullName(user)}`} description="Staff sign in with this same account and use the admin panel. They should turn on two-step login in Security." size="lg">
+        <DialogBody className="space-y-5">
+          {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+          <RadioCards<typeof role>
+            value={role}
+            onValueChange={pickRole}
+            columns={3}
+            options={[
+              { value: "none", label: "No staff access", description: current === "none" ? "A regular account." : "Becomes a regular student account." },
+              { value: "support", label: "Support", description: "Front-line help with the permissions you pick." },
+              { value: "admin", label: "Administrator", description: "Runs the marketplace with the permissions you pick." },
+            ]}
+          />
+          {role !== "none" && (
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-ink">Permissions</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {ALL_PERMISSIONS.map((p) => (
+                  <Checkbox key={p} checked={perms.includes(p)} onCheckedChange={(v) => toggle(p, v === true)} label={PERMISSION_META[p].label} description={PERMISSION_META[p].description} />
+                ))}
+              </div>
+            </fieldset>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant={role === "none" && current !== "none" ? "danger" : "primary"} loading={busy} onClick={save}>
+            {role === "none" && current !== "none" ? "Remove staff access" : "Save access"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── Announcements ──────────────────────────────────────────────────────────── */
+
+type Audience = "everyone" | "students" | "parents" | "tutors";
+
+function AnnounceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const users = useApp((s) => s.users);
+  const send = useApp((s) => s.sendAnnouncement);
+  const [audience, setAudience] = React.useState<Audience>("everyone");
+  const [title, setTitle] = React.useState("");
+  const [body, setBody] = React.useState("");
+  const [href, setHref] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) setError(null);
+  }
+  const count = (roles: Role[]) => users.filter((u) => roles.includes(u.role) && u.status === "active").length;
+  const counts: Record<Audience, number> = {
+    everyone: count(["student", "parent", "tutor"]),
+    students: count(["student"]),
+    parents: count(["parent"]),
+    tutors: count(["tutor"]),
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    const r = await send(audience, title.trim(), body.trim(), href.trim() || undefined);
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    toast.success(`Announcement sent to ${pluralize(r.data, "person", "people")}`, { description: "It appears in their notifications." });
+    setTitle("");
+    setBody("");
+    setHref("");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title="Send an announcement" description="Appears in the notifications of every active account in the group you pick." size="lg">
+        <form onSubmit={submit} noValidate>
+          <DialogBody className="space-y-4">
+            {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+            <RadioCards<Audience>
+              value={audience}
+              onValueChange={setAudience}
+              columns={4}
+              options={[
+                { value: "everyone", label: "Everyone", description: pluralize(counts.everyone, "account") },
+                { value: "students", label: "Students", description: pluralize(counts.students, "account") },
+                { value: "parents", label: "Parents", description: pluralize(counts.parents, "account") },
+                { value: "tutors", label: "Tutors", description: pluralize(counts.tutors, "account") },
+              ]}
+            />
+            <Field label="Title" required>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="e.g. New: Saturday SAT practice sessions" />
+            </Field>
+            <Field label="Message" required>
+              <Textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={600} showCount rows={4} />
+            </Field>
+            <Field label="Link" optional hint="A page on this site, e.g. /tutors or /blog/sat-tips">
+              <Input value={href} onChange={(e) => setHref(e.target.value)} maxLength={200} placeholder="/tutors" />
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={busy} disabled={!counts[audience]}>
+              <Megaphone /> Send to {pluralize(counts[audience], "person", "people")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

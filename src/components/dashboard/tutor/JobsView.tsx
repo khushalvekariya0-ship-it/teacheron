@@ -152,8 +152,8 @@ export function JobsView() {
     setQ("");
   };
 
-  const onSave = (id: string) => {
-    const res = toggleSavedJob(id);
+  const onSave = async (id: string) => {
+    const res = await toggleSavedJob(id);
     if (!res.ok) toast.error(res.error);
     else toast.success(res.data ? "Job saved" : "Removed from saved jobs");
   };
@@ -476,8 +476,8 @@ function ApplyForm({ req, onClose, defaultRate, credits, creditsOn }: { req: Req
   const { register, handleSubmit, formState: { errors, isSubmitting } } = form;
   const outOfCredits = creditsOn && credits < CREDITS_PER_APPLICATION;
 
-  const onSubmit = (v: ApplyValues) => {
-    const res = applyToJob(req.id, v.message, v.rate * 100);
+  const onSubmit = async (v: ApplyValues) => {
+    const res = await applyToJob(req.id, v.message, v.rate * 100);
     if (!res.ok) {
       setError(res.error);
       return;

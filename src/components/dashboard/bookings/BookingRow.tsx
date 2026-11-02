@@ -31,8 +31,8 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
   const subject = subjectName(b.subject);
   const href = `/dashboard/bookings/${b.id}`;
 
-  const accept = () => {
-    const res = transition(b.id, "confirmed");
+  const accept = async () => {
+    const res = await transition(b.id, "confirmed");
     if (!res.ok) return void toast.error(res.error);
     toast.success("Booking accepted", { description: `${people.counterpart} has been notified.` });
   };

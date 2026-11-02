@@ -100,8 +100,8 @@ function WrongRoleGate({ me }: { me: User }) {
           <Button
             size="lg"
             variant="secondary"
-            onClick={() => {
-              logout();
+            onClick={async () => {
+              await logout();
               router.push("/register?role=tutor");
             }}
           >
@@ -282,8 +282,8 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
   const percent = Math.round((completed / (TOTAL_STEPS - 1)) * 100);
 
   const persist = React.useCallback(
-    (atStep: number, values: Record<string, unknown>) => {
-      const res = saveOnboarding(atStep, toStoreData(values as OnboardingData));
+    async (atStep: number, values: Record<string, unknown>) => {
+      const res = await saveOnboarding(atStep, toStoreData(values as OnboardingData));
       if (!res.ok) toast.error(res.error);
       return res.ok;
     },
@@ -294,7 +294,7 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     const values = getter.current();
     const merged = { ...data, ...values } as OnboardingData;
     setData(merged);
-    if (step !== TOTAL_STEPS) persist(step, values);
+    if (step !== TOTAL_STEPS) void persist(step, values);
     getter.current = () => ({});
     setDir(target > step ? 1 : -1);
     setSubmitError(null);
@@ -303,15 +303,15 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const advance = (values: OnboardingData) => {
+  const advance = async (values: OnboardingData) => {
     const merged = { ...data, ...values };
     setData(merged);
     if (step === 1) {
-      const r = updateMe({ phone: values.phone, city: values.city, state: values.state, zip: values.zip });
+      const r = await updateMe({ phone: values.phone, city: values.city, state: values.state, zip: values.zip });
       if (!r.ok) toast.error(r.error);
     }
     const next = step + 1;
-    persist(next, values as Record<string, unknown>);
+    void persist(next, values as Record<string, unknown>);
     getter.current = () => ({});
     setFurthest((f) => Math.max(f, next));
     setDir(1);
@@ -320,7 +320,7 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const submit = () => {
+  const submit = async () => {
     const firstInvalid = STEPS.find((s) => s.schema && !s.schema.safeParse(data).success);
     if (firstInvalid) {
       toast.error(`“${firstInvalid.title}” needs attention before you can submit.`);
@@ -328,11 +328,11 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
       return;
     }
     setSubmitting(true);
-    if (!persist(TOTAL_STEPS, data as Record<string, unknown>)) {
+    if (!(await persist(TOTAL_STEPS, data as Record<string, unknown>))) {
       setSubmitting(false);
       return;
     }
-    const res = submitOnboarding();
+    const res = await submitOnboarding();
     setSubmitting(false);
     if (!res.ok) {
       setSubmitError(res.error);
@@ -344,9 +344,9 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
 
   // "Save & exit" in the layout header.
   React.useEffect(() => {
-    setSaveExitHandler(() => {
+    setSaveExitHandler(async () => {
       const values = getter.current();
-      if (persist(step, values)) {
+      if (await persist(step, values)) {
         toast.success("Progress saved", { description: "Pick up where you left off any time from your dashboard." });
         router.push("/dashboard");
       }

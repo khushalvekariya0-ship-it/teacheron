@@ -168,7 +168,7 @@ function Profile({ tutor }: { tutor: Tutor }) {
     setBooking(true);
     // Stand-in for the payment round trip (the wallet is debited by the store, as the API would).
     await new Promise((r) => setTimeout(r, 600));
-    const res = createBooking({
+    const res = await createBooking({
       tutorId: tutor.id,
       startUtc: selection.startUtc,
       durationMin: minutes,

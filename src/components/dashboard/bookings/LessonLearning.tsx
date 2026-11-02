@@ -170,11 +170,11 @@ function AddNoteDialog({ open, onOpenChange, learnerId, learnerName, bookingId }
       setError(undefined);
     }
   };
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const err = validate(body);
     if (err) return setError(err);
-    const res = addNote(learnerId, body, rating === "0" ? undefined : (Number(rating) as 1 | 2 | 3 | 4 | 5), bookingId);
+    const res = await addNote(learnerId, body, rating === "0" ? undefined : (Number(rating) as 1 | 2 | 3 | 4 | 5), bookingId);
     if (!res.ok) return setError(res.error);
     toast.success("Progress note added", { description: `${learnerName === "Student" ? "The family" : learnerName.split(" ")[0]} can see it now.` });
     close(false);
@@ -230,11 +230,11 @@ function AssignHomeworkDialog({ open, onOpenChange, learnerId, learnerName, subj
       setErrors({});
     }
   };
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next = { title: check("title", title), due: check("due", due) };
     if (next.title || next.due) return setErrors(next);
-    const res = assign({ learnerId, subject, title: title.trim(), instructions: instructions.trim(), dueDate: due });
+    const res = await assign({ learnerId, subject, title: title.trim(), instructions: instructions.trim(), dueDate: due });
     if (!res.ok) return setErrors({ form: res.error });
     toast.success("Homework assigned", { description: `Due ${labelForKey(due, { weekday: "short", month: "short", day: "numeric" })}` });
     close(false);

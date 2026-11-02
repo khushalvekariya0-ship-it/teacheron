@@ -114,8 +114,8 @@ function PromotionsInner() {
   const filtered = q.trim() !== "" || status !== "all";
   const editing = coupons.find((c) => c.id === openId) ?? null;
 
-  const setActive = (c: Coupon, active: boolean) => {
-    const res = saveCoupon({ ...toInput(c), active });
+  const setActive = async (c: Coupon, active: boolean) => {
+    const res = await saveCoupon({ ...toInput(c), active });
     if (!res.ok) {
       toast.error(res.error);
       return false;
@@ -294,7 +294,7 @@ function PromotionsInner() {
           />
           <CardContent className="space-y-3 text-[13.5px] text-ink-2">
             {referralsOn ? (
-              <p>The <span className="font-mono text-[12px]">referrals</span> flag is on. Referral codes and credit tracking are handled by the referrals service in production; no referral activity is recorded in this preview.</p>
+              <p>The <span className="font-mono text-[12px]">referrals</span> flag is on. Referral codes and credit tracking aren&apos;t built yet, so no referral activity is recorded.</p>
             ) : (
               <p>
                 Off — the <span className="font-mono text-[12px]">referrals</span> feature flag is disabled, so no referral codes are issued or redeemed. There&apos;s no referral activity to report.
@@ -339,8 +339,8 @@ function PromotionsInner() {
         description="Checkout will reject this code immediately. Bookings that already used it keep their discount."
         confirmLabel="Deactivate"
         tone="danger"
-        onConfirm={() => {
-          if (deactivating && setActive(deactivating, false)) setDeactivating(null);
+        onConfirm={async () => {
+          if (deactivating && (await setActive(deactivating, false))) setDeactivating(null);
         }}
       />
     </>
@@ -478,12 +478,12 @@ function CouponDialog({ open, coupon, onOpenChange }: { open: boolean; coupon: C
   const set = <K extends FormField>(k: K, v: FormValues[K]) => setValues((s) => ({ ...s, [k]: v }));
   const blur = (k: FormField) => () => setTouched((t) => ({ ...t, [k]: true }));
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     if (!result.success) return;
     setBusy(true);
-    const res = saveCoupon({ ...result.data, id: coupon?.id });
+    const res = await saveCoupon({ ...result.data, id: coupon?.id });
     setBusy(false);
     if (!res.ok) {
       if (/code/i.test(res.error)) {

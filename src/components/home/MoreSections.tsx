@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Section, SectionHeading, ArrowLink } from "@/components/marketing/Section";
 import { subjectName } from "@/lib/data/catalog";
-import { BLOG_POSTS } from "@/lib/data/content";
+import { useApp } from "@/lib/store";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 
 /* ═══ Tutoring for every goal — a bento grid of goals, each with a small picture ══════════ */
@@ -425,7 +425,8 @@ const CATEGORY_TINT: Record<string, string> = {
 };
 
 export function Resources() {
-  const posts = [...BLOG_POSTS].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const all = useApp((s) => s.blogPosts);
+  const posts = React.useMemo(() => all.filter((p) => p.status === "published").sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3), [all]);
   if (posts.length === 0) return null;
   return (
     <Section tone="canvas">

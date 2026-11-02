@@ -6,6 +6,7 @@ import type { Message } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
+import { uploadFile } from "@/lib/upload";
 import { formatSize } from "./shared";
 
 const MAX_HEIGHT = 168;
@@ -13,8 +14,9 @@ const MAX_HEIGHT = 168;
 export function Composer({ conversationId, recipient, onSent }: { conversationId: string; recipient: string; onSent: (msg: Message, text: string) => void }) {
   const send = useApp((s) => s.sendMessage);
   const [text, setText] = React.useState("");
-  const [file, setFile] = React.useState<Message["attachment"] | null>(null);
+  const [file, setFile] = React.useState<{ name: string; sizeKb: number; file: File } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [sending, setSending] = React.useState(false);
   const taRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const hintId = React.useId();
@@ -26,9 +28,21 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
   };
 
-  const submit = () => {
-    if (!text.trim() && !file) return;
-    const res = send(conversationId, text, file ?? undefined);
+  const submit = async () => {
+    if ((!text.trim() && !file) || sending) return;
+    setSending(true);
+    let attachment: Message["attachment"];
+    if (file) {
+      // The file goes to private storage first; only people in this conversation can open it.
+      const up = await uploadFile("messages", file.file);
+      if (!up.ok) {
+        setSending(false);
+        return setError(up.error);
+      }
+      attachment = { name: up.file.name, sizeKb: up.file.sizeKb, path: up.file.path };
+    }
+    const res = await send(conversationId, text, attachment);
+    setSending(false);
     if (!res.ok) return setError(res.error);
     const sentText = text;
     setText("");
@@ -61,7 +75,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          void submit();
         }}
         className="flex items-end gap-2"
       >
@@ -75,7 +89,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) {
-              setFile({ name: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)) });
+              setFile({ name: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f });
               setError(null);
             }
             e.target.value = "";
@@ -109,7 +123,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
           aria-invalid={error ? true : undefined}
           className="max-h-[168px] min-h-10 flex-1 resize-none rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-[15px] leading-6 text-ink outline-none transition-[border-color,box-shadow] placeholder:text-subtle hover:border-subtle focus:border-brand focus:ring-2 focus:ring-brand/25"
         />
-        <Button type="submit" size="icon" disabled={!canSend} aria-label="Send message" className="shrink-0">
+        <Button type="submit" size="icon" disabled={!canSend} loading={sending} aria-label="Send message" className="shrink-0">
           <Send />
         </Button>
       </form>

@@ -45,6 +45,7 @@ function WalletBody({ onClose }: { onClose: () => void }) {
   const balance = useWalletBalance();
   const allTx = useApp((s) => s.walletTransactions);
   const topUpWallet = useApp((s) => s.topUpWallet);
+  const paymentsEnabled = useApp((s) => s.config.paymentsEnabled);
   const [packId, setPackId] = React.useState(STUDY_CREDIT_PACKS[1].id);
   const [method, setMethod] = React.useState<TopUpMethod>("card");
   const [paying, setPaying] = React.useState(false);
@@ -91,7 +92,7 @@ function WalletBody({ onClose }: { onClose: () => void }) {
     setPaying(true);
     // Stand-in for the payment round trip (test mode in the preview build).
     await new Promise((r) => setTimeout(r, 700));
-    const res = topUpWallet(pack.id, method);
+    const res = await topUpWallet(pack.id, method);
     setPaying(false);
     if (!res.ok) {
       toast.error(res.error);
@@ -151,8 +152,8 @@ function WalletBody({ onClose }: { onClose: () => void }) {
             value={method}
             onValueChange={setMethod}
             options={[
-              { value: "card", label: "Card", icon: <CreditCard />, description: "Test card •••• 4242" },
-              { value: "upi", label: "UPI", icon: <Smartphone />, description: "Approve in your UPI app" },
+              { value: "card", label: "Card", icon: <CreditCard />, description: paymentsEnabled ? "Visa, Mastercard, Amex and more" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
+              { value: "upi", label: "UPI", icon: <Smartphone />, description: paymentsEnabled ? "Approve in your UPI app" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
             ]}
           />
         </section>

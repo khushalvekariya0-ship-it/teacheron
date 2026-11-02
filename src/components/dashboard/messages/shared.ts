@@ -24,7 +24,6 @@ export interface ConversationView {
   last?: Message;
   unread: number;
   /** The other side is a sample tutor with no live account — replies are simulated. */
-  automated: boolean;
   isTutorView: boolean;
 }
 
@@ -47,7 +46,6 @@ export function useMyConversations(): ConversationView[] {
     for (const m of messages) byConv.set(m.conversationId, [...(byConv.get(m.conversationId) ?? []), m]);
     const tutorById = new Map(tutors.map((t) => [t.id, t]));
     const userById = new Map(users.map((u) => [u.id, u]));
-    const liveTutorIds = new Set(users.map((u) => u.tutorId).filter(Boolean));
     const selfId = isTutor ? me.tutorId! : me.id;
 
     return mine
@@ -71,7 +69,6 @@ export function useMyConversations(): ConversationView[] {
           messages: list,
           last: list[list.length - 1],
           unread: list.filter((m) => m.senderId !== selfId && !m.readAt).length,
-          automated: !isTutor && !liveTutorIds.has(c.tutorId),
           isTutorView: isTutor,
         };
       })
@@ -93,22 +90,3 @@ export function formatSize(kb: number): string {
   return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
 }
 
-/**
- * Short, context-aware automated reply for sample tutors (no live account in the preview).
- * Replies never promise specific availability, prices or outcomes — they point to real product flows.
- */
-export function automatedReply(text: string, ctx: { subject?: string; hasAttachment: boolean; learnerFirstName: string }): string {
-  const t = text.toLowerCase();
-  const subject = ctx.subject ? ctx.subject.toLowerCase() : "our";
-  const hi = `Thanks, ${ctx.learnerFirstName}!`;
-  if (/\b(trial|first lesson|try out)\b/.test(t)) return `${hi} If you'd like a trial, pick any open time on my profile and I'll confirm it as soon as I can.`;
-  if (/reschedul|move (the|our)|another time|different time|change the time/.test(t)) return "No problem — you can pick a new time from the lesson page under Reschedule, and I'll confirm it.";
-  if (/\bcancel/.test(t)) return "Thanks for letting me know. You can cancel from the lesson page — the refund follows the policy shown there.";
-  if (/\b(price|rate|cost|charge|discount)\b|\$/.test(t)) return "My rate and trial options are listed on my profile, and you'll see the full total before you confirm a booking.";
-  if (/homework|worksheet|problem set|practice|assignment/.test(t)) return `${hi} Bring your attempt to our next ${subject === "our" ? "" : `${subject} `}lesson and we'll go through it together.`;
-  if (ctx.hasAttachment && t.trim().length < 12) return "Got the file, thank you — I'll take a look before our next session.";
-  if (/\b(thanks|thank you|thx|appreciate)\b/.test(t)) return "You're welcome! See you at our next lesson.";
-  if (/\b(hi|hello|hey)\b/.test(t) && t.length < 40) return `Hi ${ctx.learnerFirstName}! How can I help?`;
-  if (t.includes("?")) return `Good question — let's cover it at the start of our next ${subject === "our" ? "" : `${subject} `}lesson. Send over any details before then.`;
-  return `${hi} I've read your message and will follow up here shortly.`;
-}

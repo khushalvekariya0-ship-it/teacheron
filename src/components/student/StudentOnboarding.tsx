@@ -120,23 +120,23 @@ interface StepProps {
   me: User;
   profile: StudentProfile;
   /** Saves the step; false when the store refused it (the error is shown as a toast). */
-  persist: (n: number, values: unknown) => boolean;
+  persist: (n: number, values: unknown) => Promise<boolean>;
   onSaved: () => void;
   /** Lets the wizard save this step's answers (when valid) on Back and Save & exit. */
-  bindPending: (fn: () => void) => void;
+  bindPending: (fn: () => Promise<unknown>) => void;
 }
 
 /** A step's <form>: submit saves and moves on; Back / Save & exit save the answers if they're valid. */
 function StepForm<T extends FieldValues>({ n, form, schema, formId, persist, onSaved, bindPending, children }: { n: number; form: UseFormReturn<T>; schema: z.ZodTypeAny; children: React.ReactNode } & Pick<StepProps, "formId" | "persist" | "onSaved" | "bindPending">) {
   const { getValues, handleSubmit } = form;
   React.useEffect(() => {
-    bindPending(() => {
+    bindPending(async () => {
       const parsed = schema.safeParse(getValues());
-      if (parsed.success) persist(n, parsed.data);
+      if (parsed.success) await persist(n, parsed.data);
     });
   }, [bindPending, getValues, n, persist, schema]);
   return (
-    <form id={formId} noValidate onSubmit={handleSubmit((v) => persist(n, v) && onSaved())}>
+    <form id={formId} noValidate onSubmit={handleSubmit(async (v) => (await persist(n, v)) && onSaved())}>
       {children}
     </form>
   );
@@ -284,7 +284,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
   const [step, setStep] = React.useState(() => (profile.completedAt ? 1 : Math.min(STUDENT_TOTAL_STEPS, profile.step + 1)));
   const [dir, setDir] = React.useState(1);
   const [finished, setFinished] = React.useState(false);
-  const pending = React.useRef<() => void>(() => {});
+  const pending = React.useRef<() => Promise<unknown>>(async () => {});
   const navigated = React.useRef(false);
   const headingRef = React.useRef<HTMLHeadingElement>(null);
   const teen = !!me.parentalConsent;
@@ -298,42 +298,42 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
     return res.ok;
   };
   const persist = React.useCallback(
-    (n: number, values: unknown): boolean => {
+    async (n: number, values: unknown): Promise<boolean> => {
       const ok = (res: Result<unknown>) => {
         if (!res.ok) toast.error(res.error);
         return res.ok;
       };
       if (n === 1) {
         const v = values as ReturnType<typeof basicValues>;
-        if (!ok(updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
-        return ok(save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }));
+        if (!ok(await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
+        return ok(await save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }));
       }
-      if (n === 5) return ok(save(budgetToProfile(values as ReturnType<typeof budgetValues>), { step: 5 }));
-      return ok(save(values as Partial<StudentProfile>, { step: n }));
+      if (n === 5) return ok(await save(budgetToProfile(values as ReturnType<typeof budgetValues>), { step: 5 }));
+      return ok(await save(values as Partial<StudentProfile>, { step: n }));
     },
     [save, updateMe],
   );
-  const bindPending = React.useCallback((fn: () => void) => {
+  const bindPending = React.useCallback((fn: () => Promise<unknown>) => {
     pending.current = fn;
   }, []);
 
   const goTo = (n: number) => {
-    pending.current();
-    pending.current = () => {};
+    void pending.current();
+    pending.current = async () => {};
     setDir(n > step ? 1 : -1);
     navigated.current = true;
     setStep(n);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const advance = () => {
-    pending.current = () => {};
+    pending.current = async () => {};
     setDir(1);
     navigated.current = true;
     setStep((s) => Math.min(STUDENT_TOTAL_STEPS, s + 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const finish = () => {
+  const finish = async () => {
     const parts: [number, boolean][] = [
       [1, basicSchema(teen).safeParse(basicValues(me, profile)).success],
       [2, learningSchema.safeParse(learningValues(profile)).success],
@@ -347,15 +347,15 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
       goTo(missing[0]);
       return;
     }
-    if (check(save({}, { step: STUDENT_TOTAL_STEPS, complete: true }))) setFinished(true);
+    if (check(await save({}, { step: STUDENT_TOTAL_STEPS, complete: true }))) setFinished(true);
   };
 
   // "Save & exit" in the onboarding header.
   const exitTo = next ?? "/dashboard";
   React.useEffect(() => {
     if (finished) return;
-    setSaveExitHandler(() => {
-      pending.current();
+    setSaveExitHandler(async () => {
+      await pending.current();
       toast.success("Progress saved", { description: "Finish your profile any time from your dashboard." });
       router.push(exitTo);
     });

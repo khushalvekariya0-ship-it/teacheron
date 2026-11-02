@@ -28,6 +28,7 @@ import {
 } from "./kit";
 import { REVIEW_STATUS_META, RatingStars, useAllReviews } from "./ReviewsView";
 import { auditTone, describeAudit, sortAudit } from "./AuditLogView";
+import { FileLink } from "@/components/domain/FileLink";
 
 type Status = Report["status"];
 type TargetType = Report["targetType"];
@@ -101,23 +102,23 @@ function useTargetSummary() {
       switch (r.targetType) {
         case "message": {
           const m = msgById.get(r.targetId);
-          return m ? { text: `${dir.name(m.senderId)}: “${clip(m.body, 80)}”`, missing: false } : { text: `Message ${r.targetId} — not in this preview`, missing: true };
+          return m ? { text: `${dir.name(m.senderId)}: “${clip(m.body, 80)}”`, missing: false } : { text: `Message ${r.targetId} — no longer exists`, missing: true };
         }
         case "review": {
           const v = revById.get(r.targetId);
-          return v ? { text: `${v.rating}-star review of ${dir.name(v.tutorId)} by ${v.authorName}`, missing: false } : { text: `Review ${r.targetId} — not in this preview`, missing: true };
+          return v ? { text: `${v.rating}-star review of ${dir.name(v.tutorId)} by ${v.authorName}`, missing: false } : { text: `Review ${r.targetId} — no longer exists`, missing: true };
         }
         case "tutor": {
           const t = dir.tutorById.get(r.targetId);
-          return t ? { text: `${fullName(t)} · tutor profile`, missing: false } : { text: `Tutor ${r.targetId} — not in this preview`, missing: true };
+          return t ? { text: `${fullName(t)} · tutor profile`, missing: false } : { text: `Tutor ${r.targetId} — no longer exists`, missing: true };
         }
         case "user": {
           const u = dir.userById.get(r.targetId);
-          return u ? { text: `${fullName(u)} · ${ROLE_LABEL[u.role]}`, missing: false } : { text: `Account ${r.targetId} — not in this preview`, missing: true };
+          return u ? { text: `${fullName(u)} · ${ROLE_LABEL[u.role]}`, missing: false } : { text: `Account ${r.targetId} — no longer exists`, missing: true };
         }
         case "requirement": {
           const q = reqById.get(r.targetId);
-          return q ? { text: q.title || "Untitled requirement", missing: false } : { text: `Requirement ${r.targetId} — not in this preview`, missing: true };
+          return q ? { text: q.title || "Untitled requirement", missing: false } : { text: `Requirement ${r.targetId} — no longer exists`, missing: true };
         }
       }
     };
@@ -394,7 +395,7 @@ function MessageTarget({ report, message }: { report: Report; message?: Message 
   const conversations = useApp((s) => s.conversations);
   const dir = useDirectory();
   const tz = useViewerTimezone();
-  if (!message) return <Missing>Message <Mono>{report.targetId}</Mono> isn&apos;t in this preview&apos;s data, so its content can&apos;t be shown.</Missing>;
+  if (!message) return <Missing>Message <Mono>{report.targetId}</Mono> no longer exists, so its content can&apos;t be shown.</Missing>;
   const conv = conversations.find((c) => c.id === message.conversationId);
   const senderHref = personHref(message.senderId, dir);
   return (
@@ -403,7 +404,7 @@ function MessageTarget({ report, message }: { report: Report; message?: Message 
         <blockquote className="text-[14px] leading-relaxed text-ink">“{message.body}”</blockquote>
         {message.attachment && (
           <p className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] text-muted">
-            <Paperclip className="size-3.5" aria-hidden /> {message.attachment.name} · {message.attachment.sizeKb} KB
+            <Paperclip className="size-3.5" aria-hidden /> <FileLink path={message.attachment.path}>{message.attachment.name}</FileLink> · {message.attachment.sizeKb} KB
           </p>
         )}
         <figcaption className="mt-2 text-[12.5px] text-muted">
@@ -452,7 +453,7 @@ function Transcript({ conversationId, highlightId }: { conversationId: string; h
             <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">{m.body}</p>
             {m.attachment && (
               <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-muted">
-                <Paperclip className="size-3" aria-hidden /> {m.attachment.name}
+                <Paperclip className="size-3" aria-hidden /> <FileLink path={m.attachment.path}>{m.attachment.name}</FileLink>
               </p>
             )}
             {(reported || m.moderation) && (
@@ -478,7 +479,7 @@ function ReviewTarget({ id }: { id: string }) {
   const dir = useDirectory();
   const tz = useViewerTimezone();
   const review = reviews.find((r) => r.id === id);
-  if (!review) return <Missing>Review <Mono>{id}</Mono> isn&apos;t in this preview&apos;s data.</Missing>;
+  if (!review) return <Missing>Review <Mono>{id}</Mono> no longer exists.</Missing>;
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-line px-4 py-3">
@@ -501,7 +502,7 @@ function ReviewTarget({ id }: { id: string }) {
 function TutorTarget({ report }: { report: Report }) {
   const dir = useDirectory();
   const tutor = dir.tutorById.get(report.targetId);
-  if (!tutor) return <Missing>Tutor <Mono>{report.targetId}</Mono> isn&apos;t in this preview&apos;s data.</Missing>;
+  if (!tutor) return <Missing>Tutor <Mono>{report.targetId}</Mono> no longer exists.</Missing>;
   const account = dir.tutorUser.get(tutor.id);
   const verified = verifiedKinds(tutor);
   return (
@@ -528,7 +529,7 @@ function TutorTarget({ report }: { report: Report }) {
           { label: "Verified checks", value: verified.length ? verified.map((k) => VERIFICATION_LABEL[k]).join(", ") : <span className="font-normal text-muted">None completed</span> },
           {
             label: "Sign-in account",
-            value: account ? <TextLink href={`/admin/users?id=${encodeURIComponent(account.id)}`}>{fullName(account)}</TextLink> : <span className="font-normal text-muted">None in this preview</span>,
+            value: account ? <TextLink href={`/admin/users?id=${encodeURIComponent(account.id)}`}>{fullName(account)}</TextLink> : <span className="font-normal text-muted">None</span>,
           },
         ]}
       />
@@ -547,7 +548,7 @@ function UserTarget({ report }: { report: Report }) {
   const dir = useDirectory();
   const tz = useViewerTimezone();
   const user = dir.userById.get(report.targetId);
-  if (!user) return <Missing>Account <Mono>{report.targetId}</Mono> isn&apos;t in this preview&apos;s data.</Missing>;
+  if (!user) return <Missing>Account <Mono>{report.targetId}</Mono> no longer exists.</Missing>;
   return (
     <div className="space-y-3">
       <Facts
@@ -569,7 +570,7 @@ function RequirementTarget({ id }: { id: string }) {
   const dir = useDirectory();
   const tz = useViewerTimezone();
   const req = requirements.find((r) => r.id === id);
-  if (!req) return <Missing>Requirement <Mono>{id}</Mono> isn&apos;t in this preview&apos;s data.</Missing>;
+  if (!req) return <Missing>Requirement <Mono>{id}</Mono> no longer exists.</Missing>;
   return (
     <div className="space-y-3">
       <Facts
@@ -597,7 +598,7 @@ function SuspendAccount({ user, report, noAccountName }: { user: User | null; re
   if (!user) {
     return (
       <p className="rounded-lg border border-line bg-canvas px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
-        {noAccountName ?? "This tutor"} has no sign-in account in this preview, so there&apos;s no account to suspend here. You can still close the report once you&apos;ve decided on it.
+        {noAccountName ?? "This tutor"} has no sign-in account, so there&apos;s no account to suspend here. You can still close the report once you&apos;ve decided on it.
       </p>
     );
   }
@@ -630,8 +631,8 @@ function SuspendAccount({ user, report, noAccountName }: { user: User | null; re
         placeholder={`e.g. ${report.reason} — confirmed (report ${report.id})`}
         confirmLabel="Suspend account"
         tone="danger"
-        onConfirm={(reason) => {
-          const res = setUserStatus(user.id, "suspended", reason);
+        onConfirm={async (reason) => {
+          const res = await setUserStatus(user.id, "suspended", reason);
           if (!res.ok) {
             toast.error(res.error);
             return false;
@@ -668,8 +669,8 @@ function ReportActions({ report }: { report: Report }) {
   const shown = useSticky(confirm);
   const closed = report.status === "actioned" || report.status === "dismissed";
 
-  const apply = (status: Status, message: string) => {
-    const res = setReportStatus(report.id, status);
+  const apply = async (status: Status, message: string) => {
+    const res = await setReportStatus(report.id, status);
     if (!res.ok) {
       toast.error(res.error);
       return false;
@@ -708,8 +709,8 @@ function ReportActions({ report }: { report: Report }) {
         title={shown ? CLOSE_COPY[shown].title : "Close report"}
         description={shown ? CLOSE_COPY[shown].description : undefined}
         confirmLabel={shown ? CLOSE_COPY[shown].confirm : "Confirm"}
-        onConfirm={() => {
-          if (confirm && apply(confirm, CLOSE_COPY[confirm].toast)) setConfirm(null);
+        onConfirm={async () => {
+          if (confirm && (await apply(confirm, CLOSE_COPY[confirm].toast))) setConfirm(null);
         }}
       >
         <p className="text-[13px] text-ink-2">

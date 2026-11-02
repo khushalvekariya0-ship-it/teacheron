@@ -44,13 +44,13 @@ export function SaveSearchButton({ params, className, compact }: { params: Tutor
     setOpen(true);
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = label.trim();
     if (name.length < 3) return setError("Give this search a name of at least 3 characters.");
     if (name.length > 80) return setError("Keep the name under 80 characters.");
     setSaving(true);
-    const res = saveSearch({ kind: "tutors", label: name, query: toRecord(params), frequency });
+    const res = await saveSearch({ kind: "tutors", label: name, query: toRecord(params), frequency });
     setSaving(false);
     if (!res.ok) return toast.error(res.error);
     setOpen(false);

@@ -8,7 +8,7 @@ import type { Tutor, VerificationKind } from "@/lib/types";
 import { LEVELS, subjectName } from "@/lib/data/catalog";
 import { formatCents, formatDateTime } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import { useHydrated, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { useHydrated, useNow, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Avatar } from "@/components/ui/Avatar";
@@ -300,7 +300,7 @@ export function CompareView() {
   const ids = useApp((s) => s.compare);
   const toggleCompare = useApp((s) => s.toggleCompare);
   const clearCompare = useApp((s) => s.clearCompare);
-  const tutors = useTutors();
+  const tutors = useListedTutors();
 
   const selected = React.useMemo(() => ids.map((id) => tutors.find((t) => t.id === id)).filter((t): t is Tutor => !!t), [ids, tutors]);
   const idsParam = searchParams.get("ids");

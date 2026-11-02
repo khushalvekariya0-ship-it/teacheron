@@ -20,10 +20,10 @@ import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter } from "
 import { InlineAlert } from "@/components/ui/States";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
 import { toast } from "@/components/ui/Toast";
-import { DEFAULT_NOTIFICATION_PREFS, DEMO_PASSWORD, useApp } from "@/lib/store";
+import { DEFAULT_NOTIFICATION_PREFS, useApp } from "@/lib/store";
 import { useNow, useSession } from "@/lib/store/hooks";
 import { resolveTutor } from "@/lib/store";
-import { DEMO_USERS, ROLE_LABEL } from "@/lib/data/users";
+import { ROLE_LABEL } from "@/lib/data/users";
 import { US_STATES, US_TIMEZONES } from "@/lib/data/catalog";
 import { formatDate, formatDateTime, formatRelative, formatUsPhone, tzAbbrev } from "@/lib/format";
 import { PasswordInput, PasswordStrengthMeter } from "@/components/auth/PasswordField";
@@ -85,8 +85,8 @@ function ProfileTab({ me }: { me: User }) {
   const form = useForm<ProfileValues>({ resolver: zodResolver(profileSchema), mode: "onTouched", defaultValues: profileDefaults(me) });
   const { errors, isDirty, isSubmitting } = form.formState;
 
-  const onSubmit = form.handleSubmit((v) => {
-    const res = updateMe({
+  const onSubmit = form.handleSubmit(async (v) => {
+    const res = await updateMe({
       firstName: v.firstName.trim(),
       lastName: v.lastName.trim(),
       phone: v.phone ? formatUsPhone(v.phone) : undefined,
@@ -210,8 +210,8 @@ function TimezoneTab({ me }: { me: User }) {
   const label = options.find((o) => o.value === tz)?.label ?? tz;
   const dirty = tz !== me.timezone;
 
-  const save = () => {
-    const res = updateMe({ timezone: tz });
+  const save = async () => {
+    const res = await updateMe({ timezone: tz });
     if (!res.ok) return void toast.error(res.error);
     toast.success("Time zone updated", { description: `Times now show in ${label}.` });
   };
@@ -272,10 +272,8 @@ function SecurityTab({ me }: { me: User }) {
   const changePassword = useApp((s) => s.changePassword);
   const logout = useApp((s) => s.logout);
   const history = useApp((s) => s.loginHistory);
-  const hasCustomPassword = useApp((s) => !!s.credentials[me.email.toLowerCase()]);
   const now = useNow(60_000);
   const [confirmAll, setConfirmAll] = React.useState(false);
-  const isDemo = DEMO_USERS.some((u) => u.id === me.id);
 
   const form = useForm<PasswordValues>({ resolver: zodResolver(passwordSchema), mode: "onTouched", defaultValues: { current: "", next: "", confirm: "" } });
   const { errors, isSubmitting } = form.formState;
@@ -294,8 +292,8 @@ function SecurityTab({ me }: { me: User }) {
 
   const signIns = React.useMemo(() => history.filter((h) => h.userId === me.id).slice(0, 10), [history, me.id]);
 
-  const signOut = (all: boolean) => {
-    logout();
+  const signOut = async (all: boolean) => {
+    await logout(all);
     toast.success(all ? "Signed out of all sessions" : "Signed out");
     router.push("/login");
   };
@@ -306,11 +304,6 @@ function SecurityTab({ me }: { me: User }) {
         <form onSubmit={onSubmit} noValidate>
           <CardHeader title="Change password" description="Use at least 10 characters. A short phrase is easy to remember and hard to guess." />
           <CardContent className="space-y-4">
-            {isDemo && !hasCustomPassword && (
-              <InlineAlert tone="info">
-                Demo account — the current password is <code className="font-mono text-[12.5px] text-ink">{DEMO_PASSWORD}</code>.
-              </InlineAlert>
-            )}
             <Field label="Current password" error={errors.current?.message}>
               <PasswordInput autoComplete="current-password" {...form.register("current")} />
             </Field>
@@ -332,7 +325,7 @@ function SecurityTab({ me }: { me: User }) {
 
       <div className="space-y-5">
         <Card>
-          <CardHeader title="Recent sign-ins" description="Sign-in attempts on this account from this browser." />
+          <CardHeader title="Recent sign-ins" description="The latest sign-in attempts on this account." />
           {signIns.length === 0 ? (
             <p className="px-5 pb-5 pt-3 text-[13px] text-muted">No sign-ins recorded yet.</p>
           ) : (
@@ -367,9 +360,9 @@ function SecurityTab({ me }: { me: User }) {
         </Card>
 
         <Card>
-          <CardHeader title="Sessions" description="In this preview, your session exists only in this browser." />
+          <CardHeader title="Sessions" description="Sign out here, or on every browser and device where you're signed in." />
           <CardContent className="flex flex-col gap-2.5 sm:flex-row">
-            <Button variant="secondary" onClick={() => signOut(false)}>
+            <Button variant="secondary" onClick={() => void signOut(false)}>
               <LogOut /> Sign out
             </Button>
             <Button variant="danger-outline" onClick={() => setConfirmAll(true)}>
@@ -388,7 +381,7 @@ function SecurityTab({ me }: { me: User }) {
         tone="danger"
         onConfirm={() => {
           setConfirmAll(false);
-          signOut(true);
+          void signOut(true);
         }}
       />
     </div>
@@ -411,7 +404,6 @@ function exportMyData(me: User) {
   return {
     format: "TutorLink personal data export",
     exportedAt: new Date().toISOString(),
-    note: "Preview build — contains sample data stored in this browser.",
     profile: me,
     children: s.children.filter((c) => c.parentId === uid),
     favorites: s.favorites[uid] ?? [],
@@ -459,8 +451,8 @@ function PrivacyTab({ me }: { me: User }) {
     }
   };
 
-  const confirmDelete = () => {
-    const res = deleteMyAccount();
+  const confirmDelete = async () => {
+    const res = await deleteMyAccount();
     if (!res.ok) {
       setError(res.error);
       return;

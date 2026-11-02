@@ -18,6 +18,7 @@ import { Progress } from "@/components/ui/Controls";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { BookingStatusBadge } from "@/components/domain/Badges";
 import { useApp } from "@/lib/store";
+import { toast } from "@/components/ui/Toast";
 import { useNow, useSession, useUnreadMessages, useViewerTimezone } from "@/lib/store/hooks";
 import { isUpcoming, meetingLinkVisible, startMs, endMs } from "@/lib/booking";
 import { formatDate, formatDuration, formatTime, formatWeekdayDate, pluralize, tzAbbrev } from "@/lib/format";
@@ -325,13 +326,9 @@ function Overview({ me }: { me: User }) {
             <InlineAlert
               tone="warning"
               title="Waiting for a parent or guardian to approve your account"
-              action={
-                <Button asChild size="sm" variant="secondary">
-                  <Link href={`/consent?user=${encodeURIComponent(me.id)}`}>Open approval link</Link>
-                </Button>
-              }
+              action={<ResendConsentButton />}
             >
-              We emailed your parent or guardian at {me.parentalConsent.parentEmail}. Until they approve, you can browse tutors and save favorites, but messaging, booking and publishing requirements are paused. Preview: no email is sent — open the approval link to act as the parent.
+              We emailed your parent or guardian at {me.parentalConsent.parentEmail}. Until they approve, you can browse tutors and save favorites, but messaging, booking and publishing requirements are paused.
             </InlineAlert>
           )}
           {!me.emailVerified && (
@@ -587,5 +584,27 @@ function Overview({ me }: { me: User }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** Sends the parental-consent email again (rate-limited on the server). */
+function ResendConsentButton() {
+  const resend = useApp((s) => s.resendParentalConsent);
+  const [sending, setSending] = React.useState(false);
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      loading={sending}
+      onClick={async () => {
+        setSending(true);
+        const r = await resend();
+        setSending(false);
+        if (r.ok) toast.success("Approval email sent", { description: "Ask your parent or guardian to check their inbox." });
+        else toast.error(r.error);
+      }}
+    >
+      Send the email again
+    </Button>
   );
 }

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarDays, Check, Mic, MicOff, Plus, ShieldCheck, Star, Video, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
-import { useHydrated, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { useHydrated, useNow, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { getSubject } from "@/lib/data/catalog";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { formatCents, formatDate, formatTime, sessionPrice, tzAbbrev } from "@/lib/format";
@@ -34,7 +34,7 @@ export function HowStepsProvider({ children }: { children: React.ReactNode }) {
 
 /** Up to four tutors to try it with: verified and featured first, then by rating. Real data only. */
 function usePool(): Tutor[] {
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   return React.useMemo(
     () =>
       [...tutors]

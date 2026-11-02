@@ -186,7 +186,7 @@ export function JobsBoard() {
 
   const loginHref = `/login?next=${encodeURIComponent(`${pathname}${params.toString() ? `?${params.toString()}` : ""}`)}`;
 
-  const onToggleSave = (job: Requirement) => {
+  const onToggleSave = async (job: Requirement) => {
     if (!me) {
       toast("Sign in to save jobs", { description: "Saving jobs is available to tutor accounts.", action: { label: "Sign in", onClick: () => router.push(loginHref) } });
       return;
@@ -195,7 +195,7 @@ export function JobsBoard() {
       toast.error("Only tutor accounts can save jobs.", { description: "Want to teach? Create a tutor profile to save and apply to jobs." });
       return;
     }
-    const r = toggleSavedJob(job.id);
+    const r = await toggleSavedJob(job.id);
     if (!r.ok) toast.error(r.error);
     else toast.success(r.data ? "Job saved" : "Removed from saved jobs", { description: job.title });
   };
@@ -621,7 +621,7 @@ function SaveSearchButton({ filters }: { filters: JobFilters }) {
   const [open, setOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const save = () => {
+  const save = async () => {
     const name = label.trim();
     if (name.length < 3) {
       setError("Give this search a short name (3+ characters).");
@@ -637,7 +637,7 @@ function SaveSearchButton({ filters }: { filters: JobFilters }) {
       query.radius = String(filters.radius);
     }
     if (filters.minBudget) query.minBudget = String(filters.minBudget);
-    const r = saveSearch({ kind: "jobs", label: name, query, frequency });
+    const r = await saveSearch({ kind: "jobs", label: name, query, frequency });
     if (!r.ok) {
       setError(r.error);
       return;

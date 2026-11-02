@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { GitCompareArrows, X } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useTutors } from "@/lib/store/hooks";
+import { useListedTutors } from "@/lib/store/hooks";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 
@@ -16,7 +16,7 @@ export function CompareTray() {
   const hydrated = useApp((s) => s.hydrated);
   const toggle = useApp((s) => s.toggleCompare);
   const clear = useApp((s) => s.clearCompare);
-  const tutors = useTutors();
+  const tutors = useListedTutors();
   const pathname = usePathname();
   const selected = ids.map((id) => tutors.find((t) => t.id === id)).filter(Boolean) as typeof tutors;
   const show = hydrated && selected.length > 0 && pathname !== "/compare";

@@ -82,16 +82,17 @@ function Inner() {
 
   const childName = (id?: string) => (id ? children.find((c) => c.id === id)?.firstName : undefined);
 
-  const act = (res: Result<unknown>, success: string) => {
+  const act = async (pending: Result<unknown> | Promise<Result<unknown>>, success: string) => {
+    const res = await pending;
     if (!res.ok) toast.error(res.error);
     else toast.success(success);
     return res.ok;
   };
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!pending) return;
-    if (pending.kind === "close") act(setRequirementStatus(pending.req.id, "closed"), "Requirement closed");
-    else act(deleteRequirement(pending.req.id), "Requirement deleted");
+    if (pending.kind === "close") await act(setRequirementStatus(pending.req.id, "closed"), "Requirement closed");
+    else await act(deleteRequirement(pending.req.id), "Requirement deleted");
     setPending(null);
   };
 

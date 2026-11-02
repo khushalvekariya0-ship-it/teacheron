@@ -169,15 +169,15 @@ function ActiveLesson({ booking, me, actor, leaveHref, started }: { booking: Boo
     if (conversationId && actor !== "admin") markConversationRead(conversationId);
   }, [conversationId, actor, lines.length, markConversationRead]);
 
-  const send = (body: string): string | null => {
+  const send = async (body: string): Promise<string | null> => {
     let target = conversationId;
     if (!target) {
       if (actor !== "booker") return "The chat opens once the student has sent a first message.";
-      const started = startConversation(booking.tutorId, { childId: booking.childId, subject: booking.subject });
+      const started = await startConversation(booking.tutorId, { childId: booking.childId, subject: booking.subject });
       if (!started.ok) return started.error;
       target = started.data.id;
     }
-    const sent = sendMessage(target, body);
+    const sent = await sendMessage(target, body);
     return sent.ok ? null : sent.error;
   };
 
@@ -253,7 +253,7 @@ function Room({
   selfName: string;
   status: string;
   leaveHref: string;
-  chat: { lines: ChatLine[]; onSend: (body: string) => string | null; disabledReason?: string; note: string };
+  chat: { lines: ChatLine[]; onSend: (body: string) => string | null | Promise<string | null>; disabledReason?: string; note: string };
 }) {
   const [panel, setPanel] = React.useState<"board" | "chat">("board");
   return (
@@ -270,17 +270,17 @@ function Room({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {chip}
           <Popover>
-            <PopoverTrigger aria-label="About this preview" className="grid size-9 place-items-center rounded-full border border-line-strong text-ink transition-colors hover:bg-sunken">
+            <PopoverTrigger aria-label="About the classroom" className="grid size-9 place-items-center rounded-full border border-line-strong text-ink transition-colors hover:bg-sunken">
               <Info className="size-[18px]" />
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80 p-4 text-[13.5px] leading-relaxed text-ink-2">
-              <p className="font-semibold text-ink">What works in this preview</p>
+              <p className="font-semibold text-ink">What works today</p>
               <ul className="mt-2 list-disc space-y-1 pl-4">
                 <li>Your camera, microphone and screen share</li>
                 <li>The whiteboard — saved on this device, and live between your own windows</li>
                 <li>Chat, saved to your inbox</li>
               </ul>
-              <p className="mt-3 font-semibold text-ink">Arrives with the live server</p>
+              <p className="mt-3 font-semibold text-ink">Not connected yet (needs a video service)</p>
               <ul className="mt-2 list-disc space-y-1 pl-4">
                 <li>Seeing and hearing the other person</li>
                 <li>One board shared between two devices</li>

@@ -24,7 +24,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <footer className="border-t border-line">
         <div className="container-page flex flex-col gap-2 py-5 text-[12.5px] text-muted sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © {new Date().getFullYear()} {SITE.legalName} · <span className="text-ink-2">Preview build</span> — accounts and data stay in this browser.
+            © {new Date().getFullYear()} {SITE.legalName}
           </p>
           <nav aria-label="Legal" className="flex gap-4">
             <Link href="/privacy" className="underline-offset-2 hover:text-ink hover:underline">Privacy</Link>

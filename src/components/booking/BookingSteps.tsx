@@ -14,6 +14,7 @@ import { Checkbox, RadioCards, Segmented } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
 import { SlotPicker } from "@/components/domain/SlotPicker";
 import { PAY_METHOD_LABEL } from "@/lib/data/platform";
+import { useApp } from "@/lib/store";
 
 export const NOTES_MAX = 500;
 
@@ -286,6 +287,7 @@ export function ReviewStep({
   onAgree: (v: boolean) => void;
   agreeError: boolean;
 }) {
+  const paymentsEnabled = useApp((s) => s.config.paymentsEnabled);
   const [code, setCode] = React.useState("");
   const minutes = lessonMinutes(tutor, draft);
   const total = Math.max(0, subtotal - discount);
@@ -387,8 +389,8 @@ export function ReviewStep({
                   description: walletCovers ? "One tap. No card details needed." : `You need ${formatCents(total - walletBalance, { exact: (total - walletBalance) % 100 !== 0 })} more for this lesson.`,
                   disabled: !walletCovers,
                 },
-                { value: "card", label: "Card", icon: <CreditCard />, description: "Test card •••• 4242" },
-                { value: "upi", label: "UPI", icon: <Smartphone />, description: "Approve in your UPI app" },
+                { value: "card", label: "Card", icon: <CreditCard />, description: paymentsEnabled ? "Visa, Mastercard, Amex and more" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
+                { value: "upi", label: "UPI", icon: <Smartphone />, description: paymentsEnabled ? "Approve in your UPI app" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
               ]}
             />
             {!walletCovers && (

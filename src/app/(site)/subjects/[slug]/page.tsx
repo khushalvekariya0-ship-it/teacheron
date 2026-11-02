@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import { SubjectPageView } from "@/components/content/SubjectPageView";
 import { tutorsForSubject } from "@/components/content/insights";
-import { DEFAULT_CATALOG, DEFAULT_SUBJECTS } from "@/lib/data/catalog";
+import { DEFAULT_SUBJECTS } from "@/lib/data/catalog";
 import { SITE } from "@/lib/site";
+import { listedTutors, publicCatalog } from "@/server/public";
+
+/** Figures and content come from the database; the page is rebuilt at most once a minute. */
+export const revalidate = 60;
 
 type Props = { params: Promise<{ slug: string }> };
 
 /*
- * Built-in subjects are prerendered (and described to search engines). Subjects added in
- * Admin → Catalog aren't known to the server, so their pages render on demand and the client view
- * fills them in from the live catalog (dynamicParams stays at its default, true).
+ * Built-in subjects are prerendered; subjects added in Admin → Subjects render on demand
+ * (dynamicParams stays at its default, true). Names and tutor counts come from the database.
  */
 export function generateStaticParams() {
   return DEFAULT_SUBJECTS.map((s) => ({ slug: s.slug }));
@@ -17,9 +20,9 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const subject = DEFAULT_CATALOG.bySlug[slug];
+  const subject = (await publicCatalog()).bySlug[slug];
   if (!subject) return { title: "Subject", robots: { index: false, follow: true } };
-  const count = tutorsForSubject(slug).length;
+  const count = tutorsForSubject(slug, await listedTutors()).length;
   return {
     title: `${subject.name} tutors`,
     description:
@@ -34,13 +37,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SubjectPage({ params }: Props) {
   const { slug } = await params;
-  const subject = DEFAULT_CATALOG.bySlug[slug];
+  const catalog = await publicCatalog();
+  const subject = catalog.bySlug[slug];
   const jsonLd = subject && {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Subjects", item: `${SITE.url}/subjects` },
-      { "@type": "ListItem", position: 2, name: DEFAULT_CATALOG.categoryBySlug[subject.category]?.name ?? subject.category, item: `${SITE.url}/subjects#${subject.category}` },
+      { "@type": "ListItem", position: 2, name: catalog.categoryBySlug[subject.category]?.name ?? subject.category, item: `${SITE.url}/subjects#${subject.category}` },
       { "@type": "ListItem", position: 3, name: subject.name, item: `${SITE.url}/subjects/${slug}` },
     ],
   };

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { SearchTrigger } from "@/components/layout/CommandPalette";
-import { Bell, ChevronsUpDown, LogOut, Menu, RotateCcw, Search, Globe, Check, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Bell, ChevronsUpDown, LogOut, Menu, Search, Globe, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
 import { DarkModeToggle } from "@/components/ui/DarkModeToggle";
@@ -13,18 +13,15 @@ import { WalletButton } from "@/components/wallet/WalletButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Sheet, SheetContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Popover, PopoverContent, PopoverTrigger, ConfirmDialog } from "@/components/ui/Overlay";
+import { Sheet, SheetContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay";
 import { ForbiddenState, UnauthorizedState, EmptyState } from "@/components/ui/States";
 import { useApp } from "@/lib/store";
 import { useSession, useUnreadMessages, useUnreadNotifications } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { hasPermission, isStaff } from "@/lib/permissions";
 import { formatRelative } from "@/lib/format";
-import { DEMO_ACCOUNTS, useDemoLogin } from "@/components/layout/DemoSwitcher";
 import { ADMIN_NAV, NAV_BY_ROLE, type NavSection } from "./nav";
 import type { Role, User } from "@/lib/types";
-import { toast } from "@/components/ui/Toast";
-import { SAMPLE_DATA } from "@/lib/sample-data";
 
 function sectionsFor(user: User, area: "app" | "admin"): NavSection[] {
   if (area === "admin") {
@@ -117,41 +114,9 @@ function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSec
 }
 
 function SidebarFooter({ user }: { user: User }) {
-  const [confirm, setConfirm] = React.useState(false);
-  const reset = useApp((s) => s.resetDemo);
-  const router = useRouter();
   return (
     <div className="space-y-2 border-t border-line p-3">
-      <div className="rounded-xl bg-canvas px-3 py-2.5">
-        <p className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
-          <span className="size-1.5 animate-pulse-dot rounded-full bg-success" aria-hidden /> Preview environment
-        </p>
-        <p className="mt-0.5 text-[11.5px] leading-snug text-muted">
-          {SAMPLE_DATA ? "Sample data, stored only in this browser." : "Saved only in this browser until the database is connected."}
-        </p>
-        <button type="button" onClick={() => setConfirm(true)} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-ink underline-offset-2 hover:underline">
-          <RotateCcw className="size-3" /> {SAMPLE_DATA ? "Reset demo data" : "Clear this browser's data"}
-        </button>
-      </div>
       <AccountMenu user={user} />
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={SAMPLE_DATA ? "Reset demo data?" : "Clear this browser's data?"}
-        description={
-          SAMPLE_DATA
-            ? "All bookings, messages and changes you've made in this preview will be replaced with the original sample data."
-            : "All accounts, bookings, messages and changes saved in this browser will be removed."
-        }
-        confirmLabel="Reset data"
-        tone="danger"
-        onConfirm={() => {
-          reset();
-          setConfirm(false);
-          toast.success(SAMPLE_DATA ? "Demo data reset" : "Browser data cleared");
-          router.push("/login");
-        }}
-      />
     </div>
   );
 }
@@ -159,7 +124,6 @@ function SidebarFooter({ user }: { user: User }) {
 function AccountMenu({ user, compact }: { user: User; compact?: boolean }) {
   const logout = useApp((s) => s.logout);
   const router = useRouter();
-  const demoLogin = useDemoLogin();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className={cn("flex w-full items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-canvas", compact ? "p-1" : "px-2 py-2")} aria-label="Account menu">
@@ -182,18 +146,9 @@ function AccountMenu({ user, compact }: { user: User; compact?: boolean }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push("/")}><Globe /> View public site</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Switch demo account</DropdownMenuLabel>
-        {DEMO_ACCOUNTS.map((a) => (
-          <DropdownMenuItem key={a.id} onSelect={() => a.id !== user.id && demoLogin(a.id)}>
-            <a.icon />
-            <span className="flex-1">{a.label}</span>
-            {a.id === user.id && <Check className="!text-ink" />}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
         <DropdownMenuItem
-          onSelect={() => {
-            logout();
+          onSelect={async () => {
+            await logout();
             router.push("/login");
           }}
         >

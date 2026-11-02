@@ -223,8 +223,8 @@ function ReviewForm({ booking, me, onDone }: { booking: Booking; me: User; onDon
   const form = useForm<ReviewValues>({ resolver: zodResolver(reviewSchema), mode: "onTouched", defaultValues: { rating: 0, body: "" } });
   const { errors, isSubmitting } = form.formState;
 
-  const onSubmit = form.handleSubmit((v) => {
-    const res = submitReview(booking.id, v.rating as Review["rating"], v.body);
+  const onSubmit = form.handleSubmit(async (v) => {
+    const res = await submitReview(booking.id, v.rating as Review["rating"], v.body);
     if (!res.ok) {
       toast.error(res.error);
       return;
