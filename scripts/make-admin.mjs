@@ -35,7 +35,9 @@ if (!process.env.SUPABASE_DB_URL) {
   process.exit(1);
 }
 
-const sql = postgres(process.env.SUPABASE_DB_URL, { max: 1, prepare: false, onnotice: () => {} });
+// Encrypted unless the database is on this computer.
+const ssl = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(process.env.SUPABASE_DB_URL).hostname) ? false : "require";
+const sql = postgres(process.env.SUPABASE_DB_URL, { max: 1, ssl, prepare: false, onnotice: () => {} });
 try {
   const [user] = await sql`select id, role, first_name, last_name, tutor_id from public.users where lower(email) = ${email}`;
   if (!user) {

@@ -12,10 +12,14 @@ export type Tx = postgres.TransactionSql;
 
 const cache = globalThis as unknown as { __tutorlinkSql?: Sql };
 
+/** Supabase is reached over the internet, so the connection is always encrypted; a database on this computer isn't. */
+const sslFor = (url: string) => (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname) ? false : ("require" as const));
+
 export function db(): Sql {
   if (!env.dbUrl) throw new NotConfiguredError("The database");
   cache.__tutorlinkSql ??= postgres(env.dbUrl, {
     max: env.dbPoolMax,
+    ssl: sslFor(env.dbUrl),
     prepare: false,
     idle_timeout: 20,
     connect_timeout: 10,

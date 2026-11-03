@@ -25,7 +25,7 @@ Open the file `.env.local` in the project folder. It already has empty lines for
 | `NEXT_PUBLIC_SUPABASE_URL` | **Project Settings → Data API** → *Project URL* (looks like `https://abcd1234.supabase.co`) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Project Settings → API Keys** → the **anon / public** key (or the new **publishable** key, `sb_publishable_…`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Same page → the **service_role** key (or a **secret** key, `sb_secret_…`). This one is secret. |
-| `SUPABASE_DB_URL` | Click **Connect** at the top of the dashboard → **Transaction pooler** → copy the URI and replace `[YOUR-PASSWORD]` with the database password from step 1. It looks like `postgresql://postgres.abcd1234:YOUR-PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres` |
+| `SUPABASE_DB_URL` | Click **Connect** at the top of the dashboard → **Transaction pooler** → copy the URI and replace `[YOUR-PASSWORD]` with the database password from step 1. It looks like `postgresql://postgres.abcd1234:YOUR-PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres`. If pages hang or the build says a page "took more than 60 seconds", use the **Session pooler** link instead (same address, port `5432`). |
 
 Also set `NEXT_PUBLIC_SITE_URL` to the address people open the site at — `http://localhost:3100`
 on this computer for now, your real domain later.

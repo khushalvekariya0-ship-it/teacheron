@@ -26,7 +26,9 @@ const checkOnly = process.argv.includes("--check");
 const dir = join(root, "supabase", "migrations");
 const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
 
-const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {}, connect_timeout: 15 });
+// Encrypted unless the database is on this computer.
+const ssl = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname) ? false : "require";
+const sql = postgres(url, { max: 1, ssl, prepare: false, onnotice: () => {}, connect_timeout: 15 });
 try {
   await sql`create table if not exists public.schema_migrations (version text primary key, applied_at timestamptz not null default now())`;
   await sql`alter table public.schema_migrations enable row level security`;
