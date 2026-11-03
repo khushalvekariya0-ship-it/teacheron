@@ -99,10 +99,10 @@ const ACTIONS: (keyof DomainActions)[] = [
   "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "openDispute",
   "addDisputeNote", "setDisputeStatus", "resolveDispute", "reviewVerification", "setUserStatus", "setReportStatus", "moderateReview", "setFlag",
   "updatePolicy", "setPlatformFee", "saveCoupon", "saveSubjectArea", "deleteSubjectArea", "saveSubject", "deleteSubject", "moveCatalogItem",
-  "loadStarterCatalog", "logConversationAccess", "setStaffAccess", "updateUserDetails", "deleteAccount", "setTutorListing", "takeDownRequirement", "sendAnnouncement", "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",
+  "loadStarterCatalog", "logConversationAccess", "contactLearner", "warnChatUser", "restrictChat", "setContactFlagStatus", "requestChatUnlock", "declineChatUnlock", "setStaffAccess", "updateUserDetails", "deleteAccount", "setTutorListing", "takeDownRequirement", "sendAnnouncement", "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",
 ];
 /** Actions the scheduler or a public link run; the browser never calls them. */
-const SERVER_ONLY = new Set<keyof DomainActions>(["confirmParentalConsent", "runScheduledJobs"]);
+const SERVER_ONLY = new Set<keyof DomainActions>(["confirmParentalConsent", "runScheduledJobs", "recordContactFlag"]);
 
 async function post(url: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> | null }> {
   try {

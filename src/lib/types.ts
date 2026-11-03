@@ -33,6 +33,23 @@ export interface User {
   /** Students aged 13–17 need a parent's consent before booking or messaging. Under-13s cannot register. */
   parentalConsent?: { parentEmail: string; status: "pending" | "granted" };
   lastLoginAt?: ISODate;
+  /** Chat safety: warnings from Trust & Safety, and a pause on sending messages. */
+  chatModeration?: ChatModeration;
+}
+
+export interface ChatModeration {
+  warnings: number;
+  lastWarnedAt?: ISODate;
+  /** Messages can't be sent (or new chats started) before this time. */
+  restrictedUntil?: ISODate;
+  restrictionReason?: string;
+  /** Staff account that paused it, or "system" for the automatic pause after repeated attempts. */
+  restrictedBy?: ID;
+  /** The paused person asked Trust & Safety to unlock messaging (cleared when staff answer or pause again). */
+  unlockRequestedAt?: ISODate;
+  unlockRequestNote?: string;
+  /** Staff said no to the request; no new request until this pause ends. */
+  unlockDeclinedAt?: ISODate;
 }
 
 export type Permission =
@@ -554,6 +571,29 @@ export interface Report {
   createdAt: ISODate;
 }
 
+/**
+ * A message, note or file that was stopped because it contained contact details (Admin → Chat safety).
+ * Only a masked excerpt is kept: the phone number, email or handle itself is never stored.
+ */
+export interface ContactFlag {
+  id: ID;
+  /** Who tried to send it. */
+  userId: ID;
+  channel: "chat" | "homework" | "lesson" | "profile";
+  source: "text" | "file";
+  /** The conversation, homework or tutor profile it was meant for. */
+  contextId?: ID;
+  /** The person who would have received it (user id, or tutor id for a tutor). */
+  recipientId?: ID;
+  kinds: ("phone" | "email" | "social")[];
+  excerpt: string;
+  fileName?: string;
+  status: "open" | "actioned" | "dismissed";
+  reviewedBy?: ID;
+  reviewedAt?: ISODate;
+  createdAt: ISODate;
+}
+
 export type DisputeStatus =
   | "open"
   | "under_review"
@@ -575,7 +615,8 @@ export interface Dispute {
     | "refund_issue"
     | "other";
   details: string;
-  evidence: { name: string; sizeKb: number; path?: string }[];
+  /** `staffOnly`: the file shows contact details, so only staff (and the uploader) can open it. */
+  evidence: { name: string; sizeKb: number; path?: string; staffOnly?: boolean }[];
   status: DisputeStatus;
   resolution?: { outcome: "full_refund" | "partial_refund" | "credit" | "no_refund"; amountCents: Cents; note: string };
   adminNotes: { by: ID; body: string; at: ISODate }[];

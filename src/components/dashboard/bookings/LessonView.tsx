@@ -78,6 +78,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
   const conversations = useApp((s) => s.conversations);
   const transition = useApp((s) => s.transitionBooking);
   const startConversation = useApp((s) => s.startConversation);
+  const contactLearner = useApp((s) => s.contactLearner);
   const peopleFor = usePeople();
   const review = useLessonReview(b);
   const dispute = useLessonDispute(b.id);
@@ -109,7 +110,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     el?.focus({ preventScroll: true });
   };
   const message = async () => {
-    const res = await startConversation(b.tutorId, { childId: b.childId, subject: b.subject });
+    const res = isTutor ? await contactLearner({ bookingId: b.id }) : await startConversation(b.tutorId, { childId: b.childId, subject: b.subject });
     if (!res.ok) return void toast.error(res.error);
     router.push(`/dashboard/messages?c=${res.data.id}`);
   };
@@ -168,11 +169,11 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
                 <MessageSquare /> Message {isTutor ? people.booker?.firstName ?? "family" : tutorFirst}
               </Link>
             </Button>
-          ) : !isTutor ? (
+          ) : (
             <Button variant="secondary" onClick={message}>
-              <MessageSquare /> Message {tutorFirst}
+              <MessageSquare /> Message {isTutor ? people.booker?.firstName ?? "family" : tutorFirst}
             </Button>
-          ) : undefined
+          )
         }
       />
 

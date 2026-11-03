@@ -60,7 +60,15 @@ export async function POST(request: Request) {
     const parsed = parseArgs(action, body!.args);
     if (!parsed.ok) return json({ result: fail(parsed.error) }, { status: 400 });
     const prepared = await prepareArgs(action, parsed.args, me);
-    if (!prepared.ok) return json({ result: fail(prepared.error), state: await buildState(me.id) });
+    if (!prepared.ok) {
+      let error = prepared.error;
+      // A file or photo stopped for showing contact details is logged for Trust & Safety (never the file itself).
+      if (prepared.flag) {
+        const logged = await runAction("recordContactFlag", [prepared.flag], { userId: me.id });
+        if (logged.ok && (logged.data as { paused?: boolean }).paused) error += " Messaging is paused for 1 hour because of repeated attempts to share contact details.";
+      }
+      return json({ result: fail(error, prepared.flag ? "contact_blocked" : undefined), state: await buildState(me.id) });
+    }
 
     // Remember the media a tutor is replacing, so the old file can be removed once the change is saved.
     const replacing = action === "updateTutorProfile" && me.tutorId ? await currentMedia(me.tutorId, prepared.args[0] as Record<string, unknown>) : [];

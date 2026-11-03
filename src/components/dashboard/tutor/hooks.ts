@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import type { Booking, Child, Tutor, User, WeeklyWindow } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useSession, useTutors } from "@/lib/store/hooks";
@@ -8,6 +9,7 @@ import { zonedParts, zonedToUtc } from "@/lib/time";
 import { endMs } from "@/lib/booking";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { TUTOR_PLANS, type Plan } from "@/lib/data/platform";
+import { toast } from "@/components/ui/Toast";
 
 export const DAY_MS = 86_400_000;
 
@@ -202,4 +204,21 @@ export function profileChecklist(t: Tutor): ChecklistItem[] {
 
 export function completionPercent(items: ChecklistItem[]): number {
   return items.length ? Math.round((items.filter((i) => i.done).length / items.length) * 100) : 0;
+}
+
+/* ─── Messaging a family ────────────────────────────────────────────────────── */
+
+/** Opens the chat with a family (starting it if needed), from a lesson or a job the tutor applied to. */
+export function useMessageFamily() {
+  const router = useRouter();
+  const contact = useApp((s) => s.contactLearner);
+  const [busy, setBusy] = React.useState(false);
+  const open = async (source: { bookingId?: string; requirementId?: string }) => {
+    setBusy(true);
+    const r = await contact(source);
+    setBusy(false);
+    if (!r.ok) return void toast.error(r.error);
+    router.push(`/dashboard/messages?c=${r.data.id}`);
+  };
+  return { open, busy };
 }

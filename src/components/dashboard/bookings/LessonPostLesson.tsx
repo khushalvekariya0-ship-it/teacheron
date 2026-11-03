@@ -162,6 +162,7 @@ export function DisputeCard({ dispute: d, myId, tz }: { dispute: Dispute; myId: 
               {d.evidence.map((f) => (
                 <li key={f.name} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-1 text-[12px] text-ink-2">
                   <FileText className="size-3.5 text-muted" aria-hidden /> <FileLink path={f.path}>{f.name}</FileLink> <span className="text-muted">{f.sizeKb} KB</span>
+                  {f.staffOnly && <span className="text-muted" title="This file shows contact details, so only TutorLink staff and the person who added it can open it."> · staff only</span>}
                 </li>
               ))}
             </ul>
@@ -277,7 +278,7 @@ export function DisputeDialog({ booking, open, onOpenChange, isTutor }: { bookin
                 Evidence <span className="font-normal text-muted">(optional)</span>
               </p>
               <p className="text-[12.5px] text-muted">Screenshots or documents, up to {MAX_FILES} files, 10 MB each.</p>
-              <input ref={fileRef} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden accept=".pdf,.png,.jpg,.jpeg,.heic,.txt,.doc,.docx" onChange={(e) => onFiles(e.target.files)} />
+              <input ref={fileRef} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.docx" onChange={(e) => onFiles(e.target.files)} />
               <AnimatePresence initial={false}>
                 {files.length > 0 && (
                   <motion.ul initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2, ease: EASE }} className="mt-2 flex flex-wrap gap-1.5 overflow-hidden">

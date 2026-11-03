@@ -2,8 +2,10 @@ import type {
   Application, AppNotification, AuditLog, Booking, BookingType, Child, Conversation, Coupon, Dispute, FeatureFlag, Homework,
   LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod, Payment, Payout, ProgressNote, Report, Requirement, Review,
   SavedSearch, StudentProfile, Subject, SubjectCategory, Subscription, TeachingMode, Tutor, User, VerificationRequest, WalletTransaction,
+  ContactFlag,
 } from "@/lib/types";
 import type { BookingPolicy } from "@/lib/data/platform";
+import { maskMatches, scanContact } from "./contact";
 
 /*
  * The application's data, as one plain object. The same shape is used in two places:
@@ -12,9 +14,11 @@ import type { BookingPolicy } from "@/lib/data/platform";
  *  • in the browser, where the store (src/lib/store) holds what the signed-in viewer may see.
  */
 
-export type Result<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
+/** `code` marks failures the interface treats specially (a message stopped for contact details, a paused account). */
+export type FailCode = "contact_blocked" | "chat_paused";
+export type Result<T = undefined> = { ok: true; data: T } | { ok: false; error: string; code?: string };
 export const ok = <T,>(data: T): Result<T> => ({ ok: true, data });
-export const fail = (error: string): Result<never> => ({ ok: false, error });
+export const fail = (error: string, code?: FailCode): Result<never> => (code ? { ok: false, error, code } : { ok: false, error });
 
 export interface TutorOnboardingDraft {
   step: number;
@@ -114,6 +118,8 @@ export interface Data {
   walletTransactions: WalletTransaction[];
   subscriptions: Record<string, Subscription>;
   reports: Report[];
+  /** Messages, notes and files stopped for containing contact details (staff with reports.moderate only). */
+  contactFlags: ContactFlag[];
   disputes: Dispute[];
   verificationRequests: VerificationRequest[];
   auditLogs: AuditLog[];
@@ -149,7 +155,7 @@ export function emptyData(defaults: Pick<Data, "flags" | "policy" | "platformFee
     users: [], children: [], tutorOverrides: {}, registeredTutors: [], onboarding: {}, studentProfiles: {}, favorites: {}, savedSearches: [],
     savedJobs: {}, requirements: [], applications: [], bookings: [], reviews: [], conversations: [], messages: [], notifications: [],
     notificationPrefs: {}, goals: [], progressNotes: [], homework: [], payments: [], payouts: [], leadTransactions: [], walletTransactions: [],
-    subscriptions: {}, reports: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [],
+    subscriptions: {}, reports: [], contactFlags: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [],
     blogPosts: [], faqs: [], testimonials: [],
     ...defaults,
   };
@@ -157,17 +163,14 @@ export function emptyData(defaults: Pick<Data, "flags" | "policy" | "platformFee
 
 /* ─── Shared rules and helpers ───────────────────────────────────────────── */
 
-const CONTACT_PATTERNS = [
-  /[\w.+-]+@[\w-]+\.[\w.-]+/g, // email
-  /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, // US phone
-  /\b(?:whatsapp|telegram|snapchat|insta(?:gram)?|venmo|cash\s?app)\b[:\s]*@?[\w.]*/gi,
-];
-
-/** Masks phone numbers, emails and off-platform handles. Returns the safe text and whether anything was masked. */
+/**
+ * Masks phone numbers, emails and other-app handles in text other people read (profiles, job posts,
+ * applications, reviews, booking notes), using the same detection as chat (./contact.ts). Returns the
+ * safe text and whether anything was masked.
+ */
 export function maskContactInfo(body: string): { text: string; masked: boolean } {
-  let text = body;
-  for (const re of CONTACT_PATTERNS) text = text.replace(re, "[contact details hidden]");
-  return { text, masked: text !== body };
+  const found = scanContact(body, "chat");
+  return found.found ? { text: maskMatches(body, found.matches, "[contact details hidden]"), masked: true } : { text: body, masked: false };
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {

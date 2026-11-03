@@ -81,6 +81,18 @@ export function describeAudit(a: AuditLog): string {
       return "Account suspended";
     case "user.reactivate":
       return "Account reactivated";
+    case "chat.warn":
+      return "Warned about sharing contact details";
+    case "chat.restrict":
+      return `Messaging paused${m.hours ? ` for ${Number(m.hours) >= 48 ? `${Math.round(Number(m.hours) / 24)} days` : `${s("hours")} hours`}` : ""}`;
+    case "chat.unrestrict":
+      return "Messaging unlocked";
+    case "chat.unlock_request":
+      return "Asked to unlock messaging";
+    case "chat.unlock_declined":
+      return "Unlock request declined; messaging stays paused";
+    case "contact_flag.status":
+      return m.status === "dismissed" ? "Chat safety entries dismissed" : m.status === "open" ? "Chat safety entries reopened" : "Chat safety entries marked dealt with";
     case "verification.approve":
       return `${humanize(s("kind") || "verification")} check approved`;
     case "verification.reject":
@@ -141,7 +153,8 @@ export function auditTone(a: AuditLog): "default" | "accent" | "success" | "warn
   if (a.action === "user.suspend" || a.action === "verification.reject" || a.action === "user.delete" || a.action === "requirement.takedown" || a.action === "security.mfa_off") return "danger";
   if (a.action === "review.moderate") return m.status === "removed" ? "danger" : m.status === "flagged" ? "warning" : "success";
   if (a.action === "report.status") return m.status === "actioned" ? "success" : m.status === "dismissed" ? "default" : "accent";
-  if (a.action === "user.reactivate" || a.action === "verification.approve" || a.action === "dispute.resolve") return "success";
+  if (a.action === "user.reactivate" || a.action === "verification.approve" || a.action === "dispute.resolve" || a.action === "chat.unrestrict") return "success";
+  if (a.action === "chat.warn" || a.action === "chat.restrict") return "warning";
   if (a.action === "conversation.access" || a.action === "file.view" || a.action === "user.mfa_reset") return "warning";
   return "accent";
 }

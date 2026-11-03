@@ -3,11 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Ban, BookOpen, CalendarPlus, Ellipsis, FileText, Flag, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, Ban, BookOpen, CalendarPlus, Clock, Ellipsis, FileText, Flag, LockOpen, ShieldAlert, ShieldCheck, UserRound } from "lucide-react";
 import type { Message } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useSession } from "@/lib/store/hooks";
-import { formatTime } from "@/lib/format";
+import { formatDateTime, formatTime } from "@/lib/format";
 import { dateKey } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
@@ -80,6 +80,8 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
   const blockedByMe = c.blockedBy === selfId;
   const tutorSlug = view.tutor?.slug;
   const context = [view.subjectLabel, view.childName && `for ${view.childName}`].filter(Boolean).join(" · ");
+  const restricted = me.chatModeration?.restrictedUntil;
+  const pausedUntil = restricted && new Date(restricted).getTime() > now ? restricted : null;
 
   const onSent = () => {
     atBottom.current = true;
@@ -242,8 +244,10 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
         ))}
       </div>
 
-      {/* Composer or blocked state */}
-      {c.blockedBy ? (
+      {/* Composer, paused or blocked state */}
+      {pausedUntil ? (
+        <PausedNotice until={pausedUntil} tz={tz} />
+      ) : c.blockedBy ? (
         <div className="flex flex-col items-center gap-2 border-t border-line bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-center text-[13px] text-muted sm:flex-row sm:justify-center">
           <Ban className="size-4 shrink-0" aria-hidden />
           {blockedByMe ? (
@@ -274,6 +278,70 @@ export function Thread({ view, now, tz, onBack }: { view: ConversationView; now:
         }}
       />
       <ReportDialog open={reportOpen} onOpenChange={setReportOpen} view={view} />
+    </div>
+  );
+}
+
+/** Shown instead of the message box while messaging is paused, with a way to ask Trust & Safety to unlock it. */
+function PausedNotice({ until, tz }: { until: string; tz: string }) {
+  const me = useSession();
+  const ask = useApp((s) => s.requestChatUnlock);
+  const [open, setOpen] = React.useState(false);
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string>();
+  const cm = me?.chatModeration;
+  const asked = cm?.unlockRequestedAt;
+  const declined = cm?.unlockDeclinedAt;
+
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    const res = await ask(note.trim());
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOpen(false);
+    setNote("");
+    toast.success("Request sent", { description: "Our team will review it. You'll get a notification with the answer." });
+  };
+
+  return (
+    <div role="status" className="flex flex-col gap-3 border-t border-line bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-[13px] leading-snug text-ink-2 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+        <ShieldAlert className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
+        <p>
+          <span className="font-semibold text-ink">Messaging is paused until {formatDateTime(until, tz)}.</span>{" "}
+          {cm?.restrictedBy === "system"
+            ? "Several messages included contact details. Keep conversations and payments on TutorLink."
+            : `${cm?.restrictionReason ? `Reason: ${cm.restrictionReason}. ` : ""}`}
+          {asked && <span className="mt-1 block text-muted">You asked to unlock it on {formatDateTime(asked, tz)}. Our team will review it soon.</span>}
+          {declined && <span className="mt-1 block text-muted">Our team reviewed your request and kept the pause. You can message again after {formatDateTime(until, tz)}.</span>}
+        </p>
+      </div>
+      {declined ? null : asked ? (
+        <Button size="sm" variant="secondary" disabled className="shrink-0 self-start sm:self-auto">
+          <Clock /> Request sent
+        </Button>
+      ) : (
+        <Button size="sm" variant="secondary" onClick={() => { setError(undefined); setOpen(true); }} className="shrink-0 self-start sm:self-auto">
+          <LockOpen /> Ask to unlock
+        </Button>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent title="Ask to unlock messaging" description="Our Trust & Safety team will look at your request and reply with a notification.">
+          <form onSubmit={send} noValidate>
+            <DialogBody className="space-y-3">
+              <Field label="Anything we should know?" optional hint="For example, if a message was about a lesson time and not a phone number." error={error}>
+                <Textarea value={note} onChange={(e) => { setNote(e.target.value); setError(undefined); }} rows={4} maxLength={500} showCount autoFocus />
+              </Field>
+            </DialogBody>
+            <DialogFooter>
+              <DialogClose asChild><Button variant="secondary">Cancel</Button></DialogClose>
+              <Button type="submit" loading={busy}><LockOpen /> Send request</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

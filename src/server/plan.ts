@@ -19,6 +19,11 @@ async function cms(L: Loader) {
   await Promise.all([L.load("blog_posts", "true"), L.load("faqs", "true"), L.load("testimonials", "true")]);
 }
 
+/** The account's stopped attempts in the last hour (for the automatic pause). */
+async function recentFlags(L: Loader, me: User | null) {
+  await L.load("contact_flags", "user_id = $1 and created_at > now() - interval '1 hour'", [me?.id ?? ""]);
+}
+
 async function jobAlerts(L: Loader) {
   await L.load("saved_searches", "kind = 'jobs' and frequency = 'instant'");
 }
@@ -78,15 +83,39 @@ export const PLANS: Record<ActionName, Plan> = {
   startConversation: async (L, me, [tutorId]) => {
     await Promise.all([L.self(me), L.tutors([str(tutorId)])]);
   },
+  contactLearner: async (L, me, [source]) => {
+    const s = (source ?? {}) as { bookingId?: unknown; requirementId?: unknown };
+    const [bookings, requirements] = await Promise.all([L.byId("bookings", [str(s.bookingId)]), L.byId("requirements", [str(s.requirementId)]), L.self(me)]);
+    await L.users([bookings[0]?.booker_id as string, requirements[0]?.owner_id as string]);
+  },
   sendMessage: async (L, me, [conversationId]) => {
     const [c] = await L.byId("conversations", [str(conversationId)]);
-    await Promise.all([L.self(me), L.users([c?.user_id as string]), L.usersByTutor([c?.tutor_id as string])]);
+    await Promise.all([
+      L.self(me), L.users([c?.user_id as string]), L.usersByTutor([c?.tutor_id as string]), recentFlags(L, me),
+      // The latest messages, so a number sent a piece at a time is noticed.
+      L.load("messages", "id in (select id from public.messages where conversation_id = $1 order by created_at desc limit 12)", [str(conversationId) ?? ""]),
+    ]);
   },
   markConversationRead: async (L, me, [conversationId]) => {
     await Promise.all([L.self(me), L.byId("conversations", [str(conversationId)]), L.load("messages", "conversation_id = $1 and read_at is null", [str(conversationId) ?? ""])]);
   },
   toggleBlock: async (L, me, [conversationId]) => {
     await Promise.all([L.self(me), L.byId("conversations", [str(conversationId)])]);
+  },
+  requestChatUnlock: async (L, me) => {
+    // Staff who moderate chat are told about the request.
+    await Promise.all([L.self(me), L.load("users", "role in ('admin', 'support') and status = 'active' and 'reports.moderate' = any(permissions)")]);
+  },
+  recordContactFlag: async (L, me, [input]) => {
+    const i = obj(input);
+    await Promise.all([L.self(me), recentFlags(L, me)]);
+    if (i.channel === "chat") {
+      const [c] = await L.byId("conversations", [str(i.contextId)]);
+      await L.usersByTutor([c?.tutor_id as string]);
+    } else if (i.channel === "homework") {
+      const [hw] = await L.byId("homework", [str(i.contextId)]);
+      await L.usersByTutor([hw?.tutor_id as string]);
+    }
   },
   report: async (L, me, [input]) => {
     const i = obj(input);
@@ -116,11 +145,11 @@ export const PLANS: Record<ActionName, Plan> = {
   },
   submitHomework: async (L, me, [id]) => {
     const [hw] = await L.byId("homework", [str(id)]);
-    await Promise.all([L.self(me), L.usersByTutor([hw?.tutor_id as string])]);
+    await Promise.all([L.self(me), L.usersByTutor([hw?.tutor_id as string]), recentFlags(L, me)]);
   },
   reviewHomework: async (L, me, [id]) => {
     const [hw] = await L.byId("homework", [str(id)]);
-    await Promise.all([L.self(me), L.byId("children", [hw?.learner_id as string])]);
+    await Promise.all([L.self(me), L.byId("children", [hw?.learner_id as string]), recentFlags(L, me)]);
   },
   setTopicStatus: self,
   addGoal: async (L, me, [input]) => {
@@ -195,6 +224,18 @@ export const PLANS: Record<ActionName, Plan> = {
   sendAnnouncement: async (L, me, [audience]) => {
     const roles = audience === "students" ? ["student"] : audience === "parents" ? ["parent"] : audience === "tutors" ? ["tutor"] : ["student", "parent", "tutor"];
     await Promise.all([L.self(me), L.load("users", "role = any($1) and status = 'active'", [roles])]);
+  },
+  warnChatUser: async (L, me, [userId]) => {
+    await Promise.all([L.self(me), L.users([str(userId)]), L.load("contact_flags", "user_id = $1 and status = 'open'", [str(userId) ?? ""])]);
+  },
+  restrictChat: async (L, me, [userId]) => {
+    await Promise.all([L.self(me), L.users([str(userId)]), L.load("contact_flags", "user_id = $1 and status = 'open'", [str(userId) ?? ""])]);
+  },
+  declineChatUnlock: async (L, me, [userId]) => {
+    await Promise.all([L.self(me), L.users([str(userId)])]);
+  },
+  setContactFlagStatus: async (L, me, [ids]) => {
+    await Promise.all([L.self(me), L.byId("contact_flags", Array.isArray(ids) ? ids.map(str) : [])]);
   },
   logConversationAccess: async (L, me, [conversationId]) => {
     await Promise.all([

@@ -89,7 +89,7 @@ const USER: Record<string, Col> = {
   phone: ["phone", "v", true], city: ["city", "v", true], state: ["state", "v", true], zip: ["zip", "v", true],
   timezone: ["timezone", "v"], createdAt: ["created_at", "ts"], emailVerified: ["email_verified", "v"], mfaEnabled: ["mfa_enabled", "flag", true],
   tutorId: ["tutor_id", "v", true], permissions: ["permissions", "v", true], status: ["status", "v"],
-  parentalConsent: ["parental_consent", "json", true], lastLoginAt: ["last_login_at", "ts", true],
+  parentalConsent: ["parental_consent", "json", true], lastLoginAt: ["last_login_at", "ts", true], chatModeration: ["chat_moderation", "json", true],
 };
 
 const CHILD: Record<string, Col> = {
@@ -190,6 +190,12 @@ const WALLET_TX: Record<string, Col> = {
 const REPORT: Record<string, Col> = {
   id: ["id", "v"], reporterId: ["reporter_id", "v"], targetType: ["target_type", "v"], targetId: ["target_id", "v"], reason: ["reason", "v"],
   details: ["details", "v"], status: ["status", "v"], createdAt: ["created_at", "ts"],
+};
+
+const CONTACT_FLAG: Record<string, Col> = {
+  id: ["id", "v"], userId: ["user_id", "v"], channel: ["channel", "v"], source: ["source", "v"], contextId: ["context_id", "v", true],
+  recipientId: ["recipient_id", "v", true], kinds: ["kinds", "v"], excerpt: ["excerpt", "v"], fileName: ["file_name", "v", true], status: ["status", "v"],
+  reviewedBy: ["reviewed_by", "v", true], reviewedAt: ["reviewed_at", "ts", true], createdAt: ["created_at", "ts"],
 };
 
 const DISPUTE: Record<string, Col> = {
@@ -314,6 +320,7 @@ export const SPECS: TableSpec[] = [
   arraySpec("leadTransactions", "lead_transactions", LEAD_TX, "created_at desc"),
   arraySpec("walletTransactions", "wallet_transactions", WALLET_TX, "created_at desc"),
   arraySpec("reports", "reports", REPORT, "created_at desc"),
+  arraySpec("contactFlags", "contact_flags", CONTACT_FLAG, "created_at desc"),
   arraySpec("disputes", "disputes", DISPUTE, "created_at desc"),
   arraySpec("verificationRequests", "verification_requests", VERIFICATION, "submitted_at desc"),
   arraySpec("auditLogs", "audit_logs", AUDIT, "created_at desc"),
@@ -369,7 +376,7 @@ export const WRITE_ORDER = [
   "subject_categories", "subjects", "feature_flags", "platform_settings", "tutors", "users", "children", "student_profiles", "notification_prefs",
   "onboarding_drafts", "subscriptions", "lead_transactions", "verification_requests", "payouts", "favorites", "saved_searches", "requirements",
   "saved_jobs", "applications", "bookings", "reviews", "disputes", "conversations", "messages", "notifications", "learning_goals", "progress_notes",
-  "homework", "payments", "wallet_transactions", "coupons", "reports", "audit_logs", "blog_posts", "faqs", "testimonials",
+  "homework", "payments", "wallet_transactions", "coupons", "reports", "contact_flags", "audit_logs", "blog_posts", "faqs", "testimonials",
 ];
 
 export const keyOf = (spec: TableSpec, row: Row) => spec.key.map((k) => String(row[k])).join("\u0000");

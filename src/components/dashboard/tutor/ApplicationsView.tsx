@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { NeedsTutorProfile } from "./shared";
-import { useMyTutor } from "./hooks";
+import { useMessageFamily, useMyTutor } from "./hooks";
 import { ACTIVE_APPLICATION, APPLICATION_PIPELINE, APPLICATION_STATUS_META, budgetLabel } from "./jobs-shared";
 
 type Group = "all" | "active" | "hired" | "inactive";
@@ -203,6 +203,7 @@ function ApplicationCard({ row, now, onWithdraw }: { row: Row; now: number; onWi
   const [open, setOpen] = React.useState(false);
   const meta = APPLICATION_STATUS_META[app.status];
   const canWithdraw = ACTIVE_APPLICATION.includes(app.status);
+  const chat = useMessageFamily();
   return (
     <article data-spotlight className="rounded-xl border border-line bg-surface p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -272,11 +273,9 @@ function ApplicationCard({ row, now, onWithdraw }: { row: Row; now: number; onWi
               <Link href={`/tutor-jobs/${req.id}`}>View job</Link>
             </Button>
           )}
-          {["contacted", "trial_requested", "hired", "shortlisted"].includes(app.status) && (
-            <Button asChild variant="secondary" size="sm">
-              <Link href="/dashboard/messages">
-                <MessagesSquare /> Messages
-              </Link>
+          {req && (canWithdraw || app.status === "hired") && (
+            <Button variant="secondary" size="sm" loading={chat.busy} onClick={() => void chat.open({ requirementId: req.id })}>
+              <MessagesSquare /> Message family
             </Button>
           )}
           {canWithdraw && (

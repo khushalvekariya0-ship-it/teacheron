@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarCheck2, CalendarClock, CalendarX2, Goal, LineChart, NotebookPen, Plus, UserX } from "lucide-react";
+import { CalendarCheck2, CalendarClock, CalendarX2, Goal, LineChart, MessageSquare, NotebookPen, Plus, UserX } from "lucide-react";
 import type { LearningGoal, ProgressNote } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
@@ -22,7 +22,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { NeedsTutorProfile, TagInput } from "./shared";
-import { formatDateKey, todayKey, useMyStudents, useMyTutor, type Learner } from "./hooks";
+import { formatDateKey, todayKey, useMessageFamily, useMyStudents, useMyTutor, type Learner } from "./hooks";
 
 type TopicStatus = LearningGoal["topics"][number]["status"];
 const TOPIC_OPTIONS: { value: TopicStatus; label: string }[] = [
@@ -99,6 +99,7 @@ function StudentPanel({ student, tutorId, tutorSubjects }: { student: Learner; t
   const allNotes = useApp((s) => s.progressNotes);
   const setTopicStatus = useApp((s) => s.setTopicStatus);
   const [addingGoal, setAddingGoal] = React.useState(false);
+  const chat = useMessageFamily();
 
   const goals = React.useMemo(() => allGoals.filter((g) => g.learnerId === student.id && g.tutorId === tutorId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [allGoals, student.id, tutorId]);
   const notes = React.useMemo(() => allNotes.filter((n) => n.learnerId === student.id && n.tutorId === tutorId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [allNotes, student.id, tutorId]);
@@ -138,6 +139,11 @@ function StudentPanel({ student, tutorId, tutorSubjects }: { student: Learner; t
                 </Badge>
               ))}
             </div>
+            {b[0] && (
+              <Button variant="secondary" size="sm" loading={chat.busy} onClick={() => void chat.open({ bookingId: b[0].id })}>
+                <MessageSquare /> Message {student.guardian ? student.guardian.split(" ")[0] : student.name.split(" ")[0]}
+              </Button>
+            )}
           </div>
           <div>
             <p className="mb-2 text-[12.5px] font-medium text-muted">

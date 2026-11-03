@@ -28,8 +28,9 @@ async function mayOpen(me: User, path: string): Promise<boolean> {
     }
     case "disputes": {
       if (hasPermission(me, "disputes.manage")) return true;
-      const rows = await sql`select b.booker_id, b.tutor_id from public.disputes d join public.bookings b on b.id = d.booking_id where d.evidence @> ${sql.json([{ path }])}`;
-      return rows.some((r) => isParty(r.booker_id, r.tutor_id));
+      // Evidence that shows contact details (staffOnly) opens only for staff and the person who added it (checked above).
+      const rows = await sql`select b.booker_id, b.tutor_id, d.evidence from public.disputes d join public.bookings b on b.id = d.booking_id where d.evidence @> ${sql.json([{ path }])}`;
+      return rows.some((r) => isParty(r.booker_id, r.tutor_id) && !(r.evidence as { path?: string; staffOnly?: boolean }[]).some((f) => f.path === path && f.staffOnly));
     }
     case "homework": {
       // The learner (or their parent) who handed it in, and the tutor who set it.

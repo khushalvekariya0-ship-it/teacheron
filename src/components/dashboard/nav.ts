@@ -2,7 +2,7 @@ import {
   Bell, BookOpen, Briefcase, CalendarDays, ClipboardList, Coins, CreditCard, FileCheck2, Flag, Gavel, Heart, Home, Inbox,
   LayoutDashboard, LineChart, MessagesSquare, NotebookPen, Receipt, ScrollText, Search, Settings,
   ShieldCheck, SlidersHorizontal, Star, Tag, ToggleLeft, UserRound, Users, Wallet, BadgeCheck, Clock, Bookmark, Newspaper,
-  MapPin, Layers,
+  MapPin, Layers, MessageSquareWarning,
 } from "lucide-react";
 import type * as React from "react";
 import type { Permission, Role } from "@/lib/types";
@@ -138,6 +138,7 @@ export const ADMIN_NAV: NavSection[] = [
     items: [
       { label: "Disputes", href: "/admin/disputes", icon: Gavel, permission: "disputes.manage" },
       { label: "Reports", href: "/admin/reports", icon: Flag, permission: "reports.moderate" },
+      { label: "Chat safety", href: "/admin/chat-safety", icon: MessageSquareWarning, permission: "reports.moderate" },
       { label: "Reviews", href: "/admin/reviews", icon: Star, permission: "reports.moderate" },
     ],
   },

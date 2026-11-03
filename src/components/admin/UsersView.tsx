@@ -26,6 +26,7 @@ import {
   ALL_PERMISSIONS, BulkBar, ClearFilters, ExportButton, Facts, FilterSelect, PERMISSION_META, PermissionButton, PermissionNotice, ReasonDialog, SearchInput, Section,
   RowOpen, StatusPill, TextLink, Timeline, Toolbar, fullName, humanize, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam,
 } from "./kit";
+import { ChatPauseControls } from "./ChatSafetyView";
 
 type TabKey = "all" | "student" | "parent" | "tutor" | "staff";
 type StatusFilter = "all" | User["status"];
@@ -307,6 +308,8 @@ function UserDetail({ user }: { user: User }) {
         </div>
       </div>
 
+      {!staff && user.status !== "suspended" && <ChatPauseControls user={user} className="mx-5 my-4" />}
+
       {user.status === "suspended" && (
         <div className="px-5 py-4">
           <p className="flex items-start gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-[13px] text-danger">
@@ -324,6 +327,9 @@ function UserDetail({ user }: { user: User }) {
             { label: "Time zone", value: user.timezone },
             { label: "Joined", value: formatDate(user.createdAt, tz) },
             { label: "Last sign-in", value: user.lastLoginAt ? formatRelative(user.lastLoginAt, now) : "No sign-ins recorded" },
+            ...(user.chatModeration?.warnings
+              ? [{ label: "Chat warnings", value: <TextLink href={`/admin/chat-safety?user=${encodeURIComponent(user.id)}`}>{pluralize(user.chatModeration.warnings, "warning")}</TextLink> }]
+              : []),
             ...(user.parentalConsent ? [{ label: "Parental consent", value: `${user.parentalConsent.status === "granted" ? "Granted" : "Pending"} · ${user.parentalConsent.parentEmail}` }] : []),
             ...(user.tutorId ? [{ label: "Tutor profile", value: <TextLink href={`/admin/tutors?id=${user.tutorId}`}>Open tutor record</TextLink> }] : []),
           ]}

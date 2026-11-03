@@ -20,10 +20,11 @@ export type PrivateKind = (typeof PRIVATE_KINDS)[number];
 export const UPLOAD_RULES = {
   video: { bucket: PUBLIC_BUCKET, folder: "videos", maxBytes: 50 * 1024 * 1024, types: ["video/mp4", "video/webm", "video/quicktime"] },
   verification: { bucket: PRIVATE_BUCKET, folder: "verification", maxBytes: 15 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"] },
-  messages: { bucket: PRIVATE_BUCKET, folder: "messages", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
-  disputes: { bucket: PRIVATE_BUCKET, folder: "disputes", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "text/plain"] },
+  // Files the other person can open are checked for contact details (src/server/scan.ts), so only types that can be read are allowed.
+  messages: { bucket: PRIVATE_BUCKET, folder: "messages", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
+  disputes: { bucket: PRIVATE_BUCKET, folder: "disputes", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
   requirements: { bucket: PRIVATE_BUCKET, folder: "requirements", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
-  homework: { bucket: PRIVATE_BUCKET, folder: "homework", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
+  homework: { bucket: PRIVATE_BUCKET, folder: "homework", maxBytes: 10 * 1024 * 1024, types: ["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
 } as const;
 export type UploadKind = keyof typeof UPLOAD_RULES;
 
@@ -68,7 +69,9 @@ export class UploadError extends Error {}
 /** A one-time URL the browser uploads a file to directly (files never pass through this server). */
 export async function signedUpload(kind: UploadKind, userId: string, file: { name: string; type: string; size: number }) {
   const rule = UPLOAD_RULES[kind];
-  if (!(rule.types as readonly string[]).includes(file.type)) throw new UploadError(kind === "video" ? "Upload an MP4, WebM or MOV video." : "That file type isn't supported.");
+  if (!(rule.types as readonly string[]).includes(file.type)) {
+    throw new UploadError(kind === "video" ? "Upload an MP4, WebM or MOV video." : kind === "messages" || kind === "homework" || kind === "disputes" ? "Attach a PDF, image (PNG, JPG, WebP), Word (.docx) or text file." : "That file type isn't supported.");
+  }
   if (!Number.isFinite(file.size) || file.size <= 0) throw new UploadError("That file is empty.");
   if (file.size > rule.maxBytes) throw new UploadError(`Files must be ${Math.round(rule.maxBytes / 1024 / 1024)} MB or smaller.`);
   const base = file.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "file";

@@ -27,7 +27,7 @@ export const PERMISSION_META: Record<Permission, { label: string; description: s
   "payments.read": { label: "View payments", description: "Payments, refunds and tutor payouts." },
   "payments.refund": { label: "Issue refunds", description: "Resolve disputes with a full or partial refund." },
   "disputes.manage": { label: "Manage disputes", description: "Work the dispute queue, add notes and record decisions." },
-  "reports.moderate": { label: "Moderate reports", description: "Work the report queue and moderate reviews." },
+  "reports.moderate": { label: "Moderate reports", description: "Work the report queue, moderate reviews and handle chat safety (warn people, pause messaging)." },
   "conversations.read_flagged": { label: "Read flagged conversations", description: "Open private conversations for a logged reason." },
   "content.manage": { label: "Manage content", description: "Catalog, CMS pages, SEO, blog and FAQs." },
   "settings.manage": { label: "Platform settings", description: "Booking policy, platform fee, plans and coupons." },
@@ -406,6 +406,7 @@ export function ReasonDialog({
   minLength = 5,
   confirmLabel = "Confirm",
   tone = "default",
+  initialValue = "",
   onConfirm,
   children,
 }: {
@@ -419,6 +420,8 @@ export function ReasonDialog({
   minLength?: number;
   confirmLabel?: string;
   tone?: "default" | "danger";
+  /** Text the box starts with (it can be edited). */
+  initialValue?: string;
   onConfirm: (reason: string) => boolean | Promise<boolean>;
   children?: React.ReactNode;
 }) {
@@ -429,7 +432,7 @@ export function ReasonDialog({
   if (wasOpen !== open) {
     setWasOpen(open);
     if (open) {
-      setReason("");
+      setReason(initialValue);
       setTouched(false);
       setBusy(false);
     }

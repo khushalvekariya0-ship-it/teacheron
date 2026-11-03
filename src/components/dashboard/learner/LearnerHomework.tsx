@@ -242,7 +242,8 @@ function HomeworkInner({ me }: { me: User }) {
 
 /* ─── Submit dialog ─────────────────────────────────────────────────────────── */
 
-const ACCEPT = ".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt";
+// Files are checked for contact details before the tutor can open them, so only readable types are allowed.
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.docx,.txt";
 
 const submitSchema = z
   .object({
@@ -357,7 +358,7 @@ function SubmitForm({ homework, onDone, onSubmitted }: { homework: Homework; onD
               {fileError}
             </p>
           ) : (
-            <p className="mt-1.5 text-[12.5px] text-muted">PDF, image, Word or text file up to 10 MB. Only you and your tutor can open it.</p>
+            <p className="mt-1.5 text-[12.5px] text-muted">PDF, image, Word (.docx) or text file up to 10 MB. Only you and your tutor can open it. Files with phone numbers, emails or social handles are refused.</p>
           )}
         </div>
       </DialogBody>

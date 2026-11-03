@@ -67,7 +67,7 @@ export function ConversationList({
             compact
             icon={<MessagesSquare />}
             title="No conversations yet"
-            description={isTutor ? "When families message you or book a lesson, the conversation appears here." : "Message a tutor from their profile to ask questions before you book."}
+            description={isTutor ? "Families can message you, and you can message a family from a lesson, from Students & progress, or from a job you applied to." : "Message a tutor from their profile to ask questions before you book."}
             action={isTutor ? <Button asChild><Link href="/dashboard/jobs">Browse jobs</Link></Button> : <Button asChild><Link href="/tutors">Find tutors</Link></Button>}
           />
         </div>

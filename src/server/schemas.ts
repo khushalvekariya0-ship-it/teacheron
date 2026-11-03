@@ -160,9 +160,15 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   respondToReview: t(id, text(2000)),
 
   startConversation: t(id, z.object({ childId: id.optional(), subject: text(80).optional() }).optional()),
+  contactLearner: t(z.object({ bookingId: id.optional(), requirementId: id.optional() })),
   sendMessage: t(id, text(4000), file.optional()),
   markConversationRead: t(id),
   toggleBlock: t(id),
+  warnChatUser: t(id, text(500)),
+  requestChatUnlock: t(text(500)),
+  declineChatUnlock: t(id),
+  restrictChat: t(id, z.union([z.literal(0), z.literal(24), z.literal(72), z.literal(168), z.literal(720)]), text(500)),
+  setContactFlagStatus: t(z.array(id).min(1).max(200), z.enum(["open", "actioned", "dismissed"])),
   report: t(z.object({ targetType: z.enum(["user", "tutor", "message", "review", "requirement"]), targetId: id, reason: text(100), details: text(2000) })),
 
   markNotificationRead: t(id),

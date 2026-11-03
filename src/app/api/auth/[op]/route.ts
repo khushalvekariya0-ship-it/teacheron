@@ -8,6 +8,7 @@ import { backendStatus } from "@/server/env";
 import { clientIp, json, rateLimit, readJson, sameOrigin, serverError, tooMany } from "@/server/http";
 import { accountById, currentSession, hasVerifiedFactor } from "@/server/session";
 import { buildState } from "@/server/snapshot";
+import { contactIn, NAME_RULE } from "@/lib/domain/contact";
 import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
 
 /*
@@ -168,6 +169,7 @@ export async function POST(request: Request, ctx: Ctx) {
         const parsed = signUpSchema.safeParse(body);
         if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
         const input = parsed.data;
+        if (contactIn(input.firstName, input.lastName).found) return fail(NAME_RULE);
         if (input.role === "student" && input.ageBand === "under13") return fail("Students under 13 can't create an account. A parent can sign up and add them as a child.");
         const teen = input.role === "student" && input.ageBand === "13-17";
         if (teen && !input.parentEmail) return fail("Students under 18 need a parent or guardian's email.");

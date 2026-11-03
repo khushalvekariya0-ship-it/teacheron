@@ -1,6 +1,6 @@
 import type {
   AlertFrequency, Application, ApplicationStatus, AppNotification, AuditLog, AvailabilityException, Booking, BookingRules, BookingStatus, Child,
-  Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod,
+  ContactFlag, Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod,
   Payment, Permission, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch, StudentProfile, Subject, SubjectCategory,
   Subscription, TeachingMode, TrialConfig, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WalletTransaction,
   WeeklyWindow,
@@ -16,6 +16,7 @@ import { actorFor, hasPermission } from "@/lib/permissions";
 import { STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, slugify, subjectName } from "@/lib/data/catalog";
 import { ALL_PERMISSIONS } from "@/lib/data/users";
 import { parseIntroVideo } from "@/lib/video";
+import { blockedMessage, contactIn, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, type ContactKind } from "./contact";
 import {
   DEFAULT_NOTIFICATION_PREFS, emptyStudentProfile, fail, maskContactInfo, ok, resolveTutor,
   type BlogPostItem, type CreateBookingInput, type Data, type FaqItem, type Result, type TestimonialItem,
@@ -108,10 +109,19 @@ export interface DomainActions {
   respondToReview(reviewId: string, body: string): Result;
   // messaging
   startConversation(tutorId: string, opts?: { childId?: string; subject?: string }): Result<Conversation>;
+  /** A tutor opens a chat with a family they teach (from a booking) or whose job they applied to. */
+  contactLearner(source: { bookingId?: string; requirementId?: string }): Result<Conversation>;
   sendMessage(conversationId: string, body: string, attachment?: Message["attachment"]): Result<Message>;
   markConversationRead(conversationId: string): Result;
   toggleBlock(conversationId: string): Result<boolean>;
   report(input: Omit<Report, "id" | "reporterId" | "status" | "createdAt">): Result<Report>;
+  /**
+   * Server only (never callable from the browser): records a file or photo that the server's file
+   * check stopped for containing contact details. Returns whether messaging is now paused.
+   */
+  recordContactFlag(input: { channel: ContactFlag["channel"]; contextId?: string; kinds: ContactKind[]; fileName?: string }): Result<{ paused: boolean }>;
+  /** A person whose messaging is paused asks Trust & Safety to unlock it (once per pause). */
+  requestChatUnlock(note: string): Result;
   // notifications
   markNotificationRead(id: string): Result;
   markAllNotificationsRead(): Result;
@@ -182,6 +192,14 @@ export interface DomainActions {
   sendAnnouncement(audience: "everyone" | "students" | "parents" | "tutors", title: string, body: string, href?: string): Result<number>;
   /** Records why staff opened a private conversation and returns its messages. */
   logConversationAccess(conversationId: string, reason: string): Result<Message[]>;
+  // chat safety (staff with reports.moderate)
+  /** Sends a formal warning about sharing contact details; their open flags are marked as dealt with. */
+  warnChatUser(userId: string, note: string): Result;
+  /** Pauses sending messages for `hours` (24, 72, 168 or 720), or lifts a pause with 0. */
+  restrictChat(userId: string, hours: number, reason: string): Result;
+  setContactFlagStatus(ids: string[], status: ContactFlag["status"]): Result;
+  /** Staff answer an "ask to unlock" request with no: messaging stays paused and the person is told. */
+  declineChatUnlock(userId: string): Result;
   // website content (admin)
   saveBlogPost(input: Omit<BlogPostItem, "slug"> & { slug?: string }): Result<BlogPostItem>;
   deleteBlogPost(slug: string): Result;
@@ -231,6 +249,35 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     if (!hasPermission(r.data, permission)) return fail(message);
     return r;
   };
+  /* Chat safety */
+  const pausedUntil = (u: User) => {
+    const until = u.chatModeration?.restrictedUntil;
+    return until && new Date(until).getTime() > Date.now() ? until : null;
+  };
+  const pausedMessage = (u: User) => {
+    const until = pausedUntil(u);
+    if (!until) return null;
+    const when = formatDateTime(until, u.timezone);
+    return u.chatModeration?.restrictedBy === "system"
+      ? `Messaging is paused until ${when} because of repeated attempts to share contact details.`
+      : `Messaging is paused on your account until ${when}.${u.chatModeration?.restrictionReason ? ` Reason: ${u.chatModeration.restrictionReason}` : ""} Contact support if you think this is a mistake.`;
+  };
+  /** Five stopped attempts within an hour pause messaging for an hour (it stops people probing the filter). */
+  const AUTO_PAUSE_ATTEMPTS = 5;
+  const flagContact = (u: User, f: Omit<ContactFlag, "id" | "userId" | "status" | "createdAt">): boolean => {
+    const flag: ContactFlag = { ...f, id: uid("cfl"), userId: u.id, status: "open", createdAt: nowIso() };
+    set((s) => ({ contactFlags: [flag, ...s.contactFlags] }));
+    const hourAgo = Date.now() - 3_600_000;
+    const recent = get().contactFlags.filter((x) => x.userId === u.id && new Date(x.createdAt).getTime() > hourAgo).length;
+    if (recent < AUTO_PAUSE_ATTEMPTS || pausedUntil(u)) return false;
+    const until = new Date(Date.now() + 3_600_000).toISOString();
+    const chatModeration = { warnings: 0, ...u.chatModeration, restrictedUntil: until, restrictionReason: "Repeated attempts to share contact details", restrictedBy: "system", unlockRequestedAt: undefined, unlockRequestNote: undefined, unlockDeclinedAt: undefined };
+    set((s) => ({ users: s.users.map((x) => (x.id === u.id ? { ...x, chatModeration } : x)) }));
+    notify(u.id, { type: "security", title: "Messaging paused for 1 hour", body: "Several of your messages included contact details. Keep conversations and payments on TutorLink.", href: "/dashboard/messages" });
+    return true;
+  };
+  /** Whoever is on the other side of a conversation (an account id). */
+  const counterpartOf = (c: Conversation, u: User) => (u.tutorId && u.tutorId === c.tutorId ? c.userId : (tutorUserId(c.tutorId) ?? c.tutorId));
   /** Catalog and content edits need an admin with content.manage. */
   const requireCatalogEditor = (): Result<User> => requireStaff(["admin"], "content.manage", "You don't have permission to edit the subject catalog.");
   const requireContentEditor = (): Result<User> => requireStaff(["admin"], "content.manage", "You don't have permission to edit website content.");
@@ -328,6 +375,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     updateMe(patch) {
       const r = requireUser();
       if (!r.ok) return r;
+      // Others see your name, so it can't carry contact details (your own phone number field is private and fine).
+      if (contactIn(patch.firstName, patch.lastName).found) return fail(NAME_RULE, "contact_blocked");
       set((s) => ({ users: s.users.map((u) => (u.id === r.data.id ? { ...u, ...definedOnly(patch) } : u)) }));
       return ok(undefined);
     },
@@ -433,6 +482,13 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (existing && existing.ownerId !== r.data.id) return fail("You can only edit your own requirements.");
       const { id: _id, ownerId: _o, status: _s, createdAt: _c, updatedAt: _u, publishedAt: _p, ...editable } = input;
       void _id; void _o; void _s; void _c; void _u; void _p;
+      // Tutors read job posts, so contact details in them are hidden.
+      const clean = (t: string | undefined) => (typeof t === "string" ? maskContactInfo(t).text : t);
+      editable.title = clean(editable.title);
+      editable.objectives = clean(editable.objectives);
+      editable.preferences = clean(editable.preferences);
+      editable.details = clean(editable.details);
+      if (editable.attachments) editable.attachments = editable.attachments.map((a) => ({ ...a, name: maskMatches(a.name, fileNameContact(a.name).matches, "[hidden]") }));
       const req: Requirement = {
         id: existing?.id ?? uid("req"), ownerId: r.data.id, title: "", subject: "", grade: "9", objectives: "", modes: ["online"],
         city: r.data.city ?? "", state: r.data.state ?? "", zip: r.data.zip ?? "", days: [], timesOfDay: [], sessionsPerWeek: 1,
@@ -670,7 +726,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       }
       if (to === "pending" && b.status === "payment_failed" && paid > 0 && !paidFromWallet(id) && !env.paymentsEnabled) return fail(PAYMENTS_OFF);
 
-      const patch: Partial<Booking> = { status: to, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to, note: [note, refund?.rule].filter(Boolean).join(" · ") || undefined }] };
+      const safeNote = note ? maskContactInfo(note).text : note;
+      const patch: Partial<Booking> = { status: to, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to, note: [safeNote, refund?.rule].filter(Boolean).join(" · ") || undefined }] };
       const tutor = resolveTutor(get(), b.tutorId)!;
       if (to === "confirmed" && paid > 0) {
         // Capture the authorized payment now that the tutor accepted.
@@ -775,9 +832,44 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (opts.childId && !get().children.some((c) => c.id === opts.childId && c.parentId === r.data.id)) return fail("Choose one of your children.");
       const existing = get().conversations.find((c) => c.tutorId === tutorId && c.userId === r.data.id && (c.childId ?? null) === (opts.childId ?? null));
       if (existing) return ok(existing);
+      const paused = pausedMessage(r.data);
+      if (paused) return fail(paused);
       const conv: Conversation = {
         id: uid("cnv"), tutorId, userId: r.data.id, childId: opts.childId, subject: opts.subject, createdAt: nowIso(), lastMessageAt: nowIso(),
         involvesMinor: r.data.role === "parent" || !!r.data.parentalConsent,
+      };
+      set((s) => ({ conversations: [conv, ...s.conversations] }));
+      return ok(conv);
+    },
+    contactLearner(source) {
+      const r = requireUser(["tutor"]);
+      if (!r.ok) return r;
+      const tutorId = r.data.tutorId;
+      if (!tutorId) return fail("Finish your tutor profile before messaging families.");
+      if (resolveTutor(get(), tutorId)?.hidden) return fail("Your profile is hidden from search. Contact support to resolve it before messaging families.");
+      // Only families the tutor already has a real connection with: a lesson, or a job they applied to.
+      let target: { userId: string; childId?: string; subject?: string } | null = null;
+      if (source.bookingId) {
+        const b = get().bookings.find((x) => x.id === source.bookingId && x.tutorId === tutorId);
+        if (!b) return fail("Booking not found.");
+        target = { userId: b.bookerId, childId: b.childId, subject: b.subject };
+      } else if (source.requirementId) {
+        const req = get().requirements.find((q) => q.id === source.requirementId);
+        const applied = get().applications.some((a) => a.requirementId === source.requirementId && a.tutorId === tutorId && !["withdrawn", "rejected", "closed"].includes(a.status));
+        if (!req || !applied) return fail("You can message a family once you've applied to their job.");
+        target = { userId: req.ownerId, childId: req.childId, subject: req.subject || undefined };
+      }
+      if (!target) return fail("Choose a student to message.");
+      const learner = get().users.find((u) => u.id === target.userId);
+      if (!learner || learner.status !== "active") return fail("This account isn't available right now.");
+      if (learner.parentalConsent?.status === "pending") return fail("This student's parent hasn't approved their account yet, so they can't receive messages.");
+      const existing = get().conversations.find((c) => c.tutorId === tutorId && c.userId === target.userId && (c.childId ?? null) === (target.childId ?? null));
+      if (existing) return ok(existing);
+      const paused = pausedMessage(r.data);
+      if (paused) return fail(paused);
+      const conv: Conversation = {
+        id: uid("cnv"), tutorId, userId: target.userId, childId: target.childId, subject: target.subject, createdAt: nowIso(), lastMessageAt: nowIso(),
+        involvesMinor: learner.role === "parent" || !!learner.parentalConsent,
       };
       set((s) => ({ conversations: [conv, ...s.conversations] }));
       return ok(conv);
@@ -790,16 +882,52 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const senderId = r.data.tutorId && r.data.tutorId === c.tutorId ? c.tutorId : r.data.id === c.userId ? r.data.id : null;
       if (!senderId) return fail("You're not part of this conversation.");
       if (c.blockedBy) return fail(c.blockedBy === senderId ? "You blocked this conversation. Unblock to send messages." : "You can't reply to this conversation.");
+      const paused = pausedMessage(r.data);
+      if (paused) return fail(paused, "chat_paused");
       const trimmed = body.trim();
       if (!trimmed && !attachment) return fail("Write a message first.");
       if (trimmed.length > 4000) return fail("Messages are limited to 4,000 characters.");
       if (attachment && attachment.sizeKb > 10_240) return fail("Attachments must be 10 MB or smaller.");
-      if (attachment && !/\.(pdf|png|jpe?g|docx?|txt)$/i.test(attachment.name)) return fail("Attach a PDF, image, Word or text file.");
-      const { text, masked } = maskContactInfo(trimmed);
-      const msg: Message = { id: uid("msg"), conversationId, senderId, body: text, createdAt: nowIso(), attachment, ...(masked ? { moderation: "contact_info_masked" as const } : {}) };
+      if (attachment && !/\.(pdf|png|jpe?g|webp|docx|txt)$/i.test(attachment.name)) return fail("Attach a PDF, image (PNG, JPG, WebP), Word (.docx) or text file.");
+      // The other person sees the file name too.
+      if (attachment && fileNameContact(attachment.name).found) return fail("The file name looks like it includes contact details. Rename the file and attach it again.", "contact_blocked");
+      // Contact details are never delivered: the message is refused (nothing is saved) and the attempt is logged for Trust & Safety.
+      const found = scanContact(trimmed, "chat");
+      if (found.found) {
+        const nowPaused = flagContact(r.data, { channel: "chat", source: "text", contextId: c.id, recipientId: counterpartOf(c, r.data), kinds: found.kinds, excerpt: redactedExcerpt(trimmed, found.matches) });
+        const pause = nowPaused ? pausedMessage(get().users.find((x) => x.id === r.data.id) ?? r.data) : null;
+        return fail(pause ? `${blockedMessage(found.kinds)} ${pause}` : blockedMessage(found.kinds), "contact_blocked");
+      }
+      // A number sent a piece at a time ("9", "1", "7" …, or "my number is 917" then "555 0123"): this person's
+      // latest short messages (no reply in between, last 30 minutes) are read together with this one.
+      const thread = get().messages.filter((m) => m.conversationId === c.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const recent: Message[] = [];
+      for (let i = thread.length - 1; i >= 0 && recent.length < 10; i--) {
+        const m = thread[i];
+        if (m.senderId !== senderId || Date.now() - new Date(m.createdAt).getTime() > 30 * 60_000 || m.body.length > 60 || m.moderation) break;
+        recent.unshift(m);
+      }
+      const split = trimmed ? scanSplitMessages(recent.map((m) => m.body), trimmed) : null;
+      if (split?.found) {
+        // The earlier pieces were already delivered, so they're hidden now as well.
+        const hide = new Set(split.pieces.map((i) => recent[i].id));
+        set((s) => ({ messages: s.messages.map((m) => (hide.has(m.id) ? { ...m, body: "[removed: part of a phone number or contact details]", moderation: "contact_info_masked" as const } : m)) }));
+        const nowPaused = flagContact(r.data, {
+          channel: "chat", source: "text", contextId: c.id, recipientId: counterpartOf(c, r.data), kinds: split.kinds,
+          excerpt: `Contact details sent a few pieces at a time across ${split.pieces.length + 1} messages (the earlier pieces were hidden)`,
+        });
+        const pause = nowPaused ? pausedMessage(get().users.find((x) => x.id === r.data.id) ?? r.data) : null;
+        return fail(pause ? `${blockedMessage(split.kinds, "split")} ${pause}` : blockedMessage(split.kinds, "split"), "contact_blocked");
+      }
+      const text = trimmed;
+      const msg: Message = {
+        id: uid("msg"), conversationId, senderId, body: text, createdAt: nowIso(),
+        ...(attachment ? { attachment: { name: attachment.name, sizeKb: attachment.sizeKb, ...(attachment.path ? { path: attachment.path } : {}) } } : {}),
+      };
       set((s) => ({ messages: [...s.messages, msg], conversations: s.conversations.map((x) => (x.id === conversationId ? { ...x, lastMessageAt: msg.createdAt } : x)) }));
       const recipient = senderId === c.tutorId ? c.userId : tutorUserId(c.tutorId);
-      notify(recipient, { type: "message", title: `New message from ${r.data.firstName} ${r.data.lastName.charAt(0)}.`, body: text.slice(0, 90), href: `/dashboard/messages?c=${conversationId}` });
+      // A message that's only digits doesn't put them in the notification (or its email copy).
+      notify(recipient, { type: "message", title: `New message from ${r.data.firstName} ${r.data.lastName.charAt(0)}.`, body: numberPiece(text) ? "Sent you a message." : text.slice(0, 90), href: `/dashboard/messages?c=${conversationId}` });
       return ok(msg);
     },
     markConversationRead(conversationId) {
@@ -837,6 +965,47 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       }));
       return ok(rep);
     },
+    recordContactFlag(input) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      if (!input.kinds.length) return fail("Nothing to record.");
+      let contextId: string | undefined;
+      let recipientId: string | undefined;
+      // Only link the entry to something the person really is part of.
+      if (input.channel === "chat") {
+        const c = get().conversations.find((x) => x.id === input.contextId);
+        if (c && (c.userId === r.data.id || (r.data.tutorId && c.tutorId === r.data.tutorId))) {
+          contextId = c.id;
+          recipientId = counterpartOf(c, r.data);
+        }
+      } else if (input.channel === "homework") {
+        const hw = get().homework.find((h) => h.id === input.contextId);
+        if (hw && learnerIdsFor(r.data).includes(hw.learnerId)) {
+          contextId = hw.id;
+          recipientId = tutorUserId(hw.tutorId) ?? hw.tutorId;
+        }
+      } else if (r.data.tutorId) contextId = r.data.tutorId;
+      const fileName = input.fileName?.slice(0, 200);
+      const paused = flagContact(r.data, { channel: input.channel, source: "file", contextId, recipientId, kinds: input.kinds, excerpt: fileName ? `File: ${fileName}` : "Profile photo", fileName });
+      return ok({ paused });
+    },
+    requestChatUnlock(note) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      if (!pausedUntil(r.data)) return fail("Your messaging isn't paused.");
+      if (r.data.chatModeration?.unlockRequestedAt) return fail("You've already asked. Our team will review it soon.");
+      if (r.data.chatModeration?.unlockDeclinedAt) return fail("Our team already reviewed your request. You can send messages again when the pause ends.");
+      // The note only goes to staff, but contact details still don't belong in it.
+      const text = maskContactInfo(note.trim().slice(0, 500)).text;
+      const chatModeration = { warnings: 0, ...r.data.chatModeration, unlockRequestedAt: nowIso(), unlockRequestNote: text || undefined };
+      set((s) => ({ users: s.users.map((u) => (u.id === r.data.id ? { ...u, chatModeration } : u)) }));
+      const moderators = get().users.filter((u) => u.status === "active" && hasPermission(u, "reports.moderate"));
+      for (const m of moderators) {
+        notify(m.id, { type: "security", title: `${r.data.firstName} ${r.data.lastName.charAt(0)}. asked to unlock messaging`, body: text || "No message added.", href: `/admin/chat-safety?user=${r.data.id}` });
+      }
+      audit("chat.unlock_request", "user", r.data.id, text ? { note: text } : undefined);
+      return ok(undefined);
+    },
 
     /* ─── Notifications ────────────────────────────────────── */
     markNotificationRead(id) {
@@ -865,6 +1034,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const r = requireUser(["parent"]);
       if (!r.ok) return r;
       if (!input.firstName.trim()) return fail("Enter your child's first name.");
+      if (contactIn(input.firstName).found) return fail(NAME_RULE, "contact_blocked");
+      if (input.notes) input = { ...input, notes: maskContactInfo(input.notes).text };
+      if (input.learningGoals) input = { ...input, learningGoals: input.learningGoals.map((g) => maskContactInfo(g).text) };
       const existing = input.id ? get().children.find((c) => c.id === input.id) : undefined;
       if (input.id && (!existing || existing.parentId !== r.data.id)) return fail("Child not found.");
       if (!existing && get().children.filter((c) => c.parentId === r.data.id).length >= 10) return fail("You can add up to 10 children.");
@@ -899,6 +1071,11 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (body.trim().length < 10) return fail("Write a short note (10+ characters).");
       if (body.trim().length > 4000) return fail("Keep the note under 4,000 characters.");
       if (bookingId && !get().bookings.some((b) => b.id === bookingId && b.tutorId === tutorId)) return fail("Choose one of your lessons.");
+      const found = scanContact(body, "chat");
+      if (found.found) {
+        flagContact(r.data, { channel: "lesson", source: "text", contextId: learnerId, recipientId: accountFor(learnerId), kinds: found.kinds, excerpt: redactedExcerpt(body.trim(), found.matches) });
+        return fail(blockedMessage(found.kinds, "note"), "contact_blocked");
+      }
       const n: ProgressNote = { id: uid("prg"), learnerId, tutorId, bookingId, body: body.trim(), rating, createdAt: nowIso() };
       set((s) => ({ progressNotes: [n, ...s.progressNotes] }));
       notify(accountFor(learnerId), { type: "progress", title: "New progress note", body: n.body.slice(0, 90), href: "/dashboard/progress" });
@@ -911,6 +1088,11 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!tutorId) return fail("Complete your tutor profile first.");
       if (!tutorTeachesLearner(tutorId, input.learnerId)) return fail("You can only assign homework to students you teach.");
       if (!input.title.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) return fail("Add a title and due date.");
+      const found = contactIn(input.title, input.instructions);
+      if (found.found) {
+        flagContact(r.data, { channel: "homework", source: "text", contextId: input.learnerId, recipientId: accountFor(input.learnerId), kinds: found.kinds, excerpt: redactedExcerpt(`${input.title}\n${input.instructions ?? ""}`.trim(), found.matches) });
+        return fail(blockedMessage(found.kinds, "note"), "contact_blocked");
+      }
       const hw: Homework = { ...input, title: input.title.trim(), id: uid("hw"), tutorId, status: "assigned", createdAt: nowIso() };
       set((s) => ({ homework: [hw, ...s.homework] }));
       notify(accountFor(input.learnerId), { type: "homework", title: "New homework", body: hw.title, href: "/dashboard/homework" });
@@ -923,6 +1105,12 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!hw || !learnerIdsFor(r.data).includes(hw.learnerId)) return fail("Homework not found.");
       if (hw.status === "reviewed") return fail("This homework has already been reviewed.");
       if (!body.trim() && !fileName) return fail("Add a note or attach your work.");
+      if (fileName && fileNameContact(fileName).found) return fail("The file name looks like it includes contact details. Rename the file and attach it again.", "contact_blocked");
+      const found = scanContact(body, "chat");
+      if (found.found) {
+        flagContact(r.data, { channel: "homework", source: "text", contextId: hw.id, recipientId: tutorUserId(hw.tutorId) ?? hw.tutorId, kinds: found.kinds, excerpt: redactedExcerpt(body.trim(), found.matches) });
+        return fail(blockedMessage(found.kinds, "note"), "contact_blocked");
+      }
       set((s) => ({ homework: s.homework.map((h) => (h.id === id ? { ...h, status: "submitted", submission: { body: body.trim(), fileName, ...(fileName && filePath ? { filePath } : {}), submittedAt: nowIso() } } : h)) }));
       notify(tutorUserId(hw.tutorId), { type: "homework", title: "Homework submitted", body: hw.title, href: "/dashboard/homework" });
       return ok(undefined);
@@ -933,6 +1121,11 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const hw = get().homework.find((h) => h.id === id);
       if (!hw || !r.data.tutorId || hw.tutorId !== r.data.tutorId) return fail("Homework not found.");
       if (hw.status !== "submitted") return fail("Only submitted homework can be reviewed.");
+      const found = scanContact(body, "chat");
+      if (found.found) {
+        flagContact(r.data, { channel: "homework", source: "text", contextId: hw.id, recipientId: accountFor(hw.learnerId), kinds: found.kinds, excerpt: redactedExcerpt(body.trim(), found.matches) });
+        return fail(blockedMessage(found.kinds, "note"), "contact_blocked");
+      }
       set((s) => ({ homework: s.homework.map((h) => (h.id === id ? { ...h, status: "reviewed", feedback: { body: body.trim(), grade, at: nowIso() } } : h)) }));
       notify(accountFor(hw.learnerId), { type: "homework", title: "Homework reviewed", body: hw.title, href: "/dashboard/homework" });
       return ok(undefined);
@@ -953,6 +1146,12 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (r.data.role === "tutor" ? !tutorTeachesLearner(tutorId, input.learnerId) : !learnerIdsFor(r.data).includes(input.learnerId)) return fail("You can't add goals for this learner.");
       if (r.data.role !== "tutor" && !resolveTutor(get(), tutorId)) return fail("Choose one of your tutors.");
       if (!input.title.trim()) return fail("Give the goal a title.");
+      const goalText = [input.title, ...(input.topics ?? []).map((t) => t.name)];
+      const found = contactIn(...goalText);
+      if (found.found) {
+        flagContact(r.data, { channel: "lesson", source: "text", contextId: input.learnerId, kinds: found.kinds, excerpt: redactedExcerpt(goalText.join("\n"), found.matches) });
+        return fail(blockedMessage(found.kinds, "note"), "contact_blocked");
+      }
       const goal: LearningGoal = { ...input, title: input.title.trim(), id: uid("gol"), tutorId, createdAt: nowIso() };
       set((s) => ({ goals: [goal, ...s.goals] }));
       return ok(goal);
@@ -987,9 +1186,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         ...("photoUrl" in patch && !patch.photoUrl ? { photoUrl: "" } : {}),
         ...("introVideoUrl" in patch && !patch.introVideoUrl ? { introVideoUrl: "" } : {}),
         ...(patch.education
-          ? { education: keepVerified(patch.education, current.education, (a, b) => a.degree === b.degree && a.field === b.field && a.institution === b.institution && a.year === b.year) }
+          ? { education: keepVerified(patch.education.map((e) => ({ ...e, degree: maskContactInfo(e.degree).text, field: maskContactInfo(e.field).text, institution: maskContactInfo(e.institution).text })), current.education, (a, b) => a.degree === b.degree && a.field === b.field && a.institution === b.institution && a.year === b.year) }
           : {}),
-        ...(patch.certifications ? { certifications: keepVerified(patch.certifications, current.certifications, (a, b) => a.name === b.name && a.issuer === b.issuer && a.year === b.year) } : {}),
+        ...(patch.certifications ? { certifications: keepVerified(patch.certifications.map((c) => ({ ...c, name: maskContactInfo(c.name).text, issuer: maskContactInfo(c.issuer).text })), current.certifications, (a, b) => a.name === b.name && a.issuer === b.issuer && a.year === b.year) } : {}),
       };
       patchTutor(r.data.tutorId, clean);
       return ok(undefined);
@@ -1071,8 +1270,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         trial: { enabled: Boolean(d.trialEnabled ?? true), priceCents: Math.min(20000, Math.max(0, Math.round(Number(d.trialPrice ?? 0) * 100) || 0)), durationMin: [15, 20, 25, 30, 45, 60].includes(Number(d.trialDuration)) ? Number(d.trialDuration) : 30 },
         rules: { minNoticeHours: 12, maxAdvanceDays: 45, bufferMinutes: 15, sessionLengths: [60], requiresApproval: true },
         experienceYears: Math.min(60, Math.max(0, Math.round(Number(d.experienceYears ?? 0)) || 0)),
-        education: (Array.isArray(d.education) ? (d.education as unknown as Tutor["education"]) : []).slice(0, 6).map((e) => ({ degree: str(e.degree, 80), field: str(e.field, 80), institution: str(e.institution, 120), year: Number(e.year) || 0, verified: false })),
-        certifications: (Array.isArray(d.certifications) ? (d.certifications as unknown as Tutor["certifications"]) : []).slice(0, 6).map((c) => ({ name: str(c.name, 120), issuer: str(c.issuer, 120), year: Number(c.year) || 0, verified: false })),
+        education: (Array.isArray(d.education) ? (d.education as unknown as Tutor["education"]) : []).slice(0, 6).map((e) => ({ degree: maskContactInfo(str(e.degree, 80)).text, field: maskContactInfo(str(e.field, 80)).text, institution: maskContactInfo(str(e.institution, 120)).text, year: Number(e.year) || 0, verified: false })),
+        certifications: (Array.isArray(d.certifications) ? (d.certifications as unknown as Tutor["certifications"]) : []).slice(0, 6).map((c) => ({ name: maskContactInfo(str(c.name, 120)).text, issuer: maskContactInfo(str(c.issuer, 120)).text, year: Number(c.year) || 0, verified: false })),
         languages: strs(d.languages).length ? strs(d.languages) : ["English"],
         verification: { identity: d.idDocument ? "submitted" : "not_started", education: "not_started", certification: "not_started", background: "not_started" },
         rating: null, reviewCount: 0, lessonsCompleted: 0, responseTimeHours: null,
@@ -1399,6 +1598,76 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       audit("conversation.access", "conversation", conversationId, { reason: reason.trim() });
       // The messages are released only now that the access is on record.
       return ok(get().messages.filter((m) => m.conversationId === conversationId));
+    },
+
+    /* ─── Chat safety (staff) ──────────────────────────────── */
+    warnChatUser(userId, note) {
+      const r = requireStaff(["admin", "support"], "reports.moderate", "You don't have permission to moderate chat.");
+      if (!r.ok) return r;
+      const target = get().users.find((u) => u.id === userId);
+      if (!target) return fail("Account not found.");
+      if (target.role === "admin" || target.role === "support") return fail("Staff accounts can't be warned here.");
+      if (note.trim().length < 10) return fail("Write the warning the person will see (at least 10 characters).");
+      const at = nowIso();
+      const chatModeration = { ...target.chatModeration, warnings: (target.chatModeration?.warnings ?? 0) + 1, lastWarnedAt: at };
+      set((s) => ({
+        users: s.users.map((u) => (u.id === userId ? { ...u, chatModeration } : u)),
+        contactFlags: s.contactFlags.map((f) => (f.userId === userId && f.status === "open" ? { ...f, status: "actioned" as const, reviewedBy: r.data.id, reviewedAt: at } : f)),
+      }));
+      notify(userId, { type: "security", title: "A warning from TutorLink Trust & Safety", body: note.trim().slice(0, 500), href: "/dashboard/messages" });
+      audit("chat.warn", "user", userId, { reason: note.trim(), warnings: chatModeration.warnings });
+      return ok(undefined);
+    },
+    restrictChat(userId, hours, reason) {
+      const r = requireStaff(["admin", "support"], "reports.moderate", "You don't have permission to moderate chat.");
+      if (!r.ok) return r;
+      const target = get().users.find((u) => u.id === userId);
+      if (!target) return fail("Account not found.");
+      if (userId === r.data.id) return fail("You can't change your own messaging.");
+      if (target.role === "admin" || target.role === "support") return fail("Staff accounts can't be paused here.");
+      if (![0, 24, 72, 168, 720].includes(hours)) return fail("Choose how long to pause messaging.");
+      if (reason.trim().length < 5) return fail("Add a reason for the audit log.");
+      const at = nowIso();
+      const warned = { warnings: target.chatModeration?.warnings ?? 0, ...(target.chatModeration?.lastWarnedAt ? { lastWarnedAt: target.chatModeration.lastWarnedAt } : {}) };
+      const until = hours ? new Date(Date.now() + hours * 3_600_000).toISOString() : undefined;
+      const chatModeration = until ? { ...warned, restrictedUntil: until, restrictionReason: reason.trim().slice(0, 300), restrictedBy: r.data.id } : warned;
+      set((s) => ({
+        users: s.users.map((u) => (u.id === userId ? { ...u, chatModeration } : u)),
+        contactFlags: until ? s.contactFlags.map((f) => (f.userId === userId && f.status === "open" ? { ...f, status: "actioned" as const, reviewedBy: r.data.id, reviewedAt: at } : f)) : s.contactFlags,
+      }));
+      if (until) notify(userId, { type: "security", title: `Messaging paused until ${formatDateTime(until, target.timezone)}`, body: reason.trim().slice(0, 300), href: "/dashboard/messages" });
+      else notify(userId, { type: "security", title: "Messaging is available again", body: "You can send messages on TutorLink again.", href: "/dashboard/messages" });
+      audit(until ? "chat.restrict" : "chat.unrestrict", "user", userId, { reason: reason.trim(), ...(hours ? { hours } : {}) });
+      return ok(undefined);
+    },
+    setContactFlagStatus(ids, status) {
+      const r = requireStaff(["admin", "support"], "reports.moderate", "You don't have permission to moderate chat.");
+      if (!r.ok) return r;
+      const wanted = new Set(ids);
+      const found = get().contactFlags.filter((f) => wanted.has(f.id));
+      if (!found.length) return fail("Nothing to update. Those entries no longer exist.");
+      const at = nowIso();
+      set((s) => ({
+        contactFlags: s.contactFlags.map((f) => {
+          if (!wanted.has(f.id)) return f;
+          return status === "open" ? { ...f, status, reviewedBy: undefined, reviewedAt: undefined } : { ...f, status, reviewedBy: r.data.id, reviewedAt: at };
+        }),
+      }));
+      audit("contact_flag.status", "user", found[0].userId, { status, count: found.length });
+      return ok(undefined);
+    },
+    declineChatUnlock(userId) {
+      const r = requireStaff(["admin", "support"], "reports.moderate", "You don't have permission to moderate chat.");
+      if (!r.ok) return r;
+      const target = get().users.find((u) => u.id === userId);
+      if (!target) return fail("Account not found.");
+      const until = pausedUntil(target);
+      if (!until || !target.chatModeration?.unlockRequestedAt) return fail("There's no request to answer. The pause may have ended already.");
+      const chatModeration = { ...target.chatModeration, unlockRequestedAt: undefined, unlockRequestNote: undefined, unlockDeclinedAt: nowIso() };
+      set((s) => ({ users: s.users.map((u) => (u.id === userId ? { ...u, chatModeration } : u)) }));
+      notify(userId, { type: "security", title: "Your messaging stays paused", body: `Our team reviewed your request. You can send messages again after ${formatDateTime(until, target.timezone)}.`, href: "/dashboard/messages" });
+      audit("chat.unlock_declined", "user", userId);
+      return ok(undefined);
     },
 
     /* ─── Accounts & moderation (staff) ────────────────────── */
