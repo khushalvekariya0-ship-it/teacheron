@@ -19,6 +19,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EASE } from "@/components/motion";
 import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
+import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
 import { uploadFile } from "@/lib/upload";
 import { useFlag } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, US_STATES, US_TIMEZONES, subjectName } from "@/lib/data/catalog";
@@ -52,7 +53,7 @@ function useBind<T extends FieldValues>(form: UseFormReturn<T>, bind: (getter: (
 export function PersonalStep({ me, formId, defaults, onValid, bindValues }: StepProps<PersonalValues> & { me: User }) {
   const form = useForm<PersonalValues>({ resolver: zodResolver(personalSchema), defaultValues: defaults, mode: "onTouched" });
   useBind(form, bindValues);
-  const { register, control, handleSubmit, formState: { errors } } = form;
+  const { register, control, handleSubmit, setValue, formState: { errors } } = form;
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -83,9 +84,21 @@ export function PersonalStep({ me, formId, defaults, onValid, bindValues }: Step
           </Field>
         )}
       />
+      <AddressLookup
+        onPick={(a) => {
+          setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
+          setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
+          if (a.zip) setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+        }}
+      />
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem_8rem]">
         <Field label="City" required error={errors.city?.message}>
-          <Input autoComplete="address-level2" {...register("city")} />
+          <CityInput {...register("city")} onPick={async (c) => {
+            setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
+            setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
+            const zip = zipForCity(form.getValues("zip"), await c.zips);
+            setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
+          }} />
         </Field>
         <Controller
           name="state"

@@ -21,6 +21,7 @@ import { useHydrated, useSession } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { toast } from "@/components/ui/Toast";
 import { destinationFor, safeNext } from "./authUtils";
+import { AddressLookup } from "@/components/domain/AddressLookup";
 import { PasswordInput, PasswordStrengthMeter } from "./PasswordField";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -377,6 +378,7 @@ export function RegisterView() {
         >
           <Input inputMode="numeric" autoComplete="postal-code" maxLength={5} icon={<MapPin />} placeholder="e.g. 60614" className="sm:max-w-44" {...form.register("zip")} />
         </Field>
+        <AddressLookup collapsed className="-mt-2" onPick={(a) => a.zip && form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true })} />
 
         <AnimatePresence initial={false}>
           {role === "student" && (

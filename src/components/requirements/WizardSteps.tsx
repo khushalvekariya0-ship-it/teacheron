@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { SubjectSelect, fieldDescribedBy } from "./SubjectSelect";
 import { LIMITS, STEPS, cityForZip, formatToModes, type Attachment, type Format, type ReqForm } from "./model";
 import { uploadFile } from "@/lib/upload";
+import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
 
 /* ─── Step 1 · Learner & subject ───────────────────────────────────────────── */
 
@@ -266,6 +267,14 @@ export function StepFormat() {
           </p>
           <p className="mt-0.5 text-[13px] text-muted">{inPerson ? "Tutors use this to check whether you're inside their service area." : "Helps tutors in your time zone find you."}</p>
         </div>
+        <AddressLookup
+          collapsed
+          onPick={(a) => {
+            setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
+            setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
+            if (a.zip) setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+          }}
+        />
         <div className="grid gap-5 sm:grid-cols-[150px_1fr_1fr]">
           <Field label="ZIP code" id="req-zip" required={inPerson} error={errors.zip?.message} hint={point ? point.label.replace(/^\d{5} · /, "") : undefined}>
             <Input
@@ -289,7 +298,12 @@ export function StepFormat() {
             />
           </Field>
           <Field label="City" id="req-city" required={inPerson} error={errors.city?.message}>
-            <Input id="req-city" autoComplete="address-level2" placeholder="Brooklyn" {...register("city")} />
+            <CityInput id="req-city" placeholder="Brooklyn" {...register("city")} onPick={async (c) => {
+            setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
+            setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
+            const zip = zipForCity(getValues("zip"), await c.zips);
+            setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
+          }} />
           </Field>
           <Field label="State" id="req-state" required={inPerson} error={errors.state?.message}>
             <Controller

@@ -28,6 +28,7 @@ import { US_STATES, US_TIMEZONES } from "@/lib/data/catalog";
 import { formatDate, formatDateTime, formatRelative, formatUsPhone, tzAbbrev } from "@/lib/format";
 import { PasswordInput, PasswordStrengthMeter } from "@/components/auth/PasswordField";
 import { downloadJson } from "./hooks";
+import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
 
 type TabKey = "profile" | "timezone" | "security" | "privacy";
 
@@ -156,9 +157,22 @@ function ProfileTab({ me }: { me: User }) {
               </Field>
             )}
           />
+          <AddressLookup
+            collapsed
+            onPick={(a) => {
+              form.setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
+              form.setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
+              if (a.zip) form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+            }}
+          />
           <div className="grid gap-5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
             <Field label="City" optional error={errors.city?.message}>
-              <Input autoComplete="address-level2" icon={<MapPin />} {...form.register("city")} />
+              <CityInput icon={<MapPin />} {...form.register("city")} onPick={async (c) => {
+            form.setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
+            form.setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
+            const zip = zipForCity(form.getValues("zip"), await c.zips);
+            form.setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
+          }} />
             </Field>
             <Field label="State" optional error={errors.state?.message}>
               <Select placeholder="Select" options={US_STATES} autoComplete="address-level1" {...form.register("state")} />

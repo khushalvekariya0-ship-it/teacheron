@@ -19,6 +19,7 @@ import {
   BUDGET_PRESETS, EXPERIENCE_OPTIONS, GENDERS, GOALS, LESSON_LENGTHS, PAY_METHOD_OPTIONS, START_OPTIONS,
   type BasicValues, type BudgetValues, type LearningValues, type PreferencesValues, type ScheduleValues,
 } from "./schema";
+import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
 
 /*
  * The fields of each part of a student's learning profile. Used by the setup wizard (/onboarding/student)
@@ -110,9 +111,21 @@ export function BasicFields({ form, me }: { form: UseFormReturn<BasicValues>; me
         )}
       />
 
+      <AddressLookup
+        onPick={(a) => {
+          setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
+          setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
+          if (a.zip) setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+        }}
+      />
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem_8rem]">
         <Field label="City" required error={errors.city?.message}>
-          <Input autoComplete="address-level2" {...register("city")} />
+          <CityInput {...register("city")} onPick={async (c) => {
+            setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
+            setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
+            const zip = zipForCity(form.getValues("zip"), await c.zips);
+            setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
+          }} />
         </Field>
         <Controller
           name="state"
