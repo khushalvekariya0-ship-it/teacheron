@@ -6,7 +6,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  AlertTriangle, BadgeCheck, Clock, Download, Globe2, KeyRound, LogOut, MapPin, Monitor, Phone, ShieldCheck, Trash2, UserRound, XCircle, CheckCircle2,
+  AlertTriangle, BadgeCheck, Clock, Download, Globe2, KeyRound, LogOut, Monitor, Phone, ShieldCheck, Trash2, UserRound, XCircle, CheckCircle2,
 } from "lucide-react";
 import type { User } from "@/lib/types";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -24,11 +24,13 @@ import { DEFAULT_NOTIFICATION_PREFS, useApp } from "@/lib/store";
 import { useNow, useSession } from "@/lib/store/hooks";
 import { resolveTutor } from "@/lib/store";
 import { ROLE_LABEL } from "@/lib/data/users";
-import { US_STATES, US_TIMEZONES } from "@/lib/data/catalog";
+import { US_TIMEZONES } from "@/lib/data/catalog";
 import { formatDate, formatDateTime, formatRelative, formatUsPhone, tzAbbrev } from "@/lib/format";
 import { PasswordInput, PasswordStrengthMeter } from "@/components/auth/PasswordField";
 import { downloadJson } from "./hooks";
-import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
+import { LocationFields } from "@/components/domain/LocationFields";
+import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
+import { isPostalCode, postalError } from "@/lib/postal";
 
 type TabKey = "profile" | "timezone" | "security" | "privacy";
 
@@ -67,30 +69,37 @@ export function SettingsView() {
 
 const phoneDigits = (v: string) => v.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
 
-const profileSchema = z.object({
-  firstName: z.string().trim().min(1, "Enter your first name").max(50, "Keep it under 50 characters"),
-  lastName: z.string().trim().min(1, "Enter your last name").max(50, "Keep it under 50 characters"),
-  phone: z.string().trim().refine((v) => v === "" || phoneDigits(v).length === 10, "Enter a 10-digit US phone number"),
-  city: z.string().trim().max(60, "Keep it under 60 characters"),
-  state: z.string(),
-  zip: z.string().trim().refine((v) => v === "" || /^\d{5}$/.test(v), "Enter a 5-digit ZIP code"),
-});
+const profileSchema = z
+  .object({
+    firstName: z.string().trim().min(1, "Enter your first name").max(50, "Keep it under 50 characters"),
+    lastName: z.string().trim().min(1, "Enter your last name").max(50, "Keep it under 50 characters"),
+    phone: z.string().trim().refine((v) => v === "" || phoneDigits(v).length === 10, "Enter a 10-digit US phone number"),
+    country: z.string().refine((v) => isCountryCode(v), "Choose your country"),
+    city: z.string().trim().max(60, "Keep it under 60 characters"),
+    state: z.string().max(60),
+    zip: z.string().trim(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.zip && !isPostalCode(v.zip, v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
+  });
 type ProfileValues = z.infer<typeof profileSchema>;
 
 function profileDefaults(me: User): ProfileValues {
-  return { firstName: me.firstName, lastName: me.lastName, phone: me.phone ?? "", city: me.city ?? "", state: me.state ?? "", zip: me.zip ?? "" };
+  return { firstName: me.firstName, lastName: me.lastName, phone: me.phone ?? "", country: me.country ?? DEFAULT_COUNTRY, city: me.city ?? "", state: me.state ?? "", zip: me.zip ?? "" };
 }
 
 function ProfileTab({ me }: { me: User }) {
   const updateMe = useApp((s) => s.updateMe);
   const form = useForm<ProfileValues>({ resolver: zodResolver(profileSchema), mode: "onTouched", defaultValues: profileDefaults(me) });
   const { errors, isDirty, isSubmitting } = form.formState;
+  const loc = useWatch({ control: form.control, name: ["country", "zip", "city", "state"] });
 
   const onSubmit = form.handleSubmit(async (v) => {
     const res = await updateMe({
       firstName: v.firstName.trim(),
       lastName: v.lastName.trim(),
       phone: v.phone ? formatUsPhone(v.phone) : undefined,
+      country: v.country,
       city: v.city.trim() || undefined,
       state: v.state || undefined,
       zip: v.zip.trim() || undefined,
@@ -157,30 +166,14 @@ function ProfileTab({ me }: { me: User }) {
               </Field>
             )}
           />
-          <AddressLookup
-            collapsed
-            onPick={(a) => {
-              form.setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
-              form.setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
-              if (a.zip) form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+          <LocationFields
+            idPrefix="settings-loc"
+            value={{ country: loc[0] || "US", zip: loc[1] ?? "", city: loc[2] ?? "", state: loc[3] ?? "" }}
+            onChange={(patch) => {
+              for (const [k, v] of Object.entries(patch) as [keyof typeof patch, string][]) form.setValue(k, v, { shouldDirty: true, shouldValidate: !!errors[k] });
             }}
+            errors={{ country: errors.country?.message, zip: errors.zip?.message, city: errors.city?.message, state: errors.state?.message }}
           />
-          <div className="grid gap-5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
-            <Field label="City" optional error={errors.city?.message}>
-              <CityInput icon={<MapPin />} {...form.register("city")} onPick={async (c) => {
-            form.setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
-            form.setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
-            const zip = zipForCity(form.getValues("zip"), await c.zips);
-            form.setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
-          }} />
-            </Field>
-            <Field label="State" optional error={errors.state?.message}>
-              <Select placeholder="Select" options={US_STATES} autoComplete="address-level1" {...form.register("state")} />
-            </Field>
-            <Field label="ZIP code" optional error={errors.zip?.message}>
-              <Input inputMode="numeric" maxLength={5} autoComplete="postal-code" {...form.register("zip")} />
-            </Field>
-          </div>
         </CardContent>
         <CardFooter className="justify-end">
           <AnimatePresence>

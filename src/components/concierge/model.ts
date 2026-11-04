@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Grade, TeachingMode, Tutor } from "@/lib/types";
 import { GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, getSubject, subjectName } from "@/lib/data/catalog";
 import { resolveLocation } from "@/lib/data/geo";
+import { isPostalCode, POSTAL_ERROR } from "@/lib/postal";
 import { rankTutors, type MatchCriteria } from "@/lib/matching";
 import { toQueryString, type TutorSearch } from "@/lib/search";
 import { daysSummary, timesSummary, type TimeOfDay } from "@/components/jobs/jobUtils";
@@ -42,7 +43,7 @@ export const answersSchema = z
     days: z.array(z.string()),
     timesOfDay: z.array(z.enum(["morning", "afternoon", "evening"])),
     mode: z.enum(["", "online", "in_person", "either"]),
-    zip: z.string().refine((v) => v === "" || /^\d{5}$/.test(v), "Enter a 5-digit ZIP code."),
+    zip: z.string().refine((v) => v === "" || isPostalCode(v), POSTAL_ERROR),
     minExperience: z.string(),
     language: z.string(),
     support: z.array(z.string()),
@@ -123,7 +124,7 @@ export function paramsToAnswers(p: URLSearchParams): Answers {
     days: (p.get("days") ?? "").split(",").filter((d) => DAYS.includes(d)),
     timesOfDay: (p.get("times") ?? "").split(",").filter((t): t is TimeOfDay => TIMES.includes(t as TimeOfDay)),
     mode: ["online", "in_person", "either"].includes(mode) ? (mode as ModeChoice) : "",
-    zip: /^\d{5}$/.test(zip) ? zip : "",
+    zip: isPostalCode(zip) ? zip : "",
     minExperience: /^\d{1,2}$/.test(exp) ? exp : "",
     language: LANGUAGES.includes(lang) ? lang : "",
     support: (p.get("support") ?? "").split(",").filter((s) => LEARNING_SUPPORT.includes(s)),

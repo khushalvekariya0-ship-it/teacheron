@@ -15,6 +15,7 @@ import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { timeRange, tzShort } from "./shared";
+import { videoLabel } from "./LessonVideo";
 
 const DAY = 86_400_000;
 
@@ -62,7 +63,7 @@ export function LessonWhenWhere({
         </Item>
         <Item icon={b.mode === "online" ? Video : MapPin} label="Format">
           {MODE_LABEL[b.mode]}
-          {b.mode === "online" && <span className="font-normal text-muted"> · TutorLink classroom</span>}
+          {b.mode === "online" && <span className="font-normal text-muted"> · {b.videoLink ? videoLabel(b) : "TutorLink classroom"}</span>}
         </Item>
       </dl>
 
@@ -109,6 +110,23 @@ function Item({ icon: Icon, label, children }: { icon: React.ComponentType<{ cla
 function OnlineStrip({ booking: b, now, policy, tz, soon, live, isTutor, tutorFirstName }: { booking: Booking; now: number; policy: BookingPolicy; tz: string; soon: boolean; live: boolean; isTutor: boolean; tutorFirstName: string }) {
   const linkAt = new Date(startMs(b) - policy.meetingLinkVisibleMinutesBefore * 60_000).toISOString();
   let body: React.ReactNode = null;
+  // A lesson on the tutor's Zoom / Google Meet: the meeting card below has the Join button.
+  if (b.videoLink && (live || b.status === "pending")) {
+    const label = videoLabel(b);
+    if (live && soon) {
+      body = (
+        <div className="space-y-3">
+          <Countdown booking={b} />
+          <Explainer icon={Video}>This lesson is on {label}. Join with the button in the {label} meeting card below.</Explainer>
+        </div>
+      );
+    } else if (live) {
+      body = <Explainer icon={Video}>Starts {formatRelative(b.startUtc, now)}. This lesson is on {label}: the Join button is in the {label} meeting card below.</Explainer>;
+    } else if (endMs(b) > now) {
+      body = <Explainer icon={Video}>{isTutor ? `Accept this request to confirm it. The family can then join your ${label} meeting.` : `The lesson is confirmed once ${tutorFirstName} accepts. You can then join on ${label}.`}</Explainer>;
+    }
+    return body ? <div className="border-t border-line px-5 py-4">{body}</div> : null;
+  }
   if (live && soon) body = <LiveJoin booking={b} policy={policy} tz={tz} />;
   else if (live) {
     body = (

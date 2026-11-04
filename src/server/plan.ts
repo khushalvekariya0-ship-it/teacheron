@@ -77,6 +77,10 @@ export const PLANS: Record<ActionName, Plan> = {
   },
   transitionBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
   rescheduleBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  // The tutor's world holds their other upcoming lessons (for "use this link for my other lessons").
+  setLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  removeLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  setLessonRecording: (L, me, [id]) => L.bookingParticipants(str(id), me),
   submitReview: (L, me, [bookingId]) => L.bookingParticipants(str(bookingId), me),
   respondToReview: self,
 
@@ -93,7 +97,7 @@ export const PLANS: Record<ActionName, Plan> = {
     await Promise.all([
       L.self(me), L.users([c?.user_id as string]), L.usersByTutor([c?.tutor_id as string]), recentFlags(L, me),
       // The latest messages, so a number sent a piece at a time is noticed.
-      L.load("messages", "id in (select id from public.messages where conversation_id = $1 order by created_at desc limit 12)", [str(conversationId) ?? ""]),
+      L.load("messages", "id in (select id from public.messages where conversation_id = $1 order by created_at desc limit 45)", [str(conversationId) ?? ""]),
     ]);
   },
   markConversationRead: async (L, me, [conversationId]) => {

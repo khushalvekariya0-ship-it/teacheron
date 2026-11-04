@@ -628,8 +628,39 @@ function findPhones(v: View, mode: ScanMode): [number, number][] {
 /* ─── 4. Email addresses ──────────────────────────────────────────────────────── */
 
 /** Undoes "(at)", "[dot]", " at gmail", "gmail . com" and the like. */
+/** The phonetic alphabet: "juliet oscar hotel november" → "john". */
+const NATO: Record<string, string> = {
+  alpha: "a", alfa: "a", bravo: "b", charlie: "c", delta: "d", echo: "e", foxtrot: "f", golf: "g", hotel: "h", india: "i", juliet: "j", juliett: "j",
+  kilo: "k", lima: "l", mike: "m", november: "n", oscar: "o", papa: "p", quebec: "q", romeo: "r", sierra: "s", tango: "t", uniform: "u",
+  victor: "v", whiskey: "w", whisky: "w", xray: "x", yankee: "y", zulu: "z",
+};
+const NATO_WORD = `(?:${Object.keys(NATO).join("|")})`;
+function unNato(v: View): View {
+  return replaceIn(v, new RegExp(`\\b${NATO_WORD}(?:[\\s,.-]+${NATO_WORD}){2,}\\b`, "g"), (m) => m[0].split(/[\s,.-]+/).map((w) => NATO[w] ?? "").join(""));
+}
+
+/** ROT13 ("wbua ng tznvy" → "john at gmail"). */
+const rot13 = (t: string) => t.replace(/[a-z]/gi, (c) => String.fromCharCode(((c.toLowerCase().charCodeAt(0) - 97 + 13) % 26) + (c >= "a" ? 97 : 65)));
+
 function unmaskEmail(v: View): View {
   let e = v;
+  // "gmail", "at", "dot com" written in Hindi or Gujarati (vowel signs are already removed): જીમેલ, एट, डॉट कॉम
+  e = replaceIn(e, /जमल|જમલ/g, "gmail");
+  e = replaceIn(e, /(?:डट|ડટ)\s*(?:कम|કમ)/g, " dot com");
+  e = replaceIn(e, /(?<!\S)(?:एट|એટ)(?!\S)/g, "at");
+  e = replaceIn(e, /(?<!\S)(?:डट|ડટ)(?!\S)/g, "dot");
+  // Provider names with their letters split up: "g mail", "gm ail", "g.m.a.i.l", "h o t m a i l", "out look", "ya hoo"
+  e = replaceIn(e, /\bg(?:ee)?[\s._-]*m[\s._-]*[a4@][\s._-]*[i1l][\s._-]*l\b/g, "gmail");
+  e = replaceIn(e, /\by[\s._-]*[a4@][\s._-]*h[\s._-]*[o0][\s._-]*[o0]\b/g, "yahoo");
+  e = replaceIn(e, /\bh[\s._-]*[o0][\s._-]*t[\s._-]*m[\s._-]*[a4@][\s._-]*[i1l][\s._-]*l\b/g, "hotmail");
+  e = replaceIn(e, /\b[o0][\s._-]*u[\s._-]*t[\s._-]*l[\s._-]*[o0][\s._-]*[o0][\s._-]*k\b/g, "outlook");
+  e = replaceIn(e, /\b[i1][\s._-]*c[\s._-]*l[\s._-]*[o0][\s._-]*u[\s._-]*d\b/g, "icloud");
+  e = replaceIn(e, /\bproton[\s._-]*m[\s._-]*[a4@][\s._-]*[i1l][\s._-]*l\b/g, "protonmail");
+  // "john underscore smith"
+  e = replaceIn(e, /(?<=[a-z0-9])\s+under\s?score\s+(?=[a-z0-9])/g, "_");
+  // "john-at-gmail-dot-com", "john_at_gmail", "john 4t gmail", "gmail d0t com"
+  e = replaceIn(e, new RegExp(`(?<=[a-z0-9])[\\s_-]*[-_][\\s_-]*(?:at|@t|4t)[\\s_-]*[-_]?[\\s_-]*(?=${PROVIDER})|(?<=[a-z0-9])\\s+(?:@t|4t)\\s+(?=${PROVIDER}|[a-z0-9-]+\\.${TLD_SPACED}\\b)`, "g"), "@");
+  e = replaceIn(e, new RegExp(`(${PROVIDER})[\\s_-]*[-_][\\s_-]*(?:dot|d0t)[\\s_-]*[-_]?[\\s_-]*(?=(?:com|net|co|org|in|uk|us)\\b)|(${PROVIDER})\\s+d0t\\s+(?=(?:com|net|co|org|in|uk|us)\\b)`, "g"), (m) => `${m[1] ?? m[2]}.`);
   // Provider names split up: "g mail", "hot-mail", "out look", "ya hoo", "i cloud", "proton mail".
   e = replaceIn(e, /\bg(?:ee)?[\s._-]+m[a4@][i1l]l\b|\bhot[\s._-]+m[a4@][i1l]l\b|\bout[\s._-]+look\b|\bya[\s._-]+hoo\b|\bi[\s._-]+cloud\b|\bproton[\s._-]+m[a4@][i1l]l\b|\by[\s._-]+m[a4@][i1l]l\b/g, (m) => m[0].replace(/[\s._-]+/g, "").replace(/^gee/, "g"));
   // "gmaildotcom", "gmail dot co dot uk"
@@ -663,6 +694,10 @@ const EMAIL_EXTRA = [
   new RegExp(`(?<![a-z0-9._-])(?=[a-z0-9._-]*[0-9_.])[a-z0-9._-]+\\s*(?:on|at|in|-|:)?\\s*${PROVIDER}\\b`, "g"),
   // gmail: jsmith99, my gmail id is john.doe
   new RegExp(`\\b${PROVIDER}\\b(?:\\s*(?:\\bid\\b|\\baddress\\b|\\bis\\b|[:=-]))*\\s*(?=[a-z0-9._-]*[0-9._])[a-z0-9._-]+`, "g"),
+  // my gmail is johnsmith, gmail id: johnsmith (but not "gmail is down")
+  new RegExp(`\\b${PROVIDER}\\b\\s*(?:\\b(?:id|address|account|username)\\b\\s*)?(?:\\bis\\b|[:=])\\s*(?!(?:not|down|broken|working|full|blocked|fine|ok|okay|the|this|that|same|new|old|private|hidden|below|above|here|there|slow|open|closed|best|better|easier|easy|free|good|great|safer|faster)\\b)[a-z][a-z0-9._-]{2,}`, "g"),
+  // johnsmith1990 is my gmail
+  new RegExp(`(?<![a-z0-9._-])(?=[a-z0-9._-]*[0-9._])[a-z0-9._-]{3,}\\s+(?:is\\s+)?(?:my\\s+)?${PROVIDER}\\b`, "g"),
   // john doe gmail com
   new RegExp(`(?<![a-z0-9._-])[a-z0-9._-]{3,}\\s+${PROVIDER}\\s+(?:com|net|co)\\b`, "g"),
 ];
@@ -724,8 +759,9 @@ function decodeHex(token: string): string | null {
 function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
   if (!text || !text.trim()) return { found: false, kinds: [], matches: [] };
   const v = normalize(text.length > 200_000 ? text.slice(0, 200_000) : text);
-  const unmasked = unmaskEmail(v);
-  const rebuilt = [unmasked, joinSpacedLetters(unmasked), unmaskEmail(joinSpacedLetters(v))];
+  const spelled = mode === "chat" ? unNato(v) : v;
+  const unmasked = unmaskEmail(spelled);
+  const rebuilt = [unmasked, joinSpacedLetters(unmasked), unmaskEmail(joinSpacedLetters(spelled))];
   const matches: ContactMatch[] = [];
   const add = (kind: ContactKind, spans: [number, number][]) => {
     for (const [start, end] of spans) if (end > start) matches.push({ kind, start, end });
@@ -747,6 +783,9 @@ function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
       // Written backwards: "moc.liamg@nhoj", "moc tod liamg ta nhoj".
       const reversed = scanCore(Array.from(text).reverse().join(""), "chat", depth + 1);
       for (const kind of reversed.kinds) if (kind !== "phone" && !matches.some((m) => m.kind === kind)) matches.push({ kind, start: 0, end: text.length });
+      // ROT13: "wbua ng tznvy qbg pbz"
+      const rotated = scanCore(rot13(text), "chat", depth + 1);
+      for (const kind of rotated.kinds) if (kind !== "phone" && !matches.some((m) => m.kind === kind)) matches.push({ kind, start: 0, end: text.length });
     }
   }
   matches.sort((x, y) => x.start - y.start || y.end - x.end);
@@ -878,8 +917,35 @@ export function scanSplitMessages(previous: string[], next: string): { found: bo
     }
     if (pieces.length && digits >= 5) return { found: true, kinds: ["phone"], pieces };
   }
+  // Spelled out across short messages: "j", "o", "h", "n", "@", "g" … or "john", "at", "gmail", "dot", "com".
+  if (isShortPiece(next)) {
+    const run: number[] = [];
+    for (let i = previous.length - 1; i >= 0 && run.length < 40; i--) {
+      if (!isShortPiece(previous[i])) break;
+      run.unshift(i);
+    }
+    // An "@" on its own right after letters is an email being spelled out.
+    if (run.length >= 2 && /^(?:@|＠|\(at\)|\[at\])$/i.test(next.trim())) return { found: true, kinds: ["email"], pieces: run };
+    const glue = [...run.map((i) => previous[i]), next].map((t) => t.replace(/\s+/g, ""));
+    // Try from each starting piece, so an address after unrelated short replies is still found.
+    for (let from = 0; from < run.length; from++) {
+      const parts = glue.slice(from);
+      const starts: number[] = [];
+      let at = 0;
+      for (const part of parts) {
+        starts.push(at);
+        at += part.length;
+      }
+      const lastStart = starts[parts.length - 1];
+      const hits = scanContact(parts.join(""), "chat").matches.filter((m) => m.kind !== "phone" && m.end > lastStart);
+      if (hits.length) {
+        const pieces = run.slice(from).filter((_, k) => hits.some((m) => m.start < starts[k] + parts[k].length && m.end > starts[k]));
+        return { found: true, kinds: [...new Set(hits.map((m) => m.kind))], pieces: pieces.length ? pieces : run.slice(from) };
+      }
+    }
+  }
   // The messages read together.
-  const parts = [...previous, next];
+  const parts = [...previous.slice(-10), next];
   const starts: number[] = [];
   let at = 0;
   for (const part of parts) {
@@ -890,6 +956,15 @@ export function scanSplitMessages(previous: string[], next: string): { found: bo
   const nextStart = starts[parts.length - 1];
   const hits = scan.matches.filter((m) => m.end > nextStart);
   if (!hits.length) return none;
-  const pieces = previous.map((_, i) => i).filter((i) => hits.some((m) => m.start < starts[i] + previous[i].length && m.end > starts[i]));
+  const offset = previous.length - (parts.length - 1);
+  const pieces = parts.slice(0, -1).map((_, k) => k).filter((k) => hits.some((m) => m.start < starts[k] + parts[k].length && m.end > starts[k])).map((k) => k + offset);
   return { found: true, kinds: [...new Set(hits.map((m) => m.kind))], pieces };
+}
+
+/** A very short message: a few letters, a word or two, or letters typed with spaces ("j o h n"). */
+export function isShortPiece(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length > 24) return false;
+  const words = t.split(/\s+/);
+  return words.length <= 3 || words.every((w) => w.length === 1);
 }

@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/Toast";
 import { BookingStatusBadge } from "@/components/domain/Badges";
 import { DeclineDialog } from "./BookingDialogs";
 import { DateBlock, ModeIcon, needsWrapUp, timeRange, tzShort, type BookingPeople } from "./shared";
+import { videoLabel } from "./LessonVideo";
 
 export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Booking; people: BookingPeople; actor: Actor | null; now: number; tz: string }) {
   const transition = useApp((s) => s.transitionBooking);
@@ -24,7 +25,7 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
   const [declineOpen, setDeclineOpen] = React.useState(false);
   const canAccept = actor === "tutor" && canTransition(b, "confirmed", actor, now, policy).ok;
   const canDecline = actor === "tutor" && b.status === "pending" && canTransition(b, "cancelled_by_tutor", actor, now, policy).ok;
-  const joinable = meetingLinkVisible(b, now, policy) && !!b.meetingUrl;
+  const joinable = meetingLinkVisible(b, now, policy) && (!!b.videoLink || !!b.meetingUrl);
   const wrapUp = needsWrapUp(b, now);
   const muted = ["cancelled_by_student", "cancelled_by_tutor", "rescheduled", "refunded"].includes(b.status);
   const total = b.priceCents - b.discountCents;
@@ -46,13 +47,20 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
 
   const actions = (
     <>
-      {joinable && (
-        <Button asChild size="sm">
-          <Link href={`/classroom/${b.id}`}>
-            <Video /> Join<span className="sr-only"> {subject} lesson</span>
-          </Link>
-        </Button>
-      )}
+      {joinable &&
+        (b.videoLink ? (
+          <Button asChild size="sm">
+            <a href={b.videoLink} target="_blank" rel="noopener noreferrer">
+              <Video /> Join {videoLabel(b)}<span className="sr-only"> for the {subject} lesson</span>
+            </a>
+          </Button>
+        ) : (
+          <Button asChild size="sm">
+            <Link href={`/classroom/${b.id}`}>
+              <Video /> Join<span className="sr-only"> {subject} lesson</span>
+            </Link>
+          </Button>
+        ))}
       {canAccept && (
         <Button size="sm" onClick={accept}>
           <Check /> Accept<span className="sr-only"> request from {people.counterpart}</span>
@@ -84,7 +92,7 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
               {timeRange(b, tz)} <span className="text-subtle">{tzShort(tz, b.startUtc)}</span>
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <ModeIcon mode={b.mode} /> <span aria-hidden>{MODE_LABEL[b.mode]}</span>
+              <ModeIcon mode={b.mode} /> <span aria-hidden>{MODE_LABEL[b.mode]}{b.mode === "online" && b.videoLink ? ` · ${videoLabel(b)}` : ""}</span>
             </span>
             <span className="hidden sm:inline">{formatDuration(b.durationMin)}</span>
           </p>

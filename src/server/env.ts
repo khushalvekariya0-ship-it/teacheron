@@ -15,6 +15,11 @@ export const env = {
   cronSecret: process.env.CRON_SECRET ?? "",
   resendKey: process.env.RESEND_API_KEY ?? "",
   emailFrom: process.env.EMAIL_FROM ?? "",
+  /** An SMTP mailbox (e.g. Gmail with an app password). Used instead of Resend when set. */
+  smtpHost: process.env.SMTP_HOST ?? "",
+  smtpPort: Number(process.env.SMTP_PORT ?? 465) || 465,
+  smtpUser: process.env.SMTP_USER ?? "",
+  smtpPass: process.env.SMTP_PASS ?? "",
   /** Only changed for local testing; production uses Resend's API. */
   resendUrl: (process.env.RESEND_API_URL || "https://api.resend.com").replace(/\/$/, ""),
   /** Set once a payment provider (Stripe) is connected; until then card/UPI charges are refused. */
@@ -41,7 +46,7 @@ export function backendStatus(): BackendStatus {
     database: !!env.dbUrl,
     auth: !!(env.supabaseUrl && env.supabaseAnonKey),
     storage: !!(env.supabaseUrl && env.serviceRoleKey),
-    email: !!(env.resendKey && env.emailFrom),
+    email: !!((env.smtpHost || env.resendKey) && env.emailFrom),
     payments: env.paymentsEnabled,
     missing,
   };

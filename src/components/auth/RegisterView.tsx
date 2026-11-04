@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Input";
+import { Field, Input, Select } from "@/components/ui/Input";
 import { Checkbox, RadioCards } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
 import { Avatar } from "@/components/ui/Avatar";
@@ -23,8 +23,12 @@ import { toast } from "@/components/ui/Toast";
 import { destinationFor, safeNext } from "./authUtils";
 import { AddressLookup } from "@/components/domain/AddressLookup";
 import { PasswordInput, PasswordStrengthMeter } from "./PasswordField";
+import { EmailCodeForm } from "./EmailCodeForm";
+import { isPostalCode, POSTAL_MAX_LENGTH, postalError, postalLabel, postalNumeric, postalPlaceholder, postalRequired } from "@/lib/postal";
+import { COUNTRIES, DEFAULT_COUNTRY, guessCountry, isCountryCode } from "@/lib/location";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
 
 type RoleChoice = "student" | "parent" | "tutor";
 type AgeBand = "18+" | "13-17" | "under13";
@@ -38,12 +42,14 @@ const schema = z
     lastName: z.string().trim().min(1, "Enter your last name").max(50, "Keep it under 50 characters"),
     email: emailSchema,
     password: z.string().min(10, "Use at least 10 characters").max(128, "Use 128 characters or fewer"),
-    zip: z.string().trim().regex(/^\d{5}$/, "Enter a 5-digit ZIP code"),
+    country: z.string().refine((v) => isCountryCode(v), "Choose your country"),
+    zip: z.string().trim(),
     ageBand: z.enum(["18+", "13-17", "under13"]).optional(),
     parentEmail: z.string().trim().optional(),
     terms: z.boolean().refine((v) => v, "Please accept the Terms of Service and Privacy Policy"),
   })
   .superRefine((v, ctx) => {
+    if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zip"], message: postalError(v.country) });
     if (v.role !== "student") return;
     if (!v.ageBand) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ageBand"], message: "Tell us your age range" });
@@ -122,6 +128,7 @@ export function RegisterView() {
   const hydrated = useHydrated();
   const me = useSession();
   const signUp = useApp((s) => s.signUp);
+  const signIn = useApp((s) => s.signIn);
   const resend = useApp((s) => s.resendConfirmation);
   const logout = useApp((s) => s.logout);
   const [serverError, setServerError] = React.useState<string | null>(null);
@@ -138,6 +145,7 @@ export function RegisterView() {
       lastName: "",
       email: "",
       password: "",
+      country: DEFAULT_COUNTRY,
       zip: "",
       ageBand: undefined,
       parentEmail: "",
@@ -148,6 +156,11 @@ export function RegisterView() {
   const role = useWatch({ control: form.control, name: "role" });
   const ageBand = useWatch({ control: form.control, name: "ageBand" });
   const password = useWatch({ control: form.control, name: "password" }) ?? "";
+  const country = useWatch({ control: form.control, name: "country" }) || DEFAULT_COUNTRY;
+  // After the page loads, start from the visitor's own country (their browser's language or time zone).
+  React.useEffect(() => {
+    if (hydrated && !form.getFieldState("country").isDirty) form.setValue("country", guessCountry());
+  }, [hydrated, form]);
   const blocked = role === "student" && ageBand === "under13";
 
   /** Where the account continues after sign-up (and after the email confirmation link). */
@@ -163,7 +176,8 @@ export function RegisterView() {
       lastName: v.lastName,
       email: v.email,
       password: v.password,
-      zip: v.zip,
+      country: v.country,
+      zip: v.zip.trim(),
       ...(v.role === "student" && v.ageBand && v.ageBand !== "under13" ? { ageBand: v.ageBand } : {}),
       ...(parentEmail ? { parentEmail } : {}),
       next: setupFor(v.role),
@@ -195,6 +209,49 @@ export function RegisterView() {
         )}
       </InlineAlert>
     );
+    if (created.needsConfirmation && created.verifyBy === "code") {
+      return (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", bounce: 0.4, duration: 0.6, delay: 0.1 }}
+            className="grid size-12 place-items-center rounded-xl bg-brand-soft text-brand"
+          >
+            <MailCheck className="size-5" aria-hidden />
+          </motion.span>
+          <h1 className="mt-6 font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Confirm your email</h1>
+          <p role="status" className="mt-2 text-[15px] leading-relaxed text-muted">
+            Welcome to TutorLink, {created.firstName}. We sent a 6-digit code to <span className="font-medium text-ink">{created.email}</span>. Enter it to finish creating your account
+            {created.role === "tutor" ? ". Next comes your tutor profile setup." : created.role === "student" ? ". Next comes your learning profile." : "."} It can take a minute or two to arrive; check your spam folder too.
+          </p>
+          {consent}
+          <div className="mt-8">
+            <EmailCodeForm
+              email={created.email}
+              submitLabel="Confirm and continue"
+              onVerified={async () => {
+                // The email is confirmed; sign in with the password just chosen (all the usual sign-in checks apply).
+                const r = await signIn(created.email, form.getValues("password"));
+                if (r.ok && !r.data.mfaRequired) {
+                  toast.success("Email confirmed", { description: "Your account is ready." });
+                  router.push(dest);
+                  return;
+                }
+                toast.success("Email confirmed", { description: "Sign in to continue." });
+                router.push(`${signInHref}${signInHref.includes("?") ? "&" : "?"}verified=1`);
+              }}
+            />
+          </div>
+          <p className="mt-5 text-center text-[14px] text-muted">
+            Wrong email?{" "}
+            <button type="button" onClick={() => setCreated(null)} className="font-medium text-ink underline underline-offset-4">
+              Go back
+            </button>
+          </p>
+        </motion.div>
+      );
+    }
     if (created.needsConfirmation) {
       return (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
@@ -371,14 +428,43 @@ export function RegisterView() {
           <PasswordStrengthMeter value={password} />
         </div>
 
-        <Field
-          label="ZIP code"
-          error={errors.zip?.message}
-          hint={role === "tutor" ? "Sets your in-person service area. Your exact address is never shown." : "Helps us show tutors near you. Online tutors are available everywhere."}
-        >
-          <Input inputMode="numeric" autoComplete="postal-code" maxLength={5} icon={<MapPin />} placeholder="e.g. 60614" className="sm:max-w-44" {...form.register("zip")} />
-        </Field>
-        <AddressLookup collapsed className="-mt-2" onPick={(a) => a.zip && form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true })} />
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]">
+          <Field label="Country" error={errors.country?.message} id="reg-country">
+            <Controller
+              control={form.control}
+              name="country"
+              render={({ field }) => (
+                <Select
+                  id="reg-country"
+                  options={COUNTRY_OPTIONS}
+                  autoComplete="country"
+                  value={field.value}
+                  onBlur={field.onBlur}
+                  onChange={(e) => {
+                    field.onChange(e.target.value);
+                    if (form.getValues("zip")) form.setValue("zip", "", { shouldValidate: false });
+                  }}
+                />
+              )}
+            />
+          </Field>
+          <Field
+            label={postalLabel(country)}
+            error={errors.zip?.message}
+            optional={!postalRequired(country)}
+            hint={role === "tutor" ? "Sets your in-person service area. Your exact address is never shown." : "Helps us show tutors near you. Online tutors are available everywhere."}
+          >
+            <Input
+              inputMode={postalNumeric(country) ? "numeric" : "text"}
+              autoComplete="postal-code"
+              maxLength={POSTAL_MAX_LENGTH}
+              icon={<MapPin />}
+              placeholder={postalPlaceholder(country)}
+              {...form.register("zip")}
+            />
+          </Field>
+        </div>
+        <AddressLookup key={country} collapsed country={country} className="-mt-2" onPick={(a) => a.zip && form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true })} />
 
         <AnimatePresence initial={false}>
           {role === "student" && (

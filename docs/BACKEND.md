@@ -53,9 +53,49 @@ How the live backend works. Setup steps for the site owner are in [SUPABASE_SETU
 - Under-13s are refused; 13–17 students need a parent's approval through a one-time emailed link (`src/server/consent.ts`, `/consent?token=`; only a hash of the token is stored).
 - Suspended accounts are signed out at sign-in and every action is refused.
 
+## Locations in any country
+
+Accounts, tutor profiles and job posts have a `country` (ISO code; empty = US; migration `20261104000500_countries.sql`). `state` is the 2-letter code in the US and the state/province name elsewhere. Countries and their states/provinces come from `country-region-data` 4.1.0 (MIT, `src/lib/data/countries.ts`, `regions.json`, `regions.LICENSE.txt`; the regions load only when a form needs them). Postal codes are checked per country (`src/lib/postal.ts`: 5-digit US ZIP, 6-digit Indian PIN, UK/Canada formats, any 3–10 letters/digits elsewhere; required only for the US and India). One component, `LocationFields`, is used by sign-up (country + code), tutor setup, the student profile, Settings and job posts; staff edit the same fields in Admin → Users. `GET /api/geo` (free services, no key): Photon/OpenStreetMap for city and address search worldwide, India Post for Indian PIN codes (city → PINs, PIN → city), Zippopotam.us for US ZIP codes and other countries' codes. Picking a city fills its state and, when known, its postal code (several → a list to choose from); typing a postal code first fills the city and state. Distance for in-person matching still uses US ZIP codes only (tutors outside the US are saved at 0,0, so distance isn't scored for them).
+
+## Zoom / Google Meet on online lessons
+
+Online lessons open the TutorLink classroom by default. A tutor who teaches on Zoom (or Google Meet) creates the meeting in their own account and pastes its invite link on the lesson page ("Add Zoom or Google Meet link"); staff with `bookings.manage` can do the same from Admin → Bookings (audited). Actions: `setLessonVideo(bookingId, { link, passcode?, applyToUpcoming? })`, `removeLessonVideo(bookingId)`, `setLessonRecording(bookingId, link)` (Zoom cloud recording or Google Drive, once the lesson has started). `src/lib/video-link.ts` accepts only https Zoom (`/j/<id>`, `/my/<name>`) and Google Meet (`abc-defg-hij`) links, keeps only the `pwd` token, and refuses Zoom start links (`/s/…`, which carry host access); passcodes are up to 10 characters and refused if they look like a phone number. The database checks the same shapes (`bookings.video_link`, `video_passcode`, `recording_url`; migration `20261104000400_lesson_video_links.sql`). Links live on the booking, so only its student or parent, its tutor and booking staff receive them. The student or parent is notified when a link or recording is added. "Join Zoom" appears on the lesson page and in the classroom from confirmation until the lesson ends, and on lesson lists, the calendar and dashboards inside the usual join window. A rescheduled lesson keeps its link; "use this link for my other upcoming lessons" copies it to the tutor's upcoming online lessons that have none. Free Zoom accounts end meetings after 40 minutes.
+
+## Email codes (OTP)
+
+Both one-time codes are 6 digits, live in `public.email_codes` (`src/server/email-codes.ts`) and are kept apart by `purpose`: `verify_email` (first-time email check after sign-up) and `password_reset` (Forgot password; `reset_id` points at the reset link it unlocks). The purpose is part of the stored SHA-256 fingerprint and of every lookup, so a code made for one purpose is refused for the other. A newer code cancels older ones of the same purpose; codes expire after 15 minutes, work once, and the 5th wrong try cancels a code. Migration: `20261104000200_email_codes.sql` (it also moved reset codes out of `password_resets`).
+
+## First-time email verification
+
+With the site's own email set up (`emailReady()`), sign-up doesn't use Supabase's confirmation email (`src/server/email-verification.ts`):
+
+| Step | API | What happens |
+|---|---|---|
+| Sign up | `POST /api/auth/sign-up` | Creates the account unconfirmed with `auth.admin.createUser` (Supabase sends nothing) and emails a `verify_email` code; answers `{ needsConfirmation: true, verifyBy: "code" }`. Signing up again before confirming just sends a new code; a confirmed email gets 409 as before. |
+| Type the code | `POST /api/auth/verify-email { email, code }` | Checks the code on the server and only then confirms the email (`auth.admin.updateUserById(id, { email_confirm: true })`; the trigger sets `users.email_verified`). It doesn't sign in. Every failure gives the same answer; 10 tries per 15 minutes per IP. |
+| New code | `POST /api/auth/resend { email }` | A new code (at most 5 an hour per account); same answer for every address. |
+| Sign in | `POST /api/auth/sign-in` | Refused with `code: "email_not_confirmed"` until the email is confirmed, even if Supabase's own "Confirm email" setting is off. After confirming, the usual sign-in runs, including two-step login for staff. |
+
+Pages: the sign-up page shows the code box right after "Create account" and then signs in and continues to setup; the log-in page asks for the code when an unconfirmed account signs in, then finishes the sign-in; `/verify-email` takes an email and its code. Without the site's own email, sign-up still uses Supabase's confirmation link (`verifyBy: "link"`, `/auth/callback`, `/auth/confirm`).
+
+## Password reset
+
+The site runs password reset itself (`src/server/password-reset.ts`); Supabase's own reset email isn't used. The same flow serves students, parents, tutors and staff, from the one login page (`/login` → "Forgot your password?").
+
+| Step | API | What happens |
+|---|---|---|
+| Ask for an email | `POST /api/auth/forgot { email }` | Always the same answer (`{ ok, minutes: 15 }`), so it can't reveal who has an account. For an active account it emails a 6-digit code and a link `https://<site>/reset-password?token=…` (32 random bytes). Only SHA-256 fingerprints of the token (`password_resets`) and code (`email_codes`, purpose `password_reset`) are stored, with a 15-minute expiry. A newer email cancels older ones. Sent after the answer (`after()`). |
+| Type the code | `POST /api/auth/reset-code { email, code }` | Swaps a correct code for a fresh link token (the emailed link stops working). Every failure gives the same answer; the 5th wrong code cancels that email. |
+| Open the link | `POST /api/auth/reset-check { token }` | `valid`, `expired`, `used`, `replaced` (a newer email was sent) or `invalid`. The page then removes the token from the address bar. |
+| Save | `POST /api/auth/reset { token, password }` | Locks the row, sets the password through Supabase Auth (`auth.admin.updateUserById`, which hashes it with bcrypt), marks the link used, deletes every session of the account, and emails "your password was changed". It never signs anyone in: they sign in with the new password, and staff with two-step login still have to enter their authenticator code. |
+
+Limits: 5 `forgot` requests per 15 minutes per IP, 3 reset emails per hour per address (and per account in the database), 10 code tries and 30 link checks per 15 minutes per IP, 10 saves per 15 minutes per IP. Links are built only from `NEXT_PUBLIC_SITE_URL`, never from the request's Host header, and must be `https://` (plain `http://` only for `localhost`); otherwise no reset email is sent. An address with no account gets a "no TutorLink account for this email" note and a suspended account a "can't be reset" note (no code; at most 50 such notes an hour site-wide). Server logs show each step with the account id only (no email address, link or code). Migrations: `20261104000000_password_resets.sql`, `20261104000100_password_reset_codes.sql`, `20261104000200_email_codes.sql`.
+
+Pages: `/forgot-password` (`ForgotPasswordView`: email, then the code box), `/reset-password` (`ResetPasswordView`: new password + confirm), and `/login?reset=done` shows "Your password was changed".
+
 ## Email
 
-`src/server/email.ts` sends through Resend's HTTP API (`RESEND_API_KEY`, `EMAIL_FROM`; `RESEND_API_URL` exists only for local testing). Supabase Auth sends its own sign-up and password emails (configure its SMTP).
+`src/server/email.ts` sends through an SMTP mailbox (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, e.g. Gmail with an app password) when set, otherwise through Resend's HTTP API (`RESEND_API_KEY`; `RESEND_API_URL` exists only for local testing), from `EMAIL_FROM`. `npm run email:check` tests the login. With it set up, Supabase Auth sends no emails; without it, Supabase sends the sign-up confirmation links (configure its SMTP).
 
 ## Scheduled work
 

@@ -5,6 +5,7 @@ import { Controller, useWatch, type Control, type FieldErrors } from "react-hook
 import { MapPin, Monitor, Shuffle, Users } from "lucide-react";
 import { GRADES, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY } from "@/lib/data/catalog";
 import { resolveLocation } from "@/lib/data/geo";
+import { isPostalCode, POSTAL_MAX_LENGTH } from "@/lib/postal";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { ChipGroup, RadioCards } from "@/components/ui/Controls";
 import { SubjectSelect, fieldDescribedBy } from "@/components/requirements/SubjectSelect";
@@ -148,7 +149,7 @@ export function AnswerField({ name, control, errors, idPrefix = "cg", compact }:
       const point = /^\d{5}$/.test(zip) ? resolveLocation(zip) : null;
       const hint = point ? `Near ${point.label.replace(/^\d{5} · near /, "")}` : mode === "in_person" ? "Required for in-person lessons." : "Used to check distance for in-person lessons.";
       return (
-        <Field label={ANSWER_LABEL.zip} id={id} required={mode === "in_person"} optional={mode !== "in_person" && !compact} error={err} hint={/^\d{5}$/.test(zip) && !point ? "We can't place this ZIP yet — distance won't be scored." : hint}>
+        <Field label={ANSWER_LABEL.zip} id={id} required={mode === "in_person"} optional={mode !== "in_person" && !compact} error={err} hint={isPostalCode(zip) && !point ? "We can't place this ZIP yet — distance won't be scored." : hint}>
           <Controller
             control={control}
             name="zip"
@@ -156,7 +157,7 @@ export function AnswerField({ name, control, errors, idPrefix = "cg", compact }:
               <Input
                 id={id}
                 {...field}
-                onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, POSTAL_MAX_LENGTH))}
                 inputMode="numeric"
                 autoComplete="postal-code"
                 icon={<MapPin />}

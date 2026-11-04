@@ -305,7 +305,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
       };
       if (n === 1) {
         const v = values as ReturnType<typeof basicValues>;
-        if (!ok(await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
+        if (!ok(await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), country: v.country, city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
         return ok(await save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }));
       }
       if (n === 5) return ok(await save(budgetToProfile(values as ReturnType<typeof budgetValues>), { step: 5 }));

@@ -19,6 +19,8 @@ import { Sheet, SheetContent } from "@/components/ui/Overlay";
 import { Button } from "@/components/ui/Button";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
+import { VideoLinkDialog, videoLabel } from "@/components/dashboard/bookings/LessonVideo";
+import { videoMeetingId } from "@/lib/video-link";
 import {
   ClearFilters, ExportButton, Facts, FilterSelect, Mono, PermissionButton, PermissionNotice, RANGE_OPTIONS, ReasonDialog, SearchInput, Section, StatusPill,
   TextLink, Timeline, Toolbar, centsToDecimal, inRange, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam, type Directory, type RangePreset,
@@ -358,11 +360,15 @@ function BookingDetail({ booking: b, onOpen }: { booking: Booking; onOpen: (id: 
   const paid = bookingPaid(b);
   const net = settledNet(data.rows);
   const reason = attentionReason(b, now);
+  // Staff who manage bookings can add or change a lesson's Zoom / Google Meet link while it's still to come.
+  const [videoOpen, setVideoOpen] = React.useState(false);
+  const lessonOpen = b.mode === "online" && ["pending", "confirmed", "in_progress"].includes(b.status) && now < endMs(b);
   const child = b.childId ? dir.children.find((c) => c.id === b.childId) : undefined;
   const end = new Date(endMs(b)).toISOString();
 
   return (
     <div className="divide-y divide-line">
+      {lessonOpen && <VideoLinkDialog booking={b} open={videoOpen} onOpenChange={setVideoOpen} canApplyToOthers={false} now={now} />}
       <div className="space-y-3 px-5 py-5">
         <div className="flex flex-wrap items-center gap-1.5">
           <BookingStatusBadge status={b.status} />
@@ -411,7 +417,35 @@ function BookingDetail({ booking: b, onOpen }: { booking: Booking; onOpen: (id: 
                 </span>
               ),
             },
-            ...(b.mode === "online" ? [{ label: "Meeting link", value: b.meetingUrl ? "Issued — shown to participants shortly before the start" : "Not issued" }] : []),
+            ...(b.mode === "online"
+              ? [
+                  b.videoLink
+                    ? {
+                        label: `${videoLabel(b)} meeting`,
+                        value: (
+                          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <a href={b.videoLink} target="_blank" rel="noopener noreferrer" className="font-medium text-ink underline underline-offset-4 hover:text-brand">
+                              {videoMeetingId(b.videoLink) ?? "Open the meeting"}
+                            </a>
+                            {b.videoPasscode && <span className="font-normal text-muted">Passcode <Mono className="text-ink-2">{b.videoPasscode}</Mono></span>}
+                            {lessonOpen && <LinkButton onClick={() => setVideoOpen(true)}>Change</LinkButton>}
+                          </span>
+                        ),
+                      }
+                    : {
+                        label: "Meeting",
+                        value: (
+                          <span className="inline-flex flex-wrap items-center gap-x-2">
+                            {b.meetingUrl ? "TutorLink classroom, shown to participants shortly before the start" : "Not issued"}
+                            {lessonOpen && <LinkButton onClick={() => setVideoOpen(true)}>Add Zoom link</LinkButton>}
+                          </span>
+                        ),
+                      },
+                  ...(b.recordingUrl
+                    ? [{ label: "Recording", value: <a href={b.recordingUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-ink underline underline-offset-4 hover:text-brand">Open the recording</a> }]
+                    : []),
+                ]
+              : []),
             ...(b.locationNote ? [{ label: "Location", value: <span className="font-normal text-ink-2">{b.locationNote}</span> }] : []),
             ...(b.notes ? [{ label: "Lesson notes", value: <span className="font-normal text-ink-2">{b.notes}</span> }] : []),
             ...(b.rescheduledFromId

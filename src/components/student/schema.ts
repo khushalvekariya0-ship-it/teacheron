@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { Gender, PayMethod, StudentProfile, User } from "@/lib/types";
+import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
+import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
 
 /*
  * Student learning profile: one zod schema per setup step. The same schemas back the sections of
@@ -61,7 +63,8 @@ export const BUDGET_PRESETS = [
 
 /** Basic information. Age limits depend on how the student signed up (13–17 with a parent's consent, or 18+). */
 export function basicSchema(teen: boolean) {
-  return z.object({
+  return z
+    .object({
     firstName: z.string().trim().min(1, "Enter your first name.").max(50, "Keep it under 50 characters."),
     lastName: z.string().trim().min(1, "Enter your last name.").max(50, "Keep it under 50 characters."),
     age: z
@@ -69,11 +72,15 @@ export function basicSchema(teen: boolean) {
       .int("Use whole years.")
       .refine((n) => (teen ? n >= 13 && n <= 17 : n >= 18 && n <= 99), teen ? "You signed up as 13–17, so enter an age from 13 to 17." : "Enter an age from 18 to 99."),
     gender: z.enum(["female", "male", "non_binary", "prefer_not"]).optional(),
+    country: z.string().refine((v) => isCountryCode(v), "Choose your country."),
     city: z.string().trim().min(2, "Enter your city.").max(60, "Keep it under 60 characters."),
-    state: z.string().min(2, "Choose your state."),
-    zip: z.string().trim().regex(/^\d{5}$/, "Enter a 5-digit ZIP code."),
+    state: z.string().min(1, "Choose your state or province.").max(60),
+    zip: z.string().trim(),
     photoUrl: z.string().optional(),
-  });
+  })
+    .superRefine((v, ctx) => {
+      if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
+    });
 }
 
 export const learningSchema = z.object({
@@ -139,6 +146,7 @@ export const basicValues = (me: User, p: StudentProfile): BasicValues => ({
   lastName: me.lastName,
   age: p.age ?? Number.NaN,
   gender: p.gender,
+  country: me.country ?? DEFAULT_COUNTRY,
   city: me.city ?? "",
   state: me.state ?? "",
   zip: me.zip ?? "",

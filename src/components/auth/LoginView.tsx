@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { MailCheck } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
@@ -17,6 +18,7 @@ import { useHydrated, useSession } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { destinationFor, safeNext } from "./authUtils";
 import { PasswordInput } from "./PasswordField";
+import { EmailCodeForm } from "./EmailCodeForm";
 import { SocialSignIn, useEnabledProviders } from "./ProviderSignIn";
 import { setRememberMe } from "@/lib/remember";
 
@@ -50,6 +52,9 @@ export function LoginView() {
   const [redirecting, setRedirecting] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
   const mfaRequired = useApp((s) => s.mfaRequired);
+  const siteEmail = useApp((s) => s.config.email);
+  /** The email of an account that still has to enter its sign-up code. */
+  const [confirming, setConfirming] = React.useState<string | null>(null);
 
   const form = useForm({ resolver: zodResolver(schema), mode: "onTouched", defaultValues: { email: "", password: "" } });
   const { errors, isSubmitting } = form.formState;
@@ -59,6 +64,8 @@ export function LoginView() {
     const res = await signIn(values.email, values.password);
     if (!res.ok) {
       if (res.code === "email_not_confirmed") {
+        // The site's own email sends a 6-digit code: enter it here, then this sign-in carries on.
+        if (siteEmail) return setConfirming(values.email.trim().toLowerCase());
         setError({ title: "Confirm your email first", detail: "Open the link we emailed you when you signed up.", unconfirmed: values.email });
         return;
       }
@@ -84,6 +91,45 @@ export function LoginView() {
   const signupHref = (role: "student" | "tutor") => `/register?role=${role}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
 
   if (mfaRequired) return <MfaStep next={next} />;
+
+  if (confirming) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}>
+        <span className="grid size-12 place-items-center bg-brand-soft text-brand">
+          <MailCheck className="size-5" aria-hidden />
+        </span>
+        <h1 className="mt-6 font-heading text-[2rem] leading-[1.05] text-ink">Confirm your email first</h1>
+        <p role="status" className="mt-2 text-[15px] leading-relaxed text-muted">
+          Enter the 6-digit code we emailed to <span className="font-medium text-ink">{confirming}</span> when you signed up. Codes work for 15 minutes; if yours has expired, send a new one.
+        </p>
+        <div className="mt-8">
+          <EmailCodeForm
+            email={confirming}
+            submitLabel="Confirm and log in"
+            onVerified={async () => {
+              // Confirmed: finish this sign-in with the password already typed (two-step login still applies).
+              const r = await signIn(confirming, form.getValues("password"));
+              setConfirming(null);
+              if (!r.ok) {
+                setError({ title: r.error, detail: "" });
+                return;
+              }
+              setRememberMe(remember);
+              if (r.data.mfaRequired) return;
+              setRedirecting(true);
+              toast.success(`Email confirmed. Welcome, ${r.data.firstName}`);
+              router.push(destinationFor(r.data.role, next));
+            }}
+          />
+        </div>
+        <p className="mt-5 text-center text-[14px] text-muted">
+          <button type="button" onClick={() => setConfirming(null)} className="font-medium text-ink underline underline-offset-4">
+            Back to log in
+          </button>
+        </p>
+      </motion.div>
+    );
+  }
 
   return (
     <div>
@@ -124,6 +170,12 @@ export function LoginView() {
 
       {linkError && !error && (
         <InlineAlert className="mt-6" tone="warning" title={linkError} />
+      )}
+      {params.get("reset") === "done" && !error && (
+        <InlineAlert className="mt-6" tone="success" title="Your password was changed. Sign in with your new password." />
+      )}
+      {params.get("verified") === "1" && !error && (
+        <InlineAlert className="mt-6" tone="success" title="Your email is confirmed. Sign in to continue." />
       )}
 
       <SocialSignIn

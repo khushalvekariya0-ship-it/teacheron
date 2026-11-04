@@ -13,6 +13,7 @@ import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import type { ConfirmableTransition } from "./BookingDialogs";
+import { videoJoinable, videoLabel } from "./LessonVideo";
 
 export type LessonDialog = "cancel" | "decline" | "reschedule" | "dispute" | ConfirmableTransition;
 
@@ -25,6 +26,8 @@ export interface LessonAction {
   dialog?: LessonDialog;
   onSelect?: () => void;
   href?: string;
+  /** href opens another site (the lesson's Zoom / Google Meet) in a new tab. */
+  external?: boolean;
   disabledReason?: string;
 }
 
@@ -86,7 +89,8 @@ export function buildLessonActions(
 
   // Primary: Join › Accept › Retry payment › wrap-up › Start › Review
   let primary: LessonAction | null = null;
-  if (meetingLinkVisible(b, now, policy) && b.meetingUrl) primary = { key: "join", label: "Join lesson", icon: Video, href: `/classroom/${b.id}`, tone: "primary" };
+  if (videoJoinable(b, now)) primary = { key: "join", label: `Join ${videoLabel(b)}`, icon: Video, href: b.videoLink, external: true, tone: "primary" };
+  else if (meetingLinkVisible(b, now, policy) && b.meetingUrl) primary = { key: "join", label: "Join lesson", icon: Video, href: `/classroom/${b.id}`, tone: "primary" };
   else primary =
     items.find((i) => i.key === "confirmed" && !i.disabledReason) ??
     items.find((i) => i.key === "pending" && !i.disabledReason) ??
@@ -102,6 +106,15 @@ export function buildLessonActions(
 function ActionButton({ action, onDialog, block, size = "md" }: { action: LessonAction; onDialog: (d: LessonDialog) => void; block?: boolean; size?: "md" | "lg" }) {
   const Icon = action.icon;
   const variant = action.tone === "primary" ? "primary" : action.tone === "danger" ? "danger-outline" : "secondary";
+  if (action.href && action.external) {
+    return (
+      <Button asChild variant={variant} size={size} className={cn(block && "w-full")}>
+        <a href={action.href} target="_blank" rel="noopener noreferrer">
+          <Icon /> {action.label}
+        </a>
+      </Button>
+    );
+  }
   if (action.href) {
     return (
       <Button asChild variant={variant} size={size} className={cn(block && "w-full")}>

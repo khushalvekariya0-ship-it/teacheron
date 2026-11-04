@@ -143,7 +143,7 @@ type SaveState =
 const STEP_INTRO = [
   "Who the lessons are for and the subject you need help with.",
   "What should tutoring achieve? Specific goals attract better applications.",
-  "Online, in person or either. Only your city and ZIP are ever shown to tutors.",
+  "Online, in person or either. Only your city and postal code are ever shown to tutors.",
   "The days and times that usually work. Tutors treat this as a preference, not a booking.",
   "Your hourly budget and any preferences for the tutor.",
   "This is exactly what tutors will see. Publish when you're happy with it.",
@@ -561,7 +561,7 @@ const HOW_IT_WORKS = [
 const WHY_POST = [
   { icon: Gift, title: "Free for families", body: "Posting a requirement and receiving applications costs nothing." },
   { icon: Inbox, title: "Tutors come to you", body: "Each application has a personal note and a proposed rate — no cold messages." },
-  { icon: Lock, title: "Your details stay private", body: "Tutors see your city and ZIP only — never your name, email, phone or address." },
+  { icon: Lock, title: "Your details stay private", body: "Tutors see your city and postal code only — never your name, email, phone or address." },
 ];
 
 /** What a posted requirement looks like to tutors — an illustration of the layout, not a real listing. */

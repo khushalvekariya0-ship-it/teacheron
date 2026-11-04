@@ -86,7 +86,7 @@ function arraySpec(
 
 const USER: Record<string, Col> = {
   id: ["id", "v"], role: ["role", "v"], firstName: ["first_name", "v"], lastName: ["last_name", "v"], email: ["email", "v"],
-  phone: ["phone", "v", true], city: ["city", "v", true], state: ["state", "v", true], zip: ["zip", "v", true],
+  phone: ["phone", "v", true], country: ["country", "v", true], city: ["city", "v", true], state: ["state", "v", true], zip: ["zip", "v", true],
   timezone: ["timezone", "v"], createdAt: ["created_at", "ts"], emailVerified: ["email_verified", "v"], mfaEnabled: ["mfa_enabled", "flag", true],
   tutorId: ["tutor_id", "v", true], permissions: ["permissions", "v", true], status: ["status", "v"],
   parentalConsent: ["parental_consent", "json", true], lastLoginAt: ["last_login_at", "ts", true], chatModeration: ["chat_moderation", "json", true],
@@ -100,7 +100,7 @@ const CHILD: Record<string, Col> = {
 export const TUTOR_COLS: Record<string, Col> = {
   id: ["id", "v"], slug: ["slug", "v"], firstName: ["first_name", "v"], lastName: ["last_name", "v"], headline: ["headline", "v"], bio: ["bio", "v"],
   approach: ["approach", "v"], subjects: ["subjects", "v"], specialties: ["specialties", "v"], levels: ["levels", "v"], category: ["category", "v"],
-  learningSupport: ["learning_support", "v"], city: ["city", "v"], state: ["state", "v"], zip: ["zip", "v"], lat: ["lat", "v"], lng: ["lng", "v"],
+  learningSupport: ["learning_support", "v"], country: ["country", "v", true], city: ["city", "v"], state: ["state", "v"], zip: ["zip", "v"], lat: ["lat", "v"], lng: ["lng", "v"],
   serviceRadiusMiles: ["service_radius_miles", "v"], timezone: ["timezone", "v"], modes: ["modes", "v"], hourlyRateCents: ["hourly_rate_cents", "v"],
   trial: ["trial", "json"], rules: ["rules", "json"], experienceYears: ["experience_years", "v"], education: ["education", "json"],
   certifications: ["certifications", "json"], languages: ["languages", "v"], verification: ["verification", "json"], rating: ["rating", "v"],
@@ -111,7 +111,7 @@ export const TUTOR_COLS: Record<string, Col> = {
 
 const REQUIREMENT: Record<string, Col> = {
   id: ["id", "v"], ownerId: ["owner_id", "v"], childId: ["child_id", "v", true], title: ["title", "v"], subject: ["subject", "v"], grade: ["grade", "v"],
-  objectives: ["objectives", "v"], modes: ["modes", "v"], city: ["city", "v"], state: ["state", "v"], zip: ["zip", "v"], days: ["days", "v"],
+  objectives: ["objectives", "v"], modes: ["modes", "v"], country: ["country", "v", true], city: ["city", "v"], state: ["state", "v"], zip: ["zip", "v"], days: ["days", "v"],
   timesOfDay: ["times_of_day", "v"], sessionsPerWeek: ["sessions_per_week", "v"], budgetMinCents: ["budget_min_cents", "v"],
   budgetMaxCents: ["budget_max_cents", "v"], minExperienceYears: ["min_experience_years", "v", true], languages: ["languages", "v"],
   preferences: ["preferences", "v"], details: ["details", "v"], attachments: ["attachments", "json", true], learningSupport: ["learning_support", "v", true],
@@ -128,7 +128,8 @@ const BOOKING: Record<string, Col> = {
   id: ["id", "v"], tutorId: ["tutor_id", "v"], bookerId: ["booker_id", "v"], childId: ["child_id", "v", true], subject: ["subject", "v"], type: ["type", "v"],
   status: ["status", "v"], startUtc: ["start_utc", "ts"], durationMin: ["duration_min", "v"], mode: ["mode", "v"], priceCents: ["price_cents", "v"],
   platformFeeCents: ["platform_fee_cents", "v"], discountCents: ["discount_cents", "v"], paymentStatus: ["payment_status", "v"],
-  meetingUrl: ["meeting_url", "v", true], locationNote: ["location_note", "v", true], notes: ["notes", "v", true],
+  meetingUrl: ["meeting_url", "v", true], videoLink: ["video_link", "v", true], videoPasscode: ["video_passcode", "v", true], recordingUrl: ["recording_url", "v", true],
+  locationNote: ["location_note", "v", true], notes: ["notes", "v", true],
   rescheduledFromId: ["rescheduled_from_id", "v", true], rescheduleCount: ["reschedule_count", "v", true], reviewId: ["review_id", "v", true],
   idempotencyKey: ["idempotency_key", "v"], history: ["history", "json"], createdAt: ["created_at", "ts"],
 };

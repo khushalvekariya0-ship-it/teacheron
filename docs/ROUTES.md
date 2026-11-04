@@ -48,8 +48,8 @@ Layout: split screen with logo, "Back to site", preview disclaimer and legal lin
 |---|---|---|---|---|
 | `/login` (`?next=`) | Signed-out | Email + password (demo password `tutorlink-demo`), one-click demo accounts, and Google / Apple / Facebook / SSO through an account-picker dialog that stands in for the provider's window | Built | Static + Client → Static + Client (`POST /v1/auth/login`) |
 | `/register` | Signed-out | Role choice (student, parent, tutor), age band (18+ or 13–17 with parent email; under-13 blocked), password ≥ 10; the success screen shows the verification email in a "preview inbox" | Built | Static + Client |
-| `/forgot-password` | Signed-out | Request a reset link; the email appears in a "preview inbox" on the page | Built | Static + Client |
-| `/reset-password` (`?token=`) | Signed-out | Set a new password from the reset token (1-hour expiry, single use), then continue signed in | Built | Static + Client |
+| `/forgot-password` | Signed-out | Request a reset email (6-digit code + link, same answer for unknown emails), then type the code to continue | Built | Static + Client (`POST /api/auth/forgot`, `/api/auth/reset-code`) |
+| `/reset-password` (`?token=`) | Signed-out | Set and confirm a new password from the emailed link or the code (15-minute expiry, single use), then sign in with it | Built | Static + Client (`POST /api/auth/reset-check`, `/api/auth/reset`) |
 | `/verify-email` (`?user=&token=`) | New users | Confirm email address from the verification token | Built | Static + Client |
 | `/consent/[token]` | Parent/guardian | Review and grant/decline consent for a 13–17 student | Planned | Dynamic |
 | `/mfa` | Staff (and opted-in users) | TOTP challenge and first-time enrolment | Planned | Dynamic |

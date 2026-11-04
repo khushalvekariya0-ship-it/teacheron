@@ -11,7 +11,7 @@ import {
 import type { User, WeeklyWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { imageFileToDataUrl } from "@/lib/image";
-import { Field, Input, Select, Textarea } from "@/components/ui/Input";
+import { Field, Input, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, ChipGroup, RadioCards, Segmented, Switch } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
@@ -19,10 +19,12 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EASE } from "@/components/motion";
 import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
-import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
+import { LocationFields } from "@/components/domain/LocationFields";
+import { formatPlace } from "@/lib/location";
 import { uploadFile } from "@/lib/upload";
+import { postalLabel, postalRequired } from "@/lib/postal";
 import { useFlag } from "@/lib/store/hooks";
-import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, US_STATES, US_TIMEZONES, subjectName } from "@/lib/data/catalog";
+import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, US_TIMEZONES, subjectName } from "@/lib/data/catalog";
 import { TUTOR_PLANS } from "@/lib/data/platform";
 import { applyBps, formatCents, formatUsPhone, sessionPrice, tzAbbrev } from "@/lib/format";
 import { FileList, FilePicker, GroupField, SubjectPicker, TagInput, formatKb, toPicked, validateDocs } from "@/components/dashboard/tutor/shared";
@@ -53,7 +55,8 @@ function useBind<T extends FieldValues>(form: UseFormReturn<T>, bind: (getter: (
 export function PersonalStep({ me, formId, defaults, onValid, bindValues }: StepProps<PersonalValues> & { me: User }) {
   const form = useForm<PersonalValues>({ resolver: zodResolver(personalSchema), defaultValues: defaults, mode: "onTouched" });
   useBind(form, bindValues);
-  const { register, control, handleSubmit, setValue, formState: { errors } } = form;
+  const { control, handleSubmit, setValue, formState: { errors } } = form;
+  const loc = useWatch({ control, name: ["country", "zip", "city", "state"] });
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -84,37 +87,17 @@ export function PersonalStep({ me, formId, defaults, onValid, bindValues }: Step
           </Field>
         )}
       />
-      <AddressLookup
-        onPick={(a) => {
-          setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
-          setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
-          if (a.zip) setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+      <LocationFields
+        idPrefix="tutor-loc"
+        value={{ country: loc[0] || "US", zip: loc[1] ?? "", city: loc[2] ?? "", state: loc[3] ?? "" }}
+        onChange={(patch) => {
+          for (const [k, v] of Object.entries(patch) as [keyof typeof patch, string][]) setValue(k, v, { shouldDirty: true, shouldValidate: !!errors[k] });
         }}
+        errors={{ country: errors.country?.message, zip: errors.zip?.message, city: errors.city?.message, state: errors.state?.message }}
+        required={{ country: true, zip: postalRequired(loc[0]), city: true, state: true }}
       />
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem_8rem]">
-        <Field label="City" required error={errors.city?.message}>
-          <CityInput {...register("city")} onPick={async (c) => {
-            setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
-            setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
-            const zip = zipForCity(form.getValues("zip"), await c.zips);
-            setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
-          }} />
-        </Field>
-        <Controller
-          name="state"
-          control={control}
-          render={({ field }) => (
-            <Field label="State" required error={errors.state?.message}>
-              <Select ref={field.ref} name={field.name} value={field.value} onChange={field.onChange} onBlur={field.onBlur} options={US_STATES} placeholder="Select" autoComplete="address-level1" />
-            </Field>
-          )}
-        />
-        <Field label="ZIP code" required error={errors.zip?.message}>
-          <Input inputMode="numeric" maxLength={5} autoComplete="postal-code" {...register("zip")} />
-        </Field>
-      </div>
       <InlineAlert tone="info" title="Your location stays private">
-        Families see your city and an approximate distance for in-person lessons — never your street address or ZIP code.
+        Families see your city and an approximate distance for in-person lessons — never your street address or {postalLabel(loc[0])}.
       </InlineAlert>
     </form>
   );
@@ -837,7 +820,7 @@ export function ReviewStep({
         <ReviewBlock title="Personal info" step={1} onEdit={onEdit}>
           <Row label="Name">{me.firstName} {me.lastName}</Row>
           <Row label="Phone">{data.phone || none}</Row>
-          <Row label="Location">{[data.city, data.state].filter(Boolean).join(", ")} {data.zip}</Row>
+          <Row label="Location">{formatPlace(data)} {data.zip}</Row>
         </ReviewBlock>
         <ReviewBlock title="Subjects & levels" step={2} onEdit={onEdit}>
           <Row label="Subjects">{data.subjects?.length ? data.subjects.map(subjectName).join(", ") : none}</Row>

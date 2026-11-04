@@ -29,6 +29,7 @@ import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks"
 import { useMyChildren, todayKey } from "./data";
 import { useStudentProfile } from "@/components/student/useStudentProfile";
 import { RequirementStatusBadge, isVisibleApplication } from "./meta";
+import { JoinVideoButton } from "@/components/dashboard/bookings/LessonVideo";
 
 /* ─── Next lesson hero ──────────────────────────────────────────────────────── */
 
@@ -88,6 +89,13 @@ function JoinArea({ booking, tutor }: { booking: Booking; tutor?: Tutor }) {
       <p className="flex items-start gap-2 text-[13px] text-muted">
         <MapPin className="mt-0.5 size-4 shrink-0 text-subtle" aria-hidden /> {booking.locationNote ?? "In person — agree on a meeting place in messages."}
       </p>
+    );
+  }
+  if (booking.videoLink && meetingLinkVisible(booking, now, policy)) {
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}>
+        <JoinVideoButton booking={booking} />
+      </motion.div>
     );
   }
   if (booking.meetingUrl && meetingLinkVisible(booking, now, policy)) {

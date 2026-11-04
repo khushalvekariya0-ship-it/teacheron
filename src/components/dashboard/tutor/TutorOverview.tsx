@@ -31,6 +31,7 @@ import {
   completionPercent, isEarned, isSameMonth, netCents, profileChecklist, sumCents, useLearnerName, useMyBookings, useMyTutor, weeklyNet, learnerIdOf,
 } from "./hooks";
 import { APPLICATION_STATUS_META, requirementCriteria } from "./jobs-shared";
+import { JoinVideoButton } from "@/components/dashboard/bookings/LessonVideo";
 
 function greeting(now: number, tz: string): string {
   const h = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: tz }).format(new Date(now)));
@@ -448,7 +449,9 @@ function NextLesson({ booking, now, tz, learner, joinable, linkMinutes }: { book
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:items-end">
           {booking.mode === "online" &&
-            (joinable && booking.meetingUrl ? (
+            (joinable && booking.videoLink ? (
+              <JoinVideoButton booking={booking} />
+            ) : joinable && booking.meetingUrl ? (
               <Button asChild>
                 <Link href={`/classroom/${booking.id}`}>
                   <Video /> Join lesson

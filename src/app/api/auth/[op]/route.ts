@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import type { Provider } from "@supabase/supabase-js";
 import { auditDirect, enabledProviders, ensureAccount, notifyDirect, recordFailedLogin, recordLogin, safePath, setMfaFlag, siteOrigin } from "@/server/auth";
@@ -9,6 +9,13 @@ import { clientIp, json, rateLimit, readJson, sameOrigin, serverError, tooMany }
 import { accountById, currentSession, hasVerifiedFactor } from "@/server/session";
 import { buildState } from "@/server/snapshot";
 import { contactIn, NAME_RULE } from "@/lib/domain/contact";
+import { isPostalCode, POSTAL_CODE, postalError } from "@/lib/postal";
+import { isCountryCode } from "@/lib/location";
+import { db } from "@/server/db";
+import { emailReady } from "@/server/email";
+import { cleanCode, isCodeShape } from "@/server/email-codes";
+import { sendVerificationCode, verifyEmailCode } from "@/server/email-verification";
+import { checkResetToken, exchangeResetCode, finishPasswordReset, RESET_MINUTES, resetOrigin, sendPasswordChangedEmail, startPasswordReset } from "@/server/password-reset";
 import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
 
 /*
@@ -17,11 +24,16 @@ import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
  *
  *   POST /api/auth/sign-in    { email, password }
  *   POST /api/auth/sign-up    { role, firstName, lastName, email, password, zip?, ageBand?, parentEmail?, next? }
+ *                             → creates the account unconfirmed and emails a 6-digit code (verifyBy "code"); without the site's
+ *                               own email, Supabase emails a confirmation link instead (verifyBy "link")
+ *   POST /api/auth/verify-email { email, code }        → checks the code, then confirms the email (no sign-in; same answer for every failure)
  *   POST /api/auth/sign-out
- *   POST /api/auth/forgot     { email }                 → emails a reset link (same answer for unknown emails)
- *   POST /api/auth/reset      { password }              → after following the reset link
+ *   POST /api/auth/forgot     { email }                 → emails a 15-minute, single-use reset code + link (same answer for unknown emails)
+ *   POST /api/auth/reset-code { email, code }           → swaps the emailed 6-digit code for a link token (same answer for every failure)
+ *   POST /api/auth/reset-check { token }                → whether a reset link still works
+ *   POST /api/auth/reset      { token, password }       → sets the new password from a reset link
  *   POST /api/auth/password   { current, next }         → change password while signed in
- *   POST /api/auth/resend     { email }                 → resend the sign-up confirmation email
+ *   POST /api/auth/resend     { email }                 → a new sign-up code (or confirmation link) for an unconfirmed account
  *   POST /api/auth/consent    → re-send the parental-consent email (13–17 students)
  *   POST /api/auth/mfa-enroll → start two-step login (staff): QR code + secret for an authenticator app
  *   POST /api/auth/mfa-verify { code, factorId? } → finish setup, or enter the code after the password
@@ -36,6 +48,8 @@ type Ctx = { params: Promise<{ op: string }> };
 
 const email = z.string().trim().toLowerCase().email().max(200);
 const password = z.string().min(10, "Use at least 10 characters for your password.").max(200);
+/** A reset link's token: 32 random bytes, base64url. */
+const resetToken = z.string().min(20).max(200).regex(/^[A-Za-z0-9_-]+$/);
 const zone = z.string().max(60).optional();
 
 const signUpSchema = z.object({
@@ -44,7 +58,8 @@ const signUpSchema = z.object({
   lastName: z.string().trim().min(1).max(60),
   email,
   password,
-  zip: z.union([z.string().regex(/^\d{5}$/), z.literal("")]).optional(),
+  country: z.string().refine((v) => isCountryCode(v), "Choose your country.").optional(),
+  zip: z.union([z.string().trim().regex(POSTAL_CODE), z.literal("")]).optional(),
   ageBand: z.enum(["18+", "13-17", "under13"]).optional(),
   parentEmail: z.union([email, z.literal("")]).optional(),
   timezone: zone,
@@ -70,11 +85,17 @@ export async function POST(request: Request, ctx: Ctx) {
         const limit = rateLimit(`signin:${ip}:${parsed.data.email}`, 8, 10 * 60_000);
         if (!limit.ok) return tooMany(limit.retryAfterSec);
         const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+        const confirmFirst = emailReady() ? "Please confirm your email address first: enter the 6-digit code we emailed you." : "Please confirm your email address first — use the link we sent you.";
         if (error || !data.user) {
-          if (error?.code === "email_not_confirmed") return fail("Please confirm your email address first — use the link we sent you.", 400, { code: "email_not_confirmed" });
+          if (error?.code === "email_not_confirmed") return fail(confirmFirst, 400, { code: "email_not_confirmed" });
           await recordFailedLogin(parsed.data.email, request);
           // Same message for unknown email and wrong password, so accounts can't be discovered.
           return fail("Email or password is incorrect.", 401);
+        }
+        // The right password isn't enough until the email is confirmed (even if Supabase's own "Confirm email" setting is off).
+        if (!data.user.email_confirmed_at) {
+          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          return fail(confirmFirst, 400, { code: "email_not_confirmed" });
         }
         const user = await ensureAccount(data.user);
         if (!user || user.status === "suspended") {
@@ -174,17 +195,48 @@ export async function POST(request: Request, ctx: Ctx) {
         const teen = input.role === "student" && input.ageBand === "13-17";
         if (teen && !input.parentEmail) return fail("Students under 18 need a parent or guardian's email.");
         if (teen && input.parentEmail === input.email) return fail("Use your parent or guardian's own email address.");
+        if (input.zip && !isPostalCode(input.zip, input.country ?? "US")) return fail(postalError(input.country ?? "US"));
         const origin = siteOrigin(request);
+        const meta = {
+          role: input.role, first_name: input.firstName, last_name: input.lastName, country: input.country ?? "US", zip: input.zip ?? "", timezone: input.timezone ?? "",
+          age_band: input.role === "student" ? (input.ageBand ?? "18+") : undefined, parent_email: teen ? input.parentEmail : undefined,
+        };
+        if (emailReady()) {
+          // The site confirms the email itself with a 6-digit code (Supabase sends nothing): the account is
+          // created unconfirmed, and sign-in is refused until the code is entered (verify-email).
+          const admin = supabaseAdmin();
+          const created = await admin.auth.admin.createUser({ email: input.email, password: input.password, email_confirm: false, user_metadata: meta });
+          if (created.error || !created.data.user) {
+            const err = created.error;
+            if (err?.code === "email_exists" || /already (been )?registered|already exists/i.test(err?.message ?? "")) {
+              // An earlier sign-up that was never confirmed gets a new code; a confirmed account is told to sign in.
+              const [existing] = await db()`select id, email_verified from public.users where lower(email) = ${input.email} limit 1`;
+              if (existing && !existing.email_verified) {
+                after(() => sendVerificationCode(input.email).catch((e) => console.error("[verify] send", e)));
+                return json({ ok: true, needsConfirmation: true, verifyBy: "code", email: input.email });
+              }
+              return fail("An account with this email already exists. Try signing in.", 409);
+            }
+            if (err?.code === "weak_password") return fail("Choose a stronger password — longer is better.");
+            console.error("[auth] sign-up failed", err?.code, err?.message);
+            return fail("We couldn't create your account. Please try again.");
+          }
+          let consent: { sent: boolean; error?: string } | undefined;
+          if (teen) {
+            const r = await sendConsentRequest(created.data.user.id, origin);
+            consent = r.ok ? { sent: true } : { sent: false, error: r.error };
+          }
+          after(() => sendVerificationCode(input.email).catch((e) => console.error("[verify] send", e)));
+          return json({ ok: true, needsConfirmation: true, verifyBy: "code", email: input.email, consent });
+        }
+        // Without the site's own email, Supabase sends its confirmation link (configure its SMTP).
         const next = safePath(input.next, input.role === "tutor" ? "/onboarding/tutor" : input.role === "student" ? "/onboarding/student" : "/dashboard");
         const { data, error } = await supabase.auth.signUp({
           email: input.email,
           password: input.password,
           options: {
             emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
-            data: {
-              role: input.role, first_name: input.firstName, last_name: input.lastName, zip: input.zip ?? "", timezone: input.timezone ?? "",
-              age_band: input.role === "student" ? (input.ageBand ?? "18+") : undefined, parent_email: teen ? input.parentEmail : undefined,
-            },
+            data: meta,
           },
         });
         if (error) {
@@ -206,7 +258,16 @@ export async function POST(request: Request, ctx: Ctx) {
           await recordLogin(data.user.id, true, request);
           return json({ ok: true, needsConfirmation: false, consent, state: await buildState(data.user.id) });
         }
-        return json({ ok: true, needsConfirmation: true, email: input.email, consent });
+        return json({ ok: true, needsConfirmation: true, verifyBy: "link", email: input.email, consent });
+      }
+
+      case "verify-email": {
+        const parsed = z.object({ email, code: z.string().max(40).transform(cleanCode) }).safeParse(body);
+        if (!parsed.success || !isCodeShape(parsed.data.code)) return fail("Enter the 6-digit code from the email.");
+        const limit = rateLimit(`verify-email:${ip}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const result = await verifyEmailCode(parsed.data.email, parsed.data.code);
+        return result.ok ? json({ ok: true }) : fail(result.error);
       }
 
       case "sign-out": {
@@ -219,21 +280,53 @@ export async function POST(request: Request, ctx: Ctx) {
         if (!parsed.success) return fail("Enter a valid email address.");
         const limit = rateLimit(`forgot:${ip}`, 5, 15 * 60_000);
         if (!limit.ok) return tooMany(limit.retryAfterSec);
-        const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo: `${siteOrigin(request)}/auth/callback?next=/reset-password` });
-        if (error && error.code === "over_email_send_rate_limit") return fail("We've sent too many emails just now. Please try again in a few minutes.", 429);
-        if (error) console.warn("[auth] reset email", error.code, error.message);
-        // Same answer whether or not the account exists.
-        return json({ ok: true });
+        // Links point only at the configured https:// site address (never this request's Host header).
+        const origin = resetOrigin();
+        if (!origin) console.error("[reset] NEXT_PUBLIC_SITE_URL must be the site's https:// address (http:// only for localhost); no reset email sent");
+        if (!emailReady() || !origin) return fail("Password reset emails can't be sent right now. Please try again later or contact support.", 503);
+        // A few links per address per hour (the database also caps it per account); extra requests get the same answer.
+        const perEmail = rateLimit(`forgot:${parsed.data.email.toLowerCase()}`, 3, 60 * 60_000);
+        // The email goes out after the answer, so the answer looks and takes the same whether or not the account exists.
+        if (perEmail.ok) after(() => startPasswordReset(parsed.data.email, origin).catch((e) => console.error("[reset] start", e)));
+        return json({ ok: true, minutes: RESET_MINUTES });
+      }
+
+      case "reset-code": {
+        const parsed = z.object({ email, code: z.string().max(40).transform(cleanCode) }).safeParse(body);
+        if (!parsed.success || !isCodeShape(parsed.data.code)) return fail("Enter the 6-digit code from the email.");
+        const limit = rateLimit(`reset-code:${ip}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const result = await exchangeResetCode(parsed.data.email, parsed.data.code);
+        return result.ok ? json({ ok: true, token: result.token }) : fail(result.error);
+      }
+
+      case "reset-check": {
+        const parsed = z.object({ token: resetToken }).safeParse(body);
+        if (!parsed.success) {
+          console.info("[reset] reset page opened with a broken link");
+          return json({ ok: true, status: "invalid" });
+        }
+        const limit = rateLimit(`reset-check:${ip}`, 30, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const linkStatus = await checkResetToken(parsed.data.token);
+        console.info(`[reset] reset page opened with a ${linkStatus} link`);
+        return json({ ok: true, status: linkStatus });
       }
 
       case "reset": {
-        const parsed = z.object({ password }).safeParse(body);
-        if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Use at least 10 characters.");
-        const session = await currentSession();
-        if (!session) return fail("This reset link has expired. Request a new one.", 401);
-        const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
-        if (error) return fail(error.code === "same_password" ? "Choose a password you haven't used before." : "We couldn't change your password. Request a new link and try again.");
-        return json({ ok: true, user: { firstName: session.user.firstName, role: session.user.role }, state: await buildState(session.user.id) });
+        const parsed = z.object({ token: resetToken, password }).safeParse(body);
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0];
+          return fail(issue?.path[0] === "token" ? "This reset link isn't valid. Request a new one." : (issue?.message ?? "Use at least 10 characters."));
+        }
+        const limit = rateLimit(`reset:${ip}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const result = await finishPasswordReset(parsed.data.token, parsed.data.password);
+        if (!result.ok) return json({ ok: false, error: result.error, code: result.status }, { status: result.status === "rejected" ? 400 : 410 });
+        // This browser starts signed out too; the person signs in with the new password.
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        after(() => sendPasswordChangedEmail(result.email, result.firstName).catch((e) => console.error("[reset] notice", e)));
+        return json({ ok: true, state: await buildState(null) });
       }
 
       case "password": {
@@ -255,6 +348,11 @@ export async function POST(request: Request, ctx: Ctx) {
         if (!parsed.success) return fail("Enter a valid email address.");
         const limit = rateLimit(`resend:${ip}`, 4, 15 * 60_000);
         if (!limit.ok) return tooMany(limit.retryAfterSec);
+        if (emailReady()) {
+          // A new 6-digit code (same answer whether or not the address needs one).
+          after(() => sendVerificationCode(parsed.data.email).catch((e) => console.error("[verify] send", e)));
+          return json({ ok: true });
+        }
         const { error } = await supabase.auth.resend({ type: "signup", email: parsed.data.email, options: { emailRedirectTo: `${siteOrigin(request)}/auth/callback` } });
         if (error?.code === "over_email_send_rate_limit") return fail("We've sent too many emails just now. Please try again in a few minutes.", 429);
         return json({ ok: true });

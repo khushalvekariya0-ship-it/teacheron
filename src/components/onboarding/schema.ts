@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { User } from "@/lib/types";
 import { validateWeek } from "@/components/dashboard/tutor/AvailabilityEditor";
 import { parseIntroVideo } from "@/lib/video";
+import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
+import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
 
 /*
  * Tutor onboarding: one zod schema per step. Keys match what the store's `submitOnboarding()` reads
@@ -15,12 +17,17 @@ const year = z
   .min(1950, "Enter a year after 1950.")
   .max(MAX_YEAR, `Enter a year up to ${MAX_YEAR}.`);
 
-export const personalSchema = z.object({
-  phone: z.string().trim().refine((v) => v.replace(/\D/g, "").length === 10, "Enter a 10-digit US phone number."),
-  city: z.string().trim().min(2, "Enter your city.").max(60, "Keep it under 60 characters."),
-  state: z.string().min(2, "Choose your state."),
-  zip: z.string().trim().regex(/^\d{5}$/, "Enter a 5-digit ZIP code."),
-});
+export const personalSchema = z
+  .object({
+    phone: z.string().trim().refine((v) => v.replace(/\D/g, "").length === 10, "Enter a 10-digit US phone number."),
+    country: z.string().refine((v) => isCountryCode(v), "Choose your country."),
+    city: z.string().trim().min(2, "Enter your city.").max(60, "Keep it under 60 characters."),
+    state: z.string().min(1, "Choose your state or province.").max(60),
+    zip: z.string().trim(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
+  });
 
 export const subjectsSchema = z.object({
   subjects: z.array(z.string()).min(1, "Choose at least one subject.").max(10, "Choose up to 10 subjects."),
@@ -172,6 +179,7 @@ export function initialData(saved: Record<string, unknown> | undefined, me: User
   const d = (saved ?? {}) as OnboardingData;
   return {
     phone: me.phone ?? "",
+    country: me.country ?? DEFAULT_COUNTRY,
     city: me.city ?? "",
     state: me.state ?? "",
     zip: me.zip ?? "",

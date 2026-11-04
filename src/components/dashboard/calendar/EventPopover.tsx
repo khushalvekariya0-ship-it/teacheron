@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay
 import { BookingStatusBadge } from "@/components/domain/Badges";
 import { ModeIcon, timeRange, tzShort, type BookingPeople } from "@/components/dashboard/bookings/shared";
 import type { CalEvent } from "./model";
+import { videoLabel } from "@/components/dashboard/bookings/LessonVideo";
 
 export function eventLabel(ev: CalEvent, people: BookingPeople, tz: string): string {
   const b = ev.booking;
@@ -22,7 +23,7 @@ export function eventLabel(ev: CalEvent, people: BookingPeople, tz: string): str
 export function EventPopover({ ev, people, tz, now, children }: { ev: CalEvent; people: BookingPeople; tz: string; now: number; children: React.ReactElement }) {
   const policy = useApp((s) => s.policy);
   const b = ev.booking;
-  const joinable = meetingLinkVisible(b, now, policy) && !!b.meetingUrl;
+  const joinable = meetingLinkVisible(b, now, policy) && (!!b.videoLink || !!b.meetingUrl);
   return (
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
@@ -62,13 +63,20 @@ export function EventPopover({ ev, people, tz, now, children }: { ev: CalEvent; 
           </div>
         </dl>
         <div className="mt-3.5 flex gap-2">
-          {joinable && (
-            <Button asChild size="sm">
-              <Link href={`/classroom/${b.id}`}>
-                <Video /> Join
-              </Link>
-            </Button>
-          )}
+          {joinable &&
+            (b.videoLink ? (
+              <Button asChild size="sm">
+                <a href={b.videoLink} target="_blank" rel="noopener noreferrer">
+                  <Video /> Join {videoLabel(b)}
+                </a>
+              </Button>
+            ) : (
+              <Button asChild size="sm">
+                <Link href={`/classroom/${b.id}`}>
+                  <Video /> Join
+                </Link>
+              </Button>
+            ))}
           <Button asChild size="sm" variant={joinable ? "secondary" : "primary"} className="flex-1">
             <Link href={`/dashboard/bookings/${b.id}`}>
               Open lesson <ArrowRight />

@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:status": "node scripts/db-migrate.mjs --check",
-    "db:make-admin": "node scripts/make-admin.mjs"
+    "db:make-admin": "node scripts/make-admin.mjs",
+    "email:check": "node scripts/check-email.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -48,6 +49,7 @@
     "lucide-react": "^1.49.0",
     "next": "16.3.7",
     "next-themes": "^0.4.6",
+    "nodemailer": "^10.1.7",
     "postgres": "^4.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -3,10 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
-import { FileText, Info, MapPin, Monitor, Paperclip, Pencil, ShieldCheck, Shuffle, Upload, UserRound, Users, X } from "lucide-react";
+import { FileText, Info, Monitor, Paperclip, Pencil, ShieldCheck, Shuffle, Upload, UserRound, Users, X } from "lucide-react";
 import type { Child, Grade, Role } from "@/lib/types";
-import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, US_STATES, subjectName } from "@/lib/data/catalog";
-import { resolveLocation } from "@/lib/data/geo";
+import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, subjectName } from "@/lib/data/catalog";
 import { formatCents } from "@/lib/format";
 import { useListedTutors } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
@@ -20,9 +19,10 @@ import { JobPosting } from "@/components/jobs/JobPosting";
 import { DAY_ORDER, EXPERIENCE_OPTIONS, defaultTitle, type TimeOfDay } from "@/components/jobs/jobUtils";
 import { cn } from "@/lib/utils";
 import { SubjectSelect, fieldDescribedBy } from "./SubjectSelect";
-import { LIMITS, STEPS, cityForZip, formatToModes, type Attachment, type Format, type ReqForm } from "./model";
+import { LIMITS, STEPS, formatToModes, type Attachment, type Format, type ReqForm } from "./model";
 import { uploadFile } from "@/lib/upload";
-import { AddressLookup, CityInput, zipForCity } from "@/components/domain/AddressLookup";
+import { LocationFields } from "@/components/domain/LocationFields";
+import { postalLabel, postalRequired } from "@/lib/postal";
 
 /* ─── Step 1 · Learner & subject ───────────────────────────────────────────── */
 
@@ -231,12 +231,11 @@ export function StepGoals() {
 /* ─── Step 3 · Format & location ────────────────────────────────────────────── */
 
 export function StepFormat() {
-  const { control, register, setValue, getValues, formState } = useFormContext<ReqForm>();
+  const { control, setValue, formState } = useFormContext<ReqForm>();
   const errors = formState.errors;
   const format = useWatch<ReqForm, "format">({ name: "format" });
-  const zip = useWatch<ReqForm, "zip">({ name: "zip" });
+  const [country, zip, city, state] = useWatch<ReqForm, ["country", "zip", "city", "state"]>({ name: ["country", "zip", "city", "state"] });
   const inPerson = format === "in_person" || format === "both";
-  const point = /^\d{5}$/.test(zip) ? resolveLocation(zip) : null;
 
   return (
     <div className="space-y-7">
@@ -267,56 +266,21 @@ export function StepFormat() {
           </p>
           <p className="mt-0.5 text-[13px] text-muted">{inPerson ? "Tutors use this to check whether you're inside their service area." : "Helps tutors in your time zone find you."}</p>
         </div>
-        <AddressLookup
-          collapsed
-          onPick={(a) => {
-            setValue("city", a.city, { shouldDirty: true, shouldValidate: true });
-            setValue("state", a.state, { shouldDirty: true, shouldValidate: true });
-            if (a.zip) setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true });
+        <LocationFields
+          idPrefix="req"
+          value={{ country: country || "US", zip, city, state }}
+          onChange={(patch) => {
+            for (const [k, v] of Object.entries(patch) as [keyof typeof patch, string][]) {
+              setValue(k, v, { shouldDirty: true, shouldValidate: !!errors[k] });
+            }
           }}
+          errors={{ country: errors.country?.message, zip: errors.zip?.message, city: errors.city?.message, state: errors.state?.message }}
+          required={{ zip: inPerson && postalRequired(country), city: inPerson, state: inPerson }}
         />
-        <div className="grid gap-5 sm:grid-cols-[150px_1fr_1fr]">
-          <Field label="ZIP code" id="req-zip" required={inPerson} error={errors.zip?.message} hint={point ? point.label.replace(/^\d{5} · /, "") : undefined}>
-            <Input
-              id="req-zip"
-              inputMode="numeric"
-              autoComplete="postal-code"
-              maxLength={5}
-              placeholder="11201"
-              icon={<MapPin />}
-              {...register("zip", {
-                onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-                  const clean = e.target.value.replace(/\D/g, "").slice(0, 5);
-                  if (clean !== e.target.value) setValue("zip", clean);
-                  const hit = clean.length === 5 ? cityForZip(clean) : null;
-                  if (hit && !getValues("city").trim()) {
-                    setValue("city", hit.city, { shouldValidate: !!errors.city });
-                    setValue("state", hit.state, { shouldValidate: !!errors.state });
-                  }
-                },
-              })}
-            />
-          </Field>
-          <Field label="City" id="req-city" required={inPerson} error={errors.city?.message}>
-            <CityInput id="req-city" placeholder="Brooklyn" {...register("city")} onPick={async (c) => {
-            setValue("city", c.city, { shouldDirty: true, shouldValidate: true });
-            setValue("state", c.state, { shouldDirty: true, shouldValidate: true });
-            const zip = zipForCity(getValues("zip"), await c.zips);
-            setValue("zip", zip, { shouldDirty: true, shouldValidate: zip !== "" });
-          }} />
-          </Field>
-          <Field label="State" id="req-state" required={inPerson} error={errors.state?.message}>
-            <Controller
-              control={control}
-              name="state"
-              render={({ field }) => <Select id="req-state" autoComplete="address-level1" placeholder="Choose a state" options={US_STATES} {...field} />}
-            />
-          </Field>
-        </div>
       </div>
 
       <InlineAlert tone="info" title="Your address stays private">
-        Tutors only see your city{inPerson ? " and ZIP code" : ""} — never your street address, name or contact details. You&apos;ll agree on a meeting place in messages after choosing a tutor.
+        Tutors only see your city{inPerson ? ` and ${postalLabel(country)}` : ""} — never your street address, name or contact details. You&apos;ll agree on a meeting place in messages after choosing a tutor.
       </InlineAlert>
     </div>
   );

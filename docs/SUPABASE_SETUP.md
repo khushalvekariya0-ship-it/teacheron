@@ -56,12 +56,13 @@ public table."** Running it again later only applies new changes.
    **Authentication → Emails → SMTP Settings** and enter: host `smtp.resend.com`, port `465`,
    username `resend`, password = your Resend API key, sender = `no-reply@your-domain.com`.
 4. *(Recommended)* So confirmation links also work when opened on a different phone or computer,
-   change two templates in **Authentication → Emails → Templates**:
+   change this template in **Authentication → Emails → Templates**:
    - *Confirm signup*: make the link `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email` (new tutors then continue to their profile setup, students to their learning profile)
-   - *Reset password*: make the link `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
 
-   With the default templates the links still work, as long as they're opened in the same browser
-   that was used to sign up.
+   With the default template the link still works, as long as it's opened in the same browser
+   that was used to sign up. (Once the site's own email is set up in step 7, Supabase sends no
+   sign-up or password emails at all: the site emails 6-digit codes itself, so steps 3 and 4 only
+   matter without step 7.)
 
 ## 5. Make yourself the administrator
 
@@ -89,8 +90,47 @@ lose your phone and no other administrator can reset it for you.
 
 ## 6. Check it works
 
-Open `http://localhost:3100/api/health`. You should see `"ok": true` and three migrations listed.
+Open `http://localhost:3100/api/health`. You should see `"ok": true` and every migration listed.
 If something is missing, the `missing` list names the setting that's empty (never its value).
+
+## 7. Email from the site (sign-up codes, password reset, parent approval, notifications)
+
+The site sends its own email: **sign-up verification codes** (6 digits, valid 15 minutes: a new
+student, parent or tutor types it to confirm their email before they can sign in), **password reset
+emails** (a 6-digit code and a link, single use, valid 15 minutes), parent approval for 13–17
+students, and email copies of notifications. Without an email service the "Forgot your password?" page
+says reset emails can't be sent right now, and sign-up falls back to Supabase's confirmation link.
+
+Reset links point to `NEXT_PUBLIC_SITE_URL`. On the live site it must be your `https://` address
+(for example `NEXT_PUBLIC_SITE_URL=https://www.your-domain.com`); a plain `http://` address is accepted
+only for `localhost`, and otherwise no reset email is sent. While the site runs on your own computer,
+Gmail won't open `localhost` links, so type the 6-digit code from the email on the "Forgot password"
+page instead.
+
+**Quickest: your Gmail account (free, up to about 500 emails a day).**
+
+1. Turn on **2-Step Verification** for the Google account: <https://myaccount.google.com/security>.
+2. Open <https://myaccount.google.com/apppasswords>, type the name `TutorLink`, click **Create**, and
+   copy the 16-letter password it shows (it works only for this; your normal password stays private).
+3. Add these lines to `.env.local` (your Gmail address twice, the app password without spaces):
+
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_USER=yourname@gmail.com
+   SMTP_PASS=abcdabcdabcdabcd
+   EMAIL_FROM="TutorLink <yourname@gmail.com>"
+   ```
+
+4. Check it: `npm run email:check` (logs in, sends nothing) or `npm run email:check -- you@example.com`
+   (also sends a test email). Then rebuild and restart the site.
+
+**For a real launch** use a sending service with your own domain (better delivery): for example
+Resend (`RESEND_API_KEY` + `EMAIL_FROM` with your verified domain) or the same domain's SMTP details
+in the `SMTP_*` settings. Keep these values only in `.env.local` / your host's environment settings.
+
+With these settings Supabase sends no emails for sign-up or password reset, so its own email limits
+don't matter.
 
 ---
 
@@ -99,7 +139,7 @@ If something is missing, the `missing` list names the setting that's empty (neve
 | Feature | What to do |
 |---|---|
 | **Google / Facebook / Apple sign-in** | Supabase → **Authentication → Sign In / Providers** → turn on the provider and paste its client ID and secret (created in Google Cloud, Meta for Developers or Apple Developer). The "Continue with …" buttons appear on the site automatically for each provider you switch on. |
-| **Emails from the site** (parent approval for 13–17 students, and email copies of notifications: booking requests and changes, messages, payments, job applications, homework, account and security notices) | Put a Resend API key in `RESEND_API_KEY` and your sender in `EMAIL_FROM` (for example `TutorLink <no-reply@your-domain.com>`; the domain must be verified in Resend). Each person chooses which emails they get under **Notifications**; account and security notices always go out. Announcements are emailed only to people who switched on "Tips & product news". Without these two settings, everything still shows in the site's notifications, but no email is sent (and the teen sign-up screen says the parent email couldn't be sent). |
+| **Emails from the site** (password reset links, parent approval for 13–17 students, and email copies of notifications: booking requests and changes, messages, payments, job applications, homework, account and security notices) | See step 7: an SMTP mailbox (`SMTP_*`) or a Resend API key (`RESEND_API_KEY`), plus `EMAIL_FROM`. Each person chooses which emails they get under **Notifications**; account and security notices always go out. Announcements are emailed only to people who switched on "Tips & product news". Without these settings, everything still shows in the site's notifications, but no email is sent. |
 | **Scheduled clean-up** (expire unanswered booking requests, finish past lessons) | Already runs by itself at most every 5 minutes while people use the site. On Vercel, also set `CRON_SECRET` to any long random text; `vercel.json` then calls it daily as a backup. |
 
 ## Going live on Vercel

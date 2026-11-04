@@ -18,7 +18,10 @@ export interface User {
   lastName: string;
   email: string;
   phone?: string;
+  /** ISO country code ("US", "IN"); the US when not set. */
+  country?: string;
   city?: string;
+  /** The 2-letter code in the US, the state/province name elsewhere. */
   state?: string;
   zip?: string;
   timezone: string;
@@ -225,6 +228,8 @@ export interface Tutor {
   levels: Level[];
   category: TutorCategory;
   learningSupport: string[];
+  /** ISO country code; the US when not set. */
+  country?: string;
   city: string;
   state: string;
   zip: string;
@@ -287,6 +292,8 @@ export interface Requirement {
   grade: Grade;
   objectives: string;
   modes: TeachingMode[];
+  /** ISO country code; the US when not set. */
+  country?: string;
   city: string;
   state: string;
   zip: string;
@@ -379,6 +386,11 @@ export interface Booking {
   discountCents: Cents;
   paymentStatus: PaymentStatus;
   meetingUrl?: string;
+  /** The tutor's Zoom / Google Meet invite link for this online lesson (src/lib/video-link.ts). */
+  videoLink?: string;
+  videoPasscode?: string;
+  /** A Zoom cloud recording or Google Drive link the tutor adds after the lesson. */
+  recordingUrl?: string;
   locationNote?: string;
   notes?: string;
   rescheduledFromId?: ID;

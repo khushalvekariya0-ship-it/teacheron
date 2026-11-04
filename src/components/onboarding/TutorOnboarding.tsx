@@ -307,7 +307,7 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     const merged = { ...data, ...values };
     setData(merged);
     if (step === 1) {
-      const r = await updateMe({ phone: values.phone, city: values.city, state: values.state, zip: values.zip });
+      const r = await updateMe({ phone: values.phone, country: values.country, city: values.city, state: values.state, zip: values.zip });
       if (!r.ok) toast.error(r.error);
     }
     const next = step + 1;

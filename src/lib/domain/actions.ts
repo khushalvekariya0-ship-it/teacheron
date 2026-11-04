@@ -11,11 +11,14 @@ import { applyBps, formatCents, formatDateTime, percentOf, sessionPrice } from "
 import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
 import { isFlagOn } from "@/lib/flags";
 import { resolveLocation } from "@/lib/data/geo";
-import { canTransition, cancellationRefund, STATUS_META } from "@/lib/booking";
+import { canTransition, cancellationRefund, endMs, startMs, STATUS_META } from "@/lib/booking";
+import { checkPasscode, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL } from "@/lib/video-link";
 import { actorFor, hasPermission } from "@/lib/permissions";
 import { STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, slugify, subjectName } from "@/lib/data/catalog";
 import { ALL_PERMISSIONS } from "@/lib/data/users";
 import { parseIntroVideo } from "@/lib/video";
+import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/postal";
+import { isCountryCode } from "@/lib/location";
 import { blockedMessage, contactIn, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, type ContactKind } from "./contact";
 import {
   DEFAULT_NOTIFICATION_PREFS, emptyStudentProfile, fail, maskContactInfo, ok, resolveTutor,
@@ -75,7 +78,7 @@ const PAYMENTS_OFF = "Card and UPI payments aren't switched on yet, so only free
 
 export interface DomainActions {
   // account
-  updateMe(patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "city" | "state" | "zip" | "timezone">>): Result;
+  updateMe(patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "country" | "city" | "state" | "zip" | "timezone">>): Result;
   /**
    * Saves part of the signed-in student's learning profile. `step` records setup progress;
    * `complete` marks setup as finished. Fields left out keep their current values.
@@ -102,6 +105,15 @@ export interface DomainActions {
   createBooking(input: CreateBookingInput): Result<Booking>;
   transitionBooking(id: string, to: BookingStatus, note?: string): Result<Booking>;
   rescheduleBooking(id: string, newStartUtc: string): Result<Booking>;
+  /**
+   * The tutor (or staff who manage bookings) sets the Zoom / Google Meet invite link of an online lesson.
+   * With applyToUpcoming, the tutor's other upcoming online lessons that have no link get it too.
+   */
+  setLessonVideo(bookingId: string, input: { link: string; passcode?: string; applyToUpcoming?: boolean }): Result<{ updated: number }>;
+  /** Removes the lesson's Zoom / Google Meet link (the lesson then uses the TutorLink classroom only). */
+  removeLessonVideo(bookingId: string): Result<Booking>;
+  /** The tutor (or staff) adds or removes ("") the recording link of an online lesson once it has started. */
+  setLessonRecording(bookingId: string, link: string): Result<Booking>;
   validateCoupon(code: string, subtotalCents: number): Result<{ coupon: Coupon; discountCents: number }>;
   /** Adds Study Credits to the signed-in learner's wallet, paid by card or UPI. */
   topUpWallet(packId: string, method: Exclude<PayMethod, "wallet">): Result<WalletTransaction>;
@@ -181,7 +193,7 @@ export interface DomainActions {
   /** Makes an account staff ("admin" / "support") with these permissions, or removes staff access ("none"). */
   setStaffAccess(userId: string, role: "admin" | "support" | "none", permissions: Permission[]): Result;
   /** Staff correct an account's name, phone or location. */
-  updateUserDetails(userId: string, patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "city" | "state" | "zip">>): Result;
+  updateUserDetails(userId: string, patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "country" | "city" | "state" | "zip">>): Result;
   /** An administrator deletes an account (same rules as deleting your own). */
   deleteAccount(userId: string, reason: string): Result;
   /** Feature a tutor on the home page, or hide their profile from the public site. */
@@ -289,6 +301,24 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   const accountFor = (learnerId: string) => get().children.find((c) => c.id === learnerId)?.parentId ?? learnerId;
   const creditBalance = (tutorId: string) => get().leadTransactions.filter((t) => t.tutorId === tutorId).reduce((sum, t) => sum + t.delta, 0);
   const patchBooking = (id: string, patch: Partial<Booking>) => set((s) => ({ bookings: s.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
+  /** A profile's country and postal code must fit together (the postal code is checked against the country it ends up with). */
+  const placeProblem = (patch: { country?: string; zip?: string }, current: Pick<User, "country">): string | null => {
+    if (patch.country !== undefined && !isCountryCode(patch.country)) return "Choose a country from the list.";
+    const country = patch.country ?? current.country ?? "US";
+    if (patch.zip && !isPostalCode(patch.zip, country)) return postalError(country);
+    return null;
+  };
+  /** Who may set a lesson's Zoom / Google Meet and recording links: its tutor, or staff who manage bookings. Online lessons only. */
+  const lessonVideoAccess = (bookingId: string): Result<{ booking: Booking; actor: "tutor" | "admin" }> => {
+    const r = requireUser();
+    if (!r.ok) return r;
+    const b = get().bookings.find((x) => x.id === bookingId);
+    if (!b) return fail("Booking not found.");
+    const actor = actorFor(r.data, b);
+    if (actor !== "tutor" && actor !== "admin") return fail("Only the lesson's tutor can add or change its meeting link.");
+    if (b.mode !== "online") return fail("Meeting links are for online lessons. In-person lessons have a meeting place instead.");
+    return ok({ booking: b, actor });
+  };
   const addPayment = (p: Omit<Payment, "id" | "createdAt">) => set((s) => ({ payments: [{ ...p, id: uid("pay"), createdAt: nowIso() }, ...s.payments] }));
   const walletBalance = (userId: string) => get().walletTransactions.filter((t) => t.userId === userId).reduce((sum, t) => sum + t.deltaCents, 0);
   const addWalletTx = (t: Omit<WalletTransaction, "id" | "createdAt">): WalletTransaction => {
@@ -377,7 +407,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!r.ok) return r;
       // Others see your name, so it can't carry contact details (your own phone number field is private and fine).
       if (contactIn(patch.firstName, patch.lastName).found) return fail(NAME_RULE, "contact_blocked");
-      set((s) => ({ users: s.users.map((u) => (u.id === r.data.id ? { ...u, ...definedOnly(patch) } : u)) }));
+      const badPlace = placeProblem(patch, r.data);
+      if (badPlace) return fail(badPlace);
+      set((s) => ({ users: s.users.map((u) => (u.id === r.data.id ? { ...u, ...definedOnly({ ...patch, zip: patch.zip?.trim() }) } : u)) }));
       return ok(undefined);
     },
     saveStudentProfile(patch, opts) {
@@ -491,7 +523,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (editable.attachments) editable.attachments = editable.attachments.map((a) => ({ ...a, name: maskMatches(a.name, fileNameContact(a.name).matches, "[hidden]") }));
       const req: Requirement = {
         id: existing?.id ?? uid("req"), ownerId: r.data.id, title: "", subject: "", grade: "9", objectives: "", modes: ["online"],
-        city: r.data.city ?? "", state: r.data.state ?? "", zip: r.data.zip ?? "", days: [], timesOfDay: [], sessionsPerWeek: 1,
+        country: r.data.country, city: r.data.city ?? "", state: r.data.state ?? "", zip: r.data.zip ?? "", days: [], timesOfDay: [], sessionsPerWeek: 1,
         budgetMinCents: 4000, budgetMaxCents: 8000, languages: ["English"], preferences: "", details: "", status: "draft",
         createdAt: nowIso(), ...existing, ...definedOnly(editable), updatedAt: nowIso(),
       } as Requirement;
@@ -509,7 +541,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!req || req.ownerId !== r.data.id) return fail("Requirement not found.");
       const missing = [
         !req.subject && "subject", req.title.trim().length < 8 && "a descriptive title", req.objectives.trim().length < 20 && "learning objectives (20+ characters)",
-        !req.modes.length && "teaching mode", req.modes.includes("in_person") && !/^\d{5}$/.test(req.zip) && "a valid ZIP code",
+        !req.modes.length && "teaching mode", req.modes.includes("in_person") && (req.zip || postalRequired(req.country ?? "US")) && !isPostalCode(req.zip, req.country ?? "US") && `a valid ${postalLabel(req.country ?? "US")}`,
         req.budgetMaxCents < req.budgetMinCents && "a valid budget range",
       ].filter(Boolean);
       if (missing.length) return fail(`Please add ${missing.join(", ")} before publishing.`);
@@ -780,7 +812,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const instant = actor === "tutor" || b.status === "confirmed";
       const next: Booking = {
         ...b, id: newId, startUtc: start, status: instant ? "confirmed" : "pending", rescheduledFromId: b.id, rescheduleCount: (b.rescheduleCount ?? 0) + 1, reviewId: undefined,
-        meetingUrl: b.mode === "online" ? `/classroom/${newId}` : undefined, idempotencyKey: `${b.idempotencyKey}_r${b.history.length}`,
+        meetingUrl: b.mode === "online" ? `/classroom/${newId}` : undefined, recordingUrl: undefined, idempotencyKey: `${b.idempotencyKey}_r${b.history.length}`,
         history: [{ at: nowIso(), by: r.data.id, from: null, to: instant ? "confirmed" : "pending", note: `Rescheduled from ${formatDateTime(b.startUtc, tzOf(r.data.id))}` }], createdAt: nowIso(),
       };
       set((s) => ({
@@ -791,6 +823,61 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const other = actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId;
       notify(other, { type: "booking_rescheduled", title: "Lesson rescheduled", body: `${subjectName(b.subject)} moved to ${formatDateTime(start, tzOf(other))}`, href: `/dashboard/bookings/${newId}` });
       return ok(next);
+    },
+    setLessonVideo(bookingId, input) {
+      const check = lessonVideoAccess(bookingId);
+      if (!check.ok) return check;
+      const { booking: b, actor } = check.data;
+      if (!["pending", "confirmed", "in_progress"].includes(b.status) || endMs(b) <= Date.now()) return fail("This lesson has ended or isn't taking place, so its meeting link can't be changed.");
+      const parsed = parseVideoLink(input.link);
+      if (!parsed.ok) return fail(parsed.error);
+      const pass = checkPasscode(input.passcode);
+      if (!pass.ok) return fail(pass.error);
+      if (pass.passcode && contactIn(pass.passcode).found) return fail("That passcode looks like a phone number or contact detail. Use the passcode Zoom made, or a shorter one.");
+      const name = VIDEO_PROVIDER_LABEL[parsed.link.provider];
+      const patch = { videoLink: parsed.link.url, videoPasscode: pass.passcode };
+      const changed = (x: Booking) => x.videoLink !== patch.videoLink || (x.videoPasscode ?? undefined) !== patch.videoPasscode;
+      // The tutor's other upcoming online lessons without a link can use the same meeting.
+      const others =
+        input.applyToUpcoming && actor === "tutor"
+          ? get().bookings.filter((x) => x.id !== b.id && x.tutorId === b.tutorId && x.mode === "online" && !x.videoLink && ["pending", "confirmed"].includes(x.status) && startMs(x) > Date.now())
+          : [];
+      const targets = [b, ...others].filter(changed);
+      for (const x of targets) {
+        patchBooking(x.id, patch);
+        const when = (to?: string) => `${subjectName(x.subject)} · ${formatDateTime(x.startUtc, tzOf(to))}`;
+        notify(x.bookerId, { type: "reminder", title: x.videoLink ? `${name} link updated for your lesson` : `${name} link added for your lesson`, body: `${when(x.bookerId)}. Open the lesson to join.`, href: `/dashboard/bookings/${x.id}` });
+        if (actor === "admin") notify(tutorUserId(x.tutorId), { type: "reminder", title: `Staff set the ${name} link for a lesson`, body: when(tutorUserId(x.tutorId)), href: `/dashboard/bookings/${x.id}` });
+      }
+      if (actor === "admin") audit("booking.video_link", "booking", b.id, { provider: parsed.link.provider });
+      return ok({ updated: targets.length });
+    },
+    removeLessonVideo(bookingId) {
+      const check = lessonVideoAccess(bookingId);
+      if (!check.ok) return check;
+      const { booking: b, actor } = check.data;
+      if (!b.videoLink) return fail("This lesson has no meeting link.");
+      if (endMs(b) <= Date.now()) return fail("This lesson has ended, so its meeting link can't be changed.");
+      patchBooking(b.id, { videoLink: undefined, videoPasscode: undefined });
+      notify(b.bookerId, { type: "reminder", title: "Meeting link removed from your lesson", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))}. Join through the TutorLink classroom instead.`, href: `/dashboard/bookings/${b.id}` });
+      if (actor === "admin") audit("booking.video_link_removed", "booking", b.id);
+      return ok({ ...b, videoLink: undefined, videoPasscode: undefined });
+    },
+    setLessonRecording(bookingId, link) {
+      const check = lessonVideoAccess(bookingId);
+      if (!check.ok) return check;
+      const { booking: b, actor } = check.data;
+      if (startMs(b) > Date.now() || !["in_progress", "completed", "confirmed", "disputed", "refunded"].includes(b.status)) return fail("A recording can be added once the lesson has started.");
+      if (!link.trim()) {
+        patchBooking(b.id, { recordingUrl: undefined });
+        return ok({ ...b, recordingUrl: undefined });
+      }
+      const parsed = parseRecordingLink(link);
+      if (!parsed.ok) return fail(parsed.error);
+      patchBooking(b.id, { recordingUrl: parsed.url });
+      if (b.recordingUrl !== parsed.url) notify(b.bookerId, { type: "reminder", title: "Your lesson recording is ready", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))}`, href: `/dashboard/bookings/${b.id}` });
+      if (actor === "admin") audit("booking.recording", "booking", b.id);
+      return ok({ ...b, recordingUrl: parsed.url });
     },
     submitReview(bookingId, rating, body) {
       const r = requireUser(["student", "parent"]);
@@ -902,7 +989,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       // latest short messages (no reply in between, last 30 minutes) are read together with this one.
       const thread = get().messages.filter((m) => m.conversationId === c.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       const recent: Message[] = [];
-      for (let i = thread.length - 1; i >= 0 && recent.length < 10; i--) {
+      for (let i = thread.length - 1; i >= 0 && recent.length < 40; i--) {
         const m = thread[i];
         if (m.senderId !== senderId || Date.now() - new Date(m.createdAt).getTime() > 30 * 60_000 || m.body.length > 60 || m.moderation) break;
         recent.unshift(m);
@@ -926,8 +1013,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       };
       set((s) => ({ messages: [...s.messages, msg], conversations: s.conversations.map((x) => (x.id === conversationId ? { ...x, lastMessageAt: msg.createdAt } : x)) }));
       const recipient = senderId === c.tutorId ? c.userId : tutorUserId(c.tutorId);
-      // A message that's only digits doesn't put them in the notification (or its email copy).
-      notify(recipient, { type: "message", title: `New message from ${r.data.firstName} ${r.data.lastName.charAt(0)}.`, body: numberPiece(text) ? "Sent you a message." : text.slice(0, 90), href: `/dashboard/messages?c=${conversationId}` });
+      // A message that's only digits or a few letters doesn't show them in the notification (or its email copy).
+      notify(recipient, { type: "message", title: `New message from ${r.data.firstName} ${r.data.lastName.charAt(0)}.`, body: numberPiece(text) || text.length <= 3 ? "Sent you a message." : text.slice(0, 90), href: `/dashboard/messages?c=${conversationId}` });
       return ok(msg);
     },
     markConversationRead(conversationId) {
@@ -1253,15 +1340,19 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (r.data.tutorId && resolveTutor(get(), r.data.tutorId)) return ok(resolveTutor(get(), r.data.tutorId)!);
       const id = r.data.tutorId ?? uid("tut");
       const str = (v: unknown, max = 4000) => (typeof v === "string" ? v : "").slice(0, max);
+      const tutorCountry = isCountryCode(String(d.country ?? "")) ? String(d.country) : (r.data.country ?? "US");
+      if (d.zip && !isPostalCode(String(d.zip), tutorCountry)) return fail(postalError(tutorCountry));
       const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 20) : []);
       const tutor: Tutor = {
         id, slug: `${r.data.firstName}-${r.data.lastName}-${id.slice(-4)}`.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-"), firstName: r.data.firstName, lastName: r.data.lastName,
         headline: maskContactInfo(str(d.headline, 120)).text, bio: maskContactInfo(str(d.bio)).text, approach: maskContactInfo(str(d.approach)).text,
         subjects: strs(d.subjects), specialties: strs(d.specialties), levels: (strs(d.levels).length ? strs(d.levels) : ["high"]) as Tutor["levels"],
         category: (str(d.category) || "subject_expert") as Tutor["category"], learningSupport: strs(d.learningSupport),
-        city: str(d.city ?? r.data.city, 60), state: str(d.state ?? r.data.state, 2), zip: str(d.zip, 5),
-        // Offline geocoding from the ZIP / city. Unknown ZIPs fall back to the US centroid.
+        country: tutorCountry, city: str(d.city ?? r.data.city, 60), state: str(d.state ?? r.data.state, 60), zip: str(d.zip, 10).trim(),
+        // Offline geocoding from a US ZIP / city (unknown US ZIPs fall back to the US centroid). Places outside the US
+        // aren't on the map yet (0, 0), so distance isn't scored for them.
         ...(() => {
+          if (tutorCountry !== "US") return { lat: 0, lng: 0 };
           const p = resolveLocation(String(d.zip)) ?? resolveLocation(`${d.city ?? ""}, ${d.state ?? ""}`);
           return p ? { lat: p.lat, lng: p.lng } : { lat: 39.83, lng: -98.58 };
         })(),
@@ -1705,7 +1796,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const clean = definedOnly({ ...patch, firstName: patch.firstName?.trim(), lastName: patch.lastName?.trim() });
       if (clean.firstName !== undefined && !clean.firstName) return fail("Enter a first name.");
       if (clean.lastName !== undefined && !clean.lastName) return fail("Enter a last name.");
-      if (clean.zip && !/^\d{5}$/.test(clean.zip)) return fail("Enter a 5-digit ZIP code.");
+      const badPlace = placeProblem(clean, target);
+      if (badPlace) return fail(badPlace);
       set((s) => ({ users: s.users.map((u) => (u.id === userId ? { ...u, ...clean } : u)) }));
       audit("user.update", "user", userId, { fields: Object.keys(clean).join(",") });
       return ok(undefined);

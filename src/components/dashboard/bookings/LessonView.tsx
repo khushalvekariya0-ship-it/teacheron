@@ -22,6 +22,7 @@ import { buildLessonActions, LessonActionsPanel, StickyActionBar, type LessonDia
 import { LessonDetails } from "./LessonDetails";
 import { LessonLearning } from "./LessonLearning";
 import { LessonWhenWhere } from "./LessonLive";
+import { LessonVideoCard } from "./LessonVideo";
 import { DisputeCard, DisputeDialog, ReportProblemCard, ReviewDisplay, ReviewForm, useLessonDispute, useLessonReview } from "./LessonPostLesson";
 import { LessonTimeline } from "./LessonTimeline";
 import { bookingRef, timeRange, tzShort, usePeople } from "./shared";
@@ -199,6 +200,12 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
           <div className="order-1 min-w-0">
             <LessonWhenWhere booking={b} tz={tz} otherTz={otherTz} otherLabel={otherLabel} now={now} policy={policy} isTutor={isTutor} tutorFirstName={tutorFirst} />
           </div>
+
+          {b.mode === "online" && (
+            <div className="order-1 min-w-0">
+              <LessonVideoCard booking={b} canManage={isTutor || actor === "admin"} now={now} counterpart={isTutor ? people.counterpart : actor === "admin" ? "The family" : "You"} />
+            </div>
+          )}
 
           {(showReviewForm || review || dispute || canDispute) && (
             <div className="order-3 min-w-0 space-y-6">

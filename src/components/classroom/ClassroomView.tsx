@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarX2, Hourglass, Info, MapPin, MessagesSquare, PenLine, SearchX } from "lucide-react";
+import { ArrowLeft, CalendarX2, Hourglass, Info, MapPin, MessagesSquare, PenLine, SearchX, Video } from "lucide-react";
+import { JoinVideoButton, videoLabel } from "@/components/dashboard/bookings/LessonVideo";
+import { videoMeetingId } from "@/lib/video-link";
 import type { Booking, User } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useHydrated, useNow, useSession, useTutor, useViewerTimezone } from "@/lib/store/hooks";
@@ -191,6 +193,7 @@ function ActiveLesson({ booking, me, actor, leaveHref, started }: { booking: Boo
       selfName={`${me.firstName} ${me.lastName}`}
       status={started ? `Waiting for ${peerName.split(" ")[0]} to join` : `The lesson starts at ${formatTime(booking.startUtc, tz)}. You can set up now.`}
       leaveHref={leaveHref}
+      video={booking.videoLink ? booking : undefined}
       chat={{
         lines,
         onSend: send,
@@ -219,6 +222,30 @@ function LessonClock({ start, end }: { start: number; end: number }) {
   );
 }
 
+/** The lesson runs on the tutor's Zoom / Google Meet: join there; the whiteboard and chat stay here. */
+function VideoMeetingBanner({ booking }: { booking: Booking }) {
+  const label = videoLabel(booking);
+  const meetingId = videoMeetingId(booking.videoLink);
+  return (
+    <section aria-label={`${label} meeting`} className="shrink-0 rounded-2xl border border-line bg-surface p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+          <Video className="size-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold tracking-tight text-ink">This lesson is on {label}</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-muted">
+            Join the {label} meeting for video. The whiteboard and chat stay here.
+            {meetingId && <> Meeting ID <span className="font-mono text-ink-2">{meetingId}</span>.</>}
+            {booking.videoPasscode && <> Passcode <span className="font-mono text-ink-2">{booking.videoPasscode}</span>.</>}
+          </p>
+        </div>
+      </div>
+      <JoinVideoButton booking={booking} variant="cta" block className="mt-3" label={`Join ${label} meeting`} />
+    </section>
+  );
+}
+
 /* ─── Room shell ────────────────────────────────────────────────────────────── */
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -244,6 +271,7 @@ function Room({
   status,
   leaveHref,
   chat,
+  video,
 }: {
   roomId: string;
   title: string;
@@ -254,6 +282,8 @@ function Room({
   status: string;
   leaveHref: string;
   chat: { lines: ChatLine[]; onSend: (body: string) => string | null | Promise<string | null>; disabledReason?: string; note: string };
+  /** A lesson that runs on the tutor's Zoom / Google Meet. */
+  video?: Booking;
 }) {
   const [panel, setPanel] = React.useState<"board" | "chat">("board");
   return (
@@ -292,7 +322,10 @@ function Room({
       </header>
 
       <main id="main" className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3 p-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:grid-rows-1">
-        <VideoStage peerName={peerName} selfName={selfName} status={status} leaveHref={leaveHref} className="h-[36dvh] lg:h-auto" />
+        <div className="flex min-h-0 flex-col gap-3">
+          {video && <VideoMeetingBanner booking={video} />}
+          <VideoStage peerName={peerName} selfName={selfName} status={status} leaveHref={leaveHref} className={cn("h-[36dvh] lg:h-auto lg:min-h-0 lg:flex-1", video && "hidden lg:flex")} />
+        </div>
 
         <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
           {/* Below 1280px the board and the chat share the panel; above it they sit side by side. */}

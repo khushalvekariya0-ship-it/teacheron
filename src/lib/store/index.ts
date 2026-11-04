@@ -31,6 +31,8 @@ export interface SignUpInput {
   lastName: string;
   email: string;
   password: string;
+  /** ISO country code ("US", "IN"). */
+  country?: string;
   zip: string;
   ageBand?: "18+" | "13-17";
   parentEmail?: string;
@@ -39,6 +41,8 @@ export interface SignUpInput {
 
 export interface SignUpOutcome {
   needsConfirmation: boolean;
+  /** How the email is confirmed: a 6-digit code typed on the site, or a link from Supabase's email. */
+  verifyBy?: "code" | "link";
   email?: string;
   consent?: { sent: boolean; error?: string };
 }
@@ -70,9 +74,16 @@ interface ClientOnly {
   /** Signs out of this browser, or of every device with `everywhere`. */
   logout(everywhere?: boolean): Promise<void>;
   requestPasswordReset(email: string): Promise<Result>;
-  resetPassword(password: string): Promise<Result<{ firstName: string; role: Role }>>;
+  /** The 6-digit code from the reset email, swapped for a link token that opens /reset-password. */
+  verifyResetCode(email: string, code: string): Promise<Result<{ token: string }>>;
+  /** Whether a reset link (its token) still works: "valid", "expired", "used", "replaced" (a newer email was sent) or "invalid". */
+  checkResetLink(token: string): Promise<Result<{ status: "valid" | "expired" | "used" | "replaced" | "invalid" }>>;
+  /** Sets a new password from a reset link. Afterwards the person signs in with it. */
+  resetPassword(token: string, password: string): Promise<Result>;
   changePassword(current: string, next: string): Promise<Result>;
   resendConfirmation(email: string): Promise<Result>;
+  /** Checks the 6-digit sign-up code on the server and confirms the email (doesn't sign in). */
+  verifyEmail(email: string, code: string): Promise<Result>;
   resendParentalConsent(): Promise<Result>;
 }
 
@@ -93,7 +104,7 @@ const OFFLINE = "We couldn't reach the server. Check your connection and try aga
 const ACTIONS: (keyof DomainActions)[] = [
   "updateMe", "saveStudentProfile", "deleteMyAccount", "toggleFavorite", "saveSearch", "updateSavedSearch", "deleteSavedSearch", "toggleSavedJob",
   "saveRequirementDraft", "publishRequirement", "setRequirementStatus", "deleteRequirement", "applyToJob", "setApplicationStatus", "createBooking",
-  "transitionBooking", "rescheduleBooking", "validateCoupon", "topUpWallet", "submitReview", "respondToReview", "startConversation", "sendMessage",
+  "transitionBooking", "rescheduleBooking", "setLessonVideo", "removeLessonVideo", "setLessonRecording","validateCoupon", "topUpWallet", "submitReview", "respondToReview", "startConversation", "sendMessage",
   "markConversationRead", "toggleBlock", "report", "markNotificationRead", "markAllNotificationsRead", "setNotificationPref", "saveChild", "removeChild",
   "addProgressNote", "assignHomework", "submitHomework", "reviewHomework", "setTopicStatus", "addGoal", "updateTutorProfile", "setAvailability",
   "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "openDispute",
@@ -226,7 +237,7 @@ export const useApp = create<AppState>()(
             }
           })();
           const r = await auth<SignUpOutcome>("sign-up", { ...input, timezone });
-          return r.ok ? ok({ needsConfirmation: !!r.data.needsConfirmation, email: r.data.email, consent: r.data.consent }) : r;
+          return r.ok ? ok({ needsConfirmation: !!r.data.needsConfirmation, verifyBy: r.data.verifyBy, email: r.data.email, consent: r.data.consent }) : r;
         },
         async logout(everywhere) {
           await auth("sign-out", { scope: everywhere === true ? "global" : "local" });
@@ -236,9 +247,17 @@ export const useApp = create<AppState>()(
           const r = await auth("forgot", { email });
           return r.ok ? ok(undefined) : r;
         },
-        async resetPassword(password) {
-          const r = await auth<{ user: { firstName: string; role: Role } }>("reset", { password });
-          return r.ok ? ok(r.data.user) : r;
+        async verifyResetCode(email, code) {
+          const r = await auth<{ token: string }>("reset-code", { email, code });
+          return r.ok ? ok({ token: r.data.token }) : r;
+        },
+        async checkResetLink(token) {
+          const r = await auth<{ status: "valid" | "expired" | "used" | "replaced" | "invalid" }>("reset-check", { token });
+          return r.ok ? ok({ status: r.data.status }) : r;
+        },
+        async resetPassword(token, password) {
+          const r = await auth("reset", { token, password });
+          return r.ok ? ok(undefined) : r;
         },
         changePassword: async (current, next) => {
           const r = await auth("password", { current, next });
@@ -246,6 +265,10 @@ export const useApp = create<AppState>()(
         },
         resendConfirmation: async (email) => {
           const r = await auth("resend", { email });
+          return r.ok ? ok(undefined) : r;
+        },
+        verifyEmail: async (email, code) => {
+          const r = await auth("verify-email", { email, code });
           return r.ok ? ok(undefined) : r;
         },
         resendParentalConsent: async () => {

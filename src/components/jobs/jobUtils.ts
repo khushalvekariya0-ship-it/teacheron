@@ -3,6 +3,7 @@ import type { MatchCriteria } from "@/lib/matching";
 import { GRADE_LABEL, LEVEL_LABEL, TIMES_OF_DAY, gradeToLevel, subjectName } from "@/lib/data/catalog";
 import { distanceMiles, resolveLocation, type GeoPoint } from "@/lib/data/geo";
 import { formatCents, formatRelative } from "@/lib/format";
+import { isPostalCode } from "@/lib/postal";
 
 /*
  * Display and matching helpers for requirements ("tutor jobs"). Shared by the post-requirement
@@ -104,7 +105,7 @@ export function postedByLabel(role: Role | undefined): string {
 
 /** Converts a requirement into transparent match criteria for scoring tutors. */
 export function criteriaFromRequirement(req: Requirement): MatchCriteria {
-  const location = req.zip && /^\d{5}$/.test(req.zip) ? req.zip : req.city ? `${req.city}${req.state ? `, ${req.state}` : ""}` : undefined;
+  const location = req.zip && isPostalCode(req.zip) ? req.zip : req.city ? `${req.city}${req.state ? `, ${req.state}` : ""}` : undefined;
   return {
     subject: req.subject || undefined,
     grade: req.grade,

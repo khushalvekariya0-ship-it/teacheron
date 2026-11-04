@@ -18,7 +18,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, RadioCards } from "@/components/ui/Controls";
-import { Field, Input, Textarea } from "@/components/ui/Input";
+import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { describeAudit } from "./AuditLogView";
@@ -27,6 +27,8 @@ import {
   RowOpen, StatusPill, TextLink, Timeline, Toolbar, fullName, humanize, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam,
 } from "./kit";
 import { ChatPauseControls } from "./ChatSafetyView";
+import { POSTAL_MAX_LENGTH, postalLabel } from "@/lib/postal";
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/location";
 
 type TabKey = "all" | "student" | "parent" | "tutor" | "staff";
 type StatusFilter = "all" | User["status"];
@@ -600,10 +602,12 @@ function AccountMenu({ user }: { user: User }) {
   );
 }
 
+const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
+
 function EditDetailsDialog({ user, open, onOpenChange }: { user: User; open: boolean; onOpenChange: (o: boolean) => void }) {
   const update = useApp((s) => s.updateUserDetails);
   const initial = React.useMemo(
-    () => ({ firstName: user.firstName, lastName: user.lastName, phone: user.phone ?? "", city: user.city ?? "", state: user.state ?? "", zip: user.zip ?? "" }),
+    () => ({ firstName: user.firstName, lastName: user.lastName, phone: user.phone ?? "", country: user.country ?? DEFAULT_COUNTRY, city: user.city ?? "", state: user.state ?? "", zip: user.zip ?? "" }),
     [user],
   );
   const [form, setForm] = React.useState(initial);
@@ -642,10 +646,13 @@ function EditDetailsDialog({ user, open, onOpenChange }: { user: User; open: boo
               <Field label="Last name" required><Input {...field("lastName")} maxLength={60} autoComplete="off" /></Field>
             </div>
             <Field label="Phone" optional><Input {...field("phone")} maxLength={30} inputMode="tel" autoComplete="off" /></Field>
-            <div className="grid gap-4 sm:grid-cols-[1fr_6rem_7rem]">
+            <Field label="Country">
+              <Select options={COUNTRY_OPTIONS} value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))} />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-[1fr_9rem_7rem]">
               <Field label="City" optional><Input {...field("city")} maxLength={60} autoComplete="off" /></Field>
-              <Field label="State" optional><Input {...field("state")} maxLength={20} placeholder="CA" autoComplete="off" /></Field>
-              <Field label="ZIP" optional><Input {...field("zip")} maxLength={5} inputMode="numeric" autoComplete="off" /></Field>
+              <Field label={form.country === "US" ? "State" : "State / province"} optional><Input {...field("state")} maxLength={60} placeholder={form.country === "US" ? "CA" : ""} autoComplete="off" /></Field>
+              <Field label={postalLabel(form.country)} optional><Input {...field("zip")} maxLength={POSTAL_MAX_LENGTH} autoComplete="off" /></Field>
             </div>
           </DialogBody>
           <DialogFooter>

@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { ActionName } from "@/lib/domain/actions";
 import { ALL_PERMISSIONS } from "@/lib/data/users";
+import { isCountryCode } from "@/lib/location";
 
 /*
  * Shape checks for the arguments of every action the browser may call. They run before the domain
@@ -12,6 +13,8 @@ import { ALL_PERMISSIONS } from "@/lib/data/users";
 
 const id = z.string().min(1).max(120);
 const text = (max: number) => z.string().max(max);
+/** An ISO 3166-1 country code from the site's list ("US", "IN"). */
+const COUNTRY = z.string().refine((v) => isCountryCode(v), "Unknown country.");
 const int = (min: number, max: number) => z.number().int().min(min).max(max);
 const strings = (maxItems: number, maxLen = 120) => z.array(text(maxLen)).max(maxItems);
 const iso = z.string().max(40).refine((v) => !Number.isNaN(Date.parse(v)), "Invalid date");
@@ -78,8 +81,9 @@ const requirementDraft = z.object({
   grade: GRADE.optional(),
   objectives: text(3000).optional(),
   modes: z.array(MODE).max(2).optional(),
+  country: COUNTRY.optional(),
   city: text(60).optional(),
-  state: text(20).optional(),
+  state: text(60).optional(),
   zip: text(10).optional(),
   days: z.array(DAY_NAME).max(7).optional(),
   timesOfDay: z.array(TIME_OF_DAY).max(3).optional(),
@@ -130,7 +134,7 @@ const none = z.tuple([]);
 
 /** Actions the browser may call through POST /api/actions, with their argument shapes. */
 export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
-  updateMe: t(z.object({ firstName: text(60).optional(), lastName: text(60).optional(), phone: text(30).optional(), city: text(60).optional(), state: text(20).optional(), zip: text(10).optional(), timezone: zone.optional() })),
+  updateMe: t(z.object({ firstName: text(60).optional(), lastName: text(60).optional(), phone: text(30).optional(), country: COUNTRY.optional(), city: text(60).optional(), state: text(60).optional(), zip: text(10).optional(), timezone: zone.optional() })),
   saveStudentProfile: t(studentProfilePatch, z.object({ step: int(0, 10).optional(), complete: z.boolean().optional() }).optional()),
   deleteMyAccount: none,
 
@@ -154,6 +158,9 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   })),
   transitionBooking: t(id, BOOKING_STATUS, text(500).optional()),
   rescheduleBooking: t(id, iso),
+  setLessonVideo: t(id, z.object({ link: text(500), passcode: text(20).optional(), applyToUpcoming: z.boolean().optional() })),
+  removeLessonVideo: t(id),
+  setLessonRecording: t(id, text(500)),
   validateCoupon: t(text(20), int(0, 10_000_000)),
   topUpWallet: t(text(20), z.enum(["card", "upi"])),
   submitReview: t(id, int(1, 5), text(3000)),
@@ -220,7 +227,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   loadStarterCatalog: none,
   logConversationAccess: t(id, text(500)),
   setStaffAccess: t(id, z.enum(["admin", "support", "none"]), z.array(z.enum(ALL_PERMISSIONS as [string, ...string[]])).max(20)),
-  updateUserDetails: t(id, z.object({ firstName: text(60).optional(), lastName: text(60).optional(), phone: text(30).optional(), city: text(60).optional(), state: text(20).optional(), zip: text(10).optional() })),
+  updateUserDetails: t(id, z.object({ firstName: text(60).optional(), lastName: text(60).optional(), phone: text(30).optional(), country: COUNTRY.optional(), city: text(60).optional(), state: text(60).optional(), zip: text(10).optional() })),
   deleteAccount: t(id, text(500)),
   setTutorListing: t(id, z.object({ featured: z.boolean().optional(), hidden: z.boolean().optional() }), text(500)),
   takeDownRequirement: t(id, text(500)),

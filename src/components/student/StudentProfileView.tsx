@@ -104,7 +104,7 @@ function Profile({ me }: { me: User }) {
   const query = toQueryString(tutorSearchFor(me, profile));
 
   const saveBasic = async (v: BasicValues): Promise<Result<unknown>> => {
-    const u = await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), city: v.city.trim(), state: v.state, zip: v.zip.trim() });
+    const u = await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), country: v.country, city: v.city.trim(), state: v.state, zip: v.zip.trim() });
     return u.ok ? save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }) : u;
   };
 

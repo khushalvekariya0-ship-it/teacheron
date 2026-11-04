@@ -3,6 +3,8 @@ import type { Resolver, ResolverResult } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Child, Grade, Requirement, TeachingMode, User } from "@/lib/types";
 import { GRADE_LABEL, US_STATES, getCatalog } from "@/lib/data/catalog";
+import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/postal";
+import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
 
 const isShownSubject = (slug: string) => getCatalog().subjects.some((s) => s.slug === slug);
 import { METROS } from "@/lib/data/geo";
@@ -31,6 +33,8 @@ export interface ReqForm {
   objectives: string;
   learningSupport: string[];
   format: Format;
+  /** ISO country code (src/lib/location.ts). */
+  country: string;
   zip: string;
   city: string;
   state: string;
@@ -93,19 +97,20 @@ export function stepSchema(step: number, role: FamilyRole) {
       return z
         .object({
           format: z.enum(["", "online", "in_person", "both"]).refine((v) => v !== "", "Choose how lessons should happen."),
+          country: z.string().refine((v) => isCountryCode(v), "Choose your country."),
           zip: z.string(),
           city: z.string().max(60, "City name is too long."),
-          state: z.string(),
+          state: z.string().max(60),
         })
         .superRefine((v, ctx) => {
           const inPerson = v.format === "in_person" || v.format === "both";
-          if (v.zip && !/^\d{5}$/.test(v.zip)) ctx.addIssue({ code: "custom", path: ["zip"], message: "Enter a 5-digit ZIP code." });
+          if (v.zip && !isPostalCode(v.zip, v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
           if (inPerson) {
-            if (!v.zip) ctx.addIssue({ code: "custom", path: ["zip"], message: "A ZIP code is required for in-person lessons." });
+            if (!v.zip && postalRequired(v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: `A ${postalLabel(v.country)} is required for in-person lessons.` });
             if (v.city.trim().length < 2) ctx.addIssue({ code: "custom", path: ["city"], message: "Enter your city." });
             if (!v.state) ctx.addIssue({ code: "custom", path: ["state"], message: "Choose your state." });
           }
-          if (v.state && !US_STATES.some((s) => s.value === v.state)) ctx.addIssue({ code: "custom", path: ["state"], message: "Choose a US state." });
+          if (v.country === "US" && v.state && !US_STATES.some((s) => s.value === v.state)) ctx.addIssue({ code: "custom", path: ["state"], message: "Choose a US state." });
         });
     case 3:
       return z.object({
@@ -190,9 +195,10 @@ export function toPayload(v: ReqForm, role: FamilyRole): Partial<Requirement> {
     subject: v.subject,
     objectives: v.objectives.trim(),
     learningSupport: v.learningSupport,
+    country: v.country,
     city: v.city.trim(),
     state: v.state,
-    zip: v.zip,
+    zip: v.zip.trim(),
     days: v.days,
     timesOfDay: v.timesOfDay,
     sessionsPerWeek: v.sessionsPerWeek,
@@ -226,6 +232,7 @@ export function fromRequirement(req: Requirement): ReqForm {
     objectives: req.objectives,
     learningSupport: req.learningSupport ?? [],
     format: untouchedFormat ? "" : modesToFormat(req.modes),
+    country: req.country ?? DEFAULT_COUNTRY,
     zip: req.zip,
     city: req.city,
     state: req.state,
@@ -257,8 +264,9 @@ export function newForm(me: User, children: Child[], prefill: Prefill): ReqForm 
   const subject = prefill.subject && isShownSubject(prefill.subject) ? prefill.subject : "";
   const grade = prefill.grade && GRADE_LABEL[prefill.grade as Grade] ? (prefill.grade as Grade) : "";
   const format: Format = prefill.mode === "online" ? "online" : prefill.mode === "in_person" ? "in_person" : prefill.mode === "both" || prefill.mode === "either" ? "both" : "";
-  const zip = prefill.zip && /^\d{5}$/.test(prefill.zip) ? prefill.zip : me.zip && /^\d{5}$/.test(me.zip) ? me.zip : "";
-  const loc = !zip || zip === me.zip ? { city: me.city ?? "", state: me.state ?? "" } : cityForZip(zip) ?? { city: "", state: "" };
+  const country = me.country ?? DEFAULT_COUNTRY;
+  const zip = prefill.zip && isPostalCode(prefill.zip, country) ? prefill.zip : me.zip && isPostalCode(me.zip, country) ? me.zip : "";
+  const loc = !zip || zip === me.zip ? { city: me.city ?? "", state: me.state ?? "" } : (country === "US" ? cityForZip(zip) : null) ?? { city: "", state: "" };
   const onlyChild =
     me.role !== "parent" ? undefined : children.find((c) => c.id === prefill.childId) ?? (children.length === 1 ? children[0] : undefined);
   const g = grade || onlyChild?.grade || "";
@@ -270,6 +278,7 @@ export function newForm(me: User, children: Child[], prefill: Prefill): ReqForm 
     objectives: (prefill.goal ?? "").slice(0, LIMITS.objectivesMax),
     learningSupport: [],
     format,
+    country,
     zip,
     city: loc.city,
     state: loc.state,

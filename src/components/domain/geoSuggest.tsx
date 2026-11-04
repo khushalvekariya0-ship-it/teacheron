@@ -13,8 +13,8 @@ export interface GeoResult {
   zip: string | null;
 }
 
-/** Search-as-you-type against /api/geo: debounced, newest answer wins, keyboard navigation. */
-export function useGeoSuggest(kind: "address" | "city") {
+/** Search-as-you-type against /api/geo: debounced, newest answer wins, keyboard navigation. `country` is an ISO code. */
+export function useGeoSuggest(kind: "address" | "city", country = "US") {
   const [results, setResults] = React.useState<GeoResult[]>([]);
   const [active, setActive] = React.useState(-1);
   const [loading, setLoading] = React.useState(false);
@@ -36,7 +36,7 @@ export function useGeoSuggest(kind: "address" | "city") {
     setLoading(true);
     timer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/geo?kind=${kind}&q=${encodeURIComponent(text.trim())}`);
+        const res = await fetch(`/api/geo?kind=${kind}&country=${encodeURIComponent(country)}&q=${encodeURIComponent(text.trim())}`);
         const body = (await res.json()) as { ok: boolean; error?: string; results: GeoResult[] };
         if (n !== seq.current) return; // a newer search is on its way
         setResults(body.results ?? []);
@@ -44,7 +44,7 @@ export function useGeoSuggest(kind: "address" | "city") {
         setActive(-1);
         setOpen(true);
       } catch {
-        if (n === seq.current) setError("Address search isn't answering right now. Type your city, state and ZIP instead.");
+        if (n === seq.current) setError("Address search isn't answering right now. Type your city, state and postal code instead.");
       } finally {
         if (n === seq.current) setLoading(false);
       }
