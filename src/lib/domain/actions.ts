@@ -720,7 +720,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       // Checked inside the transaction (and by a database constraint) so two people can't take the same slot.
       if (slotConflict(tutor.id, input.startUtc, input.durationMin)) return fail("That time was just booked. Please choose another slot.");
 
-      const priceCents = input.type === "trial" ? tutor.trial.priceCents : sessionPrice(tutor.hourlyRateCents, input.durationMin);
+      // Until online payments are connected, trial lessons are free (families see them as free; the tutor's
+      // own trial price applies again once payments are on).
+      const priceCents = input.type === "trial" ? (env.paymentsEnabled ? tutor.trial.priceCents : 0) : sessionPrice(tutor.hourlyRateCents, input.durationMin);
       let discountCents = 0;
       let couponId: string | null = null;
       if (input.couponCode) {

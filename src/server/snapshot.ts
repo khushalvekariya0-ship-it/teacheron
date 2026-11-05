@@ -6,6 +6,7 @@ import { maskContactInfo } from "@/lib/domain/data";
 import { fileNameContact, maskMatches } from "@/lib/domain/contact";
 import { db } from "./db";
 import { Loader } from "./load";
+import { env } from "./env";
 
 /*
  * What the browser receives: the public marketplace (listed tutors, published reviews and jobs, the
@@ -138,6 +139,9 @@ export async function buildState(userId: string | null): Promise<ClientState> {
       const related = new Set([me?.tutorId, ...d.bookings.map((b) => b.tutorId), ...d.conversations.map((c) => c.tutorId)]);
       d.registeredTutors = d.registeredTutors.filter((t) => !t.hidden || related.has(t.id));
     }
+    // Until online payments are connected, trial lessons are free to book: families see them as free. Staff
+    // and the tutor themselves still see the tutor's own trial price (it applies again once payments are on).
+    if (!env.paymentsEnabled) d.registeredTutors = d.registeredTutors.map((t) => (staff || t.id === me?.tutorId || !t.trial.priceCents ? t : { ...t, trial: { ...t.trial, priceCents: 0 } }));
     // Personal records (learning profile, drafts, preferences, favorites, saved items) are only ever the viewer's own.
     for (const key of ["studentProfiles", "notificationPrefs", "onboarding", "favorites", "savedJobs"] as const) {
       const own = (d[key] as Record<string, unknown>)[myId ?? ""];

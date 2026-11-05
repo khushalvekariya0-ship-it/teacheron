@@ -318,9 +318,12 @@ shared store (for example Upstash Redis).
 These need an outside service and an account of your own before they can work. The site doesn't
 pretend they work: the buttons say "not available yet" or the server refuses with a clear message.
 
-- **Card and UPI payments** (Stripe). Until connected, only free lessons can be booked, and buying
-  Study Credits, lead credits or a paid tutor plan is switched off.
+- **Card and UPI payments** (Stripe or Razorpay). Until connected, trial lessons are free to book for
+  everyone (families see "Free"; each tutor's own trial price applies once payments are connected),
+  paid regular lessons can't be booked, and buying Study Credits, lead credits or a paid tutor plan is
+  switched off. Bookings, trials included, follow the tutor's "approve each booking" setting: a request
+  until the tutor accepts it, or booked straight away with instant booking on.
 - **Payouts to tutors** (Stripe Connect).
-- **Two-way video in the classroom** (a video service such as Daily, Zoom or LiveKit). Today each
-  person sees their own camera, the whiteboard and the chat.
+- **Two-way video in the classroom** needs your LiveKit keys (step 9). Without them, lessons use the
+  basic classroom (own camera, whiteboard and chat) or the tutor's Zoom / Google Meet link.
 - **Text-message notifications** (Twilio).

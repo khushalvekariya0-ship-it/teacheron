@@ -35,6 +35,7 @@ How the live backend works. Setup steps for the site owner are in [SUPABASE_SETU
 - **Staff:** queues their permissions cover (users, bookings, payments, disputes with internal notes, reports, all reviews, verification requests, audit log, coupons, drafts of content). Private messages are **not** included — `logConversationAccess` releases one conversation's messages after recording the reason in the audit log.
 - Personal records (learning profile, drafts, preferences, favorites, saved items) are only ever sent to their owner — staff included.
 - A tutor hidden by staff (`tutors.hidden`) stays visible only to staff, to the tutor, and to people who already have a booking or conversation with them; nobody new can book or message them.
+- While `env.paymentsEnabled` is false, trial prices are sent as 0 to everyone except staff and the tutor themselves (who see the tutor's own price), so cards, profiles and the booking form all say "Free".
 
 ## Adding an action
 
@@ -168,7 +169,9 @@ Besides phone numbers, emails and other apps (`src/lib/domain/contact.ts`), link
 
 ## Not connected yet
 
-Payments (Stripe), tutor payouts, two-way classroom video and SMS. `env.paymentsEnabled` is `false`, so card / UPI charges, credit and plan purchases are refused with a clear message and free lessons still work.
+Payments (Stripe or Razorpay), tutor payouts and SMS. `env.paymentsEnabled` is `false`, so card / UPI charges, credit and plan purchases are refused with a clear message and free lessons still work. Trial lessons are booked free in the meantime (`createBooking` uses price 0 for `type: "trial"`; the tutor's `trial.priceCents` is kept and applies again once payments are on).
+
+**Booking approval:** every booking, trials included, follows the tutor's `rules.requiresApproval`: `pending` (the tutor is notified in-app and by email) until the tutor accepts it (`transitionBooking → confirmed`), or `confirmed` straight away when the tutor has instant booking on and the `instant_booking` flag is enabled.
 
 ## Testing
 

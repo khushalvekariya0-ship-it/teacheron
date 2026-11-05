@@ -499,6 +499,7 @@ type TrialValues = z.infer<typeof trialSchema>;
 
 function TrialSection({ tutor }: { tutor: Tutor }) {
   const setTrial = useApp((s) => s.setTrial);
+  const paymentsOn = useApp((s) => s.config.paymentsEnabled);
   const trialsOn = useFlag("trial_lessons");
   const ed = useEditor();
   const values = (): TrialValues => ({ enabled: tutor.trial.enabled, price: Math.round(tutor.trial.priceCents / 100), durationMin: tutor.trial.durationMin });
@@ -559,7 +560,12 @@ function TrialSection({ tutor }: { tutor: Tutor }) {
           {tutor.trial.enabled && (
             <>
               <DetailRow label="Length">{tutor.trial.durationMin} minutes</DetailRow>
-              <DetailRow label="Price">{tutor.trial.priceCents ? formatCents(tutor.trial.priceCents) : "Free"}</DetailRow>
+              <DetailRow label="Price">
+                {tutor.trial.priceCents ? formatCents(tutor.trial.priceCents) : "Free"}
+                {tutor.trial.priceCents > 0 && !paymentsOn && (
+                  <span className="mt-0.5 block text-[12.5px] font-normal text-muted">Free for families until online payments start on TutorLink; your price applies after that.</span>
+                )}
+              </DetailRow>
             </>
           )}
         </dl>
