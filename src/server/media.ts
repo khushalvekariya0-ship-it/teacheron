@@ -81,6 +81,15 @@ export async function signedUpload(kind: UploadKind, userId: string, file: { nam
   return { bucket: rule.bucket, path, token: data.token, publicUrl: rule.bucket === PUBLIC_BUCKET ? publicUrl(path) : null };
 }
 
+/** Saves bytes the server already checked into private-files (classroom boards and snapshots). */
+export async function storePrivateBytes(path: string, bytes: Buffer, contentType: string): Promise<void> {
+  const { error } = await supabaseAdmin().storage.from(PRIVATE_BUCKET).upload(path, bytes, { contentType, upsert: false });
+  if (error) throw new Error(`Couldn't save the file: ${error.message}`);
+}
+
+/** A unique, sortable file-name stem. */
+export const fileStamp = stamp;
+
 /** A short-lived download link for a private file. */
 export async function signedDownload(path: string, seconds = 120): Promise<string> {
   const { data, error } = await supabaseAdmin().storage.from(PRIVATE_BUCKET).createSignedUrl(path, seconds);

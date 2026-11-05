@@ -23,6 +23,7 @@ import { LessonDetails } from "./LessonDetails";
 import { LessonLearning } from "./LessonLearning";
 import { LessonWhenWhere } from "./LessonLive";
 import { LessonVideoCard } from "./LessonVideo";
+import { LessonClassroomCard } from "./LessonClassroom";
 import { DisputeCard, DisputeDialog, ReportProblemCard, ReviewDisplay, ReviewForm, useLessonDispute, useLessonReview } from "./LessonPostLesson";
 import { LessonTimeline } from "./LessonTimeline";
 import { bookingRef, timeRange, tzShort, usePeople } from "./shared";
@@ -204,6 +205,12 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
           {b.mode === "online" && (
             <div className="order-1 min-w-0">
               <LessonVideoCard booking={b} canManage={isTutor || actor === "admin"} now={now} counterpart={isTutor ? people.counterpart : actor === "admin" ? "The family" : "You"} />
+            </div>
+          )}
+
+          {b.mode === "online" && (
+            <div className="order-3 min-w-0">
+              <LessonClassroomCard booking={b} />
             </div>
           )}
 

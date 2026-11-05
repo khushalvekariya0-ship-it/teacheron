@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarX2, Hourglass, Info, MapPin, MessagesSquare, PenLine, SearchX, Video } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, CalendarClock, CalendarX2, Hourglass, Info, MapPin, MessagesSquare, PenLine, SearchX, Video } from "lucide-react";
 import { JoinVideoButton, videoLabel } from "@/components/dashboard/bookings/LessonVideo";
 import { videoMeetingId } from "@/lib/video-link";
 import type { Booking, User } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useHydrated, useNow, useSession, useTutor, useViewerTimezone } from "@/lib/store/hooks";
 import { endMs, startMs } from "@/lib/booking";
+import { classWindow, EARLY_MINUTES } from "@/lib/classroom";
 import { actorFor } from "@/lib/permissions";
 import { subjectName } from "@/lib/data/catalog";
 import { formatTime, formatWeekdayDate } from "@/lib/format";
@@ -20,6 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, UnauthorizedState } from "@/components/ui/States";
 import { ChatPanel, type ChatLine } from "./ChatPanel";
+import { GuestJoin } from "./live/GuestJoin";
+import { LiveClassroom, type ClassChat } from "./live/LiveClassroom";
 import { VideoStage } from "./VideoStage";
 import { Whiteboard } from "./Whiteboard";
 
@@ -28,7 +32,7 @@ import { Whiteboard } from "./Whiteboard";
  * no external meeting link. `/classroom/demo` is an open room for trying it; every other id is a
  * booking, open only to the people in that lesson.
  */
-export function ClassroomView({ id }: { id: string }) {
+export function ClassroomView({ id, guestCode }: { id: string; guestCode?: string }) {
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
@@ -38,7 +42,7 @@ export function ClassroomView({ id }: { id: string }) {
       </div>
     );
   }
-  return id === "demo" ? <DemoRoom /> : <LessonRoom id={id} />;
+  return id === "demo" ? <DemoRoom /> : <LessonRoom id={id} guestCode={guestCode} />;
 }
 
 /* ─── Demo room ─────────────────────────────────────────────────────────────── */
@@ -71,13 +75,14 @@ function DemoRoom() {
 
 /* ─── A booked lesson ───────────────────────────────────────────────────────── */
 
-function LessonRoom({ id }: { id: string }) {
+function LessonRoom({ id, guestCode }: { id: string; guestCode?: string }) {
   const me = useSession();
   const bookings = useApp((s) => s.bookings);
   const booking = React.useMemo(() => bookings.find((b) => b.id === id), [bookings, id]);
   const now = useNow(15_000);
 
   if (!me) {
+    if (guestCode) return <GuestJoin bookingId={id} code={guestCode} />;
     return (
       <Gate>
         <UnauthorizedState next={`/classroom/${id}`} />
@@ -85,6 +90,7 @@ function LessonRoom({ id }: { id: string }) {
     );
   }
   const actor = booking ? actorFor(me, booking) : null;
+  if ((!booking || !actor || actor === "system") && guestCode) return <GuestJoin bookingId={id} code={guestCode} />;
   if (!booking || !actor || actor === "system") {
     return (
       <Gate>
@@ -122,22 +128,84 @@ function LessonRoom({ id }: { id: string }) {
       </Gate>
     );
   }
-  if ((booking.status !== "confirmed" && booking.status !== "in_progress") || endMs(booking) <= now) {
+  return <LessonGate booking={booking} me={me} actor={actor} lessonHref={lessonHref} lessonLink={lessonLink} now={now} />;
+}
+
+interface ClassInfo {
+  ready: boolean;
+  endedAt: string | null;
+}
+
+/**
+ * With live video set up (LiveKit), a lesson opens the live classroom inside its window (15 minutes
+ * before the start until 30 minutes after the end); before that, the page is for checking your camera,
+ * and it switches to the live room by itself when it opens. A lesson the tutor runs on Zoom / Google
+ * Meet keeps the classroom with the meeting's Join button (its video is there). Without live video set
+ * up, the classroom works as before: your own camera, the whiteboard and the chat.
+ */
+function LessonGate({ booking, me, actor, lessonHref, lessonLink, now }: { booking: Booking; me: User; actor: "booker" | "tutor" | "admin"; lessonHref: string; lessonLink: React.ReactNode; now: number }) {
+  const [info, setInfo] = React.useState<ClassInfo | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch(`/api/classroom/info?id=${encodeURIComponent(booking.id)}`)
+      .then((r) => r.json())
+      .then((d: Partial<ClassInfo> & { ok?: boolean }) => !cancelled && setInfo({ ready: !!d.ready && d.ok !== false, endedAt: d.endedAt ?? null }))
+      .catch(() => !cancelled && setInfo({ ready: false, endedAt: null }));
+    return () => {
+      cancelled = true;
+    };
+  }, [booking.id]);
+
+  const ended = (
+    <Gate>
+      <EmptyState
+        icon={<CalendarX2 />}
+        title={booking.status === "confirmed" || booking.status === "in_progress" || booking.status === "completed" ? "This lesson has ended" : "This lesson isn't taking place"}
+        description="Notes, homework, shared whiteboards and the transcript are on the lesson page."
+        action={lessonLink}
+      />
+    </Gate>
+  );
+
+  if (!info) {
     return (
-      <Gate>
-        <EmptyState
-          icon={<CalendarX2 />}
-          title={booking.status === "confirmed" || booking.status === "in_progress" || booking.status === "completed" ? "This lesson has ended" : "This lesson isn't taking place"}
-          description="Notes, homework and messages from the lesson are on the lesson page."
-          action={lessonLink}
-        />
-      </Gate>
+      <div className="mesh-gradient grid h-dvh place-items-center" role="status" aria-label="Opening the classroom">
+        <Skeleton className="h-40 w-80" />
+      </div>
     );
   }
+  if (info.ready && !booking.videoLink) {
+    const w = classWindow(booking, info.endedAt, now);
+    if (w.state === "upcoming") {
+      // More than a day away there's nothing to set up yet.
+      if (w.opensAt - now > 24 * 3600_000) {
+        return (
+          <Gate>
+            <EmptyState icon={<CalendarClock />} title="The classroom isn't open yet" description={`It opens ${EARLY_MINUTES} minutes before the lesson. ${w.label}.`} action={lessonLink} />
+          </Gate>
+        );
+      }
+      return <ActiveLesson booking={booking} me={me} actor={actor} leaveHref={lessonHref} started={false} liveOpensAt={w.opensAt} />;
+    }
+    if (!w.canJoin) return ended;
+    return <LiveLesson booking={booking} me={me} actor={actor} lessonHref={lessonHref} />;
+  }
+  if ((booking.status !== "confirmed" && booking.status !== "in_progress") || endMs(booking) <= now) return ended;
   return <ActiveLesson booking={booking} me={me} actor={actor} leaveHref={lessonHref} started={startMs(booking) <= now} />;
 }
 
-function ActiveLesson({ booking, me, actor, leaveHref, started }: { booking: Booking; me: User; actor: "booker" | "tutor" | "admin"; leaveHref: string; started: boolean }) {
+function LiveLesson({ booking, me, actor, lessonHref }: { booking: Booking; me: User; actor: "booker" | "tutor" | "admin"; lessonHref: string }) {
+  const router = useRouter();
+  const tz = useViewerTimezone();
+  const refresh = useApp((s) => s.refresh);
+  const chat = useLessonChat(booking, me, actor);
+  const tutor = useTutor(booking.tutorId);
+  const title = `${subjectName(booking.subject)} with ${actor === "tutor" ? chat.peerName : (tutor?.firstName ?? "your tutor")} · ${formatTime(booking.startUtc, tz)}`;
+  return <LiveClassroom bookingId={booking.id} title={title} chat={chat} onRefresh={() => void refresh()} onLeave={() => router.push(lessonHref)} />;
+}
+
+/** The lesson's chat is the family's existing conversation with the tutor (moderated and kept in the inbox). */
+function useLessonChat(booking: Booking, me: User, actor: "booker" | "tutor" | "admin"): ClassChat {
   const tz = useViewerTimezone();
   const tutor = useTutor(booking.tutorId);
   const users = useApp((s) => s.users);
@@ -152,7 +220,6 @@ function ActiveLesson({ booking, me, actor, leaveHref, started }: { booking: Boo
   const bookerName = booker ? `${booker.firstName} ${booker.lastName.charAt(0)}.` : "Your student";
   const peerName = actor === "tutor" ? bookerName : tutorName;
 
-  // The lesson's chat is the family's existing conversation with this tutor.
   const conversation = React.useMemo(() => {
     const between = conversations.filter((c) => c.tutorId === booking.tutorId && c.userId === booking.bookerId);
     return between.find((c) => (c.childId ?? null) === (booking.childId ?? null)) ?? between[0];
@@ -171,7 +238,7 @@ function ActiveLesson({ booking, me, actor, leaveHref, started }: { booking: Boo
     if (conversationId && actor !== "admin") markConversationRead(conversationId);
   }, [conversationId, actor, lines.length, markConversationRead]);
 
-  const send = async (body: string): Promise<string | null> => {
+  const onSend = async (body: string): Promise<string | null> => {
     let target = conversationId;
     if (!target) {
       if (actor !== "booker") return "The chat opens once the student has sent a first message.";
@@ -182,24 +249,40 @@ function ActiveLesson({ booking, me, actor, leaveHref, started }: { booking: Boo
     const sent = await sendMessage(target, body);
     return sent.ok ? null : sent.error;
   };
+  return {
+    lines,
+    onSend,
+    peerName,
+    disabledReason: actor === "admin" ? "Staff can view a classroom but can't post in its chat." : undefined,
+    note: `Messages here are saved to your conversation with ${peerName.split(" ")[0]}.`,
+  };
+}
+
+function ActiveLesson({ booking, me, actor, leaveHref, started, liveOpensAt }: { booking: Booking; me: User; actor: "booker" | "tutor" | "admin"; leaveHref: string; started: boolean; liveOpensAt?: number }) {
+  const tz = useViewerTimezone();
+  const tutor = useTutor(booking.tutorId);
+  const chat = useLessonChat(booking, me, actor);
+  const peerName = chat.peerName;
 
   return (
     <Room
       roomId={booking.id}
-      title={`${subjectName(booking.subject)} with ${actor === "tutor" ? bookerName : (tutor?.firstName ?? "your tutor")}`}
+      title={`${subjectName(booking.subject)} with ${actor === "tutor" ? peerName : (tutor?.firstName ?? "your tutor")}`}
       subtitle={`${formatWeekdayDate(booking.startUtc, tz)} · ${formatTime(booking.startUtc, tz)}`}
       chip={<LessonClock start={startMs(booking)} end={endMs(booking)} />}
       peerName={peerName}
       selfName={`${me.firstName} ${me.lastName}`}
-      status={started ? `Waiting for ${peerName.split(" ")[0]} to join` : `The lesson starts at ${formatTime(booking.startUtc, tz)}. You can set up now.`}
+      status={
+        liveOpensAt
+          ? `The live classroom opens at ${formatTime(new Date(liveOpensAt).toISOString(), tz)}. Check your camera meanwhile: this page switches over by itself.`
+          : started
+            ? `Waiting for ${peerName.split(" ")[0]} to join`
+            : `The lesson starts at ${formatTime(booking.startUtc, tz)}. You can set up now.`
+      }
+      liveSoon={!!liveOpensAt}
       leaveHref={leaveHref}
       video={booking.videoLink ? booking : undefined}
-      chat={{
-        lines,
-        onSend: send,
-        disabledReason: actor === "admin" ? "Staff can view a classroom but can't post in its chat." : undefined,
-        note: `Messages here are saved to your conversation with ${peerName.split(" ")[0]}.`,
-      }}
+      chat={chat}
     />
   );
 }
@@ -272,6 +355,7 @@ function Room({
   leaveHref,
   chat,
   video,
+  liveSoon,
 }: {
   roomId: string;
   title: string;
@@ -284,6 +368,8 @@ function Room({
   chat: { lines: ChatLine[]; onSend: (body: string) => string | null | Promise<string | null>; disabledReason?: string; note: string };
   /** A lesson that runs on the tutor's Zoom / Google Meet. */
   video?: Booking;
+  /** Live video is set up and this lesson's live room opens soon. */
+  liveSoon?: boolean;
 }) {
   const [panel, setPanel] = React.useState<"board" | "chat">("board");
   return (
@@ -310,11 +396,19 @@ function Room({
                 <li>The whiteboard — saved on this device, and live between your own windows</li>
                 <li>Chat, saved to your inbox</li>
               </ul>
-              <p className="mt-3 font-semibold text-ink">Not connected yet (needs a video service)</p>
-              <ul className="mt-2 list-disc space-y-1 pl-4">
-                <li>Seeing and hearing the other person</li>
-                <li>One board shared between two devices</li>
-              </ul>
+              {liveSoon ? (
+                <p className="mt-3">
+                  When the live classroom opens ({EARLY_MINUTES} minutes before the lesson), you see and hear each other, share screens and use one whiteboard together.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-3 font-semibold text-ink">Not connected yet (needs a video service)</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-4">
+                    <li>Seeing and hearing the other person</li>
+                    <li>One board shared between two devices</li>
+                  </ul>
+                </>
+              )}
             </PopoverContent>
           </Popover>
           <DarkModeToggle className="size-9" />

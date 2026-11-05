@@ -102,7 +102,7 @@ Full-screen, outside the site and dashboard layouts; `noindex` and disallowed in
 
 | Path | Audience | Purpose | Status | Rendering (preview → production) |
 |---|---|---|---|---|
-| `/classroom/[id]` | The booker and tutor of that booking (staff can view) | In-app lesson room: video stage on the left, infinite whiteboard and chat on the right (tabs below 1280px, stacked on phones). Opens for confirmed online lessons until they end; before the start it is a waiting room. Chat is the booking's existing conversation. | Built (own camera, mic, screen share, whiteboard and chat work; two-way media and cross-device board sync need the realtime service) | Client → Client + WebRTC SFU token from the API + realtime channel |
+| `/classroom/[id]` (`?g=` guest link) | The booker and tutor of that booking; staff with bookings.manage (host, audited); guests the tutor admits | Live lesson room (LiveKit): video grid / speaker view, screen share, shared whiteboard (tutor grants drawing, pastes and snips images, saves it to the lesson page), lesson chat, people, captions, transcript (PDF, saved for the lesson page), waiting room for guests, End class. Open 15 minutes before until 30 minutes after the lesson. Before that, and without LiveKit set up, the basic room: own camera, local whiteboard, chat. Zoom / Meet lessons keep the meeting's Join button. | Built | Client + LiveKit token from `/api/classroom/join` |
 | `/classroom/demo` | Everyone | Open demo room for trying the whiteboard, camera and chat without a booking | Built | Client |
 
 ## Admin console — `src/app/admin` (staff)

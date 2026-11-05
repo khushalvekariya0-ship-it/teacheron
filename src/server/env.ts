@@ -24,7 +24,19 @@ export const env = {
   resendUrl: (process.env.RESEND_API_URL || "https://api.resend.com").replace(/\/$/, ""),
   /** Set once a payment provider (Stripe) is connected; until then card/UPI charges are refused. */
   paymentsEnabled: false,
+  /** Live classroom media server (LiveKit Cloud or self-hosted). The key and secret never leave the server. */
+  livekitKey: process.env.LIVEKIT_API_KEY ?? "",
+  livekitSecret: process.env.LIVEKIT_API_SECRET ?? "",
+  /** What browsers connect to, e.g. wss://your-project.livekit.cloud */
+  livekitWsUrl: (process.env.LIVEKIT_WS_URL ?? "").replace(/\/$/, ""),
+  /** What this server calls for admin requests (closing a room). A bare origin; defaults to LIVEKIT_WS_URL as http(s). */
+  livekitHostUrl: (process.env.LIVEKIT_HOST_URL ?? "").replace(/\/$/, ""),
+  /** Optional: an AI recap of the lesson transcript (Google Gemini). Without it the transcript is kept, unsummarised. */
+  geminiKey: process.env.GEMINI_API_KEY ?? "",
 };
+
+/** Whether live video for lessons is connected (all three LiveKit settings present). */
+export const liveVideoReady = () => !!(env.livekitKey && env.livekitSecret && env.livekitWsUrl);
 
 export interface BackendStatus {
   database: boolean;

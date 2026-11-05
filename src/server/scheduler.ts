@@ -1,4 +1,5 @@
 import "server-only";
+import { closeFinishedClassrooms } from "./classroom";
 import { db } from "./db";
 import { runAction } from "./engine";
 import { emailNotifications } from "./notify-email";
@@ -13,7 +14,9 @@ export async function runScheduler(): Promise<number> {
   let emails: Promise<number> = Promise.resolve(0);
   const r = await runAction("runScheduledJobs", [], { userId: null }, (created) => (emails = emailNotifications(created)));
   await emails;
-  return r.ok ? (r.data as number) : 0;
+  // Live classrooms of finished lessons are closed, so a room can't be kept open after the lesson.
+  const closed = await closeFinishedClassrooms().catch((e) => (console.error("[scheduler] classrooms", e), 0));
+  return (r.ok ? (r.data as number) : 0) + closed;
 }
 
 export async function maybeRunScheduler(): Promise<void> {

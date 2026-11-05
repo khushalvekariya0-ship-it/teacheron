@@ -218,6 +218,54 @@ Providers** → open any provider; it shows this address with a copy button). Al
 - Nothing new goes into `.env.local`. The site only needs `NEXT_PUBLIC_SITE_URL` to be the real
   address (it is used for the return address after sign-in).
 
+## 9. Live classroom (video, screen share, shared whiteboard)
+
+Online lessons open the TutorLink classroom: tutor and student see and hear each other, share
+screens, draw on one whiteboard (the tutor can let the student draw, paste screenshots and save the
+board to the lesson page), use the lesson chat, live captions and a transcript, and the tutor can let
+in a guest from a guest link. Video goes through **LiveKit**, a media server. Until it's set up,
+lessons use the basic classroom (your own camera, a whiteboard on your device, the chat).
+
+**Option A: LiveKit Cloud (easiest).**
+
+1. Create an account at <https://cloud.livekit.io> and a project (choose the region closest to most of
+   your users).
+2. **Settings → API keys → Create key.** Copy the **API key**, the **API secret** (shown once) and the
+   project's **WebSocket URL** (`wss://<project>.livekit.cloud`).
+3. Put them in `.env.local` (never in chat):
+   ```
+   LIVEKIT_API_KEY=…
+   LIVEKIT_API_SECRET=…
+   LIVEKIT_WS_URL=wss://<project>.livekit.cloud
+   ```
+4. Rebuild and restart the site. A lesson's classroom now opens the live room 15 minutes before it
+   starts. The free plan has a monthly limit of minutes; check LiveKit's pricing page before launch.
+
+**Option B: your own server.** Run LiveKit on a server with a public address (see
+<https://docs.livekit.io/home/self-hosting/deployment/>), open its ports (7880 TCP for signalling
+through your HTTPS proxy, 7881 TCP and 50000–60000 UDP for media), and set the same three values.
+If browsers reach it through a path such as `wss://your-domain.com/livekit`, also set
+`LIVEKIT_HOST_URL=http://127.0.0.1:7880` (admin calls need a bare address).
+
+**Optional AI recap.** With `GEMINI_API_KEY` (from <https://aistudio.google.com/apikey>), the tutor's
+caption transcript gets a short recap (summary, what was taught, homework) on the lesson page. The
+transcript is sent to Google with contact details already hidden. Without the key nothing is sent and
+the transcript is kept as it is.
+
+How it behaves:
+
+- The room is open from 15 minutes before the lesson until 30 minutes after it ends, or until the tutor
+  presses **End class**. Rooms of finished lessons are closed automatically.
+- The tutor hosts. The student (or parent) joins from the lesson page. Staff with "Bookings" permission
+  can join as host; that's recorded in the audit log.
+- **Guest link** (People panel or the lesson page): someone without an account enters their name and
+  waits until the tutor admits them; it works only during this lesson, and "New link" or "Turn off"
+  stops the old one.
+- Chat in class is the family's normal conversation with the tutor, so contact details are blocked as
+  everywhere else. Images put on the whiteboard and boards saved to the lesson page are read for
+  contact details first; captions and transcripts have contact details hidden.
+- Lessons where the tutor added a Zoom or Google Meet link keep using that meeting for video.
+
 ---
 
 ## Optional extras
