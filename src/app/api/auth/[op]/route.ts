@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import type { Provider } from "@supabase/supabase-js";
@@ -6,7 +7,8 @@ import { hasPermission } from "@/lib/permissions";
 import { sendConsentRequest } from "@/server/consent";
 import { backendStatus } from "@/server/env";
 import { clientIp, json, rateLimit, readJson, sameOrigin, serverError, tooMany } from "@/server/http";
-import { accountById, currentSession, hasVerifiedFactor } from "@/server/session";
+import { accountById, authState, currentSession, hasVerifiedFactor } from "@/server/session";
+import { cancelLink, completeSignup, finishAddEmail, maskEmail, providerLabel, resendLinkCode, startAddEmail, verifyLinkCode } from "@/server/social";
 import { buildState } from "@/server/snapshot";
 import { contactIn, NAME_RULE } from "@/lib/domain/contact";
 import { isPostalCode, POSTAL_CODE, postalError } from "@/lib/postal";
@@ -101,6 +103,11 @@ export async function POST(request: Request, ctx: Ctx) {
         if (!user || user.status === "suspended") {
           await supabase.auth.signOut();
           return fail(user ? "This account is suspended. Contact support for help." : "We couldn't find your account. Contact support for help.", 403);
+        }
+        const [lock] = await db()`select pending_link from public.users where id = ${user.id}`;
+        if (lock?.pending_link) {
+          const p = lock.pending_link as { provider?: string };
+          return json({ ok: true, linkRequired: { provider: String(p.provider ?? ""), email: maskEmail(user.email) }, user: { firstName: user.firstName, role: user.role } });
         }
         await recordLogin(user.id, true, request);
         const mfa = hasVerifiedFactor(data.user);
@@ -358,6 +365,99 @@ export async function POST(request: Request, ctx: Ctx) {
         return json({ ok: true });
       }
 
+      case "complete-signup": {
+        // A first-time Google / Facebook / Apple account chooses its role (once).
+        const { session } = await authState();
+        if (!session) return fail("Please sign in again.", 401);
+        const parsed = z
+          .object({
+            role: z.enum(["student", "parent", "tutor"]),
+            ageBand: z.enum(["18+", "13-17", "under13"]).optional(),
+            parentEmail: z.string().trim().max(200).optional(),
+            country: z.string().max(2),
+            zip: z.string().trim().max(12).optional(),
+            timezone: zone,
+            terms: z.literal(true),
+          })
+          .safeParse(body);
+        if (!parsed.success) return fail(parsed.error.issues[0]?.path[0] === "terms" ? "Please accept the Terms of Service and Privacy Policy." : "Check the form and try again.");
+        const limit = rateLimit(`complete-signup:${session.user.id}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const r = await completeSignup(session.user.id, parsed.data);
+        if (!r.ok) {
+          if (r.deleted) await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          return fail(r.error, 400, r.deleted ? { deleted: true } : undefined);
+        }
+        let consent: { sent: boolean; error?: string } | undefined;
+        if (r.teen) {
+          const c = await sendConsentRequest(session.user.id, siteOrigin(request));
+          consent = c.ok ? { sent: true } : { sent: false, error: c.error };
+        }
+        await auditDirect(session.user.id, "account.role_chosen", "user", session.user.id, { role: r.role });
+        const next = r.role === "tutor" ? "/onboarding/tutor" : r.role === "student" ? "/onboarding/student" : safePath(body.next, "/dashboard");
+        return json({ ok: true, role: r.role, next, consent, state: await buildState(session.user.id) });
+      }
+
+      case "add-email": {
+        // A social account whose provider gave no email adds one (confirmed with a code).
+        const { session } = await authState();
+        if (!session) return fail("Please sign in again.", 401);
+        if (session.user.email) return fail("Your account already has an email address.");
+        const parsed = z.object({ email }).safeParse(body);
+        if (!parsed.success) return fail("Enter a valid email address.");
+        const limit = rateLimit(`add-email:${session.user.id}`, 5, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        if (!emailReady()) return fail("Emails can't be sent right now. Please try again later.", 503);
+        const r = await startAddEmail(session.user.id, parsed.data.email);
+        return r.ok ? json({ ok: true }) : fail(r.error);
+      }
+
+      case "add-email-verify": {
+        const { session } = await authState();
+        if (!session) return fail("Please sign in again.", 401);
+        const parsed = z.object({ code: z.string().max(40).transform(cleanCode) }).safeParse(body);
+        if (!parsed.success || !isCodeShape(parsed.data.code)) return fail("Enter the 6-digit code from the email.");
+        const limit = rateLimit(`add-email-verify:${session.user.id}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const r = await finishAddEmail(session.user.id, parsed.data.code);
+        return r.ok ? json({ ok: true, state: await buildState(session.user.id) }) : fail(r.error);
+      }
+
+      case "link-verify":
+      case "link-resend":
+      case "link-cancel": {
+        // A social sign-in attached to an existing account: confirm it with the emailed code, or remove it.
+        const { linkPending } = await authState();
+        const { data: au } = await supabase.auth.getUser();
+        if (!au.user || !linkPending) return fail("There's nothing waiting to be confirmed. Please sign in again.", 401);
+        const uid = au.user.id;
+        if (op === "link-resend") {
+          const limit = rateLimit(`link-resend:${uid}`, 3, 15 * 60_000);
+          if (!limit.ok) return tooMany(limit.retryAfterSec);
+          await resendLinkCode(uid);
+          return json({ ok: true });
+        }
+        if (op === "link-cancel") {
+          const r = await cancelLink(supabase, uid);
+          if (!r.ok) return fail(r.error);
+          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          return json({ ok: true, state: await buildState(null) });
+        }
+        const parsed = z.object({ code: z.string().max(40).transform(cleanCode) }).safeParse(body);
+        if (!parsed.success || !isCodeShape(parsed.data.code)) return fail("Enter the 6-digit code from the email.");
+        const limit = rateLimit(`link-verify:${uid}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const r = await verifyLinkCode(uid, parsed.data.code);
+        if (!r.ok) return fail(r.error);
+        await auditDirect(uid, "security.sign_in_linked", "user", uid, { provider: r.provider });
+        await notifyDirect(uid, { title: `${providerLabel(r.provider)} sign-in connected`, body: `You can now sign in with ${providerLabel(r.provider)} too. If this wasn't you, change your password and contact support.`, href: "/dashboard/settings" }, siteOrigin(request));
+        await recordLogin(uid, true, request);
+        const after2 = await authState();
+        if (after2.mfaPending) return json({ ok: true, mfaRequired: true });
+        const me = after2.session?.user;
+        return json({ ok: true, user: me ? { firstName: me.firstName, role: me.role, needsRole: !!me.needsRole } : undefined, state: await buildState(me?.id ?? null) });
+      }
+
       case "consent": {
         const session = await currentSession();
         if (!session) return fail("Please sign in to continue.", 401);
@@ -381,13 +481,22 @@ export async function GET(request: Request, ctx: Ctx) {
     if (op === "oauth") {
       const provider = url.searchParams.get("provider") ?? "";
       const next = safePath(url.searchParams.get("next"));
+      // Only pre-selects the choice on /welcome for a new account; the server saves the role chosen there.
+      const roleHint = ["student", "parent", "tutor"].includes(url.searchParams.get("role") ?? "") ? `&role=${url.searchParams.get("role")}` : "";
       if (!(await enabledProviders()).includes(provider)) return NextResponse.redirect(new URL(`/login?error=provider`, siteOrigin(request)));
+      const limit = rateLimit(`oauth:${clientIp(request)}`, 20, 10 * 60_000);
+      if (!limit.ok) return NextResponse.redirect(new URL(`/login?error=busy`, siteOrigin(request)));
+      // Which provider the callback should check (the sign-in itself is protected by PKCE and Supabase's state).
+      (await cookies()).set("tl_oauth", provider, { httpOnly: true, sameSite: "lax", secure: siteOrigin(request).startsWith("https://"), path: "/auth/callback", maxAge: 600 });
       const supabase = await supabaseForRequest();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider as Provider,
-        options: { redirectTo: `${siteOrigin(request)}/auth/callback?next=${encodeURIComponent(next)}`, skipBrowserRedirect: true },
+        options: { redirectTo: `${siteOrigin(request)}/auth/callback?next=${encodeURIComponent(next)}${roleHint}`, skipBrowserRedirect: true },
       });
-      if (error || !data.url) return NextResponse.redirect(new URL(`/login?error=provider`, siteOrigin(request)));
+      if (error || !data.url) {
+        console.error("[auth/oauth] couldn't start", provider, "sign-in:", error?.message ?? "no URL");
+        return NextResponse.redirect(new URL(`/login?error=provider`, siteOrigin(request)));
+      }
       return NextResponse.redirect(data.url);
     }
     return json({ ok: false, error: "Not found." }, { status: 404 });

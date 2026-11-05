@@ -50,8 +50,10 @@ export async function POST(request: Request) {
   const action = typeof body?.action === "string" ? (body.action as ActionName) : null;
   if (!action || !(action in ACTION_ARGS)) return json({ result: fail("Unknown action.") }, { status: 400 });
   try {
-    const { session, mfaPending } = await authState();
+    const { session, mfaPending, linkPending } = await authState();
+    if (linkPending) return json({ result: fail("Enter the code we emailed you to confirm your new sign-in method."), linkRequired: linkPending }, { status: 401 });
     if (mfaPending) return json({ result: fail("Enter the 6-digit code from your authenticator app to continue."), mfaRequired: true }, { status: 401 });
+    if (session?.user.needsRole) return json({ result: fail("Finish creating your account first: choose Student, Parent or Tutor."), needsRole: true }, { status: 403 });
     const limit = rateLimit(`act:${session?.user.id ?? clientIp(request)}`, 120, 60_000);
     if (!limit.ok) return tooMany(limit.retryAfterSec);
     if (!session) return json({ result: fail("Please sign in to continue."), state: await buildState(null) });

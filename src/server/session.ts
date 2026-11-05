@@ -41,21 +41,44 @@ function tokenAal(token: string | undefined): string | null {
 
 export const hasVerifiedFactor = (u: AuthUser) => (u.factors ?? []).some((f) => f.status === "verified");
 
-/** The request's sign-in, including whether it still owes a two-step code. */
-export async function authState(): Promise<{ session: Session | null; mfaPending: boolean }> {
-  if (!env.supabaseUrl || !env.supabaseAnonKey || !env.dbUrl) return { session: null, mfaPending: false };
-  const supabase = await supabaseForRequest();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return { session: null, mfaPending: false };
-  if (hasVerifiedFactor(data.user)) {
-    const { data: s } = await supabase.auth.getSession();
-    if (tokenAal(s.session?.access_token) !== "aal2") return { session: null, mfaPending: true };
-  }
-  const user = await accountById(data.user.id);
-  return { session: user ? { authUser: data.user, user } : null, mfaPending: false };
+/** A Google / Facebook / Apple sign-in attached to this account, waiting for the email code. */
+export interface LinkPending {
+  provider: string;
+  email: string;
 }
 
-/** The signed-in account, or null when signed out, still owing a two-step code, or not configured. */
+export interface AuthState {
+  session: Session | null;
+  mfaPending: boolean;
+  linkPending: LinkPending | null;
+}
+
+/**
+ * The request's sign-in, including whether it still owes a two-step code or the code that confirms a
+ * newly attached social sign-in. Either way the account counts as signed out until then.
+ */
+export async function authState(): Promise<AuthState> {
+  const out: AuthState = { session: null, mfaPending: false, linkPending: null };
+  if (!env.supabaseUrl || !env.supabaseAnonKey || !env.dbUrl) return out;
+  const supabase = await supabaseForRequest();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return out;
+  const [lock] = await db()`select pending_link, email from public.users where id = ${data.user.id}`;
+  const pending = lock?.pending_link as { provider?: string } | null;
+  if (pending) return { ...out, linkPending: { provider: String(pending.provider ?? ""), email: String(lock.email ?? "").replace(/^(.{1,2})[^@]*@/, "$1***@") } };
+  if (hasVerifiedFactor(data.user)) {
+    const { data: s } = await supabase.auth.getSession();
+    if (tokenAal(s.session?.access_token) !== "aal2") return { ...out, mfaPending: true };
+  }
+  const user = await accountById(data.user.id);
+  return { ...out, session: user ? { authUser: data.user, user } : null };
+}
+
+/**
+ * The signed-in account, or null when signed out, still owing a code, not configured — or a first-time
+ * social account that hasn't chosen its role yet (it can only finish signing up).
+ */
 export async function currentSession(): Promise<Session | null> {
-  return (await authState()).session;
+  const { session } = await authState();
+  return session && !session.user.needsRole ? session : null;
 }

@@ -296,6 +296,26 @@ export function DashboardShell({ area, children }: { area: "app" | "admin"; chil
     );
   }
 
+  // A first-time Google / Facebook / Apple account chooses Student, Parent or Tutor before anything else.
+  if (user.needsRole) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-page px-4">
+        <div className="w-full max-w-md rounded-2xl border border-line bg-surface">
+          <div className="border-b border-line px-6 py-4">
+            <Logo />
+          </div>
+          <div className="space-y-4 px-6 py-8 text-center">
+            <h1 className="text-lg font-semibold text-ink">Finish creating your account</h1>
+            <p className="text-sm text-muted">Choose whether you&apos;re joining as a student, parent or tutor. It takes a few seconds.</p>
+            <Button asChild>
+              <Link href="/welcome">Continue</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const staff = isStaff(user);
   if ((area === "admin" && !staff) || (area === "app" && staff)) {
     return (

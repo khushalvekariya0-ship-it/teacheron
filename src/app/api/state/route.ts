@@ -15,10 +15,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   if (!backendStatus().database) return json({ state: offlineState(), config: clientConfig() });
   try {
-    const { session, mfaPending } = await authState();
+    const { session, mfaPending, linkPending } = await authState();
     const state = await buildState(session?.user.id ?? null);
     after(maybeRunScheduler);
-    return json({ state, config: clientConfig(), mfaRequired: mfaPending });
+    return json({ state, config: clientConfig(), mfaRequired: mfaPending, linkRequired: linkPending });
   } catch (e) {
     return serverError(e, "state");
   }

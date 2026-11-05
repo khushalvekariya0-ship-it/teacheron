@@ -1,12 +1,21 @@
 "use client";
 
 import * as React from "react";
+import { cn } from "@/lib/utils";
 import { AppleIcon, FacebookIcon, GoogleIcon } from "./SocialIcons";
 
-const PROVIDERS: { id: string; name: string; icon: React.ReactNode }[] = [
-  { id: "google", name: "Google", icon: <GoogleIcon className="size-5" /> },
-  { id: "facebook", name: "Facebook", icon: <FacebookIcon className="size-5" /> },
-  { id: "apple", name: "Apple", icon: <AppleIcon className="size-5 text-ink" /> },
+/*
+ * "Continue with Google / Facebook / Apple" — real OAuth / OpenID Connect sign-in through Supabase Auth
+ * (/api/auth/oauth → the provider → /auth/callback). Styled after each provider's button guidelines:
+ * Google's neutral button, Facebook blue (#1877F2) with the white "f", Apple black (white in dark mode).
+ * Only providers switched on in Supabase (Authentication → Sign In / Providers) are shown, so no button
+ * appears that can't work. A first-time social sign-in then chooses Student, Parent or Tutor (/welcome).
+ */
+
+const PROVIDERS: { id: "google" | "facebook" | "apple"; name: string; className: string; icon: React.ReactNode }[] = [
+  { id: "google", name: "Google", className: "border border-line-strong bg-surface text-ink hover:bg-canvas", icon: <GoogleIcon className="size-5" /> },
+  { id: "facebook", name: "Facebook", className: "border border-[#1877F2] bg-[#1877F2] text-white hover:border-[#166FE5] hover:bg-[#166FE5]", icon: <FacebookIcon className="size-5" onBrand /> },
+  { id: "apple", name: "Apple", className: "border border-ink bg-ink text-on-ink hover:opacity-90", icon: <AppleIcon className="size-5" /> },
 ];
 
 /** Social sign-ins switched on in Supabase (Authentication → Providers). Empty until one is configured. */
@@ -26,23 +35,23 @@ export function useEnabledProviders(): string[] | null {
 }
 
 /**
- * "Continue with Google / Facebook / Apple" (and corporate SSO through Microsoft) — real OAuth sign-in
- * through Supabase. Only providers the owner switched on are shown; with none, nothing renders.
- * A first-time social sign-in creates a student account.
+ * The social sign-in buttons. `role` (from the sign-up page) only pre-selects the choice on /welcome;
+ * the role itself is chosen there and saved by the server.
  */
-export function SocialSignIn({ next, providers, divider }: { next: string | null; providers: string[]; divider?: React.ReactNode }) {
+export function SocialSignIn({ next, providers, divider, role }: { next: string | null; providers: string[]; divider?: React.ReactNode; role?: "student" | "parent" | "tutor" }) {
   const shown = PROVIDERS.filter((p) => providers.includes(p.id));
   const sso = providers.includes("azure");
   if (!shown.length && !sso) return null;
-  const href = (id: string) => `/api/auth/oauth?provider=${id}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
+  const href = (id: string) => `/api/auth/oauth?provider=${id}${next ? `&next=${encodeURIComponent(next)}` : ""}${role ? `&role=${role}` : ""}`;
   return (
     <>
-      <div className="mt-7 space-y-3">
+      <div className="mt-7 space-y-3" data-social-signin="">
         {shown.map((p) => (
           <a
             key={p.id}
             href={href(p.id)}
-            className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line-strong bg-surface text-[15px] font-medium text-ink shadow-xs transition-colors hover:border-subtle hover:bg-canvas active:translate-y-px"
+            data-provider={p.id}
+            className={cn("flex h-12 w-full items-center justify-center gap-3 rounded-full text-[15px] font-medium shadow-xs transition-colors active:translate-y-px", p.className)}
           >
             {p.icon}
             Continue with {p.name}

@@ -84,6 +84,19 @@ interface ClientOnly {
   resendConfirmation(email: string): Promise<Result>;
   /** Checks the 6-digit sign-up code on the server and confirms the email (doesn't sign in). */
   verifyEmail(email: string, code: string): Promise<Result>;
+  /**
+   * A Google / Facebook / Apple sign-in attached to an existing account waits for the code emailed to that
+   * account (`linkRequired`); confirmLink() enters it, cancelLink() removes that sign-in method instead.
+   */
+  linkRequired: { provider: string; email: string } | null;
+  confirmLink(code: string): Promise<Result<{ mfaRequired?: boolean; role?: Role; needsRole?: boolean }>>;
+  resendLinkCode(): Promise<Result>;
+  cancelLink(): Promise<Result>;
+  /** A first-time social account chooses its role (once). `next` is where its setup continues. */
+  completeSignup(input: { role: "student" | "parent" | "tutor"; ageBand?: "18+" | "13-17" | "under13"; parentEmail?: string; country: string; zip?: string; terms: true; next?: string }): Promise<Result<{ next: string; consent?: { sent: boolean; error?: string } }> & { deleted?: boolean }>;
+  /** A social account without an email adds one: a code goes to it, then finishAddEmail() confirms it. */
+  startAddEmail(email: string): Promise<Result>;
+  finishAddEmail(code: string): Promise<Result>;
   resendParentalConsent(): Promise<Result>;
 }
 
@@ -139,6 +152,7 @@ export const useApp = create<AppState>()(
       const apply = (seq: number, body: Record<string, unknown> | null) => {
         if (body?.config) set({ config: body.config as ClientConfig });
         if (body && "mfaRequired" in body) set({ mfaRequired: body.mfaRequired === true });
+        if (body && "linkRequired" in body) set({ linkRequired: (body.linkRequired as { provider: string; email: string } | null) ?? null });
         if (!body?.state || seq < applied) return;
         applied = seq;
         set({ ...(body.state as Data), hydrated: true });
@@ -183,6 +197,7 @@ export const useApp = create<AppState>()(
         setHydrated: () => set({ hydrated: true }),
         config: { configured: true, paymentsEnabled: false, uploads: true, email: true },
         mfaRequired: false,
+        linkRequired: null,
         compare: [],
         toggleCompare(tutorId) {
           const list = get().compare;
@@ -208,7 +223,7 @@ export const useApp = create<AppState>()(
 
         async signIn(email, password) {
           const r = await auth<{ user: { firstName: string; role: Role }; mfaRequired?: boolean }>("sign-in", { email, password });
-          if (r.ok) set({ mfaRequired: !!r.data.mfaRequired });
+          if (r.ok) set({ mfaRequired: !!r.data.mfaRequired, linkRequired: (r.data as { linkRequired?: { provider: string; email: string } }).linkRequired ?? null });
           return r.ok ? ok({ ...r.data.user, mfaRequired: !!r.data.mfaRequired }) : r;
         },
         async verifyMfa(code, factorId) {
@@ -241,7 +256,7 @@ export const useApp = create<AppState>()(
         },
         async logout(everywhere) {
           await auth("sign-out", { scope: everywhere === true ? "global" : "local" });
-          set({ compare: [], mfaRequired: false });
+          set({ compare: [], mfaRequired: false, linkRequired: null });
         },
         requestPasswordReset: async (email) => {
           const r = await auth("forgot", { email });
@@ -269,6 +284,40 @@ export const useApp = create<AppState>()(
         },
         verifyEmail: async (email, code) => {
           const r = await auth("verify-email", { email, code });
+          return r.ok ? ok(undefined) : r;
+        },
+        confirmLink: async (code) => {
+          const r = await auth<{ mfaRequired?: boolean; user?: { role: Role; needsRole?: boolean } }>("link-verify", { code });
+          if (!r.ok) return r;
+          set({ linkRequired: null, mfaRequired: !!r.data.mfaRequired });
+          return ok({ mfaRequired: !!r.data.mfaRequired, role: r.data.user?.role, needsRole: r.data.user?.needsRole });
+        },
+        resendLinkCode: async () => {
+          const r = await auth("link-resend", {});
+          return r.ok ? ok(undefined) : r;
+        },
+        cancelLink: async () => {
+          const r = await auth("link-cancel", {});
+          if (r.ok) set({ linkRequired: null });
+          return r.ok ? ok(undefined) : r;
+        },
+        completeSignup: async (input) => {
+          const timezone = (() => {
+            try {
+              return Intl.DateTimeFormat().resolvedOptions().timeZone;
+            } catch {
+              return undefined;
+            }
+          })();
+          const r = await auth<{ next: string; consent?: { sent: boolean; error?: string }; deleted?: boolean }>("complete-signup", { ...input, timezone });
+          return r.ok ? ok({ next: r.data.next, consent: r.data.consent }) : r;
+        },
+        startAddEmail: async (email) => {
+          const r = await auth("add-email", { email });
+          return r.ok ? ok(undefined) : r;
+        },
+        finishAddEmail: async (code) => {
+          const r = await auth("add-email-verify", { code });
           return r.ok ? ok(undefined) : r;
         },
         resendParentalConsent: async () => {

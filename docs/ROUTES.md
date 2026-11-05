@@ -46,7 +46,8 @@ Layout: split screen with logo, "Back to site", preview disclaimer and legal lin
 
 | Path | Audience | Purpose | Status | Rendering |
 |---|---|---|---|---|
-| `/login` (`?next=`) | Signed-out | Email + password (demo password `tutorlink-demo`), one-click demo accounts, and Google / Apple / Facebook / SSO through an account-picker dialog that stands in for the provider's window | Built | Static + Client → Static + Client (`POST /v1/auth/login`) |
+| `/login` (`?next=`, `?error=`, `?link=1`) | Signed-out | Email + password, and "Continue with Google / Facebook / Apple" (real sign-in through Supabase Auth; a button shows only when that provider is switched on). A social sign-in that lands on an existing account asks for the code emailed to that account ("Confirm it's you") | Built | Static + Client (`POST /api/auth/sign-in`, `GET /api/auth/oauth`, `POST /api/auth/link-verify`) |
+| `/welcome` (`?role=&next=`) | New Google / Facebook / Apple accounts | Add an email if the provider gave none (code), then choose Student / Parent / Tutor once, age, country and ZIP/PIN, terms | Built | Static + Client (`POST /api/auth/complete-signup`, `/api/auth/add-email`) |
 | `/register` | Signed-out | Role choice (student, parent, tutor), age band (18+ or 13–17 with parent email; under-13 blocked), password ≥ 10; the success screen shows the verification email in a "preview inbox" | Built | Static + Client |
 | `/forgot-password` | Signed-out | Request a reset email (6-digit code + link, same answer for unknown emails), then type the code to continue | Built | Static + Client (`POST /api/auth/forgot`, `/api/auth/reset-code`) |
 | `/reset-password` (`?token=`) | Signed-out | Set and confirm a new password from the emailed link or the code (15-minute expiry, single use), then sign in with it | Built | Static + Client (`POST /api/auth/reset-check`, `/api/auth/reset`) |

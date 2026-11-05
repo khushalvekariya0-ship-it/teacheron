@@ -86,7 +86,7 @@ function arraySpec(
 
 const USER: Record<string, Col> = {
   id: ["id", "v"], role: ["role", "v"], firstName: ["first_name", "v"], lastName: ["last_name", "v"], email: ["email", "v"],
-  phone: ["phone", "v", true], country: ["country", "v", true], city: ["city", "v", true], state: ["state", "v", true], zip: ["zip", "v", true],
+  phone: ["phone", "v", true], needsRole: ["needs_role", "flag", true], country: ["country", "v", true], city: ["city", "v", true], state: ["state", "v", true], zip: ["zip", "v", true],
   timezone: ["timezone", "v"], createdAt: ["created_at", "ts"], emailVerified: ["email_verified", "v"], mfaEnabled: ["mfa_enabled", "flag", true],
   tutorId: ["tutor_id", "v", true], permissions: ["permissions", "v", true], status: ["status", "v"],
   parentalConsent: ["parental_consent", "json", true], lastLoginAt: ["last_login_at", "ts", true], chatModeration: ["chat_moderation", "json", true],

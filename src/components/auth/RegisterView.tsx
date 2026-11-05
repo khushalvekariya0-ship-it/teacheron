@@ -24,6 +24,7 @@ import { destinationFor, safeNext } from "./authUtils";
 import { AddressLookup } from "@/components/domain/AddressLookup";
 import { PasswordInput, PasswordStrengthMeter } from "./PasswordField";
 import { EmailCodeForm } from "./EmailCodeForm";
+import { SocialSignIn, useEnabledProviders } from "./ProviderSignIn";
 import { isPostalCode, POSTAL_MAX_LENGTH, postalError, postalLabel, postalNumeric, postalPlaceholder, postalRequired } from "@/lib/postal";
 import { COUNTRIES, DEFAULT_COUNTRY, guessCountry, isCountryCode } from "@/lib/location";
 
@@ -129,6 +130,7 @@ export function RegisterView() {
   const me = useSession();
   const signUp = useApp((s) => s.signUp);
   const signIn = useApp((s) => s.signIn);
+  const providers = useEnabledProviders();
   const resend = useApp((s) => s.resendConfirmation);
   const logout = useApp((s) => s.logout);
   const [serverError, setServerError] = React.useState<string | null>(null);
@@ -370,6 +372,20 @@ export function RegisterView() {
           </Link>
         </p>
       </motion.div>
+
+      {/* Sign up with Google / Facebook / Apple: the role is chosen on the next page (this pre-selects it). */}
+      <SocialSignIn
+        next={next}
+        providers={providers ?? []}
+        role={role}
+        divider={
+          <div className="my-6 flex items-center gap-4" aria-hidden>
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-[14px] text-muted">or sign up with email</span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        }
+      />
 
       <motion.form
         initial={{ opacity: 0, y: 8 }}

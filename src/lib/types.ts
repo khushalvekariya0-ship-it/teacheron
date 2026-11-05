@@ -20,6 +20,8 @@ export interface User {
   phone?: string;
   /** ISO country code ("US", "IN"); the US when not set. */
   country?: string;
+  /** A first-time Google / Facebook / Apple account that hasn't chosen Student, Parent or Tutor yet. */
+  needsRole?: boolean;
   city?: string;
   /** The 2-letter code in the US, the state/province name elsewhere. */
   state?: string;

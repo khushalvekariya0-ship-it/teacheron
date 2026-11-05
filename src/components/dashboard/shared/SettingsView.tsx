@@ -138,7 +138,10 @@ function ProfileTab({ me }: { me: User }) {
               <span className="inline-flex items-center gap-1.5">
                 {me.emailVerified ? (
                   <>
-                    <BadgeCheck className="size-3.5 text-ink" aria-hidden /> Verified. Contact support to change your sign-in email.
+                    <BadgeCheck className="size-3.5 text-ink" aria-hidden />
+                    {/@privaterelay\.appleid\.com$/i.test(me.email)
+                      ? " Apple's private relay address: emails reach you through Apple, and your real address stays hidden."
+                      : " Verified. Contact support to change your sign-in email."}
                   </>
                 ) : (
                   "Not verified yet — check your inbox for the verification link."

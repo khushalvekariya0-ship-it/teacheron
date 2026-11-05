@@ -19,6 +19,7 @@ import { ROLE_LABEL } from "@/lib/data/users";
 import { destinationFor, safeNext } from "./authUtils";
 import { PasswordInput } from "./PasswordField";
 import { EmailCodeForm } from "./EmailCodeForm";
+import { LinkStep } from "./LinkStep";
 import { SocialSignIn, useEnabledProviders } from "./ProviderSignIn";
 import { setRememberMe } from "@/lib/remember";
 
@@ -33,7 +34,12 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 const LINK_ERRORS: Record<string, string> = {
   link: "That sign-in link has expired or was already used. Sign in below, or request a new link.",
   reset: "That password reset link has expired or was already used. Request a new one from “Forgot your password?”.",
-  provider: "That sign-in option isn't available right now. Use your email and password instead.",
+  provider: "That sign-in option didn't work just now. Try again, or use your email and password instead.",
+  cancelled: "Sign-in was cancelled. Choose a way to continue below.",
+  expired: "That sign-in took too long or was opened in a different browser. Please try again.",
+  no_email: "Your account with that provider has no email address, so it can't be used here. Add an email there, or sign up with your email below.",
+  account_exists: "This email already has a TutorLink account. Sign in with your email and password below.",
+  busy: "Too many sign-in attempts. Please wait a few minutes and try again.",
   suspended: "This account is suspended. Contact support for help.",
 };
 
@@ -52,6 +58,7 @@ export function LoginView() {
   const [redirecting, setRedirecting] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
   const mfaRequired = useApp((s) => s.mfaRequired);
+  const linkRequired = useApp((s) => s.linkRequired);
   const siteEmail = useApp((s) => s.config.email);
   /** The email of an account that still has to enter its sign-up code. */
   const [confirming, setConfirming] = React.useState<string | null>(null);
@@ -75,7 +82,7 @@ export function LoginView() {
       return;
     }
     setRememberMe(remember);
-    if (res.data.mfaRequired) return; // the code step below takes over
+    if (res.data.mfaRequired || useApp.getState().linkRequired) return; // a code step takes over
     setRedirecting(true);
     toast.success(`Welcome back, ${res.data.firstName}`);
     router.push(destinationFor(res.data.role, next));
@@ -90,6 +97,7 @@ export function LoginView() {
   const busy = isSubmitting || redirecting;
   const signupHref = (role: "student" | "tutor") => `/register?role=${role}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
 
+  if (linkRequired) return <LinkStep next={next} />;
   if (mfaRequired) return <MfaStep next={next} />;
 
   if (confirming) {

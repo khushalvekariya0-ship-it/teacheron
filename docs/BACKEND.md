@@ -7,7 +7,7 @@ How the live backend works. Setup steps for the site owner are in [SUPABASE_SETU
 | Piece | Where | Role |
 |---|---|---|
 | Postgres (Supabase) | `supabase/migrations/*.sql` | All data. Every table has RLS on with **no policies** and no grants to `anon`/`authenticated`, so the public API key can't read or write anything. |
-| Supabase Auth | `src/app/api/auth/[op]`, `src/app/auth/{callback,confirm}` | Passwords, email confirmation, password reset, OAuth. Session lives in Supabase's cookies. Triggers on `auth.users` create/update/delete the `public.users` row (role whitelisted to student / parent / tutor). |
+| Supabase Auth | `src/app/api/auth/[op]`, `src/app/auth/{callback,confirm}` | Passwords, email confirmation, password reset, Google / Facebook / Apple sign-in. Session lives in Supabase's cookies. Triggers on `auth.users` create/update/delete the `public.users` row (role whitelisted to student / parent / tutor). |
 | Supabase Storage | `src/server/media.ts`, `POST /api/uploads`, `GET /api/files` | `public-media` (tutor photos, intro videos) and `private-files` (verification documents, message / homework / dispute / job attachments). Browsers upload with one-time signed URLs; private files open only through `/api/files`, which checks access. |
 | Domain rules | `src/lib/domain/actions.ts` | Every business rule (bookings, refunds, messaging, moderation, catalog, content …) as pure functions over a `Data` object. |
 | API | `src/app/api/{state,actions}` | `GET /api/state` returns what the viewer may see; `POST /api/actions` runs one action. |
@@ -63,7 +63,7 @@ Online lessons open the TutorLink classroom by default. A tutor who teaches on Z
 
 ## Email codes (OTP)
 
-Both one-time codes are 6 digits, live in `public.email_codes` (`src/server/email-codes.ts`) and are kept apart by `purpose`: `verify_email` (first-time email check after sign-up) and `password_reset` (Forgot password; `reset_id` points at the reset link it unlocks). The purpose is part of the stored SHA-256 fingerprint and of every lookup, so a code made for one purpose is refused for the other. A newer code cancels older ones of the same purpose; codes expire after 15 minutes, work once, and the 5th wrong try cancels a code. Migration: `20261104000200_email_codes.sql` (it also moved reset codes out of `password_resets`).
+All one-time codes are 6 digits, live in `public.email_codes` (`src/server/email-codes.ts`) and are kept apart by `purpose`: `verify_email` (first-time email check after sign-up), `password_reset` (Forgot password; `reset_id` points at the reset link it unlocks), `link_account` (confirming a Google / Facebook / Apple sign-in on an existing account) and `add_email` (an account without an email adds one; `target_email` holds the address). The purpose is part of the stored SHA-256 fingerprint and of every lookup, so a code made for one purpose is refused for the other. A newer code cancels older ones of the same purpose; codes expire after 15 minutes, work once, and the 5th wrong try cancels a code. Migration: `20261104000200_email_codes.sql` (it also moved reset codes out of `password_resets`).
 
 ## First-time email verification
 
@@ -93,6 +93,24 @@ Limits: 5 `forgot` requests per 15 minutes per IP, 3 reset emails per hour per a
 
 Pages: `/forgot-password` (`ForgotPasswordView`: email, then the code box), `/reset-password` (`ResetPasswordView`: new password + confirm), and `/login?reset=done` shows "Your password was changed".
 
+## Google / Facebook / Apple sign-in
+
+Supabase Auth runs the OAuth 2.0 / OpenID Connect flow (PKCE, `state`, the provider's token and
+`id_token` checks); provider client IDs and secrets live only in the Supabase dashboard (setup:
+`SUPABASE_SETUP.md` step 8). The site adds account rules on top (`src/server/social.ts`, migration
+`20261104000600_social_sign_in.sql`):
+
+| Step | Where | What happens |
+|---|---|---|
+| Start | `GET /api/auth/oauth?provider=&next=&role=` | Only providers switched on in Supabase (`GET /api/auth/providers`, which reads Supabase's `/auth/v1/settings`); 20 starts per 10 minutes per IP. `signInWithOAuth` stores the PKCE verifier in an HTTP-only cookie; a short-lived HTTP-only `tl_oauth` cookie (path `/auth/callback`, SameSite=Lax, 10 minutes) carries the sign-up role hint and `next`. |
+| Return | `GET /auth/callback` | `exchangeCodeForSession` (a code works once, only with the verifier cookie from the same browser). Provider errors map to `/login?error=cancelled|expired|no_email|account_exists|provider`. Suspended accounts are signed out. |
+| New person | `/welcome`, `POST /api/auth/complete-signup` | The database trigger creates `public.users` with `needs_role = true` (no role in the sign-up metadata). Until `complete-signup` runs, `/api/state` returns no data and `/api/actions` answers 403 `{ needsRole }`. It takes role (student / parent / tutor), age band, parent email, country, ZIP/PIN and `terms: true`; same rules as a password sign-up (under 13: the sign-in is deleted; 13–17: parent approval email). It works once: afterwards the role can't change. |
+| Same email as an existing account | `/login?link=1`, `POST /api/auth/link-verify | link-resend | link-cancel` | Supabase attaches a provider identity with a *verified* email to the account with that email (an unverified one is refused, so no duplicate account is made). The site then sets `users.pending_link` and emails a `link_account` code to the account's address; meanwhile the session counts as signed out (`/api/state` returns `linkRequired: { provider, email (masked) }`, actions 401, password sign-in also returns `linkRequired`). The right code adds the identity id to `users.trusted_identities`, records the login, notifies the owner and continues (two-step login still applies to staff). `link-cancel` ("This wasn't me") unlinks that identity and signs out. Accounts whose email was never confirmed are cleaned by Supabase itself: it removes their unconfirmed password and identities before linking. |
+| No email from the provider | `/welcome`, `POST /api/auth/add-email`, `add-email-verify` | The account has `email = ''` (the unique index ignores empty emails). It must add an email that no other account uses and confirm it with an `add_email` code (5 per hour) before choosing a role. Apple private-relay addresses are normal emails. |
+
+Supabase's session cookies are always set HTTP-only, SameSite=Lax, and Secure on https
+(`src/server/supabase.ts`). Logs show account ids and providers only, never tokens or codes.
+
 ## Email
 
 `src/server/email.ts` sends through an SMTP mailbox (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, e.g. Gmail with an app password) when set, otherwise through Resend's HTTP API (`RESEND_API_KEY`; `RESEND_API_URL` exists only for local testing), from `EMAIL_FROM`. `npm run email:check` tests the login. With it set up, Supabase Auth sends no emails; without it, Supabase sends the sign-up confirmation links (configure its SMTP).
@@ -107,4 +125,4 @@ Payments (Stripe), tutor payouts, two-way classroom video and SMS. `env.payments
 
 ## Testing
 
-The backend was tested end to end against a real PostgreSQL 18 with the migrations applied, a stand-in for the Supabase Auth (including TOTP two-step login) and Storage HTTP APIs and for Resend, and a production build: sign-up and email confirmation (both link styles), onboarding with uploads, booking races, messaging with attachments and file access rules, admin moderation and content, staff management, two-step login, hiding tutors, job take-downs, announcements, no-show credit, notification emails and their settings, password reset and change, parental consent, the scheduler, account deletion, server-rendered pages, and that the `anon` role is denied on every table. Run `npm run db:status` / `GET /api/health` to check a real project.
+The backend was tested end to end against a real PostgreSQL 18 with the migrations applied, a stand-in for the Supabase Auth (including TOTP two-step login) and Storage HTTP APIs and for Resend, and a production build: sign-up and email confirmation (both link styles), onboarding with uploads, booking races, messaging with attachments and file access rules, admin moderation and content, staff management, two-step login, hiding tutors, job take-downs, announcements, no-show credit, notification emails and their settings, password reset and change, Google / Facebook / Apple sign-in (through a stand-in provider page: new accounts and role choice, linking to an existing account with the emailed code, "This wasn't me", unverified emails, Apple private relay, no email, cancel, replayed codes, under-13 and 13–17), parental consent, the scheduler, account deletion, server-rendered pages, and that the `anon` role is denied on every table. Run `npm run db:status` / `GET /api/health` to check a real project.

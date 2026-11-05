@@ -132,13 +132,99 @@ in the `SMTP_*` settings. Keep these values only in `.env.local` / your host's e
 With these settings Supabase sends no emails for sign-up or password reset, so its own email limits
 don't matter.
 
+## 8. Google, Facebook and Apple sign-in
+
+The "Continue with Google / Facebook / Apple" buttons use the real sign-in of each company, through
+Supabase Auth. **Each button appears on the site only after you switch that provider on in Supabase**
+(the site asks Supabase which ones are on). You need one account per company; the client IDs and
+secrets go **only into the Supabase dashboard**, never into `.env.local`, the code or chat.
+
+First find your **Supabase callback address**. It is the same for all three:
+`https://<your-project-ref>.supabase.co/auth/v1/callback` (Supabase → **Authentication → Sign In /
+Providers** → open any provider; it shows this address with a copy button). Also check step 4: the
+*Redirect URLs* must include `http://localhost:3100/**` and later `https://your-domain.com/**`.
+
+### Google (free)
+
+1. Open <https://console.cloud.google.com/> and create a project (for example "TutorLink").
+2. **Google Auth Platform → Branding**: app name *TutorLink*, your support email, logo (optional),
+   home page `https://your-domain.com`, privacy policy `https://your-domain.com/privacy`, terms
+   `https://your-domain.com/terms`. Under *Authorized domains* add `supabase.co` and your own domain.
+3. **Audience**: *External*. While it says *Testing*, only the test users you add can sign in; press
+   **Publish app** before real people use it.
+4. **Data access**: add the scopes `openid`, `.../auth/userinfo.email` and `.../auth/userinfo.profile`
+   (nothing else, so Google needs no extra review).
+5. **Clients → Create client → Web application**:
+   - *Authorized JavaScript origins*: `http://localhost:3100` and `https://your-domain.com`
+   - *Authorized redirect URIs*: the Supabase callback address from above.
+6. Copy the **Client ID** and **Client secret** into Supabase → **Authentication → Sign In /
+   Providers → Google**, switch it on and save.
+
+### Facebook (free)
+
+1. Open <https://developers.facebook.com/apps> → **Create app** → use case *Authenticate and request
+   data from users with Facebook Login*.
+2. **App settings → Basic**: add the privacy policy URL (`https://your-domain.com/privacy`), terms URL,
+   an app icon, a category, and a *User data deletion* link or instructions (for example the
+   Privacy page). Copy the **App ID** and **App secret**.
+3. **Use cases → Facebook Login → Customize → Permissions**: add `email` (`public_profile` is already
+   there).
+4. **Facebook Login → Settings**: *Valid OAuth Redirect URIs* = the Supabase callback address; keep
+   *Client OAuth login*, *Web OAuth login* and *Enforce HTTPS* on.
+5. Switch the app to **Live** (top of the page). In *Development* mode only people with a role on the
+   app can sign in.
+6. Supabase → **Providers → Facebook**: switch on, paste the App ID (as client ID) and App secret,
+   save. If that page offers **Allow users without an email**, turn it on: some Facebook accounts
+   only have a phone number. Those people are then asked on the site to add and confirm an email.
+
+### Apple (needs the paid Apple Developer Program, US$99 a year)
+
+1. Join at <https://developer.apple.com/programs/> and open **Certificates, Identifiers & Profiles**.
+   Your **Team ID** is shown at the top right (10 characters).
+2. **Identifiers → + → App IDs → App**: description *TutorLink*, bundle ID for example
+   `com.yourcompany.tutorlink`, tick **Sign In with Apple**, register.
+3. **Identifiers → + → Services IDs**: description *TutorLink web*, identifier for example
+   `com.yourcompany.tutorlink.web` (this is the **client ID**). Open it, tick **Sign In with Apple →
+   Configure**: primary App ID = the one from step 2; *Domains* = `<your-project-ref>.supabase.co`;
+   *Return URLs* = the Supabase callback address. Save.
+4. **Keys → +**: name *TutorLink sign-in*, tick **Sign In with Apple → Configure** (choose the App ID),
+   register, and **download the `.p8` file** (Apple lets you download it only once; keep it safe and
+   private). Note the **Key ID**.
+5. Supabase → **Providers → Apple**: switch on, enter the Services ID as client ID, and create the
+   **secret key** from the Team ID, Key ID, Services ID and the `.p8` file with the generator in
+   Supabase's Apple guide (<https://supabase.com/docs/guides/auth/social-login/auth-apple>). Save.
+   **This secret expires after 6 months**: put a reminder in your calendar to make a new one.
+6. **Private relay emails**: people can hide their email from you; Apple then gives an address like
+   `abc123@privaterelay.appleid.com` that forwards to them. Apple only forwards email from senders you
+   register: **Certificates, Identifiers & Profiles → Services → Sign in with Apple for Email
+   Communication → Configure**, and add the address in `EMAIL_FROM` (or your sending domain, with SPF
+   set up). Otherwise codes and notices to those people are dropped.
+7. Apple shares a person's name at most once, and often not with websites. Without it the welcome
+   page simply greets them without a name, and they add their name in Settings.
+
+### How it works on the site
+
+- **New person**: after the provider, they land on **/welcome**, choose Student, Parent or Tutor
+  (once; it can't be changed later), country and ZIP/PIN, and accept the terms. Students say their
+  age: 13–17 need a parent's approval, under 13 are refused and nothing is kept. Until then the
+  account can't see or do anything.
+- **Same email as an existing account**: Supabase attaches the new sign-in to that account, and the
+  site locks it until the owner types the 6-digit code emailed to the account's address ("Confirm
+  it's you"). "This wasn't me" removes the new sign-in again. After that, the provider signs straight
+  in. The owner gets a notice. An account whose email was never confirmed loses its unconfirmed
+  password (Supabase does this), so nobody can sign up first with someone else's email.
+- Passwords, Forgot password, email codes, two-step login for staff, suspended accounts and admin
+  all work the same for these accounts. A Google-only person can set a password with Forgot password.
+- Nothing new goes into `.env.local`. The site only needs `NEXT_PUBLIC_SITE_URL` to be the real
+  address (it is used for the return address after sign-in).
+
 ---
 
 ## Optional extras
 
 | Feature | What to do |
 |---|---|
-| **Google / Facebook / Apple sign-in** | Supabase → **Authentication → Sign In / Providers** → turn on the provider and paste its client ID and secret (created in Google Cloud, Meta for Developers or Apple Developer). The "Continue with …" buttons appear on the site automatically for each provider you switch on. |
+| **Google / Facebook / Apple sign-in** | See step 8. The "Continue with …" buttons appear on the site automatically for each provider you switch on in Supabase. |
 | **Emails from the site** (password reset links, parent approval for 13–17 students, and email copies of notifications: booking requests and changes, messages, payments, job applications, homework, account and security notices) | See step 7: an SMTP mailbox (`SMTP_*`) or a Resend API key (`RESEND_API_KEY`), plus `EMAIL_FROM`. Each person chooses which emails they get under **Notifications**; account and security notices always go out. Announcements are emailed only to people who switched on "Tips & product news". Without these settings, everything still shows in the site's notifications, but no email is sent. |
 | **Scheduled clean-up** (expire unanswered booking requests, finish past lessons) | Already runs by itself at most every 5 minutes while people use the site. On Vercel, also set `CRON_SECRET` to any long random text; `vercel.json` then calls it daily as a backup. |
 

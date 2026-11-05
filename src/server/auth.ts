@@ -27,12 +27,14 @@ export async function ensureAccount(au: AuthUser): Promise<User | null> {
   if (existing) return existing;
   const meta = (au.user_metadata ?? {}) as Record<string, unknown>;
   const role = ["student", "parent", "tutor"].includes(String(meta.role)) ? String(meta.role) : "student";
+  // A social sign-in brings no role: the person chooses one before using the account.
+  const needsRole = meta.role === undefined || meta.role === null;
   const full = String(meta.full_name ?? meta.name ?? "").trim();
   const first = String(meta.first_name ?? full.split(" ")[0] ?? "").slice(0, 60);
   const last = String(meta.last_name ?? full.split(" ").slice(1).join(" ") ?? "").slice(0, 60);
   await db()`
-    insert into public.users (id, role, first_name, last_name, email, email_verified)
-    values (${au.id}, ${role}, ${first}, ${last}, ${(au.email ?? "").toLowerCase()}, ${!!au.email_confirmed_at})
+    insert into public.users (id, role, first_name, last_name, email, email_verified, needs_role)
+    values (${au.id}, ${role}, ${first}, ${last}, ${(au.email ?? "").toLowerCase()}, ${!!au.email_confirmed_at}, ${needsRole})
     on conflict (id) do nothing`;
   return accountById(au.id);
 }

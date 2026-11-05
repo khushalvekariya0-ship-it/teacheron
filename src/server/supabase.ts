@@ -11,11 +11,14 @@ import { env, NotConfiguredError } from "./env";
 export async function supabaseForRequest(): Promise<SupabaseClient> {
   if (!env.supabaseUrl || !env.supabaseAnonKey) throw new NotConfiguredError("Sign-in");
   const store = await cookies();
+  // The session (and the PKCE verifier of a sign-in in progress) is only ever read by the server, so the
+  // cookies are HTTP-only (no script can read them), SameSite=Lax, and HTTPS-only on an https site.
+  const secure = env.siteUrl.startsWith("https://");
   return createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {
-        for (const { name, value, options } of list) store.set(name, value, options);
+        for (const { name, value, options } of list) store.set(name, value, { ...options, httpOnly: true, sameSite: "lax", secure });
       },
     },
   });

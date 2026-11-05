@@ -11,7 +11,11 @@ import type { Tx } from "./db";
  * cancel a code; a code works once.
  */
 
-export type CodePurpose = "verify_email" | "password_reset";
+/**
+ * "link_account" confirms a Google / Facebook / Apple sign-in that was attached to an existing account;
+ * "add_email" confirms the email a social account without one adds (`target_email`).
+ */
+export type CodePurpose = "verify_email" | "password_reset" | "link_account" | "add_email";
 
 export const CODE_MINUTES = 15;
 export const MAX_CODE_TRIES = 5;
@@ -24,13 +28,34 @@ export const cleanCode = (raw: string) => raw.replace(/[\s-]/g, "");
 export const isCodeShape = (code: string) => /^\d{6}$/.test(code);
 
 /** Makes a new code for the account (cancelling its older codes of the same purpose) and returns it. */
-export async function issueCode(tx: Tx, userId: string, purpose: CodePurpose, resetId?: string): Promise<string> {
+export async function issueCode(tx: Tx, userId: string, purpose: CodePurpose, resetId?: string, targetEmail?: string): Promise<string> {
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const id = `otp_${randomBytes(9).toString("hex")}`;
   await tx`update public.email_codes set used_at = now() where user_id = ${userId} and purpose = ${purpose} and used_at is null`;
-  await tx`insert into public.email_codes (id, user_id, purpose, code_hash, reset_id, expires_at)
-           values (${id}, ${userId}, ${purpose}, ${fingerprint(purpose, id, code)}, ${resetId ?? null}, now() + make_interval(mins => ${CODE_MINUTES}))`;
+  await tx`insert into public.email_codes (id, user_id, purpose, code_hash, reset_id, target_email, expires_at)
+           values (${id}, ${userId}, ${purpose}, ${fingerprint(purpose, id, code)}, ${resetId ?? null}, ${targetEmail ?? null}, now() + make_interval(mins => ${CODE_MINUTES}))`;
   return code;
+}
+
+/**
+ * Like consumeCode, for a code that belongs to the signed-in account (linking a sign-in, adding an email):
+ * looked up by account id, not by email. Returns the address an "add_email" code was sent to.
+ */
+export async function consumeCodeForUser(tx: Tx, userId: string, purpose: CodePurpose, code: string): Promise<{ ok: true; targetEmail: string | null } | { ok: false; reason: "no_code" | "wrong" | "too_many" }> {
+  const [row] = await tx`
+    select id, code_hash, tries, target_email from public.email_codes
+    where user_id = ${userId} and purpose = ${purpose} and used_at is null and expires_at > now()
+    order by created_at desc limit 1
+    for update`;
+  if (!row) return { ok: false, reason: "no_code" };
+  if (!isCodeShape(code) || !sameHex(fingerprint(purpose, String(row.id), code), String(row.code_hash))) {
+    const tries = Number(row.tries) + 1;
+    if (tries >= MAX_CODE_TRIES) await tx`update public.email_codes set tries = ${tries}, used_at = now() where id = ${row.id}`;
+    else await tx`update public.email_codes set tries = ${tries} where id = ${row.id}`;
+    return { ok: false, reason: tries >= MAX_CODE_TRIES ? "too_many" : "wrong" };
+  }
+  await tx`update public.email_codes set used_at = now() where id = ${row.id}`;
+  return { ok: true, targetEmail: row.target_email ? String(row.target_email) : null };
 }
 
 /** How many codes of this purpose the account got in the last hour. */
