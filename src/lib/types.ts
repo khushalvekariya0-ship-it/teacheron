@@ -11,6 +11,31 @@ export type ISODate = string;
 
 export type Role = "student" | "parent" | "tutor" | "admin" | "support";
 
+/** A Google / Facebook / Apple sign-in connected to the account (Settings → Security). */
+export interface SignInMethod {
+  id: string;
+  provider: string;
+  label: string;
+  /** The address the provider shared (may differ from the account's email). */
+  email: string | null;
+  connectedAt: string | null;
+  lastUsedAt: string | null;
+  /** Why it can't be disconnected: it's the only way to sign in, or the last connected account (Supabase keeps one). */
+  locked: null | "only" | "last";
+}
+
+/** GET /api/auth/methods: how this account signs in. */
+export interface SignInMethods {
+  email: string;
+  emailVerified: boolean;
+  hasPassword: boolean;
+  social: SignInMethod[];
+  /** Social sign-ins switched on for the site. */
+  providers: string[];
+  mfa: boolean;
+  recoveryCodesLeft: number;
+}
+
 export interface User {
   id: ID;
   role: Role;
@@ -402,6 +427,9 @@ export interface Booking {
   idempotencyKey: string;
   history: BookingEvent[];
   createdAt: ISODate;
+  /** When the day-before / hour-before reminders went out (each is sent once). */
+  reminded24hAt?: ISODate;
+  reminded1hAt?: ISODate;
 }
 
 /* ─── Messaging ─────────────────────────────────────────────────────────────── */
@@ -599,7 +627,7 @@ export interface ContactFlag {
   contextId?: ID;
   /** The person who would have received it (user id, or tutor id for a tutor). */
   recipientId?: ID;
-  kinds: ("phone" | "email" | "social")[];
+  kinds: ("phone" | "email" | "social" | "link")[];
   excerpt: string;
   fileName?: string;
   status: "open" | "actioned" | "dismissed";

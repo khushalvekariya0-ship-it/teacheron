@@ -132,6 +132,7 @@ const BOOKING: Record<string, Col> = {
   locationNote: ["location_note", "v", true], notes: ["notes", "v", true],
   rescheduledFromId: ["rescheduled_from_id", "v", true], rescheduleCount: ["reschedule_count", "v", true], reviewId: ["review_id", "v", true],
   idempotencyKey: ["idempotency_key", "v"], history: ["history", "json"], createdAt: ["created_at", "ts"],
+  reminded24hAt: ["reminded_24h_at", "ts", true], reminded1hAt: ["reminded_1h_at", "ts", true],
 };
 
 const REVIEW: Record<string, Col> = {

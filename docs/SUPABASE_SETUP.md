@@ -78,7 +78,9 @@ Staff accounts can't be chosen at sign-up (that keeps strangers out of the admin
 3. Sign out, sign back in — you land in `/admin` with every permission.
 4. Go to **Admin → Security** and click **Turn on two-step login**. Scan the QR code with an
    authenticator app on your phone (Google Authenticator, Microsoft Authenticator or 1Password) and
-   enter the 6-digit code. From then on, every sign-in asks for a code from that app.
+   enter the 6-digit code. From then on, every sign-in asks for a code from that app. Save the 10
+   backup codes it shows: each one gets you in once if you lose your phone. (Students, parents and
+   tutors can turn two-step login on too, in Settings → Security.)
 
 After that, manage staff from the website: **Admin → Users → open the person → More → Make staff**
 (pick Support or Administrator and tick the permissions). The same menu removes staff access,
@@ -213,8 +215,13 @@ Providers** → open any provider; it shows this address with a copy button). Al
   it's you"). "This wasn't me" removes the new sign-in again. After that, the provider signs straight
   in. The owner gets a notice. An account whose email was never confirmed loses its unconfirmed
   password (Supabase does this), so nobody can sign up first with someone else's email.
-- Passwords, Forgot password, email codes, two-step login for staff, suspended accounts and admin
-  all work the same for these accounts. A Google-only person can set a password with Forgot password.
+- Passwords, Forgot password, email codes, two-step login, suspended accounts and admin all work the
+  same for these accounts. A Google-only person can add a password in **Settings → Security**.
+- **Connect from Settings**: signed-in people can connect Google / Facebook / Apple to their account
+  (Settings → Security → Ways to sign in) and disconnect one while another way to sign in remains.
+  For **Connect** to work, turn on **Authentication → Sign In / Providers → Allow manual linking**
+  in Supabase (it's off by default; without it the button explains that connecting isn't switched
+  on yet). Disconnecting works either way.
 - Nothing new goes into `.env.local`. The site only needs `NEXT_PUBLIC_SITE_URL` to be the real
   address (it is used for the return address after sign-in).
 
@@ -274,7 +281,7 @@ How it behaves:
 |---|---|
 | **Google / Facebook / Apple sign-in** | See step 8. The "Continue with …" buttons appear on the site automatically for each provider you switch on in Supabase. |
 | **Emails from the site** (password reset links, parent approval for 13–17 students, and email copies of notifications: booking requests and changes, messages, payments, job applications, homework, account and security notices) | See step 7: an SMTP mailbox (`SMTP_*`) or a Resend API key (`RESEND_API_KEY`), plus `EMAIL_FROM`. Each person chooses which emails they get under **Notifications**; account and security notices always go out. Announcements are emailed only to people who switched on "Tips & product news". Without these settings, everything still shows in the site's notifications, but no email is sent. |
-| **Scheduled clean-up** (expire unanswered booking requests, finish past lessons) | Already runs by itself at most every 5 minutes while people use the site. On Vercel, also set `CRON_SECRET` to any long random text; `vercel.json` then calls it daily as a backup. |
+| **Scheduled jobs** (lesson reminders the day before and an hour before, expiring unanswered booking requests, finishing past lessons, closing finished classrooms) | Run by themselves at most every 5 minutes while people use the site. For reminders to be on time even when nobody is on the site, set `CRON_SECRET` to any long random text and have `https://your-domain.com/api/cron` called **every 10 minutes** with the header `Authorization: Bearer <CRON_SECRET>`: Vercel Pro can do it from `vercel.json`; on the free plan use a free service such as cron-job.org. (`vercel.json` already calls it once a day.) |
 
 ## Going live on Vercel
 
@@ -283,6 +290,28 @@ How it behaves:
 2. In Supabase → **Authentication → URL Configuration**, set the Site URL to the real domain and
    add it to the Redirect URLs.
 3. Deploy. Open `https://your-domain.com/api/health` to check.
+
+### Launch checklist
+
+| | What | Why |
+|---|---|---|
+| ☐ | Your own domain with **https** (Vercel adds the certificate) | Emailed links (reset, confirm) only work with a real https address; phones need https for the camera in the classroom |
+| ☐ | `NEXT_PUBLIC_SITE_URL=https://your-domain.com`, and the same address in Supabase → URL Configuration | Sign-in, email links and Google / Facebook / Apple return here |
+| ☐ | Email from your domain (Resend or your domain's SMTP), `EMAIL_FROM` on that domain | Gmail sends at most ~500 a day and lands in spam more often |
+| ☐ | `CRON_SECRET` and a call to `/api/cron` every 10 minutes (see "Scheduled jobs" above) | Lesson reminders on time |
+| ☐ | Live classroom: LiveKit keys (step 9) | Video in lessons; without them lessons use the basic classroom |
+| ☐ | Google / Facebook / Apple keys (step 8), if you want those buttons | Social sign-in |
+| ☐ | Two-step login on every staff account (Admin → Security) | Protects the admin panel |
+| ☐ | Supabase: **Allow manual linking** on (Authentication → Sign In / Providers), if you switched on Google / Facebook / Apple | "Connect" in Settings → Security |
+| ☐ | Supabase: a paid plan with daily backups (or download a backup weekly) | So data can be restored |
+| ☐ | A lawyer reads Terms, Privacy and Safety for the countries you serve | The texts are a starting point, not legal advice |
+| ☐ | Payments connected (see below) before charging for lessons | Until then only free lessons can be booked |
+
+Already in place: security headers on every page (no framing by other sites, HTTPS-only once seen,
+no MIME sniffing, camera / microphone / screen only for this site), rate limits on sign-in, codes,
+uploads and the classroom, a branded error page, and preview pictures when links are shared. Rate
+limits are kept per server copy; if you run many copies at once, ask a developer to move them to a
+shared store (for example Upstash Redis).
 
 ## What is not connected yet
 

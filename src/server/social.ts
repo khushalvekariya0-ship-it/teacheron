@@ -27,7 +27,8 @@ import { supabaseAdmin } from "./supabase";
 export const PROVIDER_LABEL: Record<string, string> = { google: "Google", facebook: "Facebook", apple: "Apple", azure: "Microsoft" };
 export const providerLabel = (p: string) => PROVIDER_LABEL[p] ?? p;
 
-const idOf = (i: UserIdentity) => String(i.identity_id ?? i.id);
+/** The identity's own id (what Supabase unlinks by). */
+export const identityKey = (i: UserIdentity) => String(i.identity_id ?? i.id);
 const when = (i: UserIdentity) => Date.parse(i.last_sign_in_at ?? i.updated_at ?? i.created_at ?? "") || 0;
 const WRONG = "That code isn't right or has expired. Use the code in the newest email, or ask for a new one.";
 
@@ -64,20 +65,21 @@ async function emailLinkCode(userId: string): Promise<boolean> {
 
 /**
  * Right after a social sign-in. A brand-new account trusts its first sign-in method; a method Supabase
- * attached to an existing account waits for the email code ("pending").
+ * attached to an existing account waits for the email code ("pending"). `connectedBy` is the account that
+ * started "Connect" from its own Settings while signed in: that method is trusted straight away.
  */
-export async function checkSocialSignIn(au: AuthUser, provider: string | null): Promise<"ok" | "pending"> {
+export async function checkSocialSignIn(au: AuthUser, provider: string | null, connectedBy?: string | null): Promise<"ok" | "pending"> {
   const used = socialIdentity(au, provider);
   if (!used) return "ok";
-  const identityId = idOf(used);
+  const identityId = identityKey(used);
   const [row] = await db()`select trusted_identities, pending_link from public.users where id = ${au.id}`;
   if (!row) return "ok";
   const trusted = (row.trusted_identities as string[] | null) ?? [];
   if (trusted.includes(identityId)) return row.pending_link ? "pending" : "ok";
-  const others = (au.identities ?? []).filter((i) => idOf(i) !== identityId);
-  if (!others.length) {
+  const others = (au.identities ?? []).filter((i) => identityKey(i) !== identityId);
+  if (!others.length || (connectedBy === au.id && !row.pending_link)) {
     await db()`update public.users set trusted_identities = array_append(trusted_identities, ${identityId}) where id = ${au.id} and not (${identityId} = any(trusted_identities))`;
-    console.info("[social] new account via", used.provider, au.id);
+    console.info(others.length ? "[social] connected from Settings:" : "[social] new account via", used.provider, au.id);
     return "ok";
   }
   const pending = row.pending_link as { identityId?: string } | null;
@@ -113,7 +115,7 @@ export async function cancelLink(supabase: SupabaseClient, userId: string): Prom
   const pending = u?.pending_link as { identityId?: string } | null;
   if (!pending?.identityId) return { ok: true };
   const { data } = await supabase.auth.getUser();
-  const identity = data.user?.identities?.find((i) => idOf(i) === pending.identityId);
+  const identity = data.user?.identities?.find((i) => identityKey(i) === pending.identityId);
   if (identity) {
     const { error } = await supabase.auth.unlinkIdentity(identity);
     if (error) {
@@ -130,30 +132,37 @@ export async function cancelLink(supabase: SupabaseClient, userId: string): Prom
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TAKEN = "That email can't be used here. If it's yours, sign in with it instead.";
 
-/** A social account without an email: send a code to the address it wants to use. */
-export async function startAddEmail(userId: string, raw: string): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * Sends a code to the address an account wants to use: a social account without an email adds one
+ * ("add"), or any account changes its sign-in email ("change"). The address is only used once the code
+ * comes back (finishAddEmail), which proves the person can read that inbox.
+ */
+export async function startAddEmail(userId: string, raw: string, purpose: "add" | "change" = "add"): Promise<{ ok: true } | { ok: false; error: string }> {
   const email = raw.trim().toLowerCase();
   if (!EMAIL_RE.test(email) || email.length > 200) return { ok: false, error: "Enter a valid email address." };
   const [taken] = await db()`select 1 from public.users where lower(email) = ${email} and id <> ${userId}`;
   if (taken) return { ok: false, error: TAKEN };
   const code = await db().begin(async (tx) => ((await codesThisHour(tx, userId, "add_email")) >= 5 ? null : issueCode(tx, userId, "add_email", undefined, email)));
   if (!code) return { ok: false, error: "Too many codes this hour. Please try again later." };
+  const what = purpose === "change" ? `make this the sign-in email of your ${SITE.name} account` : `add this email to your ${SITE.name} account`;
+  const ignore = purpose === "change" ? "If you didn't ask for this, ignore this email: nothing changes." : "If you didn't ask for this, ignore this email.";
   const res = await sendEmail({
     to: email,
     subject: `Your ${SITE.name} code: confirm this email`,
-    text: `Your code to add this email to your ${SITE.name} account: ${code}\n\nIt works once and expires in ${CODE_MINUTES} minutes. If you didn't ask for this, ignore this email.\n\n— ${SITE.name}`,
-    html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;max-width:520px"><p>Your code to add this email to your ${escapeHtml(SITE.name)} account:</p><p style="margin:20px 0 8px;font-family:Consolas,Menlo,monospace;font-size:32px;font-weight:bold;letter-spacing:8px">${code}</p><p style="color:#555;font-size:13px">It works once and expires in ${CODE_MINUTES} minutes. If you didn't ask for this, ignore this email.</p><p style="color:#888;font-size:12px">— ${escapeHtml(SITE.name)}</p></div>`,
+    text: `Your code to ${what}: ${code}\n\nIt works once and expires in ${CODE_MINUTES} minutes. ${ignore}\n\n— ${SITE.name}`,
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;max-width:520px"><p>Your code to ${escapeHtml(what)}:</p><p style="margin:20px 0 8px;font-family:Consolas,Menlo,monospace;font-size:32px;font-weight:bold;letter-spacing:8px">${code}</p><p style="color:#555;font-size:13px">It works once and expires in ${CODE_MINUTES} minutes. ${escapeHtml(ignore)}</p><p style="color:#888;font-size:12px">— ${escapeHtml(SITE.name)}</p></div>`,
   });
   return res.ok ? { ok: true } : { ok: false, error: "We couldn't send the email. Please try again later." };
 }
 
-/** The code was right: the address becomes the account's (confirmed) email. */
-export async function finishAddEmail(userId: string, code: string): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+/** The code was right: the address becomes the account's (confirmed) email. `previous` is the one it replaced. */
+export async function finishAddEmail(userId: string, code: string): Promise<{ ok: true; email: string; previous: string } | { ok: false; error: string }> {
   const check = await db().begin((tx) => consumeCodeForUser(tx, userId, "add_email", code));
   if (!check.ok || !check.targetEmail) return { ok: false, error: !check.ok && check.reason === "too_many" ? "Too many wrong codes. Ask for a new code." : WRONG };
   const email = check.targetEmail;
   const [taken] = await db()`select 1 from public.users where lower(email) = ${email} and id <> ${userId}`;
   if (taken) return { ok: false, error: TAKEN };
+  const [before] = await db()`select email from public.users where id = ${userId}`;
   const { error } = await supabaseAdmin().auth.admin.updateUserById(userId, { email, email_confirm: true });
   if (error) {
     console.error("[social] couldn't set the added email for account", userId, error.message);
@@ -161,7 +170,7 @@ export async function finishAddEmail(userId: string, code: string): Promise<{ ok
   }
   // The database trigger copies it to users.email; make sure this request sees it too.
   await db()`update public.users set email = ${email}, email_verified = true where id = ${userId}`;
-  return { ok: true, email };
+  return { ok: true, email, previous: String(before?.email ?? "") };
 }
 
 export interface SignupChoice {

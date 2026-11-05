@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/Controls";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toast";
 import { EASE } from "@/components/motion";
+import { formatPhone } from "@/lib/phone";
 import { setSaveExitHandler } from "./saveExit";
 import {
   STEPS, TOTAL_STEPS, initialData, toStoreData, validSteps, type AvailabilityValues, type CredentialsValues, type ExperienceValues, type ModesValues,
@@ -309,7 +310,7 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     setData(merged);
     if (step === 1) {
       setSaving(true);
-      const r = await updateMe({ phone: values.phone, country: values.country, city: values.city, state: values.state, zip: values.zip });
+      const r = await updateMe({ phone: formatPhone(values.phone ?? "", values.country), country: values.country, city: values.city, state: values.state, zip: values.zip });
       setSaving(false);
       if (!r.ok) toast.error(r.error);
     }

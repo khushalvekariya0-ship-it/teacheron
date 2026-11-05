@@ -20,6 +20,7 @@ import { useApp } from "@/lib/store";
 import { useSession, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { parseTutorSearch, searchTutors, SCHEDULE_PRESETS, SORT_OPTIONS, type TutorSearch } from "@/lib/search";
 import { GRADE_LABEL, LEVEL_LABEL, MODE_LABEL, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
+import { locationLabel } from "@/lib/data/geo";
 import { formatCents, formatDate } from "@/lib/format";
 
 const FREQUENCY_OPTIONS: { value: AlertFrequency; label: string }[] = [
@@ -37,7 +38,7 @@ function tutorChips(s: TutorSearch): string[] {
   if (s.grade) chips.push(GRADE_LABEL[s.grade]);
   else if (s.level) chips.push(LEVEL_LABEL[s.level] ?? s.level);
   if (s.mode) chips.push(MODE_LABEL[s.mode]);
-  if (s.location) chips.push(`Near ${s.location}${s.radius ? ` · ${s.radius} mi` : ""}`);
+  if (s.location) chips.push(`Near ${locationLabel(s.location)}${s.radius ? ` · ${s.radius} mi` : ""}`);
   if (s.schedule) chips.push(SCHEDULE_PRESETS.find((p) => p.value === s.schedule)?.label ?? s.schedule);
   if (s.days?.length) chips.push(s.days.join(", "));
   if (s.times?.length) chips.push(s.times.map((t) => TIMES_OF_DAY.find((x) => x.value === t)?.label ?? t).join(", "));
@@ -63,7 +64,7 @@ function jobChips(query: Record<string, string>): string[] {
   chips.push(...subjects.map(subjectName));
   if (query.mode === "online" || query.mode === "in_person") chips.push(MODE_LABEL[query.mode]);
   if (query.grade && query.grade in GRADE_LABEL) chips.push(GRADE_LABEL[query.grade as keyof typeof GRADE_LABEL]);
-  if (query.location) chips.push(`Near ${query.location}`);
+  if (query.location) chips.push(`Near ${locationLabel(query.location)}`);
   if (query.q) chips.push(`“${query.q}”`);
   return chips;
 }

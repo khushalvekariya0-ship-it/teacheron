@@ -244,6 +244,48 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     set((s) => ({ notifications: [{ ...n, id: uid("ntf"), userId, createdAt: nowIso(), read: false }, ...s.notifications] }));
   };
   const tutorUserId = (tutorId: string) => get().users.find((u) => u.tutorId === tutorId)?.id;
+
+  /**
+   * Lesson reminders, to the family and the tutor: the day before (only for lessons booked more than a day
+   * ahead, so a lesson booked for tonight doesn't get a "tomorrow" message) and an hour before. Each goes
+   * out once; an hour-before reminder that's due replaces a day-before one that never went out.
+   */
+  const sendLessonReminders = (now: number): number => {
+    const HOUR = 3_600_000;
+    let sent = 0;
+    const patches = new Map<string, Partial<Booking>>();
+    for (const b of get().bookings) {
+      if (b.status !== "confirmed" && b.status !== "in_progress") continue;
+      const start = new Date(b.startUtc).getTime();
+      if (start <= now) continue;
+      const soon = start - now <= 65 * 60_000;
+      const tomorrow = start - now <= 24 * HOUR && start - new Date(b.createdAt).getTime() > 24 * HOUR;
+      let kind: "hour" | "day" | null = null;
+      if (soon && !b.reminded1hAt) kind = "hour";
+      else if (!soon && tomorrow && !b.reminded24hAt) kind = "day";
+      if (!kind) continue;
+      const at = nowIso();
+      const minutesLeft = Math.max(1, Math.round((start - now) / 60_000));
+      patches.set(b.id, kind === "hour" ? { reminded1hAt: at, reminded24hAt: b.reminded24hAt ?? at } : { reminded24hAt: at });
+      const where = b.mode === "online" ? (b.videoLink ? "Join from the lesson page" : "Join the TutorLink classroom from the lesson page") : b.locationNote ? `Meeting place: ${b.locationNote}` : "In person";
+      const tutorUser = tutorUserId(b.tutorId);
+      for (const to of [b.bookerId, tutorUser].filter((x): x is string => !!x)) {
+        const when = formatDateTime(b.startUtc, tzOf(to));
+        notify(to, {
+          type: "reminder",
+          title:
+            kind === "hour"
+              ? `Your ${subjectName(b.subject)} lesson starts ${minutesLeft >= 45 ? "in about an hour" : `in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}`}`
+              : `Reminder: ${subjectName(b.subject)} lesson tomorrow`,
+          body: `${when}. ${where}.`,
+          href: `/dashboard/bookings/${b.id}`,
+        });
+      }
+      sent++;
+    }
+    if (patches.size) set((s) => ({ bookings: s.bookings.map((x) => (patches.has(x.id) ? { ...x, ...patches.get(x.id) } : x)) }));
+    return sent;
+  };
   const audit = (action: string, targetType: string, targetId: string, meta?: AuditLog["meta"]) => {
     const u = me();
     set((s) => ({ auditLogs: [{ id: uid("aud"), actorId: u?.id ?? "system", action, targetType, targetId, meta, createdAt: nowIso() }, ...s.auditLogs] }));
@@ -1961,7 +2003,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         if (b.status === "pending" && start <= now) expired.push(b);
         else if ((b.status === "confirmed" || b.status === "in_progress") && start + b.durationMin * 60_000 + AUTO_COMPLETE_AFTER <= now && !disputed.has(b.id)) completed.push(b);
       }
-      if (!expired.length && !completed.length) return ok(0);
+      const reminders = sendLessonReminders(now);
+      if (!expired.length && !completed.length) return ok(reminders);
       const at = nowIso();
       const expiredIds = new Set(expired.map((b) => b.id));
       const completedIds = new Set(completed.map((b) => b.id));
@@ -1978,7 +2021,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       for (const b of expired) refundToWallet(b.id, b.bookerId, b.priceCents - b.discountCents, "Request expired — credits returned");
       for (const b of expired) notify(b.bookerId, { type: "booking_cancelled", title: "Lesson request expired", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))} — you weren't charged.`, href: `/dashboard/bookings/${b.id}` });
       for (const b of completed) notify(b.bookerId, { type: "review_request", title: "How was your lesson?", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))}`, href: `/dashboard/bookings/${b.id}` });
-      return ok(expired.length + completed.length);
+      return ok(expired.length + completed.length + reminders);
     },
   };
   return actions;

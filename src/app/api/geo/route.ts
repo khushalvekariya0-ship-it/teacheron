@@ -3,6 +3,7 @@ import regionData from "@/lib/data/regions.json";
 import { countryName, DEFAULT_COUNTRY, isCountryCode, matchRegion, type Region } from "@/lib/location";
 import { isPostalCode } from "@/lib/postal";
 import { clientIp, json, rateLimit, tooMany } from "@/server/http";
+import { pointOf } from "@/server/geocode";
 
 /*
  * Place lookups for the location forms, in any country (country=XX, ISO code; the US when left out):
@@ -10,6 +11,7 @@ import { clientIp, json, rateLimit, tooMany } from "@/server/http";
  *   ?kind=city&q=<text>                  towns and cities, so the City box fills in the state
  *   ?kind=zips&city=…&state=…            that city's postal codes, so the code can follow the city
  *   ?kind=place&code=<postal code>       the city and state of a postal code
+ *   ?kind=point&q=<place>[&country=XX]   map coordinates of a place, anywhere (search "near Rajkot")
  * Sources (free, no key): Photon (OpenStreetMap) for places; the US Census geocoder for a US street address
  * without a ZIP; Zippopotam.us for US ZIP codes and other countries' codes; India Post for Indian PIN codes.
  * `state` comes back as the 2-letter code in the US and the region's name elsewhere. Nothing is stored.
@@ -189,6 +191,19 @@ export async function GET(request: Request) {
       return json({ ok: true, zips });
     } catch {
       return json({ ok: false, zips: null }, { status: 502 });
+    }
+  }
+
+  if (kind === "point") {
+    const q = (params.get("q") ?? "").trim().slice(0, 120);
+    if (q.length < 2) return json({ ok: true, point: null });
+    const block = limited();
+    if (block) return block;
+    const inCountry = params.get("country") && isCountryCode(rawCountry) ? rawCountry : undefined;
+    try {
+      return json({ ok: true, point: await pointOf(q, inCountry) });
+    } catch {
+      return json({ ok: false, point: null }, { status: 502 });
     }
   }
 

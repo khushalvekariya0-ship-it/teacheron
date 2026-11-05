@@ -2,6 +2,7 @@ import type { TutorSearch } from "@/lib/search";
 import { SCHEDULE_PRESETS } from "@/lib/search";
 import { GRADE_LABEL, LEVEL_LABEL, subjectName, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
 import { formatCents } from "@/lib/format";
+import { locationLabel } from "@/lib/data/geo";
 
 /** Days in the order people read a week (the catalog stores Sun-first for Date math). */
 export const WEEK_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -65,7 +66,7 @@ export function filterChips(s: TutorSearch): FilterChip[] {
   if (s.subject) add("subject", subjectName(s.subject), without("subject"));
   if (s.grade) add("grade", GRADE_LABEL[s.grade], without("grade"));
   if (s.level) add("level", LEVEL_LABEL[s.level] ?? s.level, without("level"));
-  if (s.location) add("location", `Near ${s.location}`, without("location", "radius"));
+  if (s.location) add("location", `Near ${locationLabel(s.location)}`, without("location", "radius"));
   if (s.radius && s.location) add("radius", `Within ${s.radius} mi`, without("radius"));
   if (s.mode) add("mode", s.mode === "online" ? "Online" : "In person", without("mode"));
   if (s.schedule && !s.days && !s.times) add("schedule", SCHEDULE_PRESETS.find((p) => p.value === s.schedule)?.label ?? "Schedule", without("schedule"));

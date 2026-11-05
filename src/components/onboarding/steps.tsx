@@ -24,9 +24,11 @@ import { formatPlace } from "@/lib/location";
 import { uploadFile } from "@/lib/upload";
 import { postalLabel, postalRequired } from "@/lib/postal";
 import { useFlag } from "@/lib/store/hooks";
-import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, US_TIMEZONES, subjectName } from "@/lib/data/catalog";
+import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
+import { timeZoneLabel } from "@/lib/timezones";
 import { TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents, formatUsPhone, sessionPrice, tzAbbrev } from "@/lib/format";
+import { applyBps, formatCents, sessionPrice } from "@/lib/format";
+import { formatPhone, phonePlaceholder, typePhone } from "@/lib/phone";
 import { FileList, FilePicker, GroupField, SubjectPicker, TagInput, formatKb, toPicked, validateDocs } from "@/components/dashboard/tutor/shared";
 import { DAY_NAMES, DAY_ORDER, WeeklyAvailabilityEditor, formatHours, timeLabel, weeklyMinutes } from "@/components/dashboard/tutor/AvailabilityEditor";
 import {
@@ -78,11 +80,14 @@ export function PersonalStep({ me, formId, defaults, onValid, bindValues }: Step
               name={field.name}
               type="tel"
               inputMode="tel"
-              autoComplete="tel-national"
-              placeholder="(555) 010-1234"
+              autoComplete="tel"
+              placeholder={phonePlaceholder(loc[0])}
               value={field.value}
-              onBlur={field.onBlur}
-              onChange={(e) => field.onChange(formatUsPhone(e.target.value))}
+              onBlur={() => {
+                field.onChange(formatPhone(field.value ?? "", loc[0]));
+                field.onBlur();
+              }}
+              onChange={(e) => field.onChange(typePhone(e.target.value, loc[0]))}
             />
           </Field>
         )}
@@ -509,7 +514,7 @@ export function AvailabilityStep({ formId, defaults, onValid, bindValues, timezo
   const form = useForm<AvailabilityValues>({ resolver: zodResolver(availabilitySchema), defaultValues: defaults, mode: "onTouched" });
   useBind(form, bindValues);
   const { control, handleSubmit, formState: { errors } } = form;
-  const tzLabel = US_TIMEZONES.find((t) => t.value === timezone)?.label ?? `${timezone} (${tzAbbrev(timezone)})`;
+  const tzLabel = timeZoneLabel(timezone);
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="space-y-4">
       <Controller

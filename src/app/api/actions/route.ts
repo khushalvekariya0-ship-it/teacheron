@@ -15,6 +15,7 @@ import { buildState } from "@/server/snapshot";
 import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
 import { db } from "@/server/db";
 import { emailNotifications } from "@/server/notify-email";
+import { placeTutor } from "@/server/geocode";
 
 /*
  * POST /api/actions  { action, args } → { result, state }
@@ -93,6 +94,13 @@ export async function POST(request: Request) {
     if (result.ok && replacing.length) {
       const now = me.tutorId ? await currentMedia(me.tutorId, prepared.args[0] as Record<string, unknown>) : [];
       for (const old of replacing) if (!now.includes(old)) await removePublicFile(old);
+    }
+    // A tutor outside the US gets their city's map position for distance search, after the answer (saves stay fast).
+    if (result.ok && (action === "submitOnboarding" || action === "updateTutorProfile")) {
+      after(async () => {
+        const [row] = await db()`select tutor_id from public.users where id = ${me.id}`;
+        if (row?.tutor_id) await placeTutor(row.tutor_id).catch(() => false);
+      });
     }
     // A suspended or deleted account sees the public view.
     const still = await accountById(me.id);

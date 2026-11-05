@@ -199,14 +199,21 @@ export async function finishPasswordReset(token: string, password: string): Prom
   return result;
 }
 
-/** A short "your password was changed" notice, so the owner hears about a change they didn't make. */
-export async function sendPasswordChangedEmail(to: string, firstName: string): Promise<void> {
+/**
+ * A short "your password was changed" notice, so the owner hears about a change they didn't make.
+ * "set": an account made with Google / Facebook / Apple added its first password.
+ */
+export async function sendPasswordChangedEmail(to: string, firstName: string, kind: "reset" | "changed" | "set" = "reset"): Promise<void> {
   const name = firstName || "there";
   const help = `${resetOrigin() ?? ""}/forgot-password`;
+  const what =
+    kind === "set"
+      ? `A password was just added to your ${SITE.name} account, so it can now also be signed in to with this email and that password. You were signed out on other devices.`
+      : `The password for your ${SITE.name} account was just changed, and you were signed out on other devices.`;
   await sendEmail({
     to,
-    subject: `Your ${SITE.name} password was changed`,
-    text: `Hi ${name},\n\nThe password for your ${SITE.name} account was just changed, and you were signed out on other devices.\n\nIf this wasn't you, reset your password straight away: ${help}\n\n— ${SITE.name}`,
-    html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;max-width:520px"><p>Hi ${escapeHtml(name)},</p><p>The password for your ${escapeHtml(SITE.name)} account was just changed, and you were signed out on other devices.</p><p>If this wasn't you, <a href="${escapeHtml(help)}">reset your password straight away</a>.</p><p style="color:#888;font-size:12px">— ${escapeHtml(SITE.name)}</p></div>`,
+    subject: kind === "set" ? `A password was added to your ${SITE.name} account` : `Your ${SITE.name} password was changed`,
+    text: `Hi ${name},\n\n${what}\n\nIf this wasn't you, reset your password straight away: ${help}\n\n— ${SITE.name}`,
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;max-width:520px"><p>Hi ${escapeHtml(name)},</p><p>${escapeHtml(what)}</p><p>If this wasn't you, <a href="${escapeHtml(help)}">reset your password straight away</a>.</p><p style="color:#888;font-size:12px">— ${escapeHtml(SITE.name)}</p></div>`,
   });
 }

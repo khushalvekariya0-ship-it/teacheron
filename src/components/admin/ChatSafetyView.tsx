@@ -33,7 +33,7 @@ import { auditTone, describeAudit, sortAudit } from "./AuditLogView";
 type Kind = ContactFlag["kinds"][number];
 type FlagStatus = ContactFlag["status"];
 
-const KIND_LABEL: Record<Kind, string> = { phone: "Phone number", email: "Email", social: "Social / app" };
+const KIND_LABEL: Record<Kind, string> = { phone: "Phone number", email: "Email", social: "Social / app", link: "Outside link" };
 const STATUS_META: Record<FlagStatus, { label: string; tone: "warning" | "success" | "neutral" }> = {
   open: { label: "Needs review", tone: "warning" },
   actioned: { label: "Dealt with", tone: "success" },

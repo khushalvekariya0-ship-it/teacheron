@@ -8,6 +8,7 @@ import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY,
 import { useCatalog } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/format";
+import { locationLabel } from "@/lib/data/geo";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay";
 import { Checkbox, ChipGroup, Segmented } from "@/components/ui/Controls";
 import { Field, Select } from "@/components/ui/Input";
@@ -113,8 +114,8 @@ function priceLabel(min?: number, max?: number) {
 
 function lessonLabel(s: TutorSearch) {
   if (s.mode === "online") return "Online";
-  if (s.mode === "in_person") return s.location ? `In person · ${s.location}` : "In person";
-  return s.location ? `Near ${s.location}` : "Online or in person";
+  if (s.mode === "in_person") return s.location ? `In person · ${locationLabel(s.location)}` : "In person";
+  return s.location ? `Near ${locationLabel(s.location)}` : "Online or in person";
 }
 
 function availabilityLabel(s: TutorSearch) {

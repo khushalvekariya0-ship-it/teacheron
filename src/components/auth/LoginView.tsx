@@ -267,13 +267,31 @@ export function LoginView() {
 function MfaStep({ next }: { next: string | null }) {
   const router = useRouter();
   const verify = useApp((s) => s.verifyMfa);
+  const recover = useApp((s) => s.recoverMfa);
   const logout = useApp((s) => s.logout);
+  const [backup, setBackup] = React.useState(false);
   const [code, setCode] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (backup) {
+      if (code.replace(/[^a-z0-9]/gi, "").length !== 10) return setError("Enter one of your backup codes, like k7m2q-9xhtd.");
+      setBusy(true);
+      const r = await recover(code);
+      if (!r.ok) {
+        setBusy(false);
+        return setError(r.error);
+      }
+      if (r.data.signInAgain || !r.data.role) {
+        setBusy(false);
+        toast.success("Two-step login is off", { description: "Sign in again with your password." });
+        return void logout();
+      }
+      toast.success(`Welcome back, ${r.data.firstName}`, { description: "Two-step login is now off. Turn it on again with your new phone in Settings → Security." });
+      return router.push(destinationFor(r.data.role, next));
+    }
     if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code from your authenticator app.");
     setBusy(true);
     const r = await verify(code);
@@ -285,36 +303,68 @@ function MfaStep({ next }: { next: string | null }) {
     toast.success(`Welcome back, ${r.data.firstName}`);
     router.push(destinationFor(r.data.role, next));
   };
+  const switchMode = () => {
+    setBackup((b) => !b);
+    setCode("");
+    setError(null);
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}>
-      <h1 className="font-heading text-[2.25rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Enter your code</h1>
-      <p className="mt-3 text-[15px] leading-relaxed text-ink-2">Open your authenticator app (for example Google Authenticator) and enter the 6-digit code for TutorLink.</p>
+      <h1 className="font-heading text-[2.25rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">{backup ? "Use a backup code" : "Enter your code"}</h1>
+      <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+        {backup
+          ? "Enter one of the backup codes you saved when you turned on two-step login. Each code works once, and using one turns two-step login off so you can set it up on a new phone."
+          : "Open your authenticator app (for example Google Authenticator) and enter the 6-digit code for TutorLink."}
+      </p>
       <form onSubmit={submit} noValidate className="mt-8 space-y-5">
-        <Field label="6-digit code" error={error ?? undefined}>
-          <Input
-            value={code}
-            onChange={(e) => {
-              setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
-              setError(null);
-            }}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoFocus
-            placeholder="123456"
-            className="text-center font-mono text-lg tracking-[0.4em]"
-          />
+        <Field label={backup ? "Backup code" : "6-digit code"} error={error ?? undefined}>
+          {backup ? (
+            <Input
+              key="backup"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.slice(0, 20));
+                setError(null);
+              }}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoFocus
+              placeholder="k7m2q-9xhtd"
+              className="text-center font-mono text-lg tracking-[0.2em]"
+            />
+          ) : (
+            <Input
+              key="totp"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                setError(null);
+              }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              placeholder="123456"
+              className="text-center font-mono text-lg tracking-[0.4em]"
+            />
+          )}
         </Field>
         <Button type="submit" variant="brand" size="lg" className="w-full" loading={busy}>
           Verify and continue
         </Button>
       </form>
       <p className="mt-5 text-center text-[14px] text-muted">
-        Lost your phone? Ask another administrator to reset your two-step login.{" "}
+        {backup ? "Found your phone? " : "Lost your phone? "}
+        <button type="button" onClick={switchMode} className="font-medium text-ink underline underline-offset-4">
+          {backup ? "Use the app's code" : "Use a backup code"}
+        </button>
+        {" · "}
         <button type="button" onClick={() => void logout()} className="font-medium text-ink underline underline-offset-4">
           Use a different account
         </button>
       </p>
+      {backup && <p className="mt-3 text-center text-[13px] text-muted">No backup codes? Contact us: after checking it&apos;s you, we can turn two-step login off.</p>}
     </motion.div>
   );
 }

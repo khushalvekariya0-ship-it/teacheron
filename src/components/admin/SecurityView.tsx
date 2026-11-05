@@ -16,10 +16,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Progress } from "@/components/ui/Controls";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
-import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/Overlay";
-import { Field, Input } from "@/components/ui/Input";
-import { toast } from "@/components/ui/Toast";
-import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/Overlay";
+import { TwoStepLogin } from "@/components/auth/TwoStepLogin";
 import { ALL_PERMISSIONS, FilterSelect, MiniStat, PERMISSION_META, PermissionNotice, TextLink, fullName, useDirectory, useStaff } from "./kit";
 
 const DAY = 86_400_000;
@@ -128,7 +126,7 @@ export function SecurityView() {
         <Card className="lg:col-span-1">
           <CardHeader title="Your account" description={`${fullName(me)} · ${ROLE_LABEL[me.role]}`} />
           <div className="space-y-4 p-5 pt-4">
-            <TwoStepLogin on={!!me.mfaEnabled} />
+            <TwoStepLogin on={!!me.mfaEnabled} staff />
             <dl className="space-y-2 text-[13px]">
               <div className="flex justify-between gap-3">
                 <dt className="text-muted">Email</dt>
@@ -395,105 +393,5 @@ function StaffAccess({ user }: { user: User }) {
         {ROLE_LABEL[user.role]} · {perms.length} of {ALL_PERMISSIONS.length} permissions
       </p>
     </div>
-  );
-}
-
-/** Turn two-step login on (scan a QR code, confirm a code) or off (confirm a code). */
-function TwoStepLogin({ on }: { on: boolean }) {
-  const enroll = useApp((s) => s.enrollMfa);
-  const verify = useApp((s) => s.verifyMfa);
-  const disable = useApp((s) => s.disableMfa);
-  const [setup, setSetup] = React.useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
-  const [turningOff, setTurningOff] = React.useState(false);
-  const [code, setCode] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  const close = () => {
-    setSetup(null);
-    setTurningOff(false);
-    setCode("");
-    setError(null);
-  };
-  const start = async () => {
-    setBusy(true);
-    const r = await enroll();
-    setBusy(false);
-    if (!r.ok) return toast.error(r.error);
-    setSetup(r.data);
-  };
-  const confirm = async () => {
-    if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code from your authenticator app.");
-    setBusy(true);
-    const r = setup ? await verify(code, setup.factorId) : await disable(code);
-    setBusy(false);
-    if (!r.ok) {
-      setCode("");
-      return setError(r.error);
-    }
-    toast.success(setup ? "Two-step login is on" : "Two-step login is off");
-    close();
-  };
-
-  const codeField = (
-    <Field label="6-digit code" error={error ?? undefined}>
-      <Input
-        value={code}
-        onChange={(e) => {
-          setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
-          setError(null);
-        }}
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        placeholder="123456"
-        className="font-mono tracking-[0.3em]"
-      />
-    </Field>
-  );
-
-  return (
-    <>
-      <div className={cn("flex items-start gap-3 rounded-lg border px-3.5 py-3", on ? "border-success-200 bg-success-50" : "border-warning-200 bg-warning-50")}>
-        {on ? <ShieldCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden /> : <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />}
-        <div className="min-w-0">
-          <p className={cn("text-[13.5px] font-semibold", on ? "text-success" : "text-warning")}>{on ? "Two-step login is on" : "Two-step login is off"}</p>
-          <p className="mt-0.5 text-[12.5px] text-ink-2">
-            {on ? "Each sign-in asks for a code from your authenticator app." : "Staff accounts should turn this on before handling member data. You'll need an authenticator app such as Google Authenticator or 1Password."}
-          </p>
-          <Button variant={on ? "secondary" : "brand"} size="sm" className="mt-2.5" loading={busy && !setup && !turningOff} onClick={on ? () => setTurningOff(true) : start}>
-            {on ? "Turn off" : "Turn on two-step login"}
-          </Button>
-        </div>
-      </div>
-
-      <Dialog open={!!setup || turningOff} onOpenChange={(o) => !o && close()}>
-        <DialogContent
-          size="sm"
-          title={setup ? "Set up two-step login" : "Turn off two-step login?"}
-          description={setup ? "Scan the QR code with your authenticator app, then enter the code it shows." : "Enter a code from your authenticator app to confirm."}
-        >
-          <DialogBody className="space-y-4">
-            {setup && (
-              <>
-                {/* The QR code is an SVG data URL from Supabase Auth. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={setup.qrCode} alt="QR code for your authenticator app" className="mx-auto size-44 rounded-lg border border-line bg-white p-2" />
-                <div className="text-[12.5px] text-muted">
-                  Can&apos;t scan? Enter this key in the app instead:
-                  <code className="mt-1 block break-all rounded-md bg-sunken px-2.5 py-1.5 font-mono text-[12.5px] text-ink">{setup.secret}</code>
-                </div>
-              </>
-            )}
-            {codeField}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={close}>Cancel</Button>
-            <Button variant={setup ? "brand" : "danger"} loading={busy} onClick={confirm}>
-              {setup ? "Turn on" : "Turn off"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }

@@ -1,6 +1,6 @@
 import type { Grade, Level, TeachingMode, Tutor, TutorCategory } from "@/lib/types";
 import { getSubject, gradeToLevel, subjectName, WEEKDAYS, TIMES_OF_DAY, GRADE_LABEL, LEVEL_LABEL } from "@/lib/data/catalog";
-import { distanceMiles, resolveLocation } from "@/lib/data/geo";
+import { distanceMiles, locationLabel, resolveLocation } from "@/lib/data/geo";
 import { rankTutors, type MatchCriteria } from "@/lib/matching";
 import { formatCents } from "@/lib/format";
 
@@ -127,7 +127,7 @@ export function describeSearch(s: TutorSearch): string {
   if (s.grade) parts.push(GRADE_LABEL[s.grade]);
   else if (s.level) parts.push(LEVEL_LABEL[s.level]);
   if (s.mode) parts.push(s.mode === "online" ? "Online" : "In person");
-  if (s.location) parts.push(`Near ${s.location}`);
+  if (s.location) parts.push(`Near ${locationLabel(s.location)}`);
   if (s.maxRate) parts.push(`Up to ${formatCents(s.maxRate * 100)}/hr`);
   return parts.join(" · ") || "All tutors";
 }

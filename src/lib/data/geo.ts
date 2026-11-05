@@ -70,11 +70,23 @@ export function isValidZip(zip: string): boolean {
   return /^\d{5}$/.test(zip.trim());
 }
 
+/** A place outside the built-in US list, found once with the place lookup and kept with its coordinates. */
+export const pointLocation = (p: { lat: number; lng: number; label: string }) => `@${p.lat},${p.lng}|${p.label.replace(/\|/g, " ")}`;
+
+/** What a location reads as ("Ahmedabad, Gujarat, India", "60614 · near Chicago, IL", or as typed). */
+export const locationLabel = (input: string | undefined | null): string => (input ? (/^@/.test(input) ? (resolveLocation(input)?.label ?? input) : input) : "");
+
 /**
- * Resolves a ZIP code, "City, ST" or a bare city name to coordinates.
- * Returns null when the location cannot be resolved offline.
+ * Resolves a ZIP code, "City, ST", a bare city name, or a place with coordinates ("@lat,lng|label") to
+ * coordinates. Returns null when the location cannot be resolved offline.
  */
 export function resolveLocation(input: string): GeoPoint | null {
+  const at = /^@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)\|(.{1,160})$/.exec(input.trim());
+  if (at) {
+    const lat = Number(at[1]);
+    const lng = Number(at[2]);
+    return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng, label: at[3].trim() } : null;
+  }
   const q = input.trim().toLowerCase();
   if (!q) return null;
 

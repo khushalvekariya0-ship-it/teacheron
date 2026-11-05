@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { Message, Role } from "@/lib/types";
+import type { Message, Role, SignInMethods } from "@/lib/types";
 import type { DomainActions } from "@/lib/domain/actions";
 import { emptyData, fail, ok, type ClientConfig, type Data, type Result } from "@/lib/domain/data";
 import { DEFAULT_FLAGS, DEFAULT_POLICY } from "@/lib/data/platform";
@@ -63,12 +63,19 @@ interface ClientOnly {
   signIn(email: string, password: string): Promise<Result<{ firstName: string; role: Role; mfaRequired?: boolean }> & { code?: string }>;
   /** True when the browser is signed in with a password but still owes a two-step code. */
   mfaRequired: boolean;
-  /** Enter a code from the authenticator app: after the password, or to finish setting it up (with factorId). */
-  verifyMfa(code: string, factorId?: string): Promise<Result<{ firstName: string; role: Role }>>;
+  /**
+   * Enter a code from the authenticator app: after the password, or to finish setting it up (with factorId);
+   * finishing setup also returns the 10 backup codes, shown once.
+   */
+  verifyMfa(code: string, factorId?: string): Promise<Result<{ firstName: string; role: Role; recoveryCodes?: string[] }>>;
   /** Starts two-step login: returns the QR code and secret to add to an authenticator app. */
   enrollMfa(): Promise<Result<{ factorId: string; qrCode: string; secret: string }>>;
   disableMfa(code: string): Promise<Result>;
-  /** An administrator clears another staff member's two-step login (lost phone). */
+  /** New backup codes (confirmed with the app's code); the old ones stop working. */
+  newRecoveryCodes(code: string): Promise<Result<{ recoveryCodes: string[] }>>;
+  /** Lost phone: a backup code instead of the app's code, after the password. Turns two-step login off. */
+  recoverMfa(code: string): Promise<Result<{ firstName?: string; role?: Role; signInAgain?: boolean }>>;
+  /** An administrator clears another account's two-step login (lost phone and backup codes). */
   resetStaffMfa(userId: string): Promise<Result>;
   signUp(input: SignUpInput): Promise<Result<SignUpOutcome>>;
   /** Signs out of this browser, or of every device with `everywhere`. */
@@ -81,6 +88,13 @@ interface ClientOnly {
   /** Sets a new password from a reset link. Afterwards the person signs in with it. */
   resetPassword(token: string, password: string): Promise<Result>;
   changePassword(current: string, next: string): Promise<Result>;
+  /** An account made with Google / Facebook / Apple sets its first password (no current one to enter). */
+  setPassword(next: string): Promise<Result>;
+  /** Disconnects a Google / Facebook / Apple sign-in; answers with the account's sign-in methods. */
+  unlinkSignIn(identityId: string): Promise<Result<SignInMethods>>;
+  /** Changing the sign-in email: the password (when the account has one), then a code sent to the new address. */
+  startEmailChange(email: string, password?: string): Promise<Result<{ email: string }> & { code?: string }>;
+  confirmEmailChange(code: string): Promise<Result<{ email: string }>>;
   resendConfirmation(email: string): Promise<Result>;
   /** Checks the 6-digit sign-up code on the server and confirms the email (doesn't sign in). */
   verifyEmail(email: string, code: string): Promise<Result>;
@@ -249,9 +263,18 @@ export const useApp = create<AppState>()(
           return r.ok ? ok({ ...r.data.user, mfaRequired: !!r.data.mfaRequired }) : r;
         },
         async verifyMfa(code, factorId) {
-          const r = await auth<{ user: { firstName: string; role: Role } }>("mfa-verify", { code, factorId });
+          const r = await auth<{ user: { firstName: string; role: Role }; recoveryCodes?: string[] }>("mfa-verify", { code, factorId });
           if (r.ok) set({ mfaRequired: false });
-          return r.ok ? ok(r.data.user) : r;
+          return r.ok ? ok({ ...r.data.user, recoveryCodes: r.data.recoveryCodes }) : r;
+        },
+        async newRecoveryCodes(code) {
+          const r = await auth<{ recoveryCodes: string[] }>("mfa-new-codes", { code });
+          return r.ok ? ok({ recoveryCodes: r.data.recoveryCodes }) : r;
+        },
+        async recoverMfa(code) {
+          const r = await auth<{ user?: { firstName: string; role: Role }; signInAgain?: boolean }>("mfa-recover", { code });
+          if (r.ok) set({ mfaRequired: false });
+          return r.ok ? ok({ firstName: r.data.user?.firstName, role: r.data.user?.role, signInAgain: !!r.data.signInAgain }) : r;
         },
         async enrollMfa() {
           const r = await auth<{ factorId: string; qrCode: string; secret: string }>("mfa-enroll", {});
@@ -299,6 +322,22 @@ export const useApp = create<AppState>()(
         changePassword: async (current, next) => {
           const r = await auth("password", { current, next });
           return r.ok ? ok(undefined) : r;
+        },
+        setPassword: async (next) => {
+          const r = await auth("password", { next });
+          return r.ok ? ok(undefined) : r;
+        },
+        async unlinkSignIn(identityId) {
+          const r = await auth<SignInMethods>("unlink", { identityId });
+          return r.ok ? ok(r.data) : r;
+        },
+        async startEmailChange(email, password) {
+          const r = await auth<{ email: string }>("change-email", { email, password });
+          return r.ok ? ok({ email: r.data.email }) : r;
+        },
+        async confirmEmailChange(code) {
+          const r = await auth<{ email: string }>("change-email-verify", { code });
+          return r.ok ? ok({ email: r.data.email }) : r;
         },
         resendConfirmation: async (email) => {
           const r = await auth("resend", { email });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { phoneProblem } from "@/lib/phone";
 import type { User } from "@/lib/types";
 import { validateWeek } from "@/components/dashboard/tutor/AvailabilityEditor";
 import { parseIntroVideo } from "@/lib/video";
@@ -19,7 +20,7 @@ const year = z
 
 export const personalSchema = z
   .object({
-    phone: z.string().trim().refine((v) => v.replace(/\D/g, "").length === 10, "Enter a 10-digit US phone number."),
+    phone: z.string().trim(),
     country: z.string().refine((v) => isCountryCode(v), "Choose your country."),
     city: z.string().trim().min(2, "Enter your city.").max(60, "Keep it under 60 characters."),
     state: z.string().min(1, "Choose your state or province.").max(60),
@@ -27,6 +28,8 @@ export const personalSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
+    const phone = phoneProblem(v.phone, v.country);
+    if (phone) ctx.addIssue({ code: "custom", path: ["phone"], message: phone });
   });
 
 export const subjectsSchema = z.object({

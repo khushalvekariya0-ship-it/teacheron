@@ -510,7 +510,7 @@ function AccountMenu({ user }: { user: User }) {
     edit: canEdit,
     resend: can("users.write") && !user.emailVerified && user.status !== "suspended",
     staff: admin && !user.tutorId,
-    mfa: admin && staffTarget && !!user.mfaEnabled,
+    mfa: admin && !!user.mfaEnabled,
     delete: admin,
   };
   if (!Object.values(items).some(Boolean)) return null;

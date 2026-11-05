@@ -6,7 +6,7 @@ import type { Grade, Level, TutorCategory } from "@/lib/types";
 import { RADIUS_OPTIONS, type TutorSearch } from "@/lib/search";
 import { GRADES, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
 import { useCatalog } from "@/lib/store/hooks";
-import { isValidZip, resolveLocation } from "@/lib/data/geo";
+import { isValidZip, locationLabel, pointLocation, resolveLocation } from "@/lib/data/geo";
 import { cn } from "@/lib/utils";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Checkbox, ChipGroup, Segmented } from "@/components/ui/Controls";
@@ -92,48 +92,63 @@ export function KeywordField({ value, onCommit, compact }: { value: string | und
 }
 
 export function LocationField({ value, onCommit }: { value: string | undefined; onCommit: (loc: string | undefined) => void }) {
-  const [text, setText] = React.useState(value ?? "");
+  const [text, setText] = React.useState(locationLabel(value));
   const [prev, setPrev] = React.useState(value);
   const [error, setError] = React.useState<string | undefined>();
   if (prev !== value) {
     setPrev(value);
-    setText(value ?? "");
+    setText(locationLabel(value));
     setError(undefined);
   }
   const resolved = value ? resolveLocation(value) : null;
+  const [looking, setLooking] = React.useState(false);
 
-  const commit = () => {
+  const commit = async () => {
     const v = text.trim();
     if (!v) {
       setError(undefined);
       if (value) onCommit(undefined);
       return;
     }
-    if (!resolveLocation(v)) {
-      setError(isValidZip(v) ? "We don't have tutors near this ZIP yet. Try a nearby city, or choose Online." : "Enter a 5-digit ZIP or a city like “Austin, TX”.");
+    if (v === locationLabel(value)) return;
+    if (resolveLocation(v)) {
+      setError(undefined);
+      if (v !== value) onCommit(v);
       return;
     }
-    setError(undefined);
-    if (v !== value) onCommit(v);
+    // Not in the built-in US list: look the place up (any country), e.g. "Rajkot" or "Dubai Marina".
+    setLooking(true);
+    try {
+      const res = await fetch(`/api/geo?kind=point&q=${encodeURIComponent(v)}`);
+      const data = (await res.json().catch(() => ({}))) as { point?: { lat: number; lng: number; label: string } | null };
+      if (data.point) {
+        setError(undefined);
+        onCommit(pointLocation(data.point));
+      } else setError(isValidZip(v) ? "We couldn't find this ZIP. Try a nearby city, or choose Online." : "We couldn't find that place. Try a city name, e.g. “Austin, TX” or “Rajkot”.");
+    } catch {
+      setError("You seem to be offline. Try again.");
+    } finally {
+      setLooking(false);
+    }
   };
 
   return (
-    <Field label="ZIP or city" error={error} hint={!error && resolved ? `Searching near ${resolved.label}` : !error ? "Used for in-person lessons and distance." : undefined}>
+    <Field label="ZIP or city" error={error} hint={looking ? "Finding that place…" : !error && resolved ? `Searching near ${resolved.label}` : !error ? "Used for in-person lessons and distance." : undefined}>
       <Input
         icon={<MapPin />}
         value={text}
-        placeholder="e.g. 60614 or Chicago, IL"
+        placeholder="e.g. 60614, Chicago, IL or Rajkot"
         autoComplete="postal-code"
         enterKeyHint="done"
         onChange={(e) => {
           setText(e.target.value);
           if (error) setError(undefined);
         }}
-        onBlur={commit}
+        onBlur={() => void commit()}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            commit();
+            void commit();
           }
         }}
       />

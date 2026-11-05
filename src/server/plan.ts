@@ -274,16 +274,20 @@ export const PLANS: Record<ActionName, Plan> = {
   runScheduledJobs: async (L) => {
     const due = await L.load(
       "bookings",
-      "(status = 'pending' and start_utc <= now()) or (status in ('confirmed', 'in_progress') and end_utc + interval '24 hours' <= now())",
+      `(status = 'pending' and start_utc <= now()) or (status in ('confirmed', 'in_progress') and end_utc + interval '24 hours' <= now())
+       or (status in ('confirmed', 'in_progress') and start_utc > now()
+           and ((reminded_24h_at is null and start_utc <= now() + interval '24 hours') or (reminded_1h_at is null and start_utc <= now() + interval '65 minutes')))`,
       [],
       500,
     );
     const bookingIds = due.map((b) => b.id as string);
+    const tutorIds = due.map((b) => b.tutor_id as string);
     await Promise.all([
       L.byId("disputes", bookingIds, "booking_id"),
       L.byId("payments", bookingIds, "booking_id"),
       L.users(due.map((b) => b.booker_id as string)),
-      L.tutors(due.map((b) => b.tutor_id as string)),
+      L.usersByTutor(tutorIds),
+      L.tutors(tutorIds),
     ]);
   },
 };

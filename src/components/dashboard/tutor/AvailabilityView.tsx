@@ -10,7 +10,7 @@ import { useApp } from "@/lib/store";
 import { useFlag, useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { generateSlots, zonedParts } from "@/lib/time";
 import { formatDuration, formatTime, tzAbbrev } from "@/lib/format";
-import { US_TIMEZONES } from "@/lib/data/catalog";
+import { timeZoneLabel } from "@/lib/timezones";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -53,7 +53,7 @@ export function AvailabilityView() {
   const invalid = Object.keys(errors).length > 0;
   const dirty = !sameWeek(draft, saved);
   const minutes = weeklyMinutes(draft);
-  const tzLabel = US_TIMEZONES.find((t) => t.value === tutor.timezone)?.label ?? tutor.timezone;
+  const tzLabel = timeZoneLabel(tutor.timezone);
   const today = todayKey(now, tutor.timezone);
   const upcomingExceptions = [...tutor.exceptions].filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
 

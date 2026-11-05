@@ -15,7 +15,7 @@
  * The server runs this on every message and file before anything is saved; the browser never decides.
  */
 
-export type ContactKind = "phone" | "email" | "social";
+export type ContactKind = "phone" | "email" | "social" | "link";
 export type ScanMode = "chat" | "file";
 
 /** Where contact details were found, as positions in the original text. */
@@ -253,6 +253,11 @@ const SHORT_APPS = "(?:snap|sc|ig|fb|signal|tg|wa|insta|messenger|telegram|whats
 const MY_APPS = "(?:snap|ig|fb|insta|messenger)";
 const CONTACT_LINK =
   /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9-]+\.)*(?:wa\.me|whatsapp\.com|t\.me|telegram\.(?:me|org|dog)|instagram\.com|instagr\.am|facebook\.com|fb\.(?:com|me)|m\.me|messenger\.com|snapchat\.com|tiktok\.com|twitter\.com|x\.com|linkedin\.com|discord\.(?:gg|com)|signal\.(?:me|group)|skype\.com|line\.me|wechat\.com|viber\.com|kik\.me|calendly\.com|linktr\.ee|beacons\.ai|venmo\.com|cash\.app|paypal\.(?:me|com)|threads\.net|bsky\.app)\b(?:\/[^\s]*)?/g;
+// Links that can hide contact details out of sight: shared documents and forms, file sharing, paste sites,
+// one-page "link in bio" sites and link shorteners (which hide where they go). Learning links (YouTube,
+// Khan Academy, Wikipedia, Desmos…) stay allowed; documents can be attached instead, and attachments are read.
+const OUTSIDE_LINK =
+  /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?(?:docs\.google\.com|drive\.google\.com|sites\.google\.com|forms\.gle|forms\.google\.com|goo\.gl|bit\.ly|tinyurl\.com|t\.co|ow\.ly|is\.gd|cutt\.ly|rebrand\.ly|shorturl\.at|tiny\.cc|rb\.gy|s\.id|bl\.ink|lnkd\.in|dropbox\.com|db\.tt|1drv\.ms|onedrive\.live\.com|[a-z0-9-]+\.sharepoint\.com|(?:app\.)?box\.com|wetransfer\.com|we\.tl|mega\.nz|mediafire\.com|notion\.so|[a-z0-9-]+\.notion\.site|airtable\.com|(?:[a-z0-9-]+\.)?typeform\.com|(?:form\.)?jotform\.com|pastebin\.com|rentry\.co|justpaste\.it|paste\.ee|controlc\.com|privatebin\.net|hastebin\.com|(?:[a-z0-9-]+\.)?carrd\.co|about\.me|bio\.link)\/[^\s]{2,}/g;
 // Online-lesson links, whose long meeting numbers aren't phone numbers.
 const MEETING_LINK = /(?<![a-z0-9.-])(?:https?:\/\/)?(?:[a-z0-9-]+\.)*(?:zoom\.us|zoom\.com|meet\.google\.com|teams\.microsoft\.com|teams\.live\.com|webex\.com|whereby\.com)\/[^\s]*/g;
 // Asking to be called or texted; any 7+ digits shortly after count as a phone number.
@@ -770,6 +775,7 @@ function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
   add("email", findEmails([v, ...rebuilt]));
   add("phone", phonesIn(v));
   add("social", findSocial([v, rebuilt[2], unmaskLinks(unmasked)], mode));
+  for (const w of [v, unmaskLinks(unmasked)]) add("link", rangesOf(w, OUTSIDE_LINK));
   if (mode === "chat") {
     // Number words typed one letter at a time: "n i n e o n e s e v e n …"
     add("phone", phonesIn(replaceIn(v, /(?<!\S)\p{L}(?:[ \t]+\p{L}(?!\S)){3,}/gu, (m) => m[0].replace(/[ \t]+/g, ""))));
@@ -797,7 +803,7 @@ export function scanContact(text: string, mode: ScanMode = "chat"): ContactScan 
   return scanCore(text, mode, 0);
 }
 
-const MASK: Record<ContactKind, string> = { phone: "[phone number hidden]", email: "[email hidden]", social: "[contact details hidden]" };
+const MASK: Record<ContactKind, string> = { phone: "[phone number hidden]", email: "[email hidden]", social: "[contact details hidden]", link: "[link hidden]" };
 
 /** The text with every match replaced by a label (overlapping matches are merged). */
 export function maskMatches(text: string, matches: ContactMatch[], label?: string): string {
@@ -816,7 +822,7 @@ export function maskMatches(text: string, matches: ContactMatch[], label?: strin
   return out + text.slice(at);
 }
 
-const KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media, messaging or payment app contact" };
+const KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media, messaging or payment app contact", link: "a link to an outside document, form or file-sharing page" };
 
 /** "a phone number and an email address" */
 export function describeKinds(kinds: ContactKind[]): string {
@@ -837,6 +843,10 @@ export function blockedMessage(kinds: ContactKind[], where: "message" | "file" |
   }
   const what = where === "file" ? "This file" : where === "note" ? "This note" : "Your message";
   const fix = where === "file" ? "Remove or cover those details and attach it again." : "Edit it and send again.";
+  const onlyLink = kinds.length > 0 && kinds.every((k) => k === "link");
+  if (onlyLink) {
+    return `${what} wasn't sent because it includes ${describeKinds(kinds)}. Those pages can hide contact details, so they can't be shared on TutorLink. ${where === "file" ? fix : "To share a document, attach the file instead: attachments are checked before the other person can open them."}`;
+  }
   return `${what} wasn't sent because it looks like it includes ${describeKinds(kinds)}. To keep everyone safe, phone numbers, email addresses and social media or messaging app details can't be shared on TutorLink. ${fix}`;
 }
 

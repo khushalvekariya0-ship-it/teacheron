@@ -8,7 +8,8 @@ import { sendConsentRequest } from "@/server/consent";
 import { backendStatus } from "@/server/env";
 import { clientIp, json, rateLimit, readJson, sameOrigin, serverError, tooMany } from "@/server/http";
 import { accountById, authState, currentSession, hasVerifiedFactor } from "@/server/session";
-import { cancelLink, completeSignup, finishAddEmail, maskEmail, providerLabel, resendLinkCode, startAddEmail, verifyLinkCode } from "@/server/social";
+import { cancelLink, completeSignup, finishAddEmail, identityKey, maskEmail, providerLabel, resendLinkCode, startAddEmail, verifyLinkCode } from "@/server/social";
+import { clearRecoveryCodes, hasPassword, newRecoveryCodes, passwordMatches, recoveryCodesLeft, sendEmailChangedNotice, signInMethods, spendRecoveryCode } from "@/server/account-security";
 import { buildState } from "@/server/snapshot";
 import { contactIn, NAME_RULE } from "@/lib/domain/contact";
 import { isPostalCode, POSTAL_CODE, postalError } from "@/lib/postal";
@@ -34,15 +35,23 @@ import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
  *   POST /api/auth/reset-code { email, code }           → swaps the emailed 6-digit code for a link token (same answer for every failure)
  *   POST /api/auth/reset-check { token }                → whether a reset link still works
  *   POST /api/auth/reset      { token, password }       → sets the new password from a reset link
- *   POST /api/auth/password   { current, next }         → change password while signed in
+ *   POST /api/auth/password   { current?, next }        → change password while signed in (other devices are signed out);
+ *                                                        an account made with Google / Facebook / Apple sets its first one without `current`
+ *   POST /api/auth/change-email { email, password? }    → change the sign-in email: password check, then a code to the new address
+ *   POST /api/auth/change-email-verify { code }         → the code from the new address; the old address is told
+ *   POST /api/auth/unlink     { identityId }            → disconnect Google / Facebook / Apple (only while another way to sign in remains)
  *   POST /api/auth/resend     { email }                 → a new sign-up code (or confirmation link) for an unconfirmed account
  *   POST /api/auth/consent    → re-send the parental-consent email (13–17 students)
- *   POST /api/auth/mfa-enroll → start two-step login (staff): QR code + secret for an authenticator app
- *   POST /api/auth/mfa-verify { code, factorId? } → finish setup, or enter the code after the password
+ *   POST /api/auth/mfa-enroll → start two-step login (any account): QR code + secret for an authenticator app
+ *   POST /api/auth/mfa-verify { code, factorId? } → finish setup (answers with 10 backup codes, shown once), or enter the code after the password
  *   POST /api/auth/mfa-disable { code } → turn two-step login off
- *   POST /api/auth/mfa-reset  { userId } → an administrator clears another staff member's two-step login
+ *   POST /api/auth/mfa-new-codes { code } → new backup codes (the old ones stop working)
+ *   POST /api/auth/mfa-recover { code } → lost phone: a backup code instead of the app's code (turns two-step login off)
+ *   POST /api/auth/mfa-reset  { userId } → an administrator clears another account's two-step login
  *   GET  /api/auth/providers  → the social sign-ins switched on in Supabase
+ *   GET  /api/auth/methods    → this account's ways to sign in, two-step login and backup codes left
  *   GET  /api/auth/oauth?provider=google&next=/dashboard → redirect to the provider
+ *   GET  /api/auth/oauth?provider=google&link=1 → connect it to the signed-in account (Settings → Security)
  */
 export const dynamic = "force-dynamic";
 
@@ -69,6 +78,11 @@ const signUpSchema = z.object({
 });
 
 const fail = (error: string, status = 400, extra?: Record<string, unknown>) => json({ ok: false, error, ...extra }, { status });
+const isStaffRole = (role: string) => role === "admin" || role === "support";
+const SETTINGS_SECURITY = "/dashboard/settings?tab=security";
+/** Where an account manages its sign-in (security notices link here). */
+const securityHref = (role: string) => (isStaffRole(role) ? "/admin/security" : SETTINGS_SECURITY);
+const sixDigits = z.string().trim().regex(/^\d{6}$/);
 
 export async function POST(request: Request, ctx: Ctx) {
   const { op } = await ctx.params;
@@ -135,18 +149,19 @@ export async function POST(request: Request, ctx: Ctx) {
           await supabase.auth.signOut();
           return fail("This account is suspended. Contact support for help.", 403);
         }
+        let recoveryCodes: string[] | undefined;
         if (enrolling) {
           await setMfaFlag(user.id, true);
+          recoveryCodes = await newRecoveryCodes(user.id);
           await auditDirect(user.id, "security.mfa_on", "user", user.id);
-          await notifyDirect(user.id, { title: "Two-step login is on", body: "You'll enter a code from your authenticator app each time you sign in.", href: "/admin/security" }, siteOrigin(request));
+          await notifyDirect(user.id, { title: "Two-step login is on", body: "You'll enter a code from your authenticator app each time you sign in. Keep your backup codes somewhere safe.", href: securityHref(user.role) }, siteOrigin(request));
         }
-        return json({ ok: true, user: { firstName: user.firstName, role: user.role }, state: await buildState(user.id) });
+        return json({ ok: true, user: { firstName: user.firstName, role: user.role }, recoveryCodes, state: await buildState(user.id) });
       }
 
       case "mfa-enroll": {
         const session = await currentSession();
         if (!session) return fail("Please sign in again.", 401);
-        if (session.user.role !== "admin" && session.user.role !== "support") return fail("Two-step login is available for staff accounts.", 403);
         if (hasVerifiedFactor(session.authUser)) return fail("Two-step login is already on.");
         for (const f of session.authUser.factors ?? []) if (f.status !== "verified") await supabase.auth.mfa.unenroll({ factorId: f.id });
         const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: `TutorLink ${Date.now().toString(36)}`, issuer: "TutorLink" });
@@ -168,9 +183,56 @@ export async function POST(request: Request, ctx: Ctx) {
         const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
         if (error) return fail("We couldn't turn it off. Please try again.");
         await setMfaFlag(session.user.id, false);
+        await clearRecoveryCodes(session.user.id);
         await auditDirect(session.user.id, "security.mfa_off", "user", session.user.id);
-        await notifyDirect(session.user.id, { title: "Two-step login was turned off", body: "If this wasn't you, change your password and contact an administrator.", href: "/admin/security" }, siteOrigin(request));
+        await notifyDirect(session.user.id, { title: "Two-step login was turned off", body: isStaffRole(session.user.role) ? "If this wasn't you, change your password and contact an administrator." : "If this wasn't you, change your password straight away and contact us.", href: securityHref(session.user.role) }, siteOrigin(request));
         return json({ ok: true, state: await buildState(session.user.id) });
+      }
+
+      case "mfa-new-codes": {
+        // New backup codes (confirmed with the app's code); the old ones stop working.
+        const parsed = z.object({ code: sixDigits }).safeParse(body);
+        if (!parsed.success) return fail("Enter the 6-digit code from your authenticator app.");
+        const session = await currentSession();
+        if (!session) return fail("Please sign in again.", 401);
+        const limit = rateLimit(`mfa:${session.user.id}`, 8, 10 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const factor = (session.authUser.factors ?? []).find((f) => f.status === "verified" && f.factor_type === "totp");
+        if (!factor) return fail("Two-step login is off.");
+        const check = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: parsed.data.code });
+        if (check.error) return fail("That code isn't right. Check the time on your phone and try the newest code.");
+        const recoveryCodes = await newRecoveryCodes(session.user.id);
+        await auditDirect(session.user.id, "security.mfa_new_codes", "user", session.user.id);
+        return json({ ok: true, recoveryCodes });
+      }
+
+      case "mfa-recover": {
+        // Lost phone: after the password, a backup code gets the person in and turns two-step login off,
+        // so they can set it up again on a new phone. Each code works once.
+        const parsed = z.object({ code: z.string().trim().min(6).max(40) }).safeParse(body);
+        if (!parsed.success) return fail("Enter one of your backup codes.");
+        const { data: u } = await supabase.auth.getUser();
+        if (!u.user) return fail("Please sign in again.", 401);
+        if (!hasVerifiedFactor(u.user)) return fail("Two-step login isn't on for this account.");
+        const limit = rateLimit(`mfa-recover:${u.user.id}`, 5, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const user = await accountById(u.user.id);
+        if (!user || user.status === "suspended") {
+          await supabase.auth.signOut();
+          return fail("This account is suspended. Contact support for help.", 403);
+        }
+        const admin = supabaseAdmin();
+        const { data: listed, error: listError } = await admin.auth.admin.mfa.listFactors({ userId: user.id });
+        if (listError) return fail("We couldn't reach the sign-in service. Please try again.");
+        if (!(await spendRecoveryCode(user.id, parsed.data.code))) return fail("That backup code isn't right or was already used.");
+        for (const f of listed?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ id: f.id, userId: user.id });
+        await clearRecoveryCodes(user.id);
+        await setMfaFlag(user.id, false);
+        await auditDirect(user.id, "security.mfa_recovered", "user", user.id);
+        await notifyDirect(user.id, { title: "Two-step login was turned off with a backup code", body: "Someone (hopefully you) signed in with a backup code. Turn two-step login on again with your new phone. If this wasn't you, change your password straight away.", href: securityHref(user.role) }, siteOrigin(request));
+        const { data: still } = await supabase.auth.getUser();
+        if (!still.user) return json({ ok: true, signInAgain: true, state: await buildState(null) });
+        return json({ ok: true, user: { firstName: user.firstName, role: user.role }, state: await buildState(user.id) });
       }
 
       case "mfa-reset": {
@@ -178,6 +240,7 @@ export async function POST(request: Request, ctx: Ctx) {
         if (!parsed.success) return fail("Choose an account.");
         const session = await currentSession();
         if (!session || session.user.role !== "admin" || !hasPermission(session.user, "users.write")) return fail("Only an administrator with users.write can reset two-step login.", 403);
+        // Any account: staff, and members who lost their phone and their backup codes (after checking who they are).
         if (parsed.data.userId === session.user.id) return fail("Turn your own two-step login off from Security.");
         const target = await accountById(parsed.data.userId);
         if (!target) return fail("Account not found.", 404);
@@ -186,8 +249,9 @@ export async function POST(request: Request, ctx: Ctx) {
         if (error) return fail("We couldn't reach the sign-in service. Please try again.");
         for (const f of data?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ id: f.id, userId: target.id });
         await setMfaFlag(target.id, false);
+        await clearRecoveryCodes(target.id);
         await auditDirect(session.user.id, "user.mfa_reset", "user", target.id);
-        await notifyDirect(target.id, { title: "Your two-step login was reset", body: "An administrator removed your authenticator app. Set it up again in Security.", href: "/admin/security" }, siteOrigin(request));
+        await notifyDirect(target.id, { title: "Your two-step login was reset", body: isStaffRole(target.role) ? "An administrator removed your authenticator app. Set it up again in Security." : "We removed your authenticator app as you asked. Set two-step login up again in Settings → Security.", href: securityHref(target.role) }, siteOrigin(request));
         return json({ ok: true, state: await buildState(session.user.id) });
       }
 
@@ -337,17 +401,100 @@ export async function POST(request: Request, ctx: Ctx) {
       }
 
       case "password": {
-        const parsed = z.object({ current: z.string().min(1).max(200), next: password }).safeParse(body);
+        // Change the password (the current one is checked), or give an account made with Google / Facebook /
+        // Apple its first one. The check uses a separate sign-in, so this browser's session (which may have
+        // passed two-step login) stays as it is; other browsers and devices are signed out afterwards.
+        const parsed = z.object({ current: z.string().max(200).optional(), next: password }).safeParse(body);
         if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Use at least 10 characters.");
         const session = await currentSession();
-        if (!session?.authUser.email) return fail("Please sign in again.", 401);
+        if (!session) return fail("Please sign in again.", 401);
+        const signInEmail = session.authUser.email ?? "";
+        if (!signInEmail || !session.authUser.email_confirmed_at) return fail("Add and confirm an email address first: you'll sign in with it and this password.");
         const limit = rateLimit(`password:${session.user.id}`, 6, 15 * 60_000);
         if (!limit.ok) return tooMany(limit.retryAfterSec);
-        const check = await supabase.auth.signInWithPassword({ email: session.authUser.email, password: parsed.data.current });
-        if (check.error) return fail("Current password is incorrect.");
+        const had = await hasPassword(session.user.id, session.authUser);
+        if (had) {
+          if (!parsed.data.current) return fail("Enter your current password.");
+          if (!(await passwordMatches(signInEmail, parsed.data.current))) return fail("Current password is incorrect.");
+        }
         const { error } = await supabase.auth.updateUser({ password: parsed.data.next });
-        if (error) return fail(error.code === "same_password" ? "Choose a password you haven't used before." : "We couldn't change your password. Please try again.");
-        return json({ ok: true });
+        if (error) {
+          if (error.code === "same_password") return fail("Choose a password you haven't used before.");
+          if (error.code === "weak_password") return fail("Choose a stronger password — longer is better.");
+          if (error.code === "reauthentication_needed" || error.code === "insufficient_aal") return fail("For your safety, sign out and sign in again, then change your password.");
+          console.error("[auth] password change failed", error.code, error.message);
+          return fail("We couldn't change your password. Please try again.");
+        }
+        await supabase.auth.signOut({ scope: "others" }).catch(() => {});
+        await auditDirect(session.user.id, had ? "security.password_changed" : "security.password_set", "user", session.user.id);
+        after(() => sendPasswordChangedEmail(signInEmail, session.user.firstName, had ? "changed" : "set").catch((e) => console.error("[auth] password notice", e)));
+        return json({ ok: true, set: !had });
+      }
+
+      case "change-email": {
+        // A new sign-in email: the password is checked (when the account has one), then a code goes to the new address.
+        const session = await currentSession();
+        if (!session) return fail("Please sign in again.", 401);
+        const parsed = z.object({ email, password: z.string().max(200).optional() }).safeParse(body);
+        if (!parsed.success) return fail("Enter a valid email address.");
+        if (!session.user.email) return fail("Add an email address first.");
+        if (parsed.data.email === session.user.email.toLowerCase()) return fail("That's already your sign-in email.");
+        const limit = rateLimit(`change-email:${session.user.id}`, 5, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        if (!emailReady()) return fail("Emails can't be sent right now. Please try again later.", 503);
+        if (await hasPassword(session.user.id, session.authUser)) {
+          if (!parsed.data.password) return fail("Enter your password.", 400, { code: "password_required" });
+          if (!(await passwordMatches(session.authUser.email ?? session.user.email, parsed.data.password))) return fail("That password isn't right.", 400, { code: "wrong_password" });
+        }
+        const r = await startAddEmail(session.user.id, parsed.data.email, "change");
+        return r.ok ? json({ ok: true, email: parsed.data.email }) : fail(r.error);
+      }
+
+      case "change-email-verify": {
+        const session = await currentSession();
+        if (!session) return fail("Please sign in again.", 401);
+        if (!session.user.email) return fail("Add an email address first.");
+        const parsed = z.object({ code: z.string().max(40).transform(cleanCode) }).safeParse(body);
+        if (!parsed.success || !isCodeShape(parsed.data.code)) return fail("Enter the 6-digit code from the email.");
+        const limit = rateLimit(`change-email-verify:${session.user.id}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const r = await finishAddEmail(session.user.id, parsed.data.code);
+        if (!r.ok) return fail(r.error);
+        await auditDirect(session.user.id, "security.email_changed", "user", session.user.id, { from: maskEmail(r.previous), to: maskEmail(r.email) });
+        await notifyDirect(session.user.id, { title: "Your sign-in email was changed", body: `You now sign in with ${r.email}. If this wasn't you, reset your password straight away and contact us.`, href: securityHref(session.user.role) }, siteOrigin(request));
+        if (r.previous && r.previous.toLowerCase() !== r.email) {
+          const old = r.previous;
+          after(() => sendEmailChangedNotice(old, r.email, session.user.firstName).catch((e) => console.error("[auth] email-changed notice", e)));
+        }
+        return json({ ok: true, email: r.email, state: await buildState(session.user.id) });
+      }
+
+      case "unlink": {
+        // Disconnect Google / Facebook / Apple — only while another way to sign in remains.
+        const parsed = z.object({ identityId: z.string().min(1).max(100) }).safeParse(body);
+        if (!parsed.success) return fail("Choose a sign-in method.");
+        const session = await currentSession();
+        if (!session) return fail("Please sign in again.", 401);
+        const limit = rateLimit(`unlink:${session.user.id}`, 10, 15 * 60_000);
+        if (!limit.ok) return tooMany(limit.retryAfterSec);
+        const identity = (session.authUser.identities ?? []).find((i) => identityKey(i) === parsed.data.identityId && i.provider !== "email" && i.provider !== "phone");
+        if (!identity) return fail("That sign-in method isn't connected to your account.", 404);
+        const label = providerLabel(identity.provider);
+        const last = `${label} is the last account connected to your sign-in, so it stays connected. You can still sign in with your email and password.`;
+        const method = (await signInMethods(session.authUser, session.user.id)).social.find((m) => m.id === parsed.data.identityId);
+        if (method?.locked === "only") return fail(`${label} is your only way to sign in. Set a password or connect another account first.`);
+        if (method?.locked === "last") return fail(last);
+        const { error } = await supabase.auth.unlinkIdentity(identity);
+        if (error) {
+          if (error.code === "single_identity_not_deletable") return fail(last);
+          console.error("[auth] unlink failed", identity.provider, error.code, error.message);
+          return fail("We couldn't disconnect it. Please try again.");
+        }
+        await db()`update public.users set trusted_identities = array_remove(trusted_identities, ${parsed.data.identityId}) where id = ${session.user.id}`;
+        await auditDirect(session.user.id, "security.sign_in_unlinked", "user", session.user.id, { provider: identity.provider });
+        await notifyDirect(session.user.id, { title: `${label} sign-in disconnected`, body: `You can no longer sign in with ${label}. If this wasn't you, change your password straight away and contact us.`, href: securityHref(session.user.role) }, siteOrigin(request));
+        const { data: fresh } = await supabase.auth.getUser();
+        return json({ ok: true, ...(await signInMethods(fresh.user ?? session.authUser, session.user.id)) });
       }
 
       case "resend": {
@@ -478,6 +625,37 @@ export async function GET(request: Request, ctx: Ctx) {
   const url = new URL(request.url);
   try {
     if (op === "providers") return json({ providers: await enabledProviders() });
+    if (op === "methods") {
+      const session = await currentSession();
+      if (!session) return json({ ok: false, error: "Please sign in again." }, { status: 401 });
+      const [methods, providers, codesLeft] = await Promise.all([signInMethods(session.authUser, session.user.id), enabledProviders(), recoveryCodesLeft(session.user.id)]);
+      return json({ ok: true, email: session.user.email, emailVerified: !!session.authUser.email_confirmed_at, ...methods, providers, mfa: hasVerifiedFactor(session.authUser), recoveryCodesLeft: codesLeft });
+    }
+    if (op === "oauth" && url.searchParams.get("link") === "1") {
+      // Connect Google / Facebook / Apple to the signed-in account (Settings → Security). Needs "Allow manual
+      // linking" in Supabase → Authentication. The callback trusts the new sign-in because this account started it.
+      const origin = siteOrigin(request);
+      const provider = url.searchParams.get("provider") ?? "";
+      const back = (q: string) => NextResponse.redirect(new URL(`${SETTINGS_SECURITY}&${q}`, origin));
+      const session = await currentSession();
+      if (!session) return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(SETTINGS_SECURITY)}`, origin));
+      if (request.headers.get("sec-fetch-site") === "cross-site") return back("linkError=failed");
+      if (!(await enabledProviders()).includes(provider)) return back("linkError=provider");
+      const limit = rateLimit(`oauth-link:${session.user.id}`, 10, 10 * 60_000);
+      if (!limit.ok) return back("linkError=busy");
+      (await cookies()).set("tl_oauth", `link:${provider}:${session.user.id}`, { httpOnly: true, sameSite: "lax", secure: origin.startsWith("https://"), path: "/auth/callback", maxAge: 600 });
+      const supabase = await supabaseForRequest();
+      const { data, error } = await supabase.auth.linkIdentity({
+        provider: provider as Provider,
+        options: { redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(`${SETTINGS_SECURITY}&linked=${provider}`)}`, skipBrowserRedirect: true },
+      });
+      if (error || !data.url) {
+        const disabled = error?.code === "manual_linking_disabled" || /manual linking/i.test(error?.message ?? "");
+        console.error("[auth/oauth] couldn't start connecting", provider, ":", error?.code ?? error?.message ?? "no URL");
+        return back(`linkError=${disabled ? "disabled" : "failed"}`);
+      }
+      return NextResponse.redirect(data.url);
+    }
     if (op === "oauth") {
       const provider = url.searchParams.get("provider") ?? "";
       const next = safePath(url.searchParams.get("next"));
