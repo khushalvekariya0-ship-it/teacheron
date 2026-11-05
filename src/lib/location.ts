@@ -58,17 +58,29 @@ const ZONE_COUNTRY: Record<string, string> = {
   "Europe/Paris": "FR", "Africa/Lagos": "NG", "Africa/Nairobi": "KE", "Africa/Johannesburg": "ZA", "Asia/Tokyo": "JP", "Asia/Manila": "PH",
 };
 
-/** The visitor's likely country, from the browser's language ("en-IN" → IN) or time zone; the US if unknown. */
+/** The visitor's likely country, from the browser's time zone (Asia/Kolkata → IN) or language ("en-IN" → IN); the US if unknown. */
 export function guessCountry(): string {
-  try {
-    const region = new Intl.Locale(navigator.language).region;
-    if (isCountryCode(region)) return region;
-  } catch {}
+  // The time zone first: many people abroad browse in "en-US", so the language's region often says US.
   try {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (ZONE_COUNTRY[zone]) return ZONE_COUNTRY[zone];
   } catch {}
+  try {
+    const region = new Intl.Locale(navigator.language).region;
+    if (isCountryCode(region)) return region;
+  } catch {}
   return DEFAULT_COUNTRY;
+}
+
+/**
+ * The country a location form starts on: the saved one; the US for an address saved before countries
+ * existed (null meant the US); otherwise a guess from the browser (language, then time zone), so
+ * someone in India starts on India rather than having to find it in a list of 249.
+ */
+export function startCountry(me: { country?: string | null; city?: string | null; zip?: string | null }): string {
+  if (me.country) return me.country;
+  if (me.city || me.zip) return DEFAULT_COUNTRY;
+  return guessCountry();
 }
 
 /** "Rajkot, Gujarat, India"; US places read "Chicago, IL". */

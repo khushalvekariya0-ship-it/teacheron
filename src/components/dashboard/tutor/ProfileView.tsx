@@ -92,8 +92,12 @@ export function FormActions({ onCancel, error, saving }: { onCancel: () => void;
 export function useEditor() {
   const [editing, setEditing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Saving goes to the server first; the Save button shows it's working meanwhile.
+  const [saving, setSaving] = React.useState(false);
   const run = async (pending: Result<unknown> | Promise<Result<unknown>>, success: string) => {
+    setSaving(true);
     const res = await pending;
+    setSaving(false);
     if (!res.ok) {
       setError(res.error);
       return false;
@@ -106,6 +110,7 @@ export function useEditor() {
   return {
     editing,
     error,
+    saving,
     open: () => {
       setError(null);
       setEditing(true);
@@ -157,7 +162,7 @@ function AboutSection({ tutor }: { tutor: Tutor }) {
           <Field label="Teaching approach" required error={errors.approach?.message}>
             <Textarea rows={4} maxLength={1000} showCount {...register("approach")} />
           </Field>
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <div className="space-y-4">
@@ -228,7 +233,7 @@ function ExperienceSection({ tutor }: { tutor: Tutor }) {
       {ed.editing ? (
         <form noValidate onSubmit={form.handleSubmit((v) => ed.run(update({ experienceYears: v.experienceYears, category: v.category }), "Experience saved"))} className="space-y-7">
           <ExperienceFields form={form} support={false} />
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <dl className="divide-y divide-line">
@@ -297,7 +302,7 @@ function SubjectsSection({ tutor }: { tutor: Tutor }) {
               </Field>
             )}
           />
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <div className="space-y-4">
@@ -360,7 +365,7 @@ function LanguagesSection({ tutor }: { tutor: Tutor }) {
               </GroupField>
             )}
           />
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <div className="space-y-4">
@@ -460,7 +465,7 @@ function RatesSection({ tutor }: { tutor: Tutor }) {
             </div>
             {preview}
           </div>
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_16rem]">
@@ -546,7 +551,7 @@ function TrialSection({ tutor }: { tutor: Tutor }) {
               </Field>
             </div>
           )}
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <dl className="divide-y divide-line">
@@ -659,7 +664,7 @@ function BookingRulesSection({ tutor }: { tutor: Tutor }) {
               </div>
             )}
           />
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <dl className="divide-y divide-line">
@@ -713,7 +718,7 @@ function CredentialsSection({ tutor }: { tutor: Tutor }) {
         <form noValidate onSubmit={form.handleSubmit(save)} className="space-y-8">
           <CredentialsFields form={form} />
           <p className="text-[13px] text-muted">Editing an entry removes its Verified mark until the document is checked again in Verification.</p>
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : tutor.education.length + tutor.certifications.length === 0 ? (
         <p className="text-sm text-muted">No education or certifications listed.</p>

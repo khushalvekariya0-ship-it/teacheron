@@ -63,7 +63,7 @@ function ProfilePart<T extends FieldValues>({
       {ed.editing ? (
         <form noValidate onSubmit={form.handleSubmit((v) => ed.run(onSave(v), `${title} saved`))} className="space-y-6">
           {render(form)}
-          <FormActions onCancel={ed.close} error={ed.error} />
+          <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
         <dl className="divide-y divide-line">

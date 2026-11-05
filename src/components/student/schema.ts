@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Gender, PayMethod, StudentProfile, User } from "@/lib/types";
 import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
-import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
+import { isCountryCode, startCountry } from "@/lib/location";
 
 /*
  * Student learning profile: one zod schema per setup step. The same schemas back the sections of
@@ -146,7 +146,7 @@ export const basicValues = (me: User, p: StudentProfile): BasicValues => ({
   lastName: me.lastName,
   age: p.age ?? Number.NaN,
   gender: p.gender,
-  country: me.country ?? DEFAULT_COUNTRY,
+  country: startCountry(me),
   city: me.city ?? "",
   state: me.state ?? "",
   zip: me.zip ?? "",

@@ -284,6 +284,8 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
   const [step, setStep] = React.useState(() => (profile.completedAt ? 1 : Math.min(STUDENT_TOTAL_STEPS, profile.step + 1)));
   const [dir, setDir] = React.useState(1);
   const [finished, setFinished] = React.useState(false);
+  // A step is saved on the server before the next one opens; with a distant database that takes a moment.
+  const [busy, setBusy] = React.useState(false);
   const pending = React.useRef<() => Promise<unknown>>(async () => {});
   const navigated = React.useRef(false);
   const headingRef = React.useRef<HTMLHeadingElement>(null);
@@ -303,13 +305,18 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
         if (!res.ok) toast.error(res.error);
         return res.ok;
       };
-      if (n === 1) {
-        const v = values as ReturnType<typeof basicValues>;
-        if (!ok(await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), country: v.country, city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
-        return ok(await save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }));
+      setBusy(true);
+      try {
+        if (n === 1) {
+          const v = values as ReturnType<typeof basicValues>;
+          if (!ok(await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), country: v.country, city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
+          return ok(await save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }));
+        }
+        if (n === 5) return ok(await save(budgetToProfile(values as ReturnType<typeof budgetValues>), { step: 5 }));
+        return ok(await save(values as Partial<StudentProfile>, { step: n }));
+      } finally {
+        setBusy(false);
       }
-      if (n === 5) return ok(await save(budgetToProfile(values as ReturnType<typeof budgetValues>), { step: 5 }));
-      return ok(await save(values as Partial<StudentProfile>, { step: n }));
     },
     [save, updateMe],
   );
@@ -347,7 +354,10 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
       goTo(missing[0]);
       return;
     }
-    if (check(await save({}, { step: STUDENT_TOTAL_STEPS, complete: true }))) setFinished(true);
+    setBusy(true);
+    const done = check(await save({}, { step: STUDENT_TOTAL_STEPS, complete: true }));
+    setBusy(false);
+    if (done) setFinished(true);
   };
 
   // "Save & exit" in the onboarding header.
@@ -486,7 +496,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
                 <ArrowLeft /> Back
               </Button>
             )}
-            <Button type="submit" form={formId} size="lg">
+            <Button type="submit" form={formId} size="lg" loading={busy}>
               {step === STUDENT_TOTAL_STEPS ? (
                 <>
                   <Check /> Finish

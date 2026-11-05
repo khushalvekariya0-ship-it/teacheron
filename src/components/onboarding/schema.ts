@@ -3,7 +3,7 @@ import type { User } from "@/lib/types";
 import { validateWeek } from "@/components/dashboard/tutor/AvailabilityEditor";
 import { parseIntroVideo } from "@/lib/video";
 import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
-import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
+import { isCountryCode, startCountry } from "@/lib/location";
 
 /*
  * Tutor onboarding: one zod schema per step. Keys match what the store's `submitOnboarding()` reads
@@ -179,7 +179,7 @@ export function initialData(saved: Record<string, unknown> | undefined, me: User
   const d = (saved ?? {}) as OnboardingData;
   return {
     phone: me.phone ?? "",
-    country: me.country ?? DEFAULT_COUNTRY,
+    country: startCountry(me),
     city: me.city ?? "",
     state: me.state ?? "",
     zip: me.zip ?? "",

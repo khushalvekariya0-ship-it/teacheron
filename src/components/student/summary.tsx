@@ -2,6 +2,7 @@ import type * as React from "react";
 import type { StudentProfile, User } from "@/lib/types";
 import { GRADE_LABEL, MODE_LABEL, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
 import { formatCents } from "@/lib/format";
+import { countryName } from "@/lib/location";
 import type { TutorSearch } from "@/lib/search";
 import { DAY_ORDER } from "@/components/jobs/jobUtils";
 import { EXPERIENCE_OPTIONS, GENDER_LABEL, PAYER_LABEL, PAY_METHOD_NAME, START_LABEL, TUTOR_GENDER_LABEL } from "./schema";
@@ -19,7 +20,7 @@ export function basicRows(me: User, p: StudentProfile): SummaryRow[] {
     { label: "Name", value: `${me.firstName} ${me.lastName}` },
     { label: "Age", value: p.age ? `${p.age} years` : "Not added" },
     { label: "Gender", value: p.gender ? GENDER_LABEL[p.gender] : "Not added" },
-    { label: "Location", value: me.city ? `${me.city}, ${me.state ?? ""} ${me.zip ?? ""}`.trim() : "Not added" },
+    { label: "Location", value: me.city ? `${me.city}, ${me.state ?? ""} ${me.zip ?? ""}`.trim() + (me.country && me.country !== "US" ? `, ${countryName(me.country)}` : "") : "Not added" },
     { label: "Photo", value: p.photoUrl ? "Added" : "Not added" },
   ];
 }

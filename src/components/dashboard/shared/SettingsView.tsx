@@ -29,7 +29,7 @@ import { formatDate, formatDateTime, formatRelative, formatUsPhone, tzAbbrev } f
 import { PasswordInput, PasswordStrengthMeter } from "@/components/auth/PasswordField";
 import { downloadJson } from "./hooks";
 import { LocationFields } from "@/components/domain/LocationFields";
-import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
+import { isCountryCode, startCountry } from "@/lib/location";
 import { isPostalCode, postalError } from "@/lib/postal";
 
 type TabKey = "profile" | "timezone" | "security" | "privacy";
@@ -85,7 +85,7 @@ const profileSchema = z
 type ProfileValues = z.infer<typeof profileSchema>;
 
 function profileDefaults(me: User): ProfileValues {
-  return { firstName: me.firstName, lastName: me.lastName, phone: me.phone ?? "", country: me.country ?? DEFAULT_COUNTRY, city: me.city ?? "", state: me.state ?? "", zip: me.zip ?? "" };
+  return { firstName: me.firstName, lastName: me.lastName, phone: me.phone ?? "", country: startCountry(me), city: me.city ?? "", state: me.state ?? "", zip: me.zip ?? "" };
 }
 
 function ProfileTab({ me }: { me: User }) {

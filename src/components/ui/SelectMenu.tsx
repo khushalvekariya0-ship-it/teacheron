@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface SelectOption {
@@ -133,5 +134,164 @@ export const SelectMenu = React.forwardRef<HTMLButtonElement, SelectMenuProps>(f
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
+  );
+});
+
+/* ─── A dropdown with a search box, for long lists (countries, states) ─────── */
+
+const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+/** Best matches first: the name starts with it, then a word starts with it, then it appears anywhere. */
+function rank(options: SelectOption[], query: string): SelectOption[] {
+  const q = fold(query.trim());
+  if (!q) return options;
+  const starts: SelectOption[] = [];
+  const word: SelectOption[] = [];
+  const inside: SelectOption[] = [];
+  for (const o of options) {
+    const label = fold(o.label);
+    if (label.startsWith(q) || fold(o.value) === q) starts.push(o);
+    else if (label.split(/[\s(,-]+/).some((w) => w.startsWith(q))) word.push(o);
+    else if (label.includes(q)) inside.push(o);
+  }
+  return [...starts, ...word, ...inside];
+}
+
+/**
+ * The same field as SelectMenu, but the list opens with a search box: type "ind" and India is at the
+ * top. Arrow keys move, Enter picks, Escape closes.
+ */
+export const SearchSelectMenu = React.forwardRef<HTMLButtonElement, SelectMenuProps & { searchLabel?: string }>(function SearchSelectMenu(
+  { value, onValueChange, options = [], groups, placeholder, size = "md", className, contentClassName, onOpenChange, disabled, searchLabel = "Search", ...triggerProps },
+  ref,
+) {
+  const all = React.useMemo(() => (groups ? groups.flatMap((g) => g.options) : options), [groups, options]);
+  const selected = value === "" ? undefined : all.find((o) => o.value === value);
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const [active, setActive] = React.useState(0);
+  const listId = React.useId();
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  const list = React.useMemo(() => {
+    const found = rank(all, query);
+    return placeholder !== undefined && !query ? [{ value: "", label: placeholder }, ...found] : found;
+  }, [all, query, placeholder]);
+
+  const setOpenState = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+    if (next) {
+      setQuery("");
+      setActive(Math.max(0, (placeholder !== undefined ? 1 : 0) + all.findIndex((o) => o.value === value)));
+    }
+  };
+  const choose = (o: SelectOption | undefined) => {
+    if (!o || o.disabled) return;
+    onValueChange(o.value);
+    setOpenState(false);
+  };
+  const move = (by: number) => {
+    const next = Math.min(Math.max(active + by, 0), list.length - 1);
+    setActive(next);
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${next}"]`)?.scrollIntoView({ block: "nearest" });
+  };
+
+  return (
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpenState}>
+      <PopoverPrimitive.Trigger
+        ref={ref}
+        type="button"
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={open ? listId : undefined}
+        disabled={disabled}
+        {...triggerProps}
+        className={cn(
+          "group inline-flex w-full min-w-0 items-center gap-2 border border-line-strong bg-surface text-left text-ink outline-none transition-[border-color,box-shadow] duration-150 hover:border-subtle",
+          "focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/10 data-[state=open]:border-brand data-[state=open]:ring-4 data-[state=open]:ring-brand/10",
+          "disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger",
+          FIELD[size],
+          className,
+        )}
+      >
+        <span className={cn("min-w-0 flex-1 truncate", !selected && "text-muted")}>{selected?.label ?? placeholder ?? "Select"}</span>
+        <ChevronDown className="size-4 shrink-0 opacity-60 transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).querySelector("input")?.focus();
+          }}
+          className={cn("z-[120] w-[var(--radix-popover-trigger-width)] min-w-[14rem] overflow-hidden rounded-xl border border-line bg-surface shadow-xl animate-select-in", contentClassName)}
+        >
+          <div className="flex items-center gap-2 border-b border-line px-3">
+            <Search className="size-4 shrink-0 text-muted" aria-hidden />
+            <input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActive(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  move(1);
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  move(-1);
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  choose(list[active]);
+                }
+              }}
+              placeholder={`${searchLabel}…`}
+              aria-label={searchLabel}
+              aria-controls={listId}
+              aria-activedescendant={list[active] ? `${listId}-${active}` : undefined}
+              autoComplete="off"
+              className="h-10 w-full bg-transparent text-[14.5px] text-ink outline-none placeholder:text-muted"
+            />
+          </div>
+          <div ref={listRef} id={listId} role="listbox" className="max-h-[min(var(--radix-popover-content-available-height),18rem)] overflow-y-auto p-1.5">
+            {list.length === 0 && <p className="px-3 py-2.5 text-sm text-muted">No matches</p>}
+            {list.map((o, i) => {
+              const isSelected = o.value === value;
+              return (
+                <div
+                  key={o.value || "__none"}
+                  id={`${listId}-${i}`}
+                  data-index={i}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-disabled={o.disabled || undefined}
+                  ref={isSelected && !query ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}
+                  onMouseMove={() => active !== i && setActive(i)}
+                  onClick={() => choose(o)}
+                  className={cn(
+                    "relative flex cursor-pointer select-none items-center rounded-lg py-2 pl-3 pr-10 text-[14.5px]",
+                    i === active && "bg-brand-50 text-brand",
+                    o.value === "" ? "text-muted" : isSelected ? "font-semibold text-ink" : "text-ink",
+                    o.disabled && "pointer-events-none opacity-40",
+                  )}
+                >
+                  {o.label}
+                  {isSelected && o.value !== "" && (
+                    <span className="absolute right-2.5 grid size-5 place-items-center rounded-full bg-brand text-on-brand">
+                      <Check className="size-3" strokeWidth={3.2} aria-hidden />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 });

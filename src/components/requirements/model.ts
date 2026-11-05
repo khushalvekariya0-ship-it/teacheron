@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { Child, Grade, Requirement, TeachingMode, User } from "@/lib/types";
 import { GRADE_LABEL, US_STATES, getCatalog } from "@/lib/data/catalog";
 import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/postal";
-import { DEFAULT_COUNTRY, isCountryCode } from "@/lib/location";
+import { DEFAULT_COUNTRY, isCountryCode, startCountry } from "@/lib/location";
 
 const isShownSubject = (slug: string) => getCatalog().subjects.some((s) => s.slug === slug);
 import { METROS } from "@/lib/data/geo";
@@ -264,7 +264,7 @@ export function newForm(me: User, children: Child[], prefill: Prefill): ReqForm 
   const subject = prefill.subject && isShownSubject(prefill.subject) ? prefill.subject : "";
   const grade = prefill.grade && GRADE_LABEL[prefill.grade as Grade] ? (prefill.grade as Grade) : "";
   const format: Format = prefill.mode === "online" ? "online" : prefill.mode === "in_person" ? "in_person" : prefill.mode === "both" || prefill.mode === "either" ? "both" : "";
-  const country = me.country ?? DEFAULT_COUNTRY;
+  const country = startCountry(me);
   const zip = prefill.zip && isPostalCode(prefill.zip, country) ? prefill.zip : me.zip && isPostalCode(me.zip, country) ? me.zip : "";
   const loc = !zip || zip === me.zip ? { city: me.city ?? "", state: me.state ?? "" } : (country === "US" ? cityForZip(zip) : null) ?? { city: "", state: "" };
   const onlyChild =

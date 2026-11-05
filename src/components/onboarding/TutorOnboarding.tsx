@@ -260,6 +260,7 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
   const [furthest, setFurthest] = React.useState(() => clampStep(draft?.step ?? 1));
   const [dir, setDir] = React.useState(1);
   const [submitting, setSubmitting] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   // A photo picked earlier is kept with the draft (as a small data URL), so it is still here after a reload.
   const [photo, setPhoto] = React.useState<PhotoPreview | null>(() => {
@@ -307,7 +308,9 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
     const merged = { ...data, ...values };
     setData(merged);
     if (step === 1) {
+      setSaving(true);
       const r = await updateMe({ phone: values.phone, country: values.country, city: values.city, state: values.state, zip: values.zip });
+      setSaving(false);
       if (!r.ok) toast.error(r.error);
     }
     const next = step + 1;
@@ -488,7 +491,7 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
               <span className="hidden items-center gap-1.5 text-[12.5px] text-muted sm:inline-flex">
                 <Check className="size-3.5" aria-hidden /> Saved between steps
               </span>
-              <Button type="submit" form={formId} loading={submitting} size="lg">
+              <Button type="submit" form={formId} loading={submitting || saving} size="lg">
                 {step === TOTAL_STEPS ? "Publish profile" : "Continue"} {step !== TOTAL_STEPS && <ArrowRight />}
               </Button>
             </div>

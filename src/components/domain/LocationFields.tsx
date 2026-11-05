@@ -141,6 +141,8 @@ export function LocationFields({
           options={COUNTRY_OPTIONS}
           value={country}
           autoComplete="country"
+          searchable
+          searchLabel="Search countries"
           onChange={(e) => {
             const next = e.target.value;
             if (next === country) return;
@@ -205,6 +207,8 @@ export function LocationFields({
               value={state}
               placeholder={regions ? "Choose" : "Loading…"}
               autoComplete="address-level1"
+              searchable={regionOptions.length > 12}
+              searchLabel={`Search ${regionLabel(country).toLowerCase()}s`}
               onChange={(e) => {
                 const next = e.target.value;
                 onChange({ state: next });

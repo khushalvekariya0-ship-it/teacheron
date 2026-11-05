@@ -144,17 +144,30 @@ export const useApp = create<AppState>()(
   persist(
     (set, get) => {
       /*
-       * Responses can arrive out of order; a state is applied only if it was requested after the one
-       * currently shown, so an older answer never overwrites a newer one.
+       * Answers can arrive out of order, and with a distant database a save takes a second or two.
+       *   - A save's answer always includes that save, so it's shown, and it outranks every background
+       *     refresh that started before it arrived (unless a newer save's answer is already shown).
+       *   - A background refresh is shown only if no save is on its way: it may have read the database
+       *     before that save landed, and showing it would briefly undo what the person just did.
+       *   - Otherwise the newest request wins.
        */
       let requested = 0;
       let applied = 0;
-      const apply = (seq: number, body: Record<string, unknown> | null) => {
+      let lastSave = 0;
+      let saving = 0;
+      const apply = (seq: number, body: Record<string, unknown> | null, isSave = false) => {
         if (body?.config) set({ config: body.config as ClientConfig });
         if (body && "mfaRequired" in body) set({ mfaRequired: body.mfaRequired === true });
         if (body && "linkRequired" in body) set({ linkRequired: (body.linkRequired as { provider: string; email: string } | null) ?? null });
-        if (!body?.state || seq < applied) return;
-        applied = seq;
+        if (!body?.state) return;
+        if (isSave) {
+          if (seq < lastSave) return; // an older save answered after a newer one
+          lastSave = seq;
+          applied = ++requested;
+        } else {
+          if (saving > 0 || seq < applied) return;
+          applied = seq;
+        }
         set({ ...(body.state as Data), hydrated: true });
       };
       const inflight = new Map<string, Promise<unknown>>();
@@ -164,8 +177,9 @@ export const useApp = create<AppState>()(
         const running = inflight.get(key);
         if (running) return running; // a double click sends one request
         const seq = ++requested;
+        saving++;
         const p = post("/api/actions", { action: name, args }).then(({ status, body }) => {
-          apply(seq, body);
+          apply(seq, body, true);
           const result = (body?.result as Result<unknown> | undefined) ?? fail(statusError(status, body));
           if (name === "logConversationAccess" && result.ok) {
             const released = result.data as Message[];
@@ -174,7 +188,10 @@ export const useApp = create<AppState>()(
           return result;
         });
         inflight.set(key, p);
-        void p.finally(() => inflight.delete(key));
+        void p.finally(() => {
+          inflight.delete(key);
+          saving--;
+        });
         return p;
       };
 
@@ -184,10 +201,15 @@ export const useApp = create<AppState>()(
 
       const auth = async <T,>(op: string, body: unknown): Promise<Result<T> & { code?: string }> => {
         const seq = ++requested;
-        const { status, body: res } = await post(`/api/auth/${op}`, body);
-        if (!res?.ok) return { ...fail(statusError(status, res)), ...(typeof res?.code === "string" ? { code: res.code } : {}) };
-        apply(seq, res);
-        return ok(res as T);
+        saving++;
+        try {
+          const { status, body: res } = await post(`/api/auth/${op}`, body);
+          if (!res?.ok) return { ...fail(statusError(status, res)), ...(typeof res?.code === "string" ? { code: res.code } : {}) };
+          apply(seq, res, true);
+          return ok(res as T);
+        } finally {
+          saving--;
+        }
       };
 
       return {

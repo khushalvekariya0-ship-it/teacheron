@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { SelectMenu, type SelectGroup, type SelectOption } from "./SelectMenu";
+import { SearchSelectMenu, SelectMenu, type SelectGroup, type SelectOption } from "./SelectMenu";
 
 export type { SelectGroup, SelectOption };
 
@@ -136,6 +136,10 @@ export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectE
   groups?: SelectGroup[];
   placeholder?: string;
   size?: "md" | "sm";
+  /** Long lists (countries, states): the menu opens with a search box. */
+  searchable?: boolean;
+  /** The search box's label, e.g. "Search countries". */
+  searchLabel?: string;
 }
 
 const watched = new WeakSet<HTMLSelectElement>();
@@ -168,7 +172,7 @@ function watchNative(el: HTMLSelectElement, onValue: (v: string) => void, focusT
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, options = [], groups, placeholder, size = "md", value, defaultValue, onChange, onBlur, disabled, ...props },
+  { className, options = [], groups, placeholder, size = "md", value, defaultValue, onChange, onBlur, disabled, searchable, searchLabel, ...props },
   ref,
 ) {
   const field = useFieldProps(props);
@@ -220,29 +224,31 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
           </option>
         ))}
       </select>
-      <SelectMenu
-        ref={triggerRef}
-        id={field.id}
-        aria-describedby={field["aria-describedby"]}
-        aria-invalid={field["aria-invalid"]}
-        aria-label={ariaLabel}
-        aria-labelledby={ariaLabelledby}
-        value={current}
-        onValueChange={pick}
-        options={options}
-        groups={groups}
-        placeholder={placeholder}
-        size={size}
-        disabled={disabled}
-        onOpenChange={(open) => {
-          openRef.current = open;
-        }}
-        onBlur={() => {
-          // Opening the list moves focus into it; only a real blur counts as leaving the field.
-          if (openRef.current || !nativeRef.current || !onBlur) return;
-          onBlur({ target: nativeRef.current, currentTarget: nativeRef.current, type: "blur" } as unknown as React.FocusEvent<HTMLSelectElement>);
-        }}
-      />
+      {(() => {
+        const menu = {
+          id: field.id,
+          "aria-describedby": field["aria-describedby"],
+          "aria-invalid": field["aria-invalid"],
+          "aria-label": ariaLabel,
+          "aria-labelledby": ariaLabelledby,
+          value: current,
+          onValueChange: pick,
+          options,
+          groups,
+          placeholder,
+          size,
+          disabled,
+          onOpenChange: (open: boolean) => {
+            openRef.current = open;
+          },
+          onBlur: () => {
+            // Opening the list moves focus into it; only a real blur counts as leaving the field.
+            if (openRef.current || !nativeRef.current || !onBlur) return;
+            onBlur({ target: nativeRef.current, currentTarget: nativeRef.current, type: "blur" } as unknown as React.FocusEvent<HTMLSelectElement>);
+          },
+        };
+        return searchable ? <SearchSelectMenu ref={triggerRef} {...menu} searchLabel={searchLabel} /> : <SelectMenu ref={triggerRef} {...menu} />;
+      })()}
     </div>
   );
 });
