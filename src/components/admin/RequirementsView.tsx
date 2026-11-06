@@ -8,7 +8,8 @@ import { useApp } from "@/lib/store";
 import { useCatalog, useViewerTimezone } from "@/lib/store/hooks";
 import { GRADE_LABEL, MODE_LABEL, subjectName } from "@/lib/data/catalog";
 import { ROLE_LABEL } from "@/lib/data/users";
-import { formatCents, formatDate, formatDateTime, pluralize } from "@/lib/format";
+import { formatDate, formatDateTime, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
@@ -49,7 +50,7 @@ const APP_TONE: Record<ApplicationStatus, "neutral" | "accent" | "success" | "wa
 type ModeFilter = "all" | "online" | "in_person";
 
 function budget(r: Requirement) {
-  return `${formatCents(r.budgetMinCents)}–${formatCents(r.budgetMaxCents)}/hr`;
+  return `${formatMoney(r.budgetMinCents, r.currency)}–${formatMoney(r.budgetMaxCents, r.currency)}/hr`;
 }
 
 export function RequirementsView() {
@@ -127,8 +128,8 @@ function RequirementsInner() {
         actions={
           <ExportButton
             filename="tutorlink-requirements"
-            headers={["ID", "Title", "Subject", "Grade", "Owner", "Status", "Modes", "City", "State", "Budget min (USD)", "Budget max (USD)", "Applications", "Created", "Updated"]}
-            rows={() => rows.map((r) => [r.id, r.title, subjectName(r.subject), r.grade, dir.name(r.ownerId), r.status, r.modes.join(" "), r.city, r.state, centsToDecimal(r.budgetMinCents), centsToDecimal(r.budgetMaxCents), appCount.get(r.id) ?? 0, r.createdAt, r.updatedAt])}
+            headers={["ID", "Title", "Subject", "Grade", "Owner", "Status", "Modes", "City", "State", "Currency", "Budget min", "Budget max", "Applications", "Created", "Updated"]}
+            rows={() => rows.map((r) => [r.id, r.title, subjectName(r.subject), r.grade, dir.name(r.ownerId), r.status, r.modes.join(" "), r.city, r.state, r.currency, centsToDecimal(r.budgetMinCents), centsToDecimal(r.budgetMaxCents), appCount.get(r.id) ?? 0, r.createdAt, r.updatedAt])}
           />
         }
       />
@@ -305,7 +306,7 @@ function ApplicationRow({ a }: { a: Application }) {
             {dir.name(a.tutorId)}
           </Link>
           <p className="text-[12px] text-muted">
-            <span className="tabular-nums">{formatCents(a.proposedRateCents)}/hr</span> · applied {formatDate(a.createdAt, tz)}
+            <span className="tabular-nums">{formatMoney(a.proposedRateCents, a.currency)}/hr</span> · applied {formatDate(a.createdAt, tz)}
           </p>
         </div>
         <StatusPill tone={APP_TONE[a.status]}>{humanize(a.status)}</StatusPill>

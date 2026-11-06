@@ -8,7 +8,8 @@ import { useApp } from "@/lib/store";
 import { useCatalog, useTutors } from "@/lib/store/hooks";
 import { MODE_LABEL, US_TIMEZONES, slugify } from "@/lib/data/catalog";
 import { METROS, distanceMiles, type Metro } from "@/lib/data/geo";
-import { formatCents, pluralize } from "@/lib/format";
+import { pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -574,7 +575,7 @@ function TutorList({ items, empty }: { items: { tutor: Tutor; meta: React.ReactN
               <span className="block truncate font-medium text-ink">{fullName(t)}</span>
               <span className="block truncate text-muted">{meta}</span>
             </span>
-            <span className="shrink-0 tabular-nums text-ink-2">{formatCents(t.hourlyRateCents)}/hr</span>
+            <span className="shrink-0 tabular-nums text-ink-2">{formatMoney(t.hourlyRateCents, t.currency)}/hr</span>
           </Link>
         </li>
       ))}

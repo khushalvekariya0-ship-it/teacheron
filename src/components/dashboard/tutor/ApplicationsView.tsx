@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { useNow } from "@/lib/store/hooks";
 import { GRADE_LABEL, MODE_LABEL, subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDate, formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -240,7 +241,7 @@ function ApplicationCard({ row, now, onWithdraw }: { row: Row; now: number; onWi
         </div>
         <div className="shrink-0 text-left sm:text-right">
           <p className="text-[12px] text-muted">Your rate</p>
-          <p className="text-lg font-semibold tabular-nums text-ink">{formatCents(app.proposedRateCents)}/hr</p>
+          <p className="text-lg font-semibold tabular-nums text-ink">{formatMoney(app.proposedRateCents, app.currency)}/hr</p>
         </div>
       </div>
 

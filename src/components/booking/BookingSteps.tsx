@@ -5,7 +5,8 @@ import Link from "next/link";
 import { CalendarDays, Clock3, CreditCard, Info, MapPin, Monitor, Smartphone, Tag, UserRound, Users, Video, Wallet, X } from "lucide-react";
 import type { Booking, BookingType, Child, PayMethod, TeachingMode, Tutor, User } from "@/lib/types";
 import { GRADE_LABEL, subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDuration, formatTime, formatWeekdayDate, sessionPrice, tzAbbrev } from "@/lib/format";
+import { formatDuration, formatTime, formatWeekdayDate, sessionPrice, tzAbbrev } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
@@ -59,7 +60,7 @@ export function DetailsStep({
 }) {
   const [childTouched, setChildTouched] = React.useState(false);
   const selectedChild = learners.find((c) => c.id === draft.childId);
-  const trialLabel = tutor.trial.priceCents === 0 ? "Free" : formatCents(tutor.trial.priceCents);
+  const trialLabel = tutor.trial.priceCents === 0 ? "Free" : formatMoney(tutor.trial.priceCents, tutor.currency);
 
   return (
     <div className="space-y-6">
@@ -72,7 +73,7 @@ export function DetailsStep({
             onValueChange={(type) => set({ type })}
             options={[
               { value: "trial", label: `Trial lesson · ${trialLabel}`, description: `${tutor.trial.durationMin} minutes to meet ${tutor.firstName} and agree on a plan.` },
-              { value: "regular", label: `Regular lesson · ${formatCents(tutor.hourlyRateCents)}/hr`, description: `${tutor.rules.sessionLengths.map((m) => `${m}`).join(" or ")} minutes, priced by length.` },
+              { value: "regular", label: `Regular lesson · ${formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr`, description: `${tutor.rules.sessionLengths.map((m) => `${m}`).join(" or ")} minutes, priced by length.` },
             ]}
           />
           {draft.type === "trial" && trialUsed && (
@@ -88,7 +89,7 @@ export function DetailsStep({
         </fieldset>
       ) : (
         <div className="rounded-lg border border-line bg-canvas px-4 py-3 text-sm">
-          <p className="font-medium text-ink">Regular lesson · {formatCents(tutor.hourlyRateCents)}/hr</p>
+          <p className="font-medium text-ink">Regular lesson · {formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr</p>
           <p className="mt-0.5 text-[13px] text-muted">{tutor.firstName} isn&rsquo;t offering trial lessons right now.</p>
         </div>
       )}
@@ -279,7 +280,7 @@ export function ReviewStep({
   instant: boolean;
   payWith: PayMethod;
   onPayWith: (m: PayMethod) => void;
-  /** Study Credits on the account, in cents. */
+  /** Study Credits on the account in the tutor's currency (minor units). */
   walletBalance: number;
   onTopUp: () => void;
   policy: string[];
@@ -292,7 +293,9 @@ export function ReviewStep({
   const minutes = lessonMinutes(tutor, draft);
   const total = Math.max(0, subtotal - discount);
   const walletCovers = walletBalance >= total;
-  const credits = formatCents(walletBalance, { exact: walletBalance % 100 !== 0 });
+  const currency = tutor.currency;
+  const upiAllowed = currency === "INR";
+  const credits = formatMoney(walletBalance, currency);
   const start = draft.startUtc!;
   const end = new Date(new Date(start).getTime() + minutes * 60_000).toISOString();
 
@@ -326,9 +329,9 @@ export function ReviewStep({
         <div className="space-y-2 px-4 py-3.5 text-sm">
           <div className="flex justify-between">
             <span className="text-muted">
-              {draft.type === "trial" ? `Trial lesson (${formatDuration(minutes)})` : `${formatDuration(minutes)} at ${formatCents(tutor.hourlyRateCents)}/hr`}
+              {draft.type === "trial" ? `Trial lesson (${formatDuration(minutes)})` : `${formatDuration(minutes)} at ${formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr`}
             </span>
-            <span className="tabular-nums text-ink">{subtotal === 0 ? "Free" : formatCents(subtotal, { exact: subtotal % 100 !== 0 })}</span>
+            <span className="tabular-nums text-ink">{subtotal === 0 ? "Free" : formatMoney(subtotal, currency)}</span>
           </div>
           {discount > 0 && couponCode && (
             <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
@@ -338,12 +341,12 @@ export function ReviewStep({
                   <X className="size-3" />
                 </button>
               </span>
-              <span className="tabular-nums text-success">−{formatCents(discount, { exact: true })}</span>
+              <span className="tabular-nums text-success">−{formatMoney(discount, currency, { exact: true })}</span>
             </motion.div>
           )}
           <div className="flex justify-between border-t border-line pt-2.5 text-[15px] font-semibold">
             <span className="text-ink">Total</span>
-            <span className="tabular-nums text-ink">{total === 0 ? "$0" : formatCents(total, { exact: total % 100 !== 0 })}</span>
+            <span className="tabular-nums text-ink">{formatMoney(total, currency)}</span>
           </div>
         </div>
 
@@ -386,11 +389,17 @@ export function ReviewStep({
                     </>
                   ),
                   icon: <Wallet />,
-                  description: walletCovers ? "One tap. No card details needed." : `You need ${formatCents(total - walletBalance, { exact: (total - walletBalance) % 100 !== 0 })} more for this lesson.`,
+                  description: walletCovers ? "One tap. No card details needed." : `You need ${formatMoney(total - walletBalance, currency)} more for this lesson.`,
                   disabled: !walletCovers,
                 },
-                { value: "card", label: "Card", icon: <CreditCard />, description: paymentsEnabled ? "Visa, Mastercard, Amex and more" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
-                { value: "upi", label: "UPI", icon: <Smartphone />, description: paymentsEnabled ? "Approve in your UPI app" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
+                { value: "card", label: "Card", icon: <CreditCard />, description: paymentsEnabled ? "Visa, Mastercard, RuPay, Amex and more" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
+                {
+                  value: "upi",
+                  label: "UPI",
+                  icon: <Smartphone />,
+                  description: !paymentsEnabled ? "Not available yet — online payments are being set up" : upiAllowed ? "Google Pay, PhonePe, Paytm or any UPI app" : "UPI is for payments in rupees",
+                  disabled: !paymentsEnabled || !upiAllowed,
+                },
               ]}
             />
             {!walletCovers && (
@@ -399,12 +408,15 @@ export function ReviewStep({
               </button>
             )}
             <p className="text-[13px] leading-relaxed text-muted">
-              Test mode — no real charge.{" "}
-              {instant
-                ? "You pay when you confirm, and the lesson is booked right away."
-                : payWith === "wallet"
-                  ? `Your credits are held now and returned in full if ${tutor.firstName} doesn't accept.`
-                  : `Your payment is authorized now and taken only when ${tutor.firstName} accepts. If the request isn't accepted, the authorization is released.`}
+              {payWith === "wallet"
+                ? instant
+                  ? "You pay when you confirm, and the lesson is booked right away."
+                  : `Your credits are held now and returned in full if ${tutor.firstName} doesn't accept.`
+                : !paymentsEnabled
+                  ? "Card and UPI payments aren't available yet."
+                  : instant
+                    ? "Paid securely with Razorpay. The lesson is booked as soon as you pay."
+                    : `Paid securely with Razorpay. The payment is held now and taken only when ${tutor.firstName} accepts; if the request isn't accepted, the hold is released.`}
             </p>
           </fieldset>
         )}
@@ -531,7 +543,7 @@ export function SuccessStep({
           {learnerName}
         </SummaryRow>
         <SummaryRow icon={<CreditCard />} label={charge === 0 ? "Payment" : confirmed ? "Paid" : "Authorized"}>
-          {charge === 0 ? "No charge" : formatCents(charge, { exact: charge % 100 !== 0 })}
+          {charge === 0 ? "No charge" : formatMoney(charge, booking.currency)}
         </SummaryRow>
       </motion.dl>
 

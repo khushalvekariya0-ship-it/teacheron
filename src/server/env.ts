@@ -22,8 +22,21 @@ export const env = {
   smtpPass: process.env.SMTP_PASS ?? "",
   /** Only changed for local testing; production uses Resend's API. */
   resendUrl: (process.env.RESEND_API_URL || "https://api.resend.com").replace(/\/$/, ""),
-  /** Set once a payment provider (Stripe) is connected; until then card/UPI charges are refused. */
-  paymentsEnabled: false,
+  /**
+   * Razorpay (card, UPI, netbanking, wallets). The key id is public (Checkout needs it); the key secret and
+   * webhook secret never leave the server. Test keys start with rzp_test_, live keys with rzp_live_.
+   */
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID ?? "",
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET ?? "",
+  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? "",
+  /** Only changed for local testing. */
+  razorpayApiUrl: (process.env.RAZORPAY_API_URL || "https://api.razorpay.com").replace(/\/$/, ""),
+  razorpayCheckoutUrl: process.env.RAZORPAY_CHECKOUT_URL || "https://checkout.razorpay.com/v1/checkout.js",
+  /**
+   * Card / UPI payments are taken once Razorpay's key id and secret are set; until then they're refused.
+   * PAYMENTS_DISABLED=1 switches them off without removing the keys (an emergency off switch).
+   */
+  paymentsEnabled: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) && process.env.PAYMENTS_DISABLED !== "1",
   /** Live classroom media server (LiveKit Cloud or self-hosted). The key and secret never leave the server. */
   livekitKey: process.env.LIVEKIT_API_KEY ?? "",
   livekitSecret: process.env.LIVEKIT_API_SECRET ?? "",

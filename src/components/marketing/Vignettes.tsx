@@ -93,7 +93,7 @@ export function SlotVignette() {
 }
 
 export function CheckoutVignette() {
-  return <FeatureVisual icon={CreditCard} title="Clear, secure checkout" points={["Payments processed by Stripe", "Price and policy shown before you confirm", "No subscription or booking fee for families"]} />;
+  return <FeatureVisual icon={CreditCard} title="Clear, secure checkout" points={["Payments processed by Razorpay (UPI or card)", "Price and policy shown before you confirm", "No subscription or booking fee for families"]} />;
 }
 
 export function TrialVignette() {
@@ -134,7 +134,7 @@ export function JobVignette() {
 }
 
 export function GetPaidVignette() {
-  return <FeatureVisual icon={Wallet} tone="teal" title="Get paid securely" points={["Payouts to your bank through Stripe Connect", "Commission shown before you pick a plan", `Earnings released after the ${DEFAULT_POLICY.disputeWindowDays}-day dispute window`]} />;
+  return <FeatureVisual icon={Wallet} tone="teal" title="Get paid securely" points={["Payouts to your bank account", "Commission shown before you pick a plan", `Earnings released after the ${DEFAULT_POLICY.disputeWindowDays}-day dispute window`]} />;
 }
 
 /* ─── Trust & safety ─────────────────────────────────────────────────────── */

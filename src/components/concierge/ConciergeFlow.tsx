@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, ArrowRight, ClipboardList, Lock, Pencil, Plus, RotateCcw, Search, SearchX, Sparkles, Wand2, X } from "lucide-react";
 import { parseNaturalLanguage, rankTutors } from "@/lib/matching";
 import { subjectName } from "@/lib/data/catalog";
-import { useFlag, useListedTutors } from "@/lib/store/hooks";
+import { useFlag, useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
 import { pluralize } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -17,7 +17,7 @@ import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { motion, AnimatePresence, EASE } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import {
-  EMPTY_ANSWERS, answersSchema, answersToCriteria, answersToParams, buildSuggestions, criteriaToAnswers, paramsToAnswers, postRequirementHref, summarize, tutorsHref,
+  EMPTY_ANSWERS, answersSchemaFor, answersToCriteria, answersToParams, buildSuggestions, criteriaToAnswers, paramsToAnswers, postRequirementHref, summarize, tutorsHref,
   type AnswerKey, type Answers,
 } from "./model";
 import { ANSWER_LABEL, AnswerField } from "./AnswerFields";
@@ -51,6 +51,8 @@ function hasValue(a: Answers, k: AnswerKey): boolean {
 }
 
 export function ConciergeFlow() {
+  // Budgets are in the visitor's own currency (never compared with tutors who charge in another).
+  const currency = useViewerCurrency();
   const nlEnabled = useFlag("ai_matching");
   const params = useSearchParams();
   const router = useRouter();
@@ -76,7 +78,7 @@ export function ConciergeFlow() {
 
   const activeWay: Way = nlEnabled ? way : "guided";
 
-  const form = useForm<Answers>({ resolver: zodResolver(answersSchema), defaultValues: boot?.answers ?? EMPTY_ANSWERS, mode: "onTouched" });
+  const form = useForm<Answers>({ resolver: zodResolver(answersSchemaFor(currency)), defaultValues: boot?.answers ?? EMPTY_ANSWERS, mode: "onTouched" });
   const { control, formState, handleSubmit, reset, setValue, getValues } = form;
 
   const scrollTop = () => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -99,7 +101,7 @@ export function ConciergeFlow() {
       textRef.current?.focus();
       return;
     }
-    const { answers, found: keys } = criteriaToAnswers(parseNaturalLanguage(t));
+    const { answers, found: keys } = criteriaToAnswers(parseNaturalLanguage(t, currency));
     reset(answers);
     setFound(keys);
     setShown(keys.length ? keys : ["subject"]);
@@ -419,12 +421,13 @@ function Results({
   onStartOver: () => void;
   onSuggestion: (patch: Partial<Answers>) => void;
 }) {
-  const criteria = React.useMemo(() => answersToCriteria(answers), [answers]);
+  const currency = useViewerCurrency();
+  const criteria = React.useMemo(() => answersToCriteria(answers, currency), [answers, currency]);
   const qualified = React.useMemo(() => rankTutors(tutors, criteria).filter((r) => !r.disqualified), [tutors, criteria]);
   const top = qualified.slice(0, 5);
   const weak = top.length > 0 && top[0].percent < 75;
-  const suggestions = React.useMemo(() => (top.length === 0 || weak ? buildSuggestions(tutors, answers) : []), [tutors, answers, top.length, weak]);
-  const chips = summarize(answers);
+  const suggestions = React.useMemo(() => (top.length === 0 || weak ? buildSuggestions(tutors, answers, currency) : []), [tutors, answers, top.length, weak, currency]);
+  const chips = summarize(answers, currency);
 
   return (
     <div>

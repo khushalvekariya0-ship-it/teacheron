@@ -7,7 +7,8 @@ import type { Actor } from "@/lib/booking";
 import { cancellationRefund, policySummary } from "@/lib/booking";
 import { useApp } from "@/lib/store";
 import { useViewerTimezone } from "@/lib/store/hooks";
-import { formatCents, formatDateTime, percentOf } from "@/lib/format";
+import { formatDateTime, percentOf } from "@/lib/format";
+import { formatMoney, fromDollarSetting } from "@/lib/money";
 import { PAY_METHOD_LABEL } from "@/lib/data/platform";
 import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Input";
@@ -25,6 +26,7 @@ export function DeclineDialog({ booking, open, onOpenChange, counterpart }: { bo
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const paid = booking.priceCents - booking.discountCents;
+  const money = (minor: number) => formatMoney(minor, booking.currency);
   return (
     <ConfirmDialog
       open={open}
@@ -33,7 +35,7 @@ export function DeclineDialog({ booking, open, onOpenChange, counterpart }: { bo
         if (!o) setNote("");
       }}
       title="Decline this request?"
-      description={`${counterpart} will be notified${paid > 0 ? ` and the ${formatCents(paid)} card authorization released` : ""}. This can't be undone.`}
+      description={`${counterpart} will be notified${paid > 0 ? ` and the ${money(paid)} card authorization released` : ""}. This can't be undone.`}
       confirmLabel="Decline request"
       tone="danger"
       loading={busy}
@@ -68,21 +70,22 @@ export function CancelDialog({ booking, actor, open, onOpenChange, counterpart, 
   const paid = booking.priceCents - booking.discountCents;
   const to: BookingStatus = actor === "tutor" ? "cancelled_by_tutor" : "cancelled_by_student";
   const learnerView = actor === "booker";
+  const money = (minor: number) => formatMoney(minor, booking.currency);
 
   // Refunds only apply to captured payments; a pending request only holds an authorization.
   const captured = booking.paymentStatus === "paid";
-  let amount = formatCents(0);
+  let amount = money(0);
   let refundLine: React.ReactNode;
   if (paid <= 0) refundLine = "Nothing was charged for this lesson.";
   else if (booking.paymentStatus === "authorized")
     refundLine = withCredits
-      ? learnerView ? `The ${formatCents(paid)} of Study Credits held for this request goes back to your wallet.` : `The family's ${formatCents(paid)} of Study Credits is returned to their wallet.`
-      : learnerView ? `Your card hold of ${formatCents(paid)} will be released — you won't be charged.` : `The family's ${formatCents(paid)} card hold is released — they won't be charged.`;
+      ? learnerView ? `The ${money(paid)} of Study Credits held for this request goes back to your wallet.` : `The family's ${money(paid)} of Study Credits is returned to their wallet.`
+      : learnerView ? `Your card hold of ${money(paid)} will be released — you won't be charged.` : `The family's ${money(paid)} card hold is released — they won't be charged.`;
   else if (captured) {
-    amount = formatCents(refundCents);
+    amount = money(refundCents);
     refundLine = learnerView
-      ? refundCents > 0 ? `${formatCents(refundCents)} of ${formatCents(paid)} goes back to ${withCredits ? "your Study Credits wallet" : "your original payment method"}.` : "This cancellation isn't eligible for a refund."
-      : `The family is refunded ${formatCents(refundCents)}.`;
+      ? refundCents > 0 ? `${money(refundCents)} of ${money(paid)} goes back to ${withCredits ? "your Study Credits wallet" : "your original payment method"}.` : "This cancellation isn't eligible for a refund."
+      : `The family is refunded ${money(refundCents)}.`;
   } else refundLine = "No payment was captured for this lesson, so there's nothing to refund.";
 
   return (
@@ -249,7 +252,10 @@ export function TransitionDialog({
   const captured = booking.paymentStatus === "paid";
   const tutorNoShowRefund = captured ? percentOf(paid, policy.tutorNoShowRefundPercent) : 0;
   const studentNoShowRefund = captured ? percentOf(paid, policy.studentNoShowRefundPercent) : 0;
-  const credit = policy.tutorNoShowCreditCents > 0 ? ` You'll also get ${formatCents(policy.tutorNoShowCreditCents)} in platform credit.` : "";
+  const money = (minor: number) => formatMoney(minor, booking.currency);
+  // The no-show credit is set in dollars (Admin → Settings) and given in the lesson's currency.
+  const noShowCredit = fromDollarSetting(policy.tutorNoShowCreditCents, booking.currency);
+  const credit = noShowCredit > 0 ? ` You'll also get ${money(noShowCredit)} in platform credit.` : "";
 
   const copy: Record<ConfirmableTransition, { title: string; description: string; confirm: string; success: string; danger?: boolean; note?: boolean }> = {
     in_progress: { title: "Start this lesson?", description: `The lesson will show as in progress for you and ${names.learner}.`, confirm: "Start lesson", success: "Lesson started" },
@@ -261,7 +267,7 @@ export function TransitionDialog({
     },
     no_show_student: {
       title: "Report a student no-show?",
-      description: `Use this only if ${names.learner} didn't join within ${policy.noShowGraceMinutes} minutes of the start time. Student no-shows are refunded at ${policy.studentNoShowRefundPercent}%${captured && studentNoShowRefund > 0 ? ` (${formatCents(studentNoShowRefund)})` : ""} under the current policy.`,
+      description: `Use this only if ${names.learner} didn't join within ${policy.noShowGraceMinutes} minutes of the start time. Student no-shows are refunded at ${policy.studentNoShowRefundPercent}%${captured && studentNoShowRefund > 0 ? ` (${money(studentNoShowRefund)})` : ""} under the current policy.`,
       confirm: "Report no-show",
       success: "No-show reported",
       danger: true,
@@ -269,15 +275,16 @@ export function TransitionDialog({
     },
     no_show_tutor: {
       title: "Report a tutor no-show?",
-      description: `Use this only if ${names.tutor} didn't join within ${policy.noShowGraceMinutes} minutes of the start time. ${captured && tutorNoShowRefund > 0 ? `You'll be refunded ${formatCents(tutorNoShowRefund)} (${policy.tutorNoShowRefundPercent}%).` : "You weren't charged for this lesson."}${credit}`,
+      description: `Use this only if ${names.tutor} didn't join within ${policy.noShowGraceMinutes} minutes of the start time. ${captured && tutorNoShowRefund > 0 ? `You'll be refunded ${money(tutorNoShowRefund)} (${policy.tutorNoShowRefundPercent}%).` : "You weren't charged for this lesson."}${credit}`,
       confirm: "Report no-show",
       success: "No-show reported",
       danger: true,
       note: true,
     },
+    // Card / UPI payments are paid again in Razorpay's window ("Pay again"); this is for the rest.
     pending: {
       title: "Retry payment?",
-      description: `We'll place a new ${paid > 0 ? `${formatCents(paid)} ` : ""}authorization on your card and send the request to ${names.tutor} again. You're only charged once it's confirmed.`,
+      description: `We'll send the request${paid > 0 ? ` for ${money(paid)}` : ""} to ${names.tutor} again. You're only charged once it's confirmed.`,
       confirm: "Retry payment",
       success: "Request resubmitted",
     },

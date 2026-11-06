@@ -7,11 +7,12 @@ import { AreaNav } from "@/components/content/AreaNav";
 import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
 import { CreditPacks, PlanCards, PlanComparison } from "@/components/marketing/Pricing";
 import { EarningsCalculator } from "@/components/marketing/EarningsCalculator";
-import { medianRate, rateRange } from "@/components/content/insights";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
 import { listedTutors, publishedFaqs } from "@/server/public";
 import { CREDITS_PER_APPLICATION, TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents } from "@/lib/format";
+import { applyBps } from "@/lib/format";
+import { CURRENCIES, formatMoney } from "@/lib/money";
+import { ratesByCurrency } from "@/lib/search";
 
 /** Figures and content come from the database; the page is rebuilt at most once a minute. */
 export const revalidate = 60;
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
 const FAMILY_COLUMNS: { icon: LucideIcon; price: string; title: string; caption: string; items: string[]; featured?: boolean; never?: boolean }[] = [
   {
     icon: Search,
-    price: "$0",
+    price: "Free",
     title: "Always free",
     caption: "Everything before you book",
     items: ["Search and compare tutors", "Message tutors with your questions", "Post a requirement and let tutors apply", "Get a matched shortlist"],
@@ -41,7 +42,7 @@ const FAMILY_COLUMNS: { icon: LucideIcon; price: string; title: string; caption:
   },
   {
     icon: Ban,
-    price: "$0",
+    price: "None",
     title: "Never charged",
     caption: "No extras on your bill",
     items: ["No subscription", "No membership", "No booking fee", "No commission added to your price"],
@@ -51,7 +52,7 @@ const FAMILY_COLUMNS: { icon: LucideIcon; price: string; title: string; caption:
 
 const PAY_STEPS = [
   { title: "See the total first", body: "The price and the cancellation policy are shown before you confirm." },
-  { title: "Pay securely", body: "Payments are processed by Stripe — card details never touch our servers." },
+  { title: "Pay securely", body: "Payments are processed by Razorpay (UPI, cards, netbanking): card and UPI details never touch our servers." },
   { title: "Charged when it's confirmed", body: "With a booking request, your card is held and charged once the tutor accepts." },
 ];
 
@@ -64,18 +65,20 @@ const PRICING_SECTIONS = [
 
 export default async function PricingPage() {
   const tutors = await listedTutors();
-  const range = rateRange(tutors);
-  const median = medianRate(tutors);
+  // Listed rates, one group per currency tutors charge in (never mixed or converted).
+  const rates = ratesByCurrency(tutors);
   const starter = TUTOR_PLANS[0];
-  // Example bill: the median listed rate when tutors exist, otherwise a round example rate.
-  const exampleRate = median || 5000;
+  // Example bill, in US dollars: the median listed dollar rate when there is one, otherwise a round example.
+  // (The calculators below switch to the visitor's own currency in the browser.)
+  const exampleRate = rates.find((r) => r.currency === "USD")?.median || 5000;
+  const usd = (cents: number) => formatMoney(cents, "USD", { exact: true });
   const commissions = TUTOR_PLANS.map((p) => p.commissionBps / 100);
   const lowestCommission = Math.min(...commissions);
   const highestCommission = Math.max(...commissions);
   const pricingFaqs: { q: string; a: string }[] = [
     { q: "Do families pay a subscription or membership fee?", a: "No. Searching, messaging tutors and posting a requirement are free. You pay only for the lessons you book, at the price shown before you confirm." },
     { q: "Is there a booking fee on top of the tutor's rate?", a: "No. The lesson price is the tutor's hourly rate for the length you choose. TutorLink's commission is deducted from the tutor's earnings, not added to your bill." },
-    { q: "Who sets tutor rates?", a: `Each tutor sets their own rate. Rates listed today range from ${range ? `${formatCents(range.min)} to ${formatCents(range.max)}` : "tutor to tutor"} per hour.` },
+    { q: "Who sets tutor rates?", a: `Each tutor sets their own rate, in their own currency. Rates listed today range from ${rates.length ? rates.map((r) => `${formatMoney(r.min, r.currency)} to ${formatMoney(r.max, r.currency)}`).join(" and from ") : "tutor to tutor"} per hour.` },
     { q: "When is commission charged to tutors?", a: "Commission is calculated on each paid lesson. There's nothing to pay on a free trial, because nothing is charged." },
     { q: "Does a paid plan improve my ranking?", a: "No. Search order and match scores use the same factors for every tutor. Premium tutors are eligible for featured placement in highlighted spots, which is labelled and does not change ranking." },
     { q: `What if I don't need job credits?`, a: `You don't have to use them. Families can always contact you directly for free. Credits are only used when you apply to a student job (${CREDITS_PER_APPLICATION} credit per application). The ${starter.name} plan includes ${starter.monthlyLeadCredits} a month.` },
@@ -111,7 +114,7 @@ export default async function PricingPage() {
                 <span className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">
                   <Users className="size-4 text-brand" aria-hidden /> For families
                 </span>
-                <span className="mt-2 block font-heading text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink">$0</span>
+                <span className="mt-2 block font-heading text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink">Free</span>
                 <span className="mt-1 block text-[14px] text-ink-2">to join, search and message</span>
                 <span className="mt-3 inline-flex items-center gap-1 text-[14px] font-semibold text-brand">
                   See family pricing <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
@@ -124,7 +127,7 @@ export default async function PricingPage() {
                 <span className="mt-2 block font-heading text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink">
                   {lowestCommission}–{highestCommission}%
                 </span>
-                <span className="mt-1 block text-[14px] text-ink-2">commission · plans from $0 a month</span>
+                <span className="mt-1 block text-[14px] text-ink-2">commission · plans start free</span>
                 <span className="mt-3 inline-flex items-center gap-1 text-[14px] font-semibold text-brand">
                   See tutor plans <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
                 </span>
@@ -141,13 +144,13 @@ export default async function PricingPage() {
                   <span className="flex items-center gap-2 text-[14px] font-semibold text-ink">
                     <Receipt className="size-4 text-brand" aria-hidden /> Example lesson
                   </span>
-                  <span className="text-[12.5px] text-muted">1 hour · {formatCents(exampleRate)}/hr tutor</span>
+                  <span className="text-[12.5px] text-muted">1 hour · {formatMoney(exampleRate, "USD")}/hr tutor</span>
                 </div>
                 <dl className="space-y-3 px-6 py-5 text-[15px]">
                   {[
-                    { label: "Lesson (tutor's rate)", value: formatCents(exampleRate, { exact: true }) },
-                    { label: "Booking fee", value: "$0.00" },
-                    { label: "Subscription", value: "$0.00" },
+                    { label: "Lesson (tutor's rate)", value: usd(exampleRate) },
+                    { label: "Booking fee", value: usd(0) },
+                    { label: "Subscription", value: usd(0) },
                   ].map((r) => (
                     <div key={r.label} className="flex items-center justify-between gap-4">
                       <dt className="text-ink-2">{r.label}</dt>
@@ -156,14 +159,14 @@ export default async function PricingPage() {
                   ))}
                   <div className="flex items-center justify-between gap-4 border-t border-dashed border-line-strong pt-3">
                     <dt className="font-semibold text-ink">Family pays</dt>
-                    <dd className="font-heading text-[24px] font-bold tabular-nums text-ink">{formatCents(exampleRate, { exact: true })}</dd>
+                    <dd className="font-heading text-[24px] font-bold tabular-nums text-ink">{usd(exampleRate)}</dd>
                   </div>
                 </dl>
                 <div className="border-t border-line bg-canvas px-6 py-4">
                   <div className="flex items-center justify-between gap-4 text-[14px]">
                     <span className="text-ink-2">Tutor keeps</span>
                     <span className="font-semibold tabular-nums text-ink">
-                      {formatCents(exampleRate - applyBps(exampleRate, highestCommission * 100), { exact: true })}–{formatCents(exampleRate - applyBps(exampleRate, lowestCommission * 100), { exact: true })}
+                      {usd(exampleRate - applyBps(exampleRate, highestCommission * 100))}–{usd(exampleRate - applyBps(exampleRate, lowestCommission * 100))}
                     </span>
                   </div>
                   <p className="mt-2 flex items-start gap-2 text-[12.5px] leading-snug text-muted">
@@ -238,33 +241,40 @@ export default async function PricingPage() {
           </ol>
         </Reveal>
 
-        {/* Rates listed today (only when tutors are listed) */}
-        {range && (
+        {/* Rates listed today (only when tutors are listed): one bar per currency tutors charge in */}
+        {rates.length > 0 && (
           <Reveal className="mt-4">
             <div className="rounded-2xl border border-line bg-surface p-6">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-[15.5px] font-semibold text-ink">Hourly rates listed today</p>
-                <p className="text-[13px] text-muted">Each tutor sets their own rate</p>
+                <p className="text-[13px] text-muted">Each tutor sets their own rate, in their own currency</p>
               </div>
-              <div className="relative mt-8 h-2 rounded-full bg-brand-gradient" aria-hidden>
-                <span
-                  className="absolute -top-7 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-0.5 text-[12px] font-semibold text-on-ink"
-                  style={{ left: `${((median - range.min) / Math.max(1, range.max - range.min)) * 100}%` }}
-                >
-                  Median {formatCents(median)}
-                </span>
-                <span
-                  className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-ink"
-                  style={{ left: `${((median - range.min) / Math.max(1, range.max - range.min)) * 100}%` }}
-                />
-              </div>
-              <div className="mt-2 flex justify-between text-[13px] font-semibold tabular-nums text-ink-2">
-                <span>{formatCents(range.min)}</span>
-                <span>{formatCents(range.max)}</span>
-              </div>
-              <p className="sr-only">
-                Rates range from {formatCents(range.min)} to {formatCents(range.max)} an hour, with a median of {formatCents(median)}.
-              </p>
+              {rates.map((range) => {
+                const money = (cents: number) => formatMoney(cents, range.currency);
+                const at = `${((range.median - range.min) / Math.max(1, range.max - range.min)) * 100}%`;
+                return (
+                  <div key={range.currency} className={rates.length > 1 ? "mt-5" : undefined}>
+                    {rates.length > 1 && (
+                      <p className="text-[13px] font-medium text-ink-2">
+                        {CURRENCIES[range.currency].name} · {range.count} {range.count === 1 ? "tutor" : "tutors"}
+                      </p>
+                    )}
+                    <div className="relative mt-8 h-2 rounded-full bg-brand-gradient" aria-hidden>
+                      <span className="absolute -top-7 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-0.5 text-[12px] font-semibold text-on-ink" style={{ left: at }}>
+                        Median {money(range.median)}
+                      </span>
+                      <span className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-ink" style={{ left: at }} />
+                    </div>
+                    <div className="mt-2 flex justify-between text-[13px] font-semibold tabular-nums text-ink-2">
+                      <span>{money(range.min)}</span>
+                      <span>{money(range.max)}</span>
+                    </div>
+                    <p className="sr-only">
+                      Rates in {CURRENCIES[range.currency].name} range from {money(range.min)} to {money(range.max)} an hour, with a median of {money(range.median)}.
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </Reveal>
         )}
@@ -300,7 +310,10 @@ export default async function PricingPage() {
         </div>
         <PlanCards exampleCents={exampleRate} />
         <Reveal>
-          <p className="mt-6 flex items-start justify-center gap-2 text-center text-[14px] leading-relaxed text-ink-2">
+          <p className="mt-6 text-center text-[13.5px] leading-relaxed text-muted">
+            Plan and credit pack prices are in US dollars, or in Indian rupees for tutors who charge in rupees (₹).
+          </p>
+          <p className="mt-3 flex items-start justify-center gap-2 text-center text-[14px] leading-relaxed text-ink-2">
             <Scale className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
             Plans never change your position in search or your match score — every tutor is ranked by the same factors.
           </p>
@@ -313,7 +326,7 @@ export default async function PricingPage() {
         </Reveal>
         <div id="calculator" className="mt-14 scroll-mt-40">
           <Reveal>
-            <EarningsCalculator defaultRateCents={median || 5000} />
+            <EarningsCalculator defaultRateCents={exampleRate} />
           </Reveal>
         </div>
       </Section>

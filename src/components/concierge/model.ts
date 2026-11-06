@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { asCurrency, budgetLimits, formatMoney, type Currency } from "@/lib/money";
 import type { Grade, TeachingMode, Tutor } from "@/lib/types";
 import { GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, getSubject, subjectName } from "@/lib/data/catalog";
 import { resolveLocation } from "@/lib/data/geo";
@@ -18,7 +19,7 @@ export interface Answers {
   subject: string;
   grade: Grade | "";
   goal: string;
-  budgetMax: string; // whole dollars, as typed
+  budgetMax: string; // whole units of the visitor's currency, as typed
   days: string[];
   timesOfDay: TimeOfDay[];
   mode: ModeChoice;
@@ -34,12 +35,15 @@ export const EMPTY_ANSWERS: Answers = {
   subject: "", grade: "", goal: "", budgetMax: "", days: [], timesOfDay: [], mode: "", zip: "", minExperience: "", language: "", support: [],
 };
 
-export const answersSchema = z
+/** The answers form, with the budget in the visitor's currency ($10–$500, ₹100–₹20,000…). */
+export const answersSchemaFor = (currency: Currency) => {
+  const { min, max } = budgetLimits(currency);
+  return z
   .object({
     subject: z.string().min(1, "Choose a subject so we can find tutors who teach it."),
     grade: z.custom<Grade | "">((v) => typeof v === "string"),
     goal: z.string().max(300, "Keep the goal under 300 characters."),
-    budgetMax: z.string().refine((v) => v === "" || (/^\d+$/.test(v) && +v >= 10 && +v <= 500), "Enter a whole-dollar amount between $10 and $500."),
+    budgetMax: z.string().refine((v) => v === "" || (/^\d+$/.test(v) && +v >= min && +v <= max), `Enter a whole amount between ${formatMoney(min * 100, currency)} and ${formatMoney(max * 100, currency)}.`),
     days: z.array(z.string()),
     timesOfDay: z.array(z.enum(["morning", "afternoon", "evening"])),
     mode: z.enum(["", "online", "in_person", "either"]),
@@ -51,9 +55,13 @@ export const answersSchema = z
   .superRefine((v, ctx) => {
     if (v.mode === "in_person" && !v.zip) ctx.addIssue({ code: "custom", path: ["zip"], message: "Add your ZIP code so we can check who's within reach." });
   });
+};
+/** US dollars; the concierge uses answersSchemaFor(the visitor's currency). */
+export const answersSchema = answersSchemaFor("USD");
 
-export function answersToCriteria(a: Answers): MatchCriteria {
+export function answersToCriteria(a: Answers, currency: Currency = "USD"): MatchCriteria {
   return {
+    budgetCurrency: currency,
     subject: a.subject || undefined,
     grade: a.grade || undefined,
     modes: a.mode === "online" ? ["online"] : a.mode === "in_person" ? ["in_person"] : a.mode === "either" ? ["online", "in_person"] : undefined,
@@ -120,7 +128,7 @@ export function paramsToAnswers(p: URLSearchParams): Answers {
     subject: getSubject(subject) ? subject : "",
     grade: grade && GRADE_LABEL[grade as Grade] ? grade : "",
     goal: (p.get("goal") ?? "").slice(0, 300),
-    budgetMax: /^\d{2,3}$/.test(maxRate) ? maxRate : "",
+    budgetMax: /^\d{2,6}$/.test(maxRate) ? maxRate : "",
     days: (p.get("days") ?? "").split(",").filter((d) => DAYS.includes(d)),
     timesOfDay: (p.get("times") ?? "").split(",").filter((t): t is TimeOfDay => TIMES.includes(t as TimeOfDay)),
     mode: ["online", "in_person", "either"].includes(mode) ? (mode as ModeChoice) : "",
@@ -169,7 +177,7 @@ export const MODE_CHOICE_LABEL: Record<Exclude<ModeChoice, "">, string> = {
   either: "Online or in person",
 };
 
-export function summarize(a: Answers): { key: AnswerKey; label: string }[] {
+export function summarize(a: Answers, currency: Currency = "USD"): { key: AnswerKey; label: string }[] {
   const out: { key: AnswerKey; label: string }[] = [];
   if (a.subject) out.push({ key: "subject", label: subjectName(a.subject) });
   if (a.grade) out.push({ key: "grade", label: GRADE_LABEL[a.grade] });
@@ -178,7 +186,7 @@ export function summarize(a: Answers): { key: AnswerKey; label: string }[] {
     const p = resolveLocation(a.zip);
     out.push({ key: "zip", label: p ? `Near ${a.zip}` : `ZIP ${a.zip}` });
   }
-  if (a.budgetMax) out.push({ key: "budgetMax", label: `Up to $${a.budgetMax}/hr` });
+  if (a.budgetMax) out.push({ key: "budgetMax", label: `Up to ${formatMoney(Number(a.budgetMax) * 100, currency)}/hr` });
   if (a.days.length) out.push({ key: "days", label: daysSummary(a.days) });
   if (a.timesOfDay.length) out.push({ key: "timesOfDay", label: timesSummary(a.timesOfDay) });
   if (a.minExperience) out.push({ key: "minExperience", label: `${a.minExperience}+ yrs experience` });
@@ -197,22 +205,23 @@ export interface Suggestion {
   top: number;
 }
 
-function outcome(tutors: Tutor[], a: Answers): { count: number; top: number } {
-  const ranked = rankTutors(tutors, answersToCriteria(a)).filter((r) => !r.disqualified);
+function outcome(tutors: Tutor[], a: Answers, currency: Currency): { count: number; top: number } {
+  const ranked = rankTutors(tutors, answersToCriteria(a, currency)).filter((r) => !r.disqualified);
   return { count: ranked.length, top: ranked[0]?.percent ?? 0 };
 }
 
-export function buildSuggestions(tutors: Tutor[], a: Answers): Suggestion[] {
-  const base = outcome(tutors, a);
+export function buildSuggestions(tutors: Tutor[], a: Answers, currency: Currency = "USD"): Suggestion[] {
+  const base = outcome(tutors, a, currency);
   const candidates: { id: string; label: string; patch: Partial<Answers> }[] = [];
 
   if (a.mode === "in_person") candidates.push({ id: "online", label: "Allow online lessons", patch: { mode: "either" } });
   if (a.budgetMax && a.subject) {
-    const rates = tutors.filter((t) => t.subjects.includes(a.subject)).map((t) => t.hourlyRateCents).sort((x, y) => x - y);
+    // Only tutors who charge in the visitor's currency (budgets are never compared across currencies).
+    const rates = tutors.filter((t) => t.subjects.includes(a.subject) && asCurrency(t.currency) === currency).map((t) => t.hourlyRateCents).sort((x, y) => x - y);
     const target = rates[Math.min(2, rates.length - 1)];
     if (target && target > Number(a.budgetMax) * 100) {
-      const dollars = Math.min(500, Math.ceil(target / 100 / 5) * 5);
-      candidates.push({ id: "budget", label: `Raise your budget to $${dollars}/hr`, patch: { budgetMax: String(dollars) } });
+      const whole = Math.min(budgetLimits(currency).max, Math.ceil(target / 100 / 5) * 5);
+      candidates.push({ id: "budget", label: `Raise your budget to ${formatMoney(whole * 100, currency)}/hr`, patch: { budgetMax: String(whole) } });
     }
   }
   if (a.days.length || a.timesOfDay.length) candidates.push({ id: "schedule", label: "Be flexible on schedule", patch: { days: [], timesOfDay: [] } });
@@ -220,7 +229,7 @@ export function buildSuggestions(tutors: Tutor[], a: Answers): Suggestion[] {
   if (a.language) candidates.push({ id: "language", label: `Don't require ${a.language}`, patch: { language: "" } });
 
   return candidates
-    .map((c) => ({ ...c, ...outcome(tutors, { ...a, ...c.patch }) }))
+    .map((c) => ({ ...c, ...outcome(tutors, { ...a, ...c.patch }, currency) }))
     .filter((s) => s.count > base.count || s.top > base.top)
     .sort((x, y) => y.count - x.count || y.top - x.top)
     .slice(0, 4);

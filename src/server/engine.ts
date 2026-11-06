@@ -1,5 +1,5 @@
 import "server-only";
-import { createActions, type ActionName, type DomainActions, type DomainState } from "@/lib/domain/actions";
+import { createActions, type ActionName, type DomainActions, type DomainState, type ProviderOp, type VerifiedPayment } from "@/lib/domain/actions";
 import { fail, type Data, type Result } from "@/lib/domain/data";
 import type { AppNotification } from "@/lib/types";
 import { buildCatalog, setLiveCatalog } from "@/lib/data/catalog";
@@ -7,6 +7,7 @@ import { transaction, type Tx } from "./db";
 import { env } from "./env";
 import { Loader } from "./load";
 import { PLANS } from "./plan";
+import { performProviderOps } from "./payment-ops";
 import { SPECS, WRITE_ORDER, keyOf, type Row, type TableSpec } from "./tables";
 
 /*
@@ -100,19 +101,25 @@ function friendly(e: unknown): string | null {
   return null;
 }
 
+export interface ActionContext {
+  /** A card / UPI payment checked with Razorpay for this action (src/app/api/pay only; never from the browser). */
+  payment?: VerifiedPayment;
+}
+
 /**
  * `onNotified` receives the notifications the action created, once they're saved (for email copies).
+ * Razorpay calls the action asked for (take a held payment, refund) are made once, after saving.
  */
-export async function runAction(name: ActionName, args: unknown[], actor: Actor, onNotified?: (list: AppNotification[]) => void): Promise<Result<unknown>> {
+export async function runAction(name: ActionName, args: unknown[], actor: Actor, onNotified?: (list: AppNotification[]) => void, ctx: ActionContext = {}): Promise<Result<unknown>> {
   const plan = PLANS[name];
   if (!plan) return fail("Unknown action.");
   try {
-    const { result, created } = await transaction(async (tx) => {
+    const { result, created, ops } = await transaction(async (tx) => {
       const L = new Loader(tx);
       await L.globals();
       if (actor.userId) await L.users([actor.userId]);
       const me = actor.userId ? (L.data.users.find((u) => u.id === actor.userId) ?? null) : null;
-      if (actor.userId && !me) return { result: fail("Your account isn't set up yet. Please sign out and sign in again."), created: [] };
+      if (actor.userId && !me) return { result: fail("Your account isn't set up yet. Please sign out and sign in again."), created: [], ops: [] as ProviderOp[] };
       await plan(L, me, args);
       const data = L.data;
       data.sessionUserId = me?.id ?? null;
@@ -124,14 +131,21 @@ export async function runAction(name: ActionName, args: unknown[], actor: Actor,
       const set = (partial: Partial<Data> | ((s: DomainState) => Partial<Data>)) => {
         Object.assign(state, typeof partial === "function" ? partial(state) : partial);
       };
-      const actions = createActions(() => state, set, { paymentsEnabled: env.paymentsEnabled });
+      // A fresh list per attempt: only the attempt that is saved asks for Razorpay calls.
+      const providerOps: ProviderOp[] = [];
+      const actions = createActions(() => state, set, { paymentsEnabled: env.paymentsEnabled, payment: ctx.payment, providerOps });
       Object.assign(state, actions);
       const run = actions[name] as (...a: unknown[]) => Result<unknown>;
       const result = run(...args);
       await persist(tx, before, data);
-      return { result, created: result.ok ? data.notifications.filter((n) => !known.has(n.id)) : [] };
+      return { result, created: result.ok ? data.notifications.filter((n) => !known.has(n.id)) : [], ops: result.ok ? providerOps : [] };
     });
     if (created.length) onNotified?.(created);
+    if (ops.length) {
+      const { failedCaptures } = await performProviderOps(ops);
+      // A held payment that couldn't be taken: the lesson waits for the family to pay again.
+      for (const f of failedCaptures) await runAction("markPaymentFailed", [f.bookingId, f.reason], { userId: null }, onNotified);
+    }
     return result;
   } catch (e) {
     const message = friendly(e);

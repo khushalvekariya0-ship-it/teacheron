@@ -1,6 +1,6 @@
 import type { ApplicationStatus, Requirement } from "@/lib/types";
 import type { MatchCriteria } from "@/lib/matching";
-import { formatCents } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 
 /** What each application status means, in the tutor's words. */
 export const APPLICATION_STATUS_META: Record<ApplicationStatus, { label: string; tone: "neutral" | "accent" | "success" | "warning" | "danger"; description: string }> = {
@@ -27,6 +27,8 @@ export function requirementCriteria(r: Requirement): MatchCriteria {
     modes: r.modes,
     location: r.zip || undefined,
     budgetMaxCents: r.budgetMaxCents,
+    // Scoring only compares the budget with tutors who charge in the same currency.
+    budgetCurrency: r.currency,
     days: r.days,
     timesOfDay: r.timesOfDay,
     minExperienceYears: r.minExperienceYears,
@@ -35,8 +37,11 @@ export function requirementCriteria(r: Requirement): MatchCriteria {
   };
 }
 
-export function budgetLabel(r: Pick<Requirement, "budgetMinCents" | "budgetMaxCents">): string {
-  return r.budgetMinCents === r.budgetMaxCents ? `${formatCents(r.budgetMaxCents)}/hr` : `${formatCents(r.budgetMinCents)}–${formatCents(r.budgetMaxCents)}/hr`;
+/** The family's hourly budget, in the poster's currency. */
+export function budgetLabel(r: Pick<Requirement, "budgetMinCents" | "budgetMaxCents"> & { currency?: Currency }): string {
+  return r.budgetMinCents === r.budgetMaxCents
+    ? `${formatMoney(r.budgetMaxCents, r.currency)}/hr`
+    : `${formatMoney(r.budgetMinCents, r.currency)}–${formatMoney(r.budgetMaxCents, r.currency)}/hr`;
 }
 
 const TIME_LABEL: Record<string, string> = { morning: "mornings", afternoon: "afternoons", evening: "evenings" };

@@ -11,7 +11,7 @@ import { useCatalog, useSession, useListedTutors } from "@/lib/store/hooks";
 import { ADMIN_NAV, NAV_BY_ROLE } from "@/components/dashboard/nav";
 import { hasPermission } from "@/lib/permissions";
 import { Avatar } from "@/components/ui/Avatar";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 
 /* ─── Open state shared across the app (navbar button, dashboard bar, hotkey) ─── */
 
@@ -110,7 +110,7 @@ export function CommandPalette() {
           id: `t:${t.id}`,
           group: "Tutors",
           label: `${t.firstName} ${t.lastName}`,
-          hint: `${t.headline} · ${formatCents(t.hourlyRateCents)}/hr`,
+          hint: `${t.headline} · ${formatMoney(t.hourlyRateCents, t.currency)}/hr`,
           href: `/tutors/${t.slug}`,
           icon: <Avatar name={`${t.firstName} ${t.lastName}`} src={t.photoUrl} tone={t.tone} size="xs" />,
         }),

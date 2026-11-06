@@ -7,7 +7,7 @@ import type { Grade, Level } from "@/lib/types";
 import { LEVELS, subjectGroups, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, rankTutors, type MatchResult } from "@/lib/matching";
 import { useCatalog, useListedTutors } from "@/lib/store/hooks";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { CategoryIcon } from "@/components/content/icons";
@@ -279,7 +279,7 @@ function MatchCard({ match, rank, onNavigate }: { match: MatchResult; rank: numb
             </span>
             <span>{t.experienceYears} yrs experience</span>
             <span>
-              <span className="font-semibold text-ink">{formatCents(t.hourlyRateCents)}</span>/hr
+              <span className="font-semibold text-ink">{formatMoney(t.hourlyRateCents, t.currency)}</span>/hr
             </span>
           </p>
         </div>

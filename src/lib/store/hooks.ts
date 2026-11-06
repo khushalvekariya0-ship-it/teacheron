@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { Booking, Review, Tutor, User } from "@/lib/types";
 import { useApp, resolveTutor } from "./index";
 import { isFlagOn } from "@/lib/flags";
+import { asCurrency, currencyForCountry, sumByCurrency, type Currency } from "@/lib/money";
+import { guessCountry } from "@/lib/location";
 import { buildCatalog, type Catalog } from "@/lib/data/catalog";
 
 /*
@@ -98,10 +100,38 @@ export function useCreditBalance(tutorId: string | undefined): number {
 }
 
 /** Study Credits in the signed-in learner's wallet, in cents. 0 when signed out. */
-export function useWalletBalance(): number {
+/**
+ * The viewer's Study Credits in one currency (minor units). Credits are kept per currency; without
+ * `currency`, the viewer's own currency (from their country).
+ */
+export function useWalletBalance(currency?: Currency): number {
   const tx = useApp((s) => s.walletTransactions);
   const me = useSession();
-  return useMemo(() => (me ? tx.filter((t) => t.userId === me.id).reduce((a, t) => a + t.deltaCents, 0) : 0), [tx, me]);
+  const want = currency ?? currencyForCountry(me?.country);
+  return useMemo(() => (me ? tx.filter((t) => t.userId === me.id && asCurrency(t.currency) === want).reduce((a, t) => a + t.deltaCents, 0) : 0), [tx, me, want]);
+}
+
+/** Every currency the viewer holds Study Credits in, with the balance (most often just one). */
+export function useWalletBalances(): { currency: Currency; amount: number }[] {
+  const tx = useApp((s) => s.walletTransactions);
+  const me = useSession();
+  return useMemo(() => {
+    if (!me) return [];
+    const own = currencyForCountry(me.country);
+    const sums = sumByCurrency(tx.filter((t) => t.userId === me.id).map((t) => ({ amount: t.deltaCents, currency: t.currency })));
+    if (!sums.some((x) => x.currency === own)) sums.unshift({ currency: own, amount: 0 });
+    return sums.sort((a, b) => (a.currency === own ? -1 : b.currency === own ? 1 : 0));
+  }, [tx, me]);
+}
+
+/**
+ * The currency to show the viewer for things that aren't a tutor's price (Study Credits, a job budget, price
+ * filters): from their country when signed in, otherwise guessed from the device's time zone.
+ */
+export function useViewerCurrency(): Currency {
+  const me = useSession();
+  const hydrated = useHydrated();
+  return useMemo(() => currencyForCountry(me?.country ?? (hydrated ? guessCountry() : "US")), [me?.country, hydrated]);
 }
 
 export function useUnreadNotifications(): number {

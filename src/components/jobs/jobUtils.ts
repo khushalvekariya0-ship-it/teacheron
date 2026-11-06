@@ -2,7 +2,8 @@ import type { ApplicationStatus, Grade, Requirement, Role, TeachingMode } from "
 import type { MatchCriteria } from "@/lib/matching";
 import { GRADE_LABEL, LEVEL_LABEL, TIMES_OF_DAY, gradeToLevel, subjectName } from "@/lib/data/catalog";
 import { distanceMiles, resolveLocation, type GeoPoint } from "@/lib/data/geo";
-import { formatCents, formatRelative } from "@/lib/format";
+import { formatRelative } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 import { isPostalCode } from "@/lib/postal";
 
 /*
@@ -46,9 +47,10 @@ export function scheduleSummary(req: Pick<Requirement, "days" | "timesOfDay">): 
   return `${daysSummary(req.days)} · ${timesSummary(req.timesOfDay)}`;
 }
 
-export function budgetRange(req: Pick<Requirement, "budgetMinCents" | "budgetMaxCents">): string {
-  if (req.budgetMinCents === req.budgetMaxCents) return `${formatCents(req.budgetMaxCents)}/hr`;
-  return `${formatCents(req.budgetMinCents)}–${formatCents(req.budgetMaxCents)}/hr`;
+/** "₹500–₹800/hr", in the poster's currency (US dollars for a job saved without one). */
+export function budgetRange(req: Pick<Requirement, "budgetMinCents" | "budgetMaxCents"> & { currency?: Currency }): string {
+  if (req.budgetMinCents === req.budgetMaxCents) return `${formatMoney(req.budgetMaxCents, req.currency)}/hr`;
+  return `${formatMoney(req.budgetMinCents, req.currency)}–${formatMoney(req.budgetMaxCents, req.currency)}/hr`;
 }
 
 export function modesLabel(modes: readonly TeachingMode[]): string {
@@ -112,6 +114,8 @@ export function criteriaFromRequirement(req: Requirement): MatchCriteria {
     modes: req.modes.length ? req.modes : undefined,
     location,
     budgetMaxCents: req.budgetMaxCents || undefined,
+    // Scoring only compares the budget with tutors who charge in the same currency.
+    budgetCurrency: req.currency,
     days: req.days.length ? req.days : undefined,
     timesOfDay: req.timesOfDay.length ? req.timesOfDay : undefined,
     minExperienceYears: req.minExperienceYears || undefined,

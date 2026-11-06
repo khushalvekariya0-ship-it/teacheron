@@ -8,12 +8,13 @@ import type { Coupon } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useFlag, useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { dateKey, zonedToUtc } from "@/lib/time";
-import { formatCents, formatDate, pluralize } from "@/lib/format";
+import { formatDate, pluralize } from "@/lib/format";
+import { CURRENCIES, CURRENCY_CODES, asCurrency, formatMoney, isCurrency, type Currency } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Checkbox, Progress, Segmented, Switch } from "@/components/ui/Controls";
-import { Field, Input } from "@/components/ui/Input";
+import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog, Dialog, DialogBody, DialogClose, DialogContent, DialogFooter } from "@/components/ui/Overlay";
@@ -23,6 +24,7 @@ import {
   ClearFilters, ExportButton, FilterSelect, MiniStat, Mono, PermissionButton, PermissionNotice, SearchInput, StatusPill, TextLink, Toolbar,
   centsToDecimal, matches, useStaff, useUrlParam,
 } from "./kit";
+import { moneyInputProps } from "./money";
 
 type StatusFilter = "all" | "live" | "inactive" | "expired" | "exhausted";
 
@@ -45,13 +47,18 @@ function statusOf(c: Coupon, now: number): { label: string; tone: "success" | "n
   return { label: "Active", tone: "success" };
 }
 
-function discountLabel(c: Pick<Coupon, "kind" | "value">): string {
-  return c.kind === "percent" ? `${c.value}%` : formatCents(c.value, { exact: c.value % 100 !== 0 });
+/** Fixed amounts and minimums are in the code's currency (older codes saved before currencies were US dollars). */
+const couponCurrency = (c: Pick<Coupon, "currency">): Currency => asCurrency(c.currency);
+/** A currency is needed for a fixed amount or a minimum; a plain percentage code works in any currency. */
+const needsCurrency = (c: Pick<Coupon, "kind" | "minPurchaseCents">) => c.kind === "fixed" || c.minPurchaseCents > 0;
+
+function discountLabel(c: Pick<Coupon, "kind" | "value" | "currency">): string {
+  return c.kind === "percent" ? `${c.value}%` : formatMoney(c.value, couponCurrency(c), { exact: c.value % 100 !== 0 });
 }
 
 function toInput(c: Coupon) {
-  const { id, code, kind, value, minPurchaseCents, maxRedemptions, expiresAt, firstBookingOnly, active } = c;
-  return { id, code, kind, value, minPurchaseCents, maxRedemptions, expiresAt, firstBookingOnly, active };
+  const { id, code, kind, value, currency, minPurchaseCents, maxRedemptions, expiresAt, firstBookingOnly, active } = c;
+  return { id, code, kind, value, currency: needsCurrency(c) ? couponCurrency({ currency }) : undefined, minPurchaseCents, maxRedemptions, expiresAt, firstBookingOnly, active };
 }
 
 export function PromotionsView() {
@@ -135,11 +142,11 @@ function PromotionsInner() {
       sortValue: (c) => `${c.kind}:${String(c.value).padStart(9, "0")}`,
       cell: (c) => (
         <span className="tabular-nums">
-          <span className="font-medium text-ink">{discountLabel(c)}</span> <span className="text-muted">{c.kind === "percent" ? "off" : "fixed"}</span>
+          <span className="font-medium text-ink">{discountLabel(c)}</span> <span className="text-muted">{c.kind === "percent" ? "off" : `fixed · ${couponCurrency(c)}`}</span>
         </span>
       ),
     },
-    { key: "min", header: "Min. purchase", sortValue: (c) => c.minPurchaseCents, cell: (c) => <span className="tabular-nums">{c.minPurchaseCents ? formatCents(c.minPurchaseCents) : "None"}</span>, hideOnMobile: true },
+    { key: "min", header: "Min. purchase", sortValue: (c) => c.minPurchaseCents, cell: (c) => <span className="tabular-nums">{c.minPurchaseCents ? formatMoney(c.minPurchaseCents, couponCurrency(c)) : "None"}</span>, hideOnMobile: true },
     {
       key: "usage",
       header: "Usage",
@@ -205,12 +212,13 @@ function PromotionsInner() {
           <>
             <ExportButton
               filename="tutorlink-coupons"
-              headers={["Code", "Type", "Value", "Min purchase (USD)", "Redemptions", "Max redemptions", "Expires", "First booking only", "Active", "Status"]}
+              headers={["Code", "Type", "Value", "Currency", "Min purchase", "Redemptions", "Max redemptions", "Expires", "First booking only", "Active", "Status"]}
               rows={() =>
                 rows.map((c) => [
                   c.code,
                   c.kind,
                   c.kind === "percent" ? `${c.value}%` : centsToDecimal(c.value),
+                  needsCurrency(c) ? couponCurrency(c) : "",
                   centsToDecimal(c.minPurchaseCents),
                   c.redemptions,
                   c.maxRedemptions,
@@ -313,6 +321,7 @@ function PromotionsInner() {
             <ol className="list-decimal space-y-1.5 pl-5 text-[13.5px] text-ink-2 marker:text-muted">
               <li>The coupons flag must be on and the code must be active.</li>
               <li>The code must not be expired or past its redemption limit.</li>
+              <li>Codes with a fixed amount or a minimum only work on lessons paid in the code&apos;s currency.</li>
               <li>The lesson price must meet the minimum purchase.</li>
               <li>First-booking codes only work on a learner&apos;s first paid booking.</li>
               <li>Percent discounts apply to the lesson price; fixed discounts never exceed it.</li>
@@ -353,6 +362,8 @@ interface FormValues {
   code: string;
   kind: Coupon["kind"];
   value: string;
+  /** For a fixed amount and the minimum purchase. */
+  currency: Currency;
   minPurchase: string;
   maxRedemptions: string;
   expires: string; // YYYY-MM-DD in the viewer's time zone
@@ -361,13 +372,14 @@ interface FormValues {
 }
 type FormField = keyof FormValues;
 
-const EMPTY_FORM: FormValues = { code: "", kind: "percent", value: "", minPurchase: "0", maxRedemptions: "", expires: "", firstBookingOnly: false, active: true };
+const EMPTY_FORM: FormValues = { code: "", kind: "percent", value: "", currency: "INR", minPurchase: "0", maxRedemptions: "", expires: "", firstBookingOnly: false, active: true };
 
 function toForm(c: Coupon, tz: string): FormValues {
   return {
     code: c.code,
     kind: c.kind,
     value: c.kind === "percent" ? String(c.value) : centsToDecimal(c.value),
+    currency: needsCurrency(c) ? couponCurrency(c) : EMPTY_FORM.currency,
     minPurchase: centsToDecimal(c.minPurchaseCents),
     maxRedemptions: String(c.maxRedemptions),
     expires: dateKey(new Date(c.expiresAt), tz),
@@ -376,9 +388,9 @@ function toForm(c: Coupon, tz: string): FormValues {
   };
 }
 
-/** Dollars → cents without float drift. Returns null when the format is wrong. */
-function dollarsToCents(v: string): number | null {
-  const m = /^(\d{1,6})(?:\.(\d{1,2}))?$/.exec(v.trim().replace(/^\$/, ""));
+/** An amount typed in whole units ("10", "12.50") → minor units without float drift. Returns null when the format is wrong. */
+function toCents(v: string): number | null {
+  const m = /^(\d{1,6})(?:\.(\d{1,2}))?$/.exec(v.trim());
   return m ? Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0")) : null;
 }
 
@@ -395,6 +407,7 @@ function couponSchema(ctx: { existing: Coupon | null; others: Coupon[]; now: num
       code: z.string().trim().toUpperCase(),
       kind: z.enum(["percent", "fixed"]),
       value: z.string().trim(),
+      currency: z.string(),
       minPurchase: z.string().trim(),
       maxRedemptions: z.string().trim(),
       expires: z.string().trim(),
@@ -411,12 +424,14 @@ function couponSchema(ctx: { existing: Coupon | null; others: Coupon[]; now: num
         const n = /^\d{1,3}$/.test(v.value) ? Number(v.value) : NaN;
         if (!Number.isInteger(n) || n < 1 || n > 100) issue("value", "Enter a whole percentage from 1 to 100.");
       } else {
-        const cents = dollarsToCents(v.value);
-        if (cents === null) issue("value", "Enter a dollar amount such as 10 or 12.50.");
-        else if (cents <= 0) issue("value", "The discount must be more than $0.");
+        const cents = toCents(v.value);
+        if (cents === null) issue("value", "Enter an amount such as 10 or 12.50.");
+        else if (cents <= 0) issue("value", `The discount must be more than ${formatMoney(0, asCurrency(v.currency))}.`);
       }
 
-      if (dollarsToCents(v.minPurchase || "0") === null) issue("minPurchase", "Enter a dollar amount such as 0 or 40.");
+      const min = toCents(v.minPurchase || "0");
+      if (min === null) issue("minPurchase", "Enter an amount such as 0 or 40.");
+      if ((v.kind === "fixed" || (min ?? 0) > 0) && !isCurrency(v.currency)) issue("currency", "Choose a currency.");
 
       if (!/^\d{1,7}$/.test(v.maxRedemptions) || Number(v.maxRedemptions) < 1) issue("maxRedemptions", "Enter a whole number, 1 or more.");
       else if (ctx.existing && Number(v.maxRedemptions) < ctx.existing.redemptions) issue("maxRedemptions", `Already redeemed ${ctx.existing.redemptions.toLocaleString("en-US")} times — the limit can't be lower.`);
@@ -429,8 +444,9 @@ function couponSchema(ctx: { existing: Coupon | null; others: Coupon[]; now: num
     .transform((v) => ({
       code: v.code,
       kind: v.kind,
-      value: v.kind === "percent" ? Number(v.value) : dollarsToCents(v.value)!,
-      minPurchaseCents: dollarsToCents(v.minPurchase || "0")!,
+      value: v.kind === "percent" ? Number(v.value) : toCents(v.value)!,
+      currency: needsCurrency({ kind: v.kind, minPurchaseCents: toCents(v.minPurchase || "0")! }) ? asCurrency(v.currency) : undefined,
+      minPurchaseCents: toCents(v.minPurchase || "0")!,
       maxRedemptions: Number(v.maxRedemptions),
       expiresAt: endOfDayIso(v.expires, ctx.tz)!,
       firstBookingOnly: v.firstBookingOnly,
@@ -498,6 +514,9 @@ function CouponDialog({ open, coupon, onOpenChange }: { open: boolean; coupon: C
 
   const preview = result.success ? result.data : null;
   const isAdmin = me?.role === "admin";
+  // Fixed amounts and minimums are in one currency; a plain percentage code works in any currency.
+  const showCurrency = values.kind === "fixed" || (toCents(values.minPurchase || "0") ?? 0) > 0;
+  const money = moneyInputProps(values.currency);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -535,20 +554,44 @@ function CouponDialog({ open, coupon, onOpenChange }: { open: boolean; coupon: C
               />
             </div>
 
+            {showCurrency && (
+              <Field
+                label="Currency"
+                required
+                error={show("currency")}
+                hint={values.kind === "fixed" ? "The amount off and the minimum are in this currency. The code only works on lessons paid in it." : "The minimum is in this currency. The code only works on lessons paid in it."}
+              >
+                <Select
+                  value={values.currency}
+                  onChange={(e) => set("currency", e.target.value as Currency)}
+                  options={CURRENCY_CODES.map((code) => ({ value: code, label: `${code} (${CURRENCIES[code].name})` }))}
+                  className="sm:max-w-72"
+                />
+              </Field>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={values.kind === "percent" ? "Percent off" : "Amount off"} required error={show("value")} hint={values.kind === "percent" ? "Whole number, 1–100." : "In dollars, e.g. 10 or 12.50."}>
+              <Field label={values.kind === "percent" ? "Percent off" : "Amount off"} required error={show("value")} hint={values.kind === "percent" ? "Whole number, 1–100." : `In ${values.currency}, e.g. 10 or 12.50.`}>
                 <Input
                   inputMode={values.kind === "percent" ? "numeric" : "decimal"}
                   value={values.value}
                   onChange={(e) => set("value", e.target.value)}
                   onBlur={blur("value")}
-                  prefixText={values.kind === "fixed" ? "$" : undefined}
-                  suffix={values.kind === "percent" ? <span className="pr-1 text-[13px]">%</span> : undefined}
+                  prefixText={values.kind === "fixed" ? money.prefixText : undefined}
+                  suffix={values.kind === "percent" ? <span className="pr-1 text-[13px]">%</span> : money.suffix ? <span className="pr-1 text-[13px]">{money.suffix}</span> : undefined}
                   className="tabular-nums"
                 />
               </Field>
-              <Field label="Minimum purchase" error={show("minPurchase")} hint="Lesson price needed. $0 for none.">
-                <Input inputMode="decimal" value={values.minPurchase} onChange={(e) => set("minPurchase", e.target.value)} onBlur={blur("minPurchase")} prefixText="$" className="tabular-nums" />
+              <Field label="Minimum purchase" error={show("minPurchase")} hint={showCurrency ? `Lesson price needed, in ${values.currency}. 0 for none.` : "Lesson price needed. 0 for none."}>
+                <Input
+                  inputMode="decimal"
+                  value={values.minPurchase}
+                  onChange={(e) => set("minPurchase", e.target.value)}
+                  onBlur={blur("minPurchase")}
+                  prefixText={showCurrency ? money.prefixText : undefined}
+                  suffix={showCurrency && money.suffix ? <span className="pr-1 text-[13px]">{money.suffix}</span> : undefined}
+                  className="tabular-nums"
+                />
               </Field>
               <Field
                 label="Max redemptions"
@@ -581,7 +624,8 @@ function CouponDialog({ open, coupon, onOpenChange }: { open: boolean; coupon: C
                 {preview
                   ? [
                       `${discountLabel(preview)} off`,
-                      preview.minPurchaseCents ? `lessons of ${formatCents(preview.minPurchaseCents)} or more` : "any lesson price",
+                      preview.minPurchaseCents ? `lessons of ${formatMoney(preview.minPurchaseCents, couponCurrency(preview))} or more` : "any lesson price",
+                      preview.currency ? `lessons paid in ${preview.currency} only` : "lessons in any currency",
                       preview.firstBookingOnly ? "first paid booking only" : null,
                       `up to ${pluralize(preview.maxRedemptions, "use")}`,
                       `expires ${formatDate(preview.expiresAt, tz)}`,

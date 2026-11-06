@@ -101,7 +101,7 @@ export const TUTOR_COLS: Record<string, Col> = {
   id: ["id", "v"], slug: ["slug", "v"], firstName: ["first_name", "v"], lastName: ["last_name", "v"], headline: ["headline", "v"], bio: ["bio", "v"],
   approach: ["approach", "v"], subjects: ["subjects", "v"], specialties: ["specialties", "v"], levels: ["levels", "v"], category: ["category", "v"],
   learningSupport: ["learning_support", "v"], country: ["country", "v", true], city: ["city", "v"], state: ["state", "v"], zip: ["zip", "v"], lat: ["lat", "v"], lng: ["lng", "v"],
-  serviceRadiusMiles: ["service_radius_miles", "v"], timezone: ["timezone", "v"], modes: ["modes", "v"], hourlyRateCents: ["hourly_rate_cents", "v"],
+  serviceRadiusMiles: ["service_radius_miles", "v"], timezone: ["timezone", "v"], modes: ["modes", "v"], hourlyRateCents: ["hourly_rate_cents", "v"], currency: ["currency", "v", true],
   trial: ["trial", "json"], rules: ["rules", "json"], experienceYears: ["experience_years", "v"], education: ["education", "json"],
   certifications: ["certifications", "json"], languages: ["languages", "v"], verification: ["verification", "json"], rating: ["rating", "v"],
   reviewCount: ["review_count", "v"], lessonsCompleted: ["lessons_completed", "v"], responseTimeHours: ["response_time_hours", "v"],
@@ -112,7 +112,7 @@ export const TUTOR_COLS: Record<string, Col> = {
 const REQUIREMENT: Record<string, Col> = {
   id: ["id", "v"], ownerId: ["owner_id", "v"], childId: ["child_id", "v", true], title: ["title", "v"], subject: ["subject", "v"], grade: ["grade", "v"],
   objectives: ["objectives", "v"], modes: ["modes", "v"], country: ["country", "v", true], city: ["city", "v"], state: ["state", "v"], zip: ["zip", "v"], days: ["days", "v"],
-  timesOfDay: ["times_of_day", "v"], sessionsPerWeek: ["sessions_per_week", "v"], budgetMinCents: ["budget_min_cents", "v"],
+  timesOfDay: ["times_of_day", "v"], sessionsPerWeek: ["sessions_per_week", "v"], budgetMinCents: ["budget_min_cents", "v"], currency: ["currency", "v", true],
   budgetMaxCents: ["budget_max_cents", "v"], minExperienceYears: ["min_experience_years", "v", true], languages: ["languages", "v"],
   preferences: ["preferences", "v"], details: ["details", "v"], attachments: ["attachments", "json", true], learningSupport: ["learning_support", "v", true],
   status: ["status", "v"], createdAt: ["created_at", "ts"], updatedAt: ["updated_at", "ts"], publishedAt: ["published_at", "ts", true],
@@ -121,12 +121,12 @@ const REQUIREMENT: Record<string, Col> = {
 
 const APPLICATION: Record<string, Col> = {
   id: ["id", "v"], requirementId: ["requirement_id", "v"], tutorId: ["tutor_id", "v"], message: ["message", "v"],
-  proposedRateCents: ["proposed_rate_cents", "v"], status: ["status", "v"], createdAt: ["created_at", "ts"], updatedAt: ["updated_at", "ts"],
+  proposedRateCents: ["proposed_rate_cents", "v"], currency: ["currency", "v", true], status: ["status", "v"], createdAt: ["created_at", "ts"], updatedAt: ["updated_at", "ts"],
 };
 
 const BOOKING: Record<string, Col> = {
   id: ["id", "v"], tutorId: ["tutor_id", "v"], bookerId: ["booker_id", "v"], childId: ["child_id", "v", true], subject: ["subject", "v"], type: ["type", "v"],
-  status: ["status", "v"], startUtc: ["start_utc", "ts"], durationMin: ["duration_min", "v"], mode: ["mode", "v"], priceCents: ["price_cents", "v"],
+  status: ["status", "v"], startUtc: ["start_utc", "ts"], durationMin: ["duration_min", "v"], mode: ["mode", "v"], currency: ["currency", "v", true], priceCents: ["price_cents", "v"],
   platformFeeCents: ["platform_fee_cents", "v"], discountCents: ["discount_cents", "v"], paymentStatus: ["payment_status", "v"],
   meetingUrl: ["meeting_url", "v", true], videoLink: ["video_link", "v", true], videoPasscode: ["video_passcode", "v", true], recordingUrl: ["recording_url", "v", true],
   locationNote: ["location_note", "v", true], notes: ["notes", "v", true],
@@ -174,18 +174,19 @@ const HOMEWORK: Record<string, Col> = {
 };
 
 const PAYMENT: Record<string, Col> = {
-  id: ["id", "v"], bookingId: ["booking_id", "v", true], userId: ["user_id", "v"], kind: ["kind", "v"], amountCents: ["amount_cents", "v"],
+  id: ["id", "v"], bookingId: ["booking_id", "v", true], userId: ["user_id", "v"], kind: ["kind", "v"], amountCents: ["amount_cents", "v"], currency: ["currency", "v", true],
+  provider: ["provider", "v", true], providerPaymentId: ["provider_payment_id", "v", true], providerOrderId: ["provider_order_id", "v", true], providerRefundId: ["provider_refund_id", "v", true],
   status: ["status", "v"], description: ["description", "v"], createdAt: ["created_at", "ts"], method: ["method", "v"],
 };
 
 const PAYOUT: Record<string, Col> = {
-  id: ["id", "v"], tutorId: ["tutor_id", "v"], amountCents: ["amount_cents", "v"], status: ["status", "v"], arrivalDate: ["arrival_date", "v"], createdAt: ["created_at", "ts"],
+  id: ["id", "v"], tutorId: ["tutor_id", "v"], amountCents: ["amount_cents", "v"], currency: ["currency", "v", true], status: ["status", "v"], arrivalDate: ["arrival_date", "v"], createdAt: ["created_at", "ts"],
 };
 
 const LEAD_TX: Record<string, Col> = { id: ["id", "v"], tutorId: ["tutor_id", "v"], delta: ["delta", "v"], reason: ["reason", "v"], createdAt: ["created_at", "ts"] };
 
 const WALLET_TX: Record<string, Col> = {
-  id: ["id", "v"], userId: ["user_id", "v"], deltaCents: ["delta_cents", "v"], kind: ["kind", "v"], description: ["description", "v"],
+  id: ["id", "v"], userId: ["user_id", "v"], deltaCents: ["delta_cents", "v"], currency: ["currency", "v", true], kind: ["kind", "v"], description: ["description", "v"],
   bookingId: ["booking_id", "v", true], createdAt: ["created_at", "ts"],
 };
 
@@ -218,7 +219,7 @@ const AUDIT: Record<string, Col> = {
 };
 
 const COUPON: Record<string, Col> = {
-  id: ["id", "v"], code: ["code", "v"], kind: ["kind", "v"], value: ["value", "v"], minPurchaseCents: ["min_purchase_cents", "v"],
+  id: ["id", "v"], code: ["code", "v"], kind: ["kind", "v"], value: ["value", "v"], currency: ["currency", "v", true], minPurchaseCents: ["min_purchase_cents", "v"],
   maxRedemptions: ["max_redemptions", "v"], redemptions: ["redemptions", "v"], expiresAt: ["expires_at", "ts"],
   firstBookingOnly: ["first_booking_only", "v"], active: ["active", "v"],
 };

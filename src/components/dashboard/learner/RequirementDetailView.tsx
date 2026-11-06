@@ -25,7 +25,8 @@ import { useApp, type Result } from "@/lib/store";
 import { useNow, useSession } from "@/lib/store/hooks";
 import { scoreTutor, type FactorResult, type MatchCriteria } from "@/lib/matching";
 import { subjectName, GRADE_LABEL, MODE_LABEL, TIMES_OF_DAY, WEEKDAYS } from "@/lib/data/catalog";
-import { formatCents, formatDate, formatRelative, pluralize } from "@/lib/format";
+import { formatDate, formatRelative, pluralize } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks";
 import { useMyChildren } from "./data";
@@ -54,6 +55,7 @@ function criteriaFor(r: Requirement): MatchCriteria {
     modes: r.modes.length ? r.modes : undefined,
     location: r.zip || r.city || undefined,
     budgetMaxCents: r.budgetMaxCents || undefined,
+    budgetCurrency: r.currency,
     days: r.days.length ? r.days : undefined,
     timesOfDay: r.timesOfDay.length ? r.timesOfDay : undefined,
     minExperienceYears: r.minExperienceYears || undefined,
@@ -207,7 +209,7 @@ function Detail({ id }: { id: string }) {
     ["Days", req.days.length ? WEEKDAYS.filter((d) => req.days.includes(d)).join(", ") : "Flexible"],
     ["Times", req.timesOfDay.length ? TIMES_OF_DAY.filter((t) => req.timesOfDay.includes(t.value)).map((t) => t.label).join(", ") : "Flexible"],
     ["Sessions", `${req.sessionsPerWeek} per week`],
-    ["Budget", `${formatCents(req.budgetMinCents)}–${formatCents(req.budgetMaxCents)}/hr`],
+    ["Budget", `${formatMoney(req.budgetMinCents, req.currency)}–${formatMoney(req.budgetMaxCents, req.currency)}/hr`],
     ...(req.minExperienceYears ? ([["Experience", `${req.minExperienceYears}+ years`]] as [string, React.ReactNode][]) : []),
     ["Languages", req.languages.join(", ") || "English"],
     ...(req.learningSupport?.length ? ([["Learning support", req.learningSupport.join(", ")]] as [string, React.ReactNode][]) : []),
@@ -395,6 +397,7 @@ function Detail({ id }: { id: string }) {
                       percent={match?.percent ?? null}
                       factors={match?.factors ?? []}
                       budgetMaxCents={req.budgetMaxCents}
+                      budgetCurrency={req.currency}
                       fresh={freshIds.has(app.id)}
                       now={now}
                       closed={closed}
@@ -526,6 +529,7 @@ function ApplicationCard({
   percent,
   factors,
   budgetMaxCents,
+  budgetCurrency,
   fresh,
   now,
   closed,
@@ -544,6 +548,8 @@ function ApplicationCard({
   percent: number | null;
   factors: FactorResult[];
   budgetMaxCents: number;
+  /** The family's currency; a rate in another currency isn't compared with the budget. */
+  budgetCurrency: Currency;
   fresh: boolean;
   now: number;
   closed: boolean;
@@ -564,7 +570,8 @@ function ApplicationCard({
   const canShortlist = !closed && (app.status === "applied" || app.status === "viewed");
   const canMessage = app.status !== "rejected";
   const canTrial = active && app.status !== "trial_requested" && !!tutor?.trial.enabled;
-  const overBudget = app.proposedRateCents > budgetMaxCents;
+  const sameCurrency = app.currency === budgetCurrency;
+  const overBudget = sameCurrency && app.proposedRateCents > budgetMaxCents;
   const scored = factors.filter((f) => f.status !== "neutral");
 
   return (
@@ -619,13 +626,15 @@ function ApplicationCard({
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px]">
           <span>
             <span className="text-muted">Proposed rate </span>
-            <span className="font-semibold tabular-nums text-ink">{formatCents(app.proposedRateCents)}/hr</span>
+            <span className="font-semibold tabular-nums text-ink">{formatMoney(app.proposedRateCents, app.currency)}/hr</span>
           </span>
-          <span className={cn("text-[12.5px]", overBudget ? "text-warning" : "text-muted")}>
-            {overBudget ? `${formatCents(app.proposedRateCents - budgetMaxCents)} above your budget` : "Within your budget"}
-          </span>
+          {sameCurrency && (
+            <span className={cn("text-[12.5px]", overBudget ? "text-warning" : "text-muted")}>
+              {overBudget ? `${formatMoney(app.proposedRateCents - budgetMaxCents, budgetCurrency)} above your budget` : "Within your budget"}
+            </span>
+          )}
           {tutor && tutor.hourlyRateCents !== app.proposedRateCents && (
-            <span className="text-[12.5px] text-muted">Profile rate {formatCents(tutor.hourlyRateCents)}/hr</span>
+            <span className="text-[12.5px] text-muted">Profile rate {formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr</span>
           )}
         </div>
 

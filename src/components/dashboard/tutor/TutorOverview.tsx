@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { useCreditBalance, useFlag, useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { canTransition, endMs, meetingLinkVisible, startMs } from "@/lib/booking";
-import { formatCents, formatDateTime, formatDuration, formatRelative, formatTime, formatWeekdayDate } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelative, formatTime, formatWeekdayDate } from "@/lib/format";
+import { formatMoney, formatSums } from "@/lib/money";
 import { GRADE_LABEL, MODE_LABEL, subjectName } from "@/lib/data/catalog";
 import { scoreTutor } from "@/lib/matching";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -28,9 +29,9 @@ import { Stagger, StaggerItem } from "@/components/motion";
 import { VERIFICATION_LABEL, VerificationStatusBadge } from "@/components/domain/Badges";
 import { MatchRing, NeedsTutorProfile } from "./shared";
 import {
-  completionPercent, isEarned, isSameMonth, netCents, profileChecklist, sumCents, useLearnerName, useMyBookings, useMyTutor, weeklyNet, learnerIdOf,
+  chartCurrency, completionPercent, isEarned, isSameMonth, netCents, profileChecklist, useLearnerName, useMyBookings, useMyTutor, weeklyNet, learnerIdOf,
 } from "./hooks";
-import { APPLICATION_STATUS_META, requirementCriteria } from "./jobs-shared";
+import { APPLICATION_STATUS_META, budgetLabel, requirementCriteria } from "./jobs-shared";
 import { JoinVideoButton } from "@/components/dashboard/bookings/LessonVideo";
 
 function greeting(now: number, tz: string): string {
@@ -71,9 +72,12 @@ export function TutorOverview() {
     () => bookings.filter((b) => (b.status === "confirmed" || b.status === "in_progress") && startMs(b) <= now).sort((a, b) => a.startUtc.localeCompare(b.startUtc)),
     [bookings, now],
   );
-  const monthNet = React.useMemo(() => sumCents(bookings.filter((b) => isEarned(b) && isSameMonth(b.startUtc, now, tz)).map(netCents)), [bookings, now, tz]);
-  const monthLessons = bookings.filter((b) => isEarned(b) && isSameMonth(b.startUtc, now, tz)).length;
-  const weekly = React.useMemo(() => weeklyNet(bookings, now, tz, 8), [bookings, now, tz]);
+  // Amounts stay in each booking's currency; a tutor who changed currency sees one total per currency.
+  const monthEarned = React.useMemo(() => bookings.filter((b) => isEarned(b) && isSameMonth(b.startUtc, now, tz)), [bookings, now, tz]);
+  const monthNet = formatSums(monthEarned.map((b) => ({ amount: netCents(b), currency: b.currency })), tutor?.currency);
+  const monthLessons = monthEarned.length;
+  const chartIn = React.useMemo(() => chartCurrency(bookings, tutor?.currency), [bookings, tutor?.currency]);
+  const weekly = React.useMemo(() => weeklyNet(bookings, now, tz, 8, chartIn), [bookings, now, tz, chartIn]);
   // A lesson that is live right now takes priority; otherwise the soonest upcoming one.
   const next = upcoming[0];
 
@@ -134,7 +138,7 @@ export function TutorOverview() {
           <StatTile label="Requests" value={<span className="tabular-nums">{pending.length}</span>} icon={<Inbox />} hint={pending.length ? "Awaiting your reply" : "All caught up"} />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Net this month" value={<span className="tabular-nums">{formatCents(monthNet)}</span>} icon={<Wallet />} hint={`${monthLessons} paid ${monthLessons === 1 ? "lesson" : "lessons"}`} />
+          <StatTile label="Net this month" value={<span className="tabular-nums">{monthNet}</span>} icon={<Wallet />} hint={`${monthLessons} paid ${monthLessons === 1 ? "lesson" : "lessons"}`} />
         </StaggerItem>
         <StaggerItem>
           <StatTile
@@ -248,7 +252,7 @@ export function TutorOverview() {
                             )}
                           </p>
                           <p className="text-[13px] text-muted">
-                            {formatDateTime(b.startUtc, tz)} · {formatDuration(b.durationMin)} · {MODE_LABEL[b.mode]} · {b.priceCents - b.discountCents > 0 ? formatCents(b.priceCents - b.discountCents) : "Free"}
+                            {formatDateTime(b.startUtc, tz)} · {formatDuration(b.durationMin)} · {MODE_LABEL[b.mode]} · {b.priceCents - b.discountCents > 0 ? formatMoney(b.priceCents - b.discountCents, b.currency) : "Free"}
                           </p>
                           {b.notes && <p className="mt-1 line-clamp-1 text-[13px] text-ink-2">“{b.notes}”</p>}
                         </div>
@@ -283,7 +287,7 @@ export function TutorOverview() {
             />
             <CardContent>
               {weekly.some((w) => w.value > 0) ? (
-                <ColumnChart data={weekly} caption="Net earnings per week, last 8 weeks" format={(n) => formatCents(Math.round(n))} highlightLast={false} />
+                <ColumnChart data={weekly} caption="Net earnings per week, last 8 weeks" format={(n) => formatMoney(Math.round(n), chartIn)} highlightLast={false} />
               ) : (
                 <EmptyState compact icon={<Wallet />} title="No earnings yet" description="Your weekly earnings appear here after your first completed lesson." />
               )}
@@ -486,7 +490,7 @@ function RecommendedJob({ req, percent, reason, now }: { req: Requirement; perce
         {GRADE_LABEL[req.grade]} · {req.modes.map((m) => MODE_LABEL[m]).join(" or ")}
       </p>
       <p className="mt-auto pt-3 text-[12.5px] text-muted">
-        {formatCents(req.budgetMinCents)}–{formatCents(req.budgetMaxCents)}/hr · {formatRelative(req.publishedAt ?? req.createdAt, now)}
+        {budgetLabel(req)} · {formatRelative(req.publishedAt ?? req.createdAt, now)}
       </p>
       {reason && <span className="sr-only">{reason}</span>}
     </Link>

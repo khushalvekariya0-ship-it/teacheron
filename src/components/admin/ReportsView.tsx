@@ -10,7 +10,8 @@ import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { subjectName } from "@/lib/data/catalog";
 import { verifiedKinds } from "@/lib/data/tutors";
-import { formatCents, formatDate, formatDateTime, pluralize } from "@/lib/format";
+import { formatDate, formatDateTime, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
@@ -517,7 +518,7 @@ function TutorTarget({ report }: { report: Report }) {
               {tutor.city}, {tutor.state}
             </span>
             <span aria-hidden>·</span>
-            <span className="tabular-nums">{formatCents(tutor.hourlyRateCents)}/hr</span>
+            <span className="tabular-nums">{formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr</span>
             <span aria-hidden>·</span>
             <StarRating rating={tutor.rating} count={tutor.reviewCount} />
           </p>

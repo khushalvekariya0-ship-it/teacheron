@@ -4,13 +4,13 @@ import { notFound } from "next/navigation";
 import { ArrowRight, FileText, MapPin, Monitor, ShieldCheck, Users } from "lucide-react";
 import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
 import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
-import { inPersonTutorsForMetro, neutralOrder, onlineTutors, rateRange } from "@/components/content/insights";
+import { inPersonTutorsForMetro, neutralOrder, onlineTutors } from "@/components/content/insights";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
 import { subjectName, US_TIMEZONES } from "@/lib/data/catalog";
 import { METROS, METRO_BY_SLUG, distanceMiles } from "@/lib/data/geo";
-import { formatCents } from "@/lib/format";
+import { formatRateRange, ratesByCurrency } from "@/lib/search";
 import { SITE } from "@/lib/site";
 import { listedTutors } from "@/server/public";
 
@@ -55,7 +55,8 @@ export default async function LocationPage({ params }: Props) {
   const sameZone = neutralOrder(online.filter((t) => t.timezone === metro.timezone));
   const onlineShown = [...sameZone, ...neutralOrder(online.filter((t) => t.timezone !== metro.timezone))].slice(0, 4);
   const localSubjects = Array.from(new Set(nearby.flatMap((n) => n.tutor.subjects))).slice(0, 12);
-  const range = rateRange(nearby.map((n) => n.tutor));
+  // One range per currency the nearby tutors charge in (never mixed or converted).
+  const ranges = ratesByCurrency(nearby.map((n) => n.tutor));
   const otherMetros = METROS.filter((m) => m.slug !== slug)
     .map((m) => ({ m, d: distanceMiles(metro, m), n: inPersonTutorsForMetro(m, tutors).length }))
     .sort((a, b) => a.d - b.d)
@@ -73,7 +74,7 @@ export default async function LocationPage({ params }: Props) {
 
   const stats = [
     { k: "In-person tutors", v: String(nearby.length) },
-    { k: "In-person rates", v: range ? (range.min === range.max ? `${formatCents(range.min)}/hr` : `${formatCents(range.min)}–${formatCents(range.max)}`) : "—" },
+    { k: "In-person rates", v: ranges.length ? ranges.map((r) => `${formatRateRange(r)}${r.min === r.max ? "/hr" : ""}`).join(" · ") : "—" },
     { k: "Online tutors", v: String(onlineTutors(tutors).length) },
     { k: "Local time zone", v: tzLabel.replace(/ \(.+\)$/, "") },
   ];

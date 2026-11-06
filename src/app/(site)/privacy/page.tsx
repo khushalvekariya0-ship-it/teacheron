@@ -6,7 +6,7 @@ import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: `How ${SITE.name} collects, uses, shares and protects personal information — including children's privacy (COPPA), payments through Stripe, cookies, retention and your rights under U.S. state privacy laws such as the CCPA.`,
+  description: `How ${SITE.name} collects, uses, shares and protects personal information — including children's privacy (COPPA), payments through Razorpay, cookies, retention and your rights under U.S. state privacy laws such as the CCPA.`,
   alternates: { canonical: "/privacy" },
 };
 
@@ -54,7 +54,7 @@ const SECTIONS: DocSection[] = [
         </ul>
         <h3>Information from others</h3>
         <ul>
-          <li><strong>Payment processor:</strong> Stripe tells us whether a payment succeeded and gives us limited card details (such as brand and last four digits).</li>
+          <li><strong>Payment processor:</strong> Razorpay tells us whether a payment succeeded and gives us limited details of how you paid (such as the card brand and last four digits, or that you paid by UPI).</li>
           <li><strong>Verification providers:</strong> results of identity checks and background screenings we request with a tutor&rsquo;s consent.</li>
           <li><strong>Other users:</strong> for example, a tutor&rsquo;s lesson notes about a student, or a review a family leaves about a tutor.</li>
         </ul>
@@ -115,7 +115,7 @@ const SECTIONS: DocSection[] = [
         <p>We share personal information only as described here:</p>
         <ul>
           <li><strong>Between families and tutors:</strong> the information needed to arrange and deliver lessons — for example, a family sees a tutor&rsquo;s public profile, and a booked tutor sees the student&rsquo;s first name, grade and goals. Tutors&rsquo; home addresses are never shown; in-person tutors display an approximate service area.</li>
-          <li><strong>Service providers:</strong> companies that help us operate, such as payment processing (Stripe), identity verification and background screening providers, cloud hosting, email delivery, customer support tools and analytics. They may use the information only to provide services to us.</li>
+          <li><strong>Service providers:</strong> companies that help us operate, such as payment processing (Razorpay), identity verification and background screening providers, cloud hosting, email delivery, customer support tools and analytics. They may use the information only to provide services to us.</li>
           <li><strong>Legal and safety:</strong> when we believe in good faith that disclosure is required by law, or necessary to protect the safety of any person — including reports to law enforcement or child-protection authorities.</li>
           <li><strong>Business transfers:</strong> in connection with a merger, acquisition or sale of assets, subject to this Policy.</li>
           <li><strong>With your consent</strong> or at your direction.</li>
@@ -128,14 +128,14 @@ const SECTIONS: DocSection[] = [
   },
   {
     id: "payments",
-    title: "Payments through Stripe",
+    title: "Payments through Razorpay",
     content: (
       <>
         <p>
-          Payments are processed by Stripe, Inc. When you pay for a lesson, your card details go directly to Stripe; we do not store full card numbers. Tutor payouts are handled through Stripe Connect, which may collect identity, tax and bank account information from tutors to comply with financial regulations.
+          Payments are processed by Razorpay Software Private Limited. When you pay for a lesson, your card or UPI details go directly to Razorpay; we never see or store full card numbers. To pay tutors, we keep the bank account details they give us, and our payment partners may collect identity, tax and bank account information from tutors to comply with financial regulations.
         </p>
         <p>
-          Stripe&rsquo;s use of your information is governed by Stripe&rsquo;s own privacy policy. We receive and keep payment records — amounts, dates, refunds and the last four digits of a card — to operate bookings, handle disputes and meet accounting obligations.
+          Razorpay&rsquo;s use of your information is governed by Razorpay&rsquo;s own privacy policy. We receive and keep payment records — amounts, currencies, dates, refunds, how you paid and the last four digits of a card — to operate bookings, handle disputes and meet accounting obligations.
         </p>
       </>
     ),
@@ -271,7 +271,7 @@ export default function PrivacyPage() {
         sections={SECTIONS}
         intro={
           <p>
-            <strong>The short version:</strong> we collect what we need to connect learners with tutors and keep everyone safe. We don&rsquo;t sell personal information. Parents control their children&rsquo;s information. Payments go through Stripe, and we never store full card numbers.
+            <strong>The short version:</strong> we collect what we need to connect learners with tutors and keep everyone safe. We don&rsquo;t sell personal information. Parents control their children&rsquo;s information. Payments go through Razorpay, and we never store full card numbers or UPI details.
           </p>
         }
         aside={

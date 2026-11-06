@@ -8,7 +8,8 @@ import type { Booking, Dispute, DisputeStatus } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDate, pluralize } from "@/lib/format";
+import { formatDate, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
@@ -132,7 +133,7 @@ function DisputesInner() {
     },
     { key: "openedBy", header: "Opened by", sortValue: (r) => r.openedBy, cell: (r) => <span className="block max-w-40 truncate">{r.openedBy}</span> },
     { key: "other", header: "Other party", sortValue: (r) => r.other, cell: (r) => <span className="block max-w-40 truncate">{r.other}</span>, hideOnMobile: true },
-    { key: "stake", header: "At stake", align: "right", sortValue: (r) => r.paid, cell: (r) => <span className="font-medium text-ink">{r.paid ? formatCents(r.paid) : "Free lesson"}</span> },
+    { key: "stake", header: "At stake", align: "right", sortValue: (r) => r.paid, cell: (r) => <span className="font-medium text-ink">{r.paid && r.b ? formatMoney(r.paid, r.b.currency) : "Free lesson"}</span> },
     { key: "status", header: "Status", sortValue: (r) => r.d.status, cell: (r) => <StatusPill tone={DISPUTE_STATUS_META[r.d.status].tone}>{DISPUTE_STATUS_META[r.d.status].label}</StatusPill> },
   ];
 
@@ -144,11 +145,11 @@ function DisputesInner() {
         actions={
           <ExportButton
             filename="tutorlink-disputes"
-            headers={["ID", "Opened (UTC)", "Status", "Reason", "Booking ID", "Subject", "Lesson start (UTC)", "Opened by", "Other party", "Amount paid", "Outcome", "Resolution amount"]}
+            headers={["ID", "Opened (UTC)", "Status", "Reason", "Booking ID", "Subject", "Lesson start (UTC)", "Opened by", "Other party", "Currency", "Amount paid", "Outcome", "Resolution amount"]}
             rows={() =>
               rows.map((r) => [
                 r.d.id, r.d.createdAt, DISPUTE_STATUS_META[r.d.status].label, DISPUTE_REASON_LABEL[r.d.reason], r.d.bookingId, r.b ? subjectName(r.b.subject) : "",
-                r.b?.startUtc ?? "", r.openedBy, r.other, centsToDecimal(r.paid), r.d.resolution?.outcome ?? "", r.d.resolution ? centsToDecimal(r.d.resolution.amountCents) : "",
+                r.b?.startUtc ?? "", r.openedBy, r.other, r.b?.currency ?? "", centsToDecimal(r.paid), r.d.resolution?.outcome ?? "", r.d.resolution ? centsToDecimal(r.d.resolution.amountCents) : "",
               ])
             }
           />

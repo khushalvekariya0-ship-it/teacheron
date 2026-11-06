@@ -4,12 +4,24 @@ import { ArrowRight, Check, Coins, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
-import { CREDIT_PACKS, CREDITS_PER_APPLICATION, TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents } from "@/lib/format";
+import { CREDIT_PACKS, CREDITS_PER_APPLICATION, packPrice, planPrice, TUTOR_PLANS, type PlatformCurrency } from "@/lib/data/platform";
+import { applyBps } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 
 export const TUTOR_SIGNUP_HREF = "/register?role=tutor";
 
-export function PlanCards({ exampleCents = 5000 }: { exampleCents?: number }) {
+/**
+ * Tutors pay TutorLink in rupees when they charge in ₹, and in US dollars otherwise, so plan and pack
+ * prices are shown in both lists ("$29 / ₹999"). They are two separate price lists, not a conversion.
+ */
+const PRICE_LISTS: PlatformCurrency[] = ["USD", "INR"];
+/** "$29 / ₹999": the amount from each price list. */
+const inBothLists = (amountIn: (c: PlatformCurrency) => number, opts?: { exact?: boolean }) => PRICE_LISTS.map((c) => formatMoney(amountIn(c), c, opts)).join(" / ");
+const isFreePlan = (planId: string) => PRICE_LISTS.every((c) => planPrice(planId, c).amount === 0);
+const planPrices = (planId: string) => (isFreePlan(planId) ? "Free" : inBothLists((c) => planPrice(planId, c).amount));
+
+/** Plan cards. `exampleCents` (in `exampleCurrency`, US dollars by default) is the lesson used for "You keep". */
+export function PlanCards({ exampleCents = 5000, exampleCurrency = "USD" }: { exampleCents?: number; exampleCurrency?: Currency }) {
   return (
     <Stagger className="grid items-stretch gap-4 lg:grid-cols-3" stagger={0.1}>
       {TUTOR_PLANS.map((p) => {
@@ -25,9 +37,16 @@ export function PlanCards({ exampleCents = 5000 }: { exampleCents?: number }) {
                 </div>
                 <p className="mt-1.5 min-h-[46px] text-[14px] leading-relaxed text-ink-2">{p.description}</p>
 
-                <p className="mt-6 flex items-baseline gap-1">
-                  <span className="font-heading text-[44px] font-extrabold leading-none tracking-[-0.03em] text-ink tabular-nums">{formatCents(p.priceCents)}</span>
-                  <span className="text-[14px] text-muted">/ month</span>
+                <p className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  {isFreePlan(p.id) ? (
+                    <span className="font-heading text-[44px] font-extrabold leading-none tracking-[-0.03em] text-ink">Free</span>
+                  ) : (
+                    <>
+                      <span className="font-heading text-[44px] font-extrabold leading-none tracking-[-0.03em] text-ink tabular-nums">{formatMoney(planPrice(p.id, "USD").amount, "USD")}</span>
+                      <span className="font-heading text-[24px] font-bold leading-none tracking-[-0.02em] text-ink-2 tabular-nums">/ {formatMoney(planPrice(p.id, "INR").amount, "INR")}</span>
+                      <span className="text-[14px] text-muted">per month</span>
+                    </>
+                  )}
                 </p>
 
                 {/* What you keep */}
@@ -42,7 +61,7 @@ export function PlanCards({ exampleCents = 5000 }: { exampleCents?: number }) {
                     <span className="h-full rounded-full bg-brand-gradient" style={{ width: `${keepPct}%` }} />
                   </div>
                   <p className="mt-2.5 text-[12.5px] text-muted">
-                    <span className="font-semibold tabular-nums text-ink">{formatCents(keep, { exact: true })}</span> of a {formatCents(exampleCents)} lesson ·{" "}
+                    <span className="font-semibold tabular-nums text-ink">{formatMoney(keep, exampleCurrency, { exact: true })}</span> of a {formatMoney(exampleCents, exampleCurrency)} lesson ·{" "}
                     <span className="font-semibold tabular-nums text-ink">{p.monthlyLeadCredits}</span> job credits a month
                   </p>
                 </div>
@@ -56,7 +75,7 @@ export function PlanCards({ exampleCents = 5000 }: { exampleCents?: number }) {
                 </ul>
                 <Button asChild size="lg" variant={p.highlighted ? "brand" : "secondary"} className="mt-8 w-full">
                   <Link href={TUTOR_SIGNUP_HREF} aria-label={`Start with the ${p.name} plan`}>
-                    {p.priceCents === 0 ? "Start for free" : `Choose ${p.name}`} <ArrowRight />
+                    {isFreePlan(p.id) ? "Start for free" : `Choose ${p.name}`} <ArrowRight />
                   </Link>
                 </Button>
               </div>
@@ -69,12 +88,12 @@ export function PlanCards({ exampleCents = 5000 }: { exampleCents?: number }) {
 }
 
 /** Every plan side by side. Rows come from the plan data; ✓ / — rows from each plan's feature list. */
-export function PlanComparison({ exampleCents = 5000 }: { exampleCents?: number }) {
+export function PlanComparison({ exampleCents = 5000, exampleCurrency = "USD" }: { exampleCents?: number; exampleCurrency?: Currency }) {
   const has = (planIndex: number, text: string) => TUTOR_PLANS.slice(0, planIndex + 1).some((p) => p.features.some((f) => f.toLowerCase().includes(text)));
   const rows: { label: string; values: React.ReactNode[] }[] = [
-    { label: "Monthly price", values: TUTOR_PLANS.map((p) => formatCents(p.priceCents)) },
+    { label: "Monthly price", values: TUTOR_PLANS.map((p) => planPrices(p.id)) },
     { label: "Commission per paid lesson", values: TUTOR_PLANS.map((p) => `${p.commissionBps / 100}%`) },
-    { label: `You keep on a ${formatCents(exampleCents)} lesson`, values: TUTOR_PLANS.map((p) => formatCents(exampleCents - applyBps(exampleCents, p.commissionBps), { exact: true })) },
+    { label: `You keep on a ${formatMoney(exampleCents, exampleCurrency)} lesson`, values: TUTOR_PLANS.map((p) => formatMoney(exampleCents - applyBps(exampleCents, p.commissionBps), exampleCurrency, { exact: true })) },
     { label: "Job application credits a month", values: TUTOR_PLANS.map((p) => String(p.monthlyLeadCredits)) },
     ...[
       { label: "Public profile, messages and bookings", key: "public tutor profile" },
@@ -119,8 +138,14 @@ export function PlanComparison({ exampleCents = 5000 }: { exampleCents?: number 
 
 export function CreditPacks() {
   const base = CREDIT_PACKS[0];
-  const basePer = base.priceCents / base.credits;
   const best = CREDIT_PACKS[CREDIT_PACKS.length - 1].id;
+  // Saving per credit against the smallest pack, worked out within each price list ("Save 15–20%").
+  const perCredit = (packId: string, credits: number, c: PlatformCurrency) => packPrice(packId, c).amount / credits;
+  const savingLabel = (packId: string, credits: number): string | null => {
+    const pcts = PRICE_LISTS.map((c) => Math.round((1 - perCredit(packId, credits, c) / perCredit(base.id, base.credits, c)) * 100));
+    const [low, high] = [Math.min(...pcts), Math.max(...pcts)];
+    return high <= 0 ? null : low === high ? `${low}%` : low > 0 ? `${low}–${high}%` : `up to ${high}%`;
+  };
   return (
     <div className="grid gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-7 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:items-center">
       <div>
@@ -139,15 +164,15 @@ export function CreditPacks() {
       </div>
       <ul className="grid gap-3 sm:grid-cols-3">
         {CREDIT_PACKS.map((pack) => {
-          const per = Math.round(pack.priceCents / pack.credits);
-          const saving = Math.round((1 - pack.priceCents / pack.credits / basePer) * 100);
+          const saving = savingLabel(pack.id, pack.credits);
           const isBest = pack.id === best;
           return (
             <li key={pack.id} className={cn("relative rounded-xl border p-4 text-center", isBest ? "border-brand/40 bg-brand-50" : "border-line")}>
-              {saving > 0 && <span className={cn("absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold", isBest ? "bg-brand-gradient text-on-brand" : "bg-surface text-brand ring-1 ring-brand/30")}>Save {saving}%</span>}
+              {saving && <span className={cn("absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold", isBest ? "bg-brand-gradient text-on-brand" : "bg-surface text-brand ring-1 ring-brand/30")}>Save {saving}</span>}
               <p className="text-[13px] font-medium text-muted">{pack.credits} credits</p>
-              <p className="mt-1 font-heading text-[28px] font-bold tracking-[-0.03em] tabular-nums text-ink">{formatCents(pack.priceCents)}</p>
-              <p className="mt-0.5 text-[12.5px] tabular-nums text-muted">{formatCents(per, { exact: true })} per credit</p>
+              <p className="mt-1 font-heading text-[28px] font-bold tracking-[-0.03em] tabular-nums text-ink">{formatMoney(packPrice(pack.id, "USD").amount, "USD")}</p>
+              <p className="font-heading text-[18px] font-bold tracking-[-0.02em] tabular-nums text-ink-2">{formatMoney(packPrice(pack.id, "INR").amount, "INR")}</p>
+              <p className="mt-0.5 text-[12.5px] tabular-nums text-muted">{inBothLists((c) => Math.round(perCredit(pack.id, pack.credits, c)), { exact: true })} per credit</p>
             </li>
           );
         })}

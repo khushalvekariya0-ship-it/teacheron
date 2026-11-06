@@ -1,7 +1,7 @@
 import type { TutorSearch } from "@/lib/search";
-import { SCHEDULE_PRESETS } from "@/lib/search";
+import { formatRate, SCHEDULE_PRESETS } from "@/lib/search";
 import { GRADE_LABEL, LEVEL_LABEL, subjectName, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
-import { formatCents } from "@/lib/format";
+import { DEFAULT_CURRENCY, type Currency } from "@/lib/money";
 import { locationLabel } from "@/lib/data/geo";
 
 /** Days in the order people read a week (the catalog stores Sun-first for Date math). */
@@ -57,8 +57,8 @@ const without = (...keys: (keyof TutorSearch)[]) => (s: TutorSearch): TutorSearc
 
 const orderDays = (days: string[]) => WEEK_ORDER.filter((d) => days.includes(d));
 
-/** Removable chips for every active filter, in a stable, readable order. */
-export function filterChips(s: TutorSearch): FilterChip[] {
+/** Removable chips for every active filter, in a stable, readable order. Rates are in the visitor's `currency`. */
+export function filterChips(s: TutorSearch, currency: Currency = DEFAULT_CURRENCY): FilterChip[] {
   const chips: FilterChip[] = [];
   const add = (id: string, label: string, remove: FilterChip["remove"]) => chips.push({ id, label, remove });
 
@@ -72,8 +72,8 @@ export function filterChips(s: TutorSearch): FilterChip[] {
   if (s.schedule && !s.days && !s.times) add("schedule", SCHEDULE_PRESETS.find((p) => p.value === s.schedule)?.label ?? "Schedule", without("schedule"));
   if (s.days?.length) add("days", orderDays(s.days).join(", "), without("days"));
   if (s.times?.length) add("times", s.times.map((t) => TIMES_OF_DAY.find((x) => x.value === t)?.label ?? t).join(", "), without("times"));
-  if (s.minRate) add("minRate", `From ${formatCents(s.minRate * 100)}/hr`, without("minRate"));
-  if (s.maxRate) add("maxRate", `Up to ${formatCents(s.maxRate * 100)}/hr`, without("maxRate"));
+  if (s.minRate) add("minRate", `From ${formatRate(s.minRate, currency)}/hr`, without("minRate"));
+  if (s.maxRate) add("maxRate", `Up to ${formatRate(s.maxRate, currency)}/hr`, without("maxRate"));
   if (s.exp) add("exp", `${s.exp}+ yrs experience`, without("exp"));
   if (s.rating) add("rating", `${s.rating.toFixed(1)}+ rating`, without("rating"));
   if (s.category) add("category", TUTOR_CATEGORY_LABEL[s.category] ?? s.category, without("category"));

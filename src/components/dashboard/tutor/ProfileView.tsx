@@ -13,7 +13,9 @@ import { imageFileToDataUrl } from "@/lib/image";
 import { useApp } from "@/lib/store";
 import { useFlag, useReviews } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
-import { applyBps, formatCents, formatDuration, sessionPrice } from "@/lib/format";
+import { applyBps, formatDuration, sessionPrice } from "@/lib/format";
+import { CURRENCIES, CURRENCY_CODES, asCurrency, currencyForCountry, formatMoney, rateLimits, rateProblem, toMinor, type Currency } from "@/lib/money";
+import { countryName } from "@/lib/location";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -27,9 +29,9 @@ import { StarRating } from "@/components/ui/StarRating";
 import type { Result } from "@/lib/store";
 import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
 import { CredentialsFields, ExperienceFields } from "@/components/onboarding/steps";
-import { credentialsSchema, experienceSchema, type CredentialsValues, type ExperienceValues } from "@/components/onboarding/schema";
+import { TRIAL_PRICE_MAX, credentialsSchema, experienceSchema, type CredentialsValues, type ExperienceValues } from "@/components/onboarding/schema";
 import { GroupField, NeedsTutorProfile, SubjectPicker, TagInput, ValueList } from "./shared";
-import { completionPercent, profileChecklist, useMyPlan, useMyTutor } from "./hooks";
+import { completionPercent, priceInputProps, profileChecklist, useMyPlan, useMyTutor } from "./hooks";
 
 /* ─── Section shell (also used by the student profile) ──────────────────────── */
 
@@ -385,25 +387,63 @@ function LanguagesSection({ tutor }: { tutor: Tutor }) {
 
 /* ─── Rate, modes, radius ───────────────────────────────────────────────────── */
 
-const ratesSchema = z.object({
-  hourlyRate: z.number({ invalid_type_error: "Enter your hourly rate." }).int("Use whole dollars.").min(15, "The minimum rate is $15.").max(500, "The maximum rate is $500."),
-  modes: z.array(z.enum(["online", "in_person"])).min(1, "Choose at least one way to teach."),
-  serviceRadiusMiles: z.number({ invalid_type_error: "Enter a distance in miles." }).int("Use whole miles.").min(1, "At least 1 mile.").max(50, "Up to 50 miles."),
-});
+/** "₹ INR — Indian rupee" */
+const currencyLabel = (c: Currency) => `${CURRENCIES[c].symbol} ${c} — ${CURRENCIES[c].name}`;
+const CURRENCY_OPTIONS = CURRENCY_CODES.map((c) => ({ value: c, label: currencyLabel(c) }));
+/** "₹ INR" when the symbol isn't just the code, else "AED". */
+const currencyShort = (c: Currency) => (CURRENCIES[c].symbol === c ? c : `${CURRENCIES[c].symbol} ${c}`);
+
+const ratesSchema = z
+  .object({
+    currency: z.enum(CURRENCY_CODES as [Currency, ...Currency[]], { errorMap: () => ({ message: "Choose a currency." }) }),
+    hourlyRate: z.number({ invalid_type_error: "Enter your hourly rate." }).int("Use a whole number."),
+    modes: z.array(z.enum(["online", "in_person"])).min(1, "Choose at least one way to teach."),
+    serviceRadiusMiles: z.number({ invalid_type_error: "Enter a distance in miles." }).int("Use whole miles.").min(1, "At least 1 mile.").max(50, "Up to 50 miles."),
+  })
+  .superRefine((v, ctx) => {
+    const problem = rateProblem(toMinor(v.hourlyRate), v.currency, "Your rate");
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["hourlyRate"], message: problem });
+  });
 type RatesValues = z.infer<typeof ratesSchema>;
+
+/**
+ * A gentle note when a tutor's prices aren't in the currency families in their country usually pay in
+ * (hidden once they pick that currency in the editor).
+ */
+function CurrencyNote({ tutor, picked, editing }: { tutor: Tutor; picked: Currency; editing: boolean }) {
+  const mine = asCurrency(tutor.currency);
+  const local = currencyForCountry(tutor.country);
+  if (mine === local || picked === local) return null;
+  return (
+    <InlineAlert tone="info" className="mb-4">
+      Your prices are in {currencyShort(mine)}. Families in {countryName(tutor.country ?? "US") || "your country"} usually pay in {currencyShort(local)}.{" "}
+      {editing ? "You can switch below." : "You can switch with Edit."}
+    </InlineAlert>
+  );
+}
 
 function RatesSection({ tutor }: { tutor: Tutor }) {
   const update = useApp((s) => s.updateTutorProfile);
   const { plan } = useMyPlan(tutor.id);
   const ed = useEditor();
-  const values = (): RatesValues => ({ hourlyRate: Math.round(tutor.hourlyRateCents / 100), modes: tutor.modes, serviceRadiusMiles: tutor.serviceRadiusMiles });
+  const saved = asCurrency(tutor.currency);
+  const values = (): RatesValues => ({ currency: saved, hourlyRate: Math.round(tutor.hourlyRateCents / 100), modes: tutor.modes, serviceRadiusMiles: tutor.serviceRadiusMiles });
   const form = useForm<RatesValues>({ resolver: zodResolver(ratesSchema), mode: "onTouched", defaultValues: values() });
-  const { register, control, handleSubmit, reset, formState: { errors } } = form;
-  const [rate, modes] = useWatch({ control, name: ["hourlyRate", "modes"] });
+  const { register, control, handleSubmit, reset, setValue, formState: { errors } } = form;
+  const [rate, modes, picked] = useWatch({ control, name: ["hourlyRate", "modes", "currency"] });
+  const currency = ed.editing ? asCurrency(picked) : saved;
+  const switching = ed.editing && currency !== saved;
   const shownRate = ed.editing ? rate : Math.round(tutor.hourlyRateCents / 100);
-  const valid = Number.isInteger(shownRate) && shownRate >= 15 && shownRate <= 500;
-  const gross = valid ? sessionPrice(shownRate * 100, 60) : 0;
+  const valid = Number.isInteger(shownRate) && !rateProblem(toMinor(shownRate), currency);
+  const gross = valid ? sessionPrice(toMinor(shownRate), 60) : 0;
   const fee = applyBps(gross, plan.commissionBps);
+  const limits = rateLimits(currency);
+
+  // ₹45 isn't $45: a new currency means typing the rate again (going back restores the saved one).
+  const pickCurrency = (next: Currency) => {
+    setValue("currency", next, { shouldDirty: true });
+    setValue("hourlyRate", next === saved ? Math.round(tutor.hourlyRateCents / 100) : Number.NaN, { shouldDirty: true });
+  };
 
   const preview = (
     <div className="rounded-lg border border-line bg-canvas p-3.5 text-[13px]">
@@ -411,17 +451,17 @@ function RatesSection({ tutor }: { tutor: Tutor }) {
       <dl className="mt-2 space-y-1">
         <div className="flex justify-between">
           <dt className="text-muted">Family pays</dt>
-          <dd className="tabular-nums text-ink">{valid ? formatCents(gross) : "—"}</dd>
+          <dd className="tabular-nums text-ink">{valid ? formatMoney(gross, currency) : "—"}</dd>
         </div>
         <div className="flex justify-between">
           <dt className="text-muted">
             {plan.name} commission ({plan.commissionBps / 100}%)
           </dt>
-          <dd className="tabular-nums text-ink-2">{valid ? `−${formatCents(fee)}` : "—"}</dd>
+          <dd className="tabular-nums text-ink-2">{valid ? `−${formatMoney(fee, currency)}` : "—"}</dd>
         </div>
         <div className="flex justify-between border-t border-line pt-1">
           <dt className="font-medium text-ink">You earn</dt>
-          <dd className="font-semibold tabular-nums text-ink">{valid ? formatCents(gross - fee) : "—"}</dd>
+          <dd className="font-semibold tabular-nums text-ink">{valid ? formatMoney(gross - fee, currency) : "—"}</dd>
         </div>
       </dl>
     </div>
@@ -440,13 +480,46 @@ function RatesSection({ tutor }: { tutor: Tutor }) {
       {ed.editing ? (
         <form
           noValidate
-          onSubmit={handleSubmit((v) => ed.run(update({ hourlyRateCents: v.hourlyRate * 100, modes: v.modes, serviceRadiusMiles: v.serviceRadiusMiles }), "Rate and modes saved"))}
+          onSubmit={handleSubmit((v) =>
+            // The currency and the rate in it are always saved together.
+            ed.run(update({ currency: v.currency, hourlyRateCents: toMinor(v.hourlyRate), modes: v.modes, serviceRadiusMiles: v.serviceRadiusMiles }), "Rate and modes saved"),
+          )}
           className="space-y-5"
         >
+          <CurrencyNote tutor={tutor} picked={currency} editing />
           <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_16rem]">
             <div className="space-y-5">
-              <Field label="Hourly rate" required hint="$15–$500. Applies to new bookings only." error={errors.hourlyRate?.message} className="max-w-56">
-                <Input type="number" inputMode="numeric" prefixText="$" suffix={<span className="pr-1 text-sm">/hr</span>} {...register("hourlyRate", { valueAsNumber: true })} />
+              <Controller
+                name="currency"
+                control={control}
+                render={({ field }) => (
+                  <Field label="Currency" required hint="Families pay you in this currency. Your earnings stay in it." error={errors.currency?.message} className="max-w-sm">
+                    <Select ref={field.ref} value={field.value} onChange={(e) => pickCurrency(asCurrency(e.target.value))} options={CURRENCY_OPTIONS} searchable searchLabel="Search currencies" />
+                  </Field>
+                )}
+              />
+              <Field
+                label="Hourly rate"
+                required
+                hint={
+                  switching
+                    ? `Enter your rate in ${currency} (${CURRENCIES[currency].name}), ${formatMoney(limits.min, currency)}–${formatMoney(limits.max, currency)}.${tutor.trial.priceCents > 0 ? " Then check your trial price below." : ""}`
+                    : `${formatMoney(limits.min, currency)}–${formatMoney(limits.max, currency)}. Applies to new bookings only.`
+                }
+                error={errors.hourlyRate?.message}
+                className="max-w-sm"
+              >
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={limits.min / 100}
+                  max={limits.max / 100}
+                  step={1}
+                  {...priceInputProps(currency)}
+                  suffix={<span className="pr-1 text-sm">/hr</span>}
+                  className="max-w-56"
+                  {...register("hourlyRate", { valueAsNumber: true })}
+                />
               </Field>
               <Controller
                 name="modes"
@@ -468,20 +541,24 @@ function RatesSection({ tutor }: { tutor: Tutor }) {
           <FormActions onCancel={ed.close} error={ed.error} saving={ed.saving} />
         </form>
       ) : (
-        <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_16rem]">
-          <dl className="divide-y divide-line">
-            <DetailRow label="Hourly rate">{formatCents(tutor.hourlyRateCents)}/hr</DetailRow>
-            <DetailRow label="Teaching modes">
-              <span className="inline-flex items-center gap-1.5">
-                {tutor.modes.includes("online") && <Monitor className="size-3.5 text-muted" aria-hidden />}
-                {tutor.modes.includes("in_person") && <Users className="size-3.5 text-muted" aria-hidden />}
-                {tutor.modes.map((m) => MODE_LABEL[m]).join(" & ")}
-              </span>
-            </DetailRow>
-            {tutor.modes.includes("in_person") && <DetailRow label="Service radius">{tutor.serviceRadiusMiles} miles from {tutor.city}</DetailRow>}
-          </dl>
-          {preview}
-        </div>
+        <>
+          <CurrencyNote tutor={tutor} picked={saved} editing={false} />
+          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_16rem]">
+            <dl className="divide-y divide-line">
+              <DetailRow label="Hourly rate">{formatMoney(tutor.hourlyRateCents, saved)}/hr</DetailRow>
+              <DetailRow label="Currency">{currencyLabel(saved)}</DetailRow>
+              <DetailRow label="Teaching modes">
+                <span className="inline-flex items-center gap-1.5">
+                  {tutor.modes.includes("online") && <Monitor className="size-3.5 text-muted" aria-hidden />}
+                  {tutor.modes.includes("in_person") && <Users className="size-3.5 text-muted" aria-hidden />}
+                  {tutor.modes.map((m) => MODE_LABEL[m]).join(" & ")}
+                </span>
+              </DetailRow>
+              {tutor.modes.includes("in_person") && <DetailRow label="Service radius">{tutor.serviceRadiusMiles} miles from {tutor.city}</DetailRow>}
+            </dl>
+            {preview}
+          </div>
+        </>
       )}
     </Section>
   );
@@ -490,18 +567,26 @@ function RatesSection({ tutor }: { tutor: Tutor }) {
 /* ─── Trial ─────────────────────────────────────────────────────────────────── */
 
 const TRIAL_LENGTHS = [15, 20, 25, 30, 45, 60];
-const trialSchema = z.object({
-  enabled: z.boolean(),
-  price: z.number({ invalid_type_error: "Enter a price (0 for free)." }).int("Use whole dollars.").min(0, "Enter 0 or more.").max(200, "Trial lessons can be up to $200."),
-  durationMin: z.number().refine((v) => TRIAL_LENGTHS.includes(v), "Choose a trial length."),
-});
-type TrialValues = z.infer<typeof trialSchema>;
+const trialSchemaFor = (currency: Currency) =>
+  z.object({
+    enabled: z.boolean(),
+    price: z
+      .number({ invalid_type_error: "Enter a price (0 for free)." })
+      .int("Use a whole number.")
+      .min(0, "Enter 0 or more.")
+      .max(TRIAL_PRICE_MAX(currency) / 100, `Trial lessons can be up to ${formatMoney(TRIAL_PRICE_MAX(currency), currency)}.`),
+    durationMin: z.number().refine((v) => TRIAL_LENGTHS.includes(v), "Choose a trial length."),
+  });
+type TrialValues = z.infer<ReturnType<typeof trialSchemaFor>>;
 
 function TrialSection({ tutor }: { tutor: Tutor }) {
   const setTrial = useApp((s) => s.setTrial);
   const paymentsOn = useApp((s) => s.config.paymentsEnabled);
   const trialsOn = useFlag("trial_lessons");
   const ed = useEditor();
+  // The trial price is in the tutor's currency, like their hourly rate.
+  const currency = asCurrency(tutor.currency);
+  const trialSchema = React.useMemo(() => trialSchemaFor(currency), [currency]);
   const values = (): TrialValues => ({ enabled: tutor.trial.enabled, price: Math.round(tutor.trial.priceCents / 100), durationMin: tutor.trial.durationMin });
   const form = useForm<TrialValues>({ resolver: zodResolver(trialSchema), mode: "onTouched", defaultValues: values() });
   const { register, control, handleSubmit, reset, formState: { errors } } = form;
@@ -523,7 +608,7 @@ function TrialSection({ tutor }: { tutor: Tutor }) {
         </InlineAlert>
       )}
       {ed.editing ? (
-        <form noValidate onSubmit={handleSubmit((v) => ed.run(setTrial({ enabled: v.enabled, priceCents: v.price * 100, durationMin: v.durationMin }), "Trial settings saved"))} className="space-y-5">
+        <form noValidate onSubmit={handleSubmit((v) => ed.run(setTrial({ enabled: v.enabled, priceCents: toMinor(v.price), durationMin: v.durationMin }), "Trial settings saved"))} className="space-y-5">
           <Controller
             name="enabled"
             control={control}
@@ -547,8 +632,8 @@ function TrialSection({ tutor }: { tutor: Tutor }) {
                   </Field>
                 )}
               />
-              <Field label="Price" hint="Enter 0 for a free trial." error={errors.price?.message}>
-                <Input type="number" inputMode="numeric" prefixText="$" {...register("price", { valueAsNumber: true })} />
+              <Field label="Price" hint={`In ${currency}. Enter 0 for a free trial.`} error={errors.price?.message}>
+                <Input type="number" inputMode="numeric" min={0} max={TRIAL_PRICE_MAX(currency) / 100} step={1} {...priceInputProps(currency)} {...register("price", { valueAsNumber: true })} />
               </Field>
             </div>
           )}
@@ -561,7 +646,7 @@ function TrialSection({ tutor }: { tutor: Tutor }) {
             <>
               <DetailRow label="Length">{tutor.trial.durationMin} minutes</DetailRow>
               <DetailRow label="Price">
-                {tutor.trial.priceCents ? formatCents(tutor.trial.priceCents) : "Free"}
+                {tutor.trial.priceCents ? formatMoney(tutor.trial.priceCents, currency) : "Free"}
                 {tutor.trial.priceCents > 0 && !paymentsOn && (
                   <span className="mt-0.5 block text-[12.5px] font-normal text-muted">Free for families until online payments start on TutorLink; your price applies after that.</span>
                 )}

@@ -6,14 +6,14 @@ import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
 import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
 import { SubjectTile } from "@/components/content/SubjectTile";
 import { CategoryIcon } from "@/components/content/icons";
-import { neutralOrder, rateRange } from "@/components/content/insights";
+import { neutralOrder } from "@/components/content/insights";
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/States";
 import { LEVELS } from "@/lib/data/catalog";
-import { formatCents } from "@/lib/format";
-import { useCatalog, useHydrated, useListedTutors } from "@/lib/store/hooks";
+import { formatRateRange, rateSummary } from "@/lib/search";
+import { useCatalog, useHydrated, useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
 
 const SHOW = 8;
 
@@ -26,6 +26,7 @@ export function SubjectPageView({ slug }: { slug: string }) {
   const hydrated = useHydrated();
   const catalog = useCatalog();
   const allTutors = useListedTutors();
+  const currency = useViewerCurrency();
   const subject = catalog.subjects.find((s) => s.slug === slug);
 
   if (!subject) {
@@ -59,7 +60,8 @@ export function SubjectPageView({ slug }: { slug: string }) {
   const area = catalog.categoryBySlug[subject.category];
   const areaName = area?.name ?? subject.category;
   const tutors = neutralOrder(allTutors.filter((t) => t.subjects.includes(slug)));
-  const range = rateRange(tutors);
+  // Rates in the visitor's currency when tutors charge in it, otherwise the one most of them use.
+  const range = rateSummary(tutors, currency);
   const freeTrials = tutors.filter((t) => t.trial.enabled && t.trial.priceCents === 0).length;
   const online = tutors.filter((t) => t.modes.includes("online")).length;
   const inPerson = tutors.filter((t) => t.modes.includes("in_person")).length;
@@ -69,7 +71,7 @@ export function SubjectPageView({ slug }: { slug: string }) {
 
   const stats = [
     { k: "Tutors", v: String(tutors.length) },
-    { k: "Hourly rates", v: range ? (range.min === range.max ? formatCents(range.min) : `${formatCents(range.min)}–${formatCents(range.max)}`) : "—" },
+    { k: "Hourly rates", v: range ? formatRateRange(range) : "—" },
     { k: "Free trials", v: String(freeTrials) },
     { k: "Online · In person", v: `${online} · ${inPerson}` },
   ];

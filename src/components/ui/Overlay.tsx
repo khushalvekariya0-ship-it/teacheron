@@ -7,10 +7,28 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { checkoutWindowOpen, subscribeCheckoutWindow } from "@/lib/checkout";
 
 /* ─── Dialog ────────────────────────────────────────────────────────────────── */
 
-export const Dialog = DialogPrimitive.Root;
+/** Clicking a toast message (or its ×) never closes an open dialog or drawer underneath it. */
+function keepOpenForToasts<E extends { target: EventTarget | null; preventDefault(): void }>(handler?: (e: E) => void) {
+  return (e: E) => {
+    if (e.target instanceof Element && e.target.closest("[data-toasts]")) e.preventDefault();
+    handler?.(e);
+  };
+}
+
+/**
+ * A dialog or drawer. While Razorpay's payment window is open (on top of the page, outside every dialog), an
+ * open dialog steps aside and comes back as it was once the window closes: a modal dialog would otherwise
+ * trap the clicks and keyboard focus the payment window needs. Its own state lives in the component that
+ * renders it, so nothing typed is lost.
+ */
+export function Dialog({ open, onOpenChange, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  const paying = React.useSyncExternalStore(subscribeCheckoutWindow, checkoutWindowOpen, () => false);
+  return <DialogPrimitive.Root {...props} open={paying && open !== undefined ? false : open} onOpenChange={(o) => (paying ? undefined : onOpenChange?.(o))} />;
+}
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
 
@@ -35,6 +53,7 @@ export function DialogContent({
           className,
         )}
         {...props}
+        onInteractOutside={keepOpenForToasts(props.onInteractOutside)}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
           <div className="min-w-0">
@@ -115,7 +134,7 @@ export function ConfirmDialog({
 
 /* ─── Sheet (drawer) ────────────────────────────────────────────────────────── */
 
-export const Sheet = DialogPrimitive.Root;
+export const Sheet = Dialog;
 export const SheetTrigger = DialogPrimitive.Trigger;
 export const SheetClose = DialogPrimitive.Close;
 
@@ -140,6 +159,7 @@ export function SheetContent({
           className,
         )}
         {...props}
+        onInteractOutside={keepOpenForToasts(props.onInteractOutside)}
       >
         {side === "bottom" && <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-line-strong" aria-hidden />}
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">

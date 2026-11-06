@@ -10,7 +10,8 @@ import type { Application, Requirement, Tutor } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useCreditBalance, useFlag } from "@/lib/store/hooks";
 import { CREDITS_PER_APPLICATION } from "@/lib/data/platform";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { CURRENCIES, formatMoney, rateLimits, rateProblem, toMinor, type Currency } from "@/lib/money";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Field, Input, Textarea } from "@/components/ui/Input";
@@ -18,24 +19,29 @@ import { InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { motion, AnimatePresence, EASE } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { priceInputProps } from "@/components/dashboard/tutor/hooks";
 import { APPLICATION_STATUS_META, budgetRange, postedAgo } from "./jobUtils";
 
 const MIN_MESSAGE = 40;
 const MAX_MESSAGE = 2000;
 
-const applySchema = z.object({
-  message: z
-    .string()
-    .trim()
-    .min(MIN_MESSAGE, `Write at least ${MIN_MESSAGE} characters so the family knows why you're a good fit.`)
-    .max(MAX_MESSAGE, `Keep your message under ${MAX_MESSAGE.toLocaleString("en-US")} characters.`),
-  rate: z
-    .number({ invalid_type_error: "Enter your hourly rate in dollars.", required_error: "Enter your hourly rate in dollars." })
-    .int("Use a whole-dollar rate.")
-    .min(10, "Rates start at $10/hr.")
-    .max(500, "Rates can't be more than $500/hr."),
-});
-type ApplyValues = z.infer<typeof applySchema>;
+/** The proposed rate is in the tutor's own currency, within the same range as their profile rate. */
+const applySchemaFor = (currency: Currency) =>
+  z.object({
+    message: z
+      .string()
+      .trim()
+      .min(MIN_MESSAGE, `Write at least ${MIN_MESSAGE} characters so the family knows why you're a good fit.`)
+      .max(MAX_MESSAGE, `Keep your message under ${MAX_MESSAGE.toLocaleString("en-US")} characters.`),
+    rate: z
+      .number({ invalid_type_error: "Enter your hourly rate.", required_error: "Enter your hourly rate." })
+      .int("Use a whole number.")
+      .superRefine((v, ctx) => {
+        const problem = rateProblem(toMinor(v), currency, "Your rate");
+        if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+      }),
+  });
+type ApplyValues = z.infer<ReturnType<typeof applySchemaFor>>;
 
 export function PanelShell({ title, description, children, icon, className }: { title: React.ReactNode; description?: React.ReactNode; children?: React.ReactNode; icon?: React.ReactNode; className?: string }) {
   return (
@@ -85,7 +91,7 @@ function ExistingApplication({ app, now, justSent, creditsLeft }: { app: Applica
         </div>
         <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
           <dt className="text-muted">Your proposed rate</dt>
-          <dd className="font-medium tabular-nums text-ink">{formatCents(app.proposedRateCents)}/hr</dd>
+          <dd className="font-medium tabular-nums text-ink">{formatMoney(app.proposedRateCents, app.currency)}/hr</dd>
         </div>
         {creditsLeft !== null && justSent && (
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
@@ -111,6 +117,8 @@ export function ApplyPanel({ job, tutor, existing, now }: { job: Requirement; tu
   const balance = useCreditBalance(tutor.id);
   const [justSent, setJustSent] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
+  const currency = tutor.currency;
+  const schema = React.useMemo(() => applySchemaFor(currency), [currency]);
 
   const {
     register,
@@ -118,7 +126,7 @@ export function ApplyPanel({ job, tutor, existing, now }: { job: Requirement; tu
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<ApplyValues>({
-    resolver: zodResolver(applySchema),
+    resolver: zodResolver(schema),
     mode: "onTouched",
     defaultValues: { message: "", rate: Math.round(tutor.hourlyRateCents / 100) },
   });
@@ -139,11 +147,14 @@ export function ApplyPanel({ job, tutor, existing, now }: { job: Requirement; tu
 
   const outOfCredits = leadCredits && balance < CREDITS_PER_APPLICATION;
   const len = message.trim().length;
-  const overBudget = typeof rate === "number" && !Number.isNaN(rate) && rate * 100 > job.budgetMaxCents;
+  // A budget in another currency can't be compared with the tutor's rate.
+  const sameCurrency = !job.currency || job.currency === currency;
+  const overBudget = sameCurrency && typeof rate === "number" && !Number.isNaN(rate) && toMinor(rate) > job.budgetMaxCents;
+  const limits = rateLimits(currency);
 
   const onSubmit = async (v: ApplyValues) => {
     setServerError(null);
-    const r = await applyToJob(job.id, v.message, Math.round(v.rate * 100));
+    const r = await applyToJob(job.id, v.message, toMinor(v.rate));
     if (!r.ok) {
       setServerError(r.error);
       toast.error(r.error);
@@ -188,9 +199,23 @@ export function ApplyPanel({ job, tutor, existing, now }: { job: Requirement; tu
           id="apply-rate"
           required
           error={errors.rate?.message}
-          hint={overBudget ? `Above the family's budget of ${budgetRange(job)} — say why in your message.` : `Family's budget: ${budgetRange(job)}. Your profile rate is ${formatCents(tutor.hourlyRateCents)}/hr.`}
+          hint={
+            overBudget
+              ? `Above the family's budget of ${budgetRange(job)} — say why in your message.`
+              : `Family's budget: ${budgetRange(job)}. Your profile rate is ${formatMoney(tutor.hourlyRateCents, currency)}/hr.${sameCurrency ? "" : ` Your rate is in ${currency} (${CURRENCIES[currency].name}).`}`
+          }
         >
-          <Input id="apply-rate" type="number" inputMode="numeric" min={10} max={500} step={1} prefixText="$" suffix={<span className="pr-1 text-[13px]">/hr</span>} {...register("rate", { valueAsNumber: true })} />
+          <Input
+            id="apply-rate"
+            type="number"
+            inputMode="numeric"
+            min={limits.min / 100}
+            max={limits.max / 100}
+            step={1}
+            {...priceInputProps(currency)}
+            suffix={<span className="pr-1 text-[13px]">/hr</span>}
+            {...register("rate", { valueAsNumber: true })}
+          />
         </Field>
 
         {leadCredits && (

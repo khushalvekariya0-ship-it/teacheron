@@ -50,7 +50,7 @@ export function Toaster() {
     () => EMPTY,
   );
   return (
-    <div aria-live="polite" aria-atomic="false" className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 p-4 sm:bottom-4 sm:right-4 sm:left-auto sm:items-end">
+    <div data-toasts="" aria-live="polite" aria-atomic="false" className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 p-4 sm:bottom-4 sm:right-4 sm:left-auto sm:items-end">
       <AnimatePresence initial={false}>
         {list.map((t) => {
           const Icon = t.tone === "success" ? CircleCheck : t.tone === "error" ? CircleAlert : Info;

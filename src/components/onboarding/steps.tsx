@@ -20,19 +20,21 @@ import { Badge } from "@/components/ui/Badge";
 import { EASE } from "@/components/motion";
 import { IntroVideoField } from "@/components/domain/IntroVideoPlayer";
 import { LocationFields } from "@/components/domain/LocationFields";
-import { formatPlace } from "@/lib/location";
+import { countryName, formatPlace } from "@/lib/location";
 import { uploadFile } from "@/lib/upload";
 import { postalLabel, postalRequired } from "@/lib/postal";
 import { useFlag } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
 import { timeZoneLabel } from "@/lib/timezones";
 import { TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents, sessionPrice } from "@/lib/format";
+import { applyBps, sessionPrice } from "@/lib/format";
+import { CURRENCIES, currencyForCountry, formatMoney, rateLimits, rateProblem, toMinor } from "@/lib/money";
 import { formatPhone, phonePlaceholder, typePhone } from "@/lib/phone";
 import { FileList, FilePicker, GroupField, SubjectPicker, TagInput, formatKb, toPicked, validateDocs } from "@/components/dashboard/tutor/shared";
+import { priceInputProps } from "@/components/dashboard/tutor/hooks";
 import { DAY_NAMES, DAY_ORDER, WeeklyAvailabilityEditor, formatHours, timeLabel, weeklyMinutes } from "@/components/dashboard/tutor/AvailabilityEditor";
 import {
-  TRIAL_LENGTHS, availabilitySchema, credentialsSchema, experienceSchema, modesSchema, personalSchema, pricingSchema, profileSchema, reviewSchema,
+  TRIAL_LENGTHS, TRIAL_PRICE_MAX, availabilitySchema, credentialsSchema, experienceSchema, modesSchema, personalSchema, pricingSchema, profileSchema, reviewSchema,
   subjectsSchema, verificationSchema, type AvailabilityValues, type CredentialsValues, type ExperienceValues, type ModesValues, type OnboardingData,
   type PersonalValues, type PricingValues, type ProfileValues, type SubjectsValues, type VerificationValues,
 } from "./schema";
@@ -400,24 +402,44 @@ export function ModesStep({ formId, defaults, onValid, bindValues }: StepProps<M
 
 /* ─── 6 · Pricing ───────────────────────────────────────────────────────────── */
 
-export function PricingStep({ formId, defaults, onValid, bindValues }: StepProps<PricingValues>) {
-  const form = useForm<PricingValues>({ resolver: zodResolver(pricingSchema), defaultValues: defaults, mode: "onTouched" });
+export function PricingStep({ formId, defaults, onValid, bindValues, country }: StepProps<PricingValues> & { country?: string }) {
+  // The country from step 1 sets the currency (₹ in India, $ in the US…); it travels with the step's values.
+  const form = useForm<PricingValues>({ resolver: zodResolver(pricingSchema), defaultValues: { ...defaults, country: country ?? defaults.country }, mode: "onTouched" });
   useBind(form, bindValues);
   const trialsOn = useFlag("trial_lessons");
   const { register, control, handleSubmit, formState: { errors } } = form;
   const [rate, trialEnabled, trialPrice, trialDuration] = useWatch({ control, name: ["hourlyRate", "trialEnabled", "trialPrice", "trialDuration"] });
+  const currency = currencyForCountry(country ?? defaults.country);
+  const limits = rateLimits(currency);
   const starter = TUTOR_PLANS.find((p) => p.id === "free")!;
-  const validRate = Number.isInteger(rate) && rate >= 15 && rate <= 500;
-  const gross = validRate ? sessionPrice(rate * 100, 60) : 0;
+  const validRate = Number.isInteger(rate) && !rateProblem(toMinor(rate), currency);
+  const gross = validRate ? sessionPrice(toMinor(rate), 60) : 0;
   const fee = applyBps(gross, starter.commissionBps);
   const others = TUTOR_PLANS.filter((p) => p.id !== "free");
-  const trialCents = Number.isInteger(trialPrice) && trialPrice >= 0 ? trialPrice * 100 : 0;
+  const trialCents = Number.isInteger(trialPrice) && trialPrice >= 0 ? toMinor(trialPrice) : 0;
+  const where = countryName(country ?? defaults.country);
 
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(onValid)} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
       <div className="space-y-7">
-        <Field label="Hourly rate" required hint="Between $15 and $500. Most families compare rates for similar subjects and experience." error={errors.hourlyRate?.message} className="max-w-xs">
-          <Input type="number" inputMode="numeric" min={15} max={500} step={1} prefixText="$" suffix={<span className="pr-1 text-sm">/hr</span>} {...register("hourlyRate", { valueAsNumber: true })} />
+        <Field
+          label="Hourly rate"
+          required
+          hint={`Between ${formatMoney(limits.min, currency)} and ${formatMoney(limits.max, currency)}, in ${currency} (${CURRENCIES[currency].name})${where ? ` for ${where}` : ""}. Most families compare rates for similar subjects and experience.`}
+          error={errors.hourlyRate?.message}
+          className="max-w-md"
+        >
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={limits.min / 100}
+            max={limits.max / 100}
+            step={1}
+            {...priceInputProps(currency)}
+            suffix={<span className="pr-1 text-sm">/hr</span>}
+            className="max-w-xs"
+            {...register("hourlyRate", { valueAsNumber: true })}
+          />
         </Field>
 
         <div className="rounded-xl border border-line p-4 sm:p-5">
@@ -460,7 +482,7 @@ export function PricingStep({ formId, defaults, onValid, bindValues }: StepProps
                     )}
                   />
                   <Field label="Trial price" hint="Enter 0 to offer it free." error={errors.trialPrice?.message}>
-                    <Input type="number" inputMode="numeric" min={0} max={200} step={1} prefixText="$" {...register("trialPrice", { valueAsNumber: true })} />
+                    <Input type="number" inputMode="numeric" min={0} max={TRIAL_PRICE_MAX(currency) / 100} step={1} {...priceInputProps(currency)} {...register("trialPrice", { valueAsNumber: true })} />
                   </Field>
                 </div>
               </motion.div>
@@ -474,15 +496,15 @@ export function PricingStep({ formId, defaults, onValid, bindValues }: StepProps
         <dl className="mt-3 space-y-2 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Family pays</dt>
-            <dd className="font-medium tabular-nums text-ink">{validRate ? formatCents(gross) : "—"}</dd>
+            <dd className="font-medium tabular-nums text-ink">{validRate ? formatMoney(gross, currency) : "—"}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Starter commission ({starter.commissionBps / 100}%)</dt>
-            <dd className="tabular-nums text-ink-2">{validRate ? `−${formatCents(fee)}` : "—"}</dd>
+            <dd className="tabular-nums text-ink-2">{validRate ? `−${formatMoney(fee, currency)}` : "—"}</dd>
           </div>
           <div className="flex justify-between gap-3 border-t border-line pt-2">
             <dt className="font-medium text-ink">You earn</dt>
-            <dd className="text-lg font-semibold tabular-nums text-ink">{validRate ? formatCents(gross - fee) : "—"}</dd>
+            <dd className="text-lg font-semibold tabular-nums text-ink">{validRate ? formatMoney(gross - fee, currency) : "—"}</dd>
           </div>
         </dl>
         {validRate && (
@@ -492,17 +514,17 @@ export function PricingStep({ formId, defaults, onValid, bindValues }: StepProps
                 <span>
                   On {p.name} ({p.commissionBps / 100}%)
                 </span>
-                <span className="tabular-nums text-ink-2">{formatCents(gross - applyBps(gross, p.commissionBps))}</span>
+                <span className="tabular-nums text-ink-2">{formatMoney(gross - applyBps(gross, p.commissionBps), currency)}</span>
               </li>
             ))}
           </ul>
         )}
         {trialEnabled && (
           <p className="mt-4 border-t border-line pt-3 text-[12.5px] text-muted">
-            Trial: {trialDuration} min · {trialCents === 0 ? "free" : formatCents(trialCents)}
+            Trial: {trialDuration} min · {trialCents === 0 ? "free" : formatMoney(trialCents, currency)}
           </p>
         )}
-        <p className="mt-3 text-[12px] leading-snug text-muted">Payouts arrive by Stripe after each lesson&apos;s dispute window.</p>
+        <p className="mt-3 text-[12px] leading-snug text-muted">TutorLink pays out to your bank account; automatic payouts are being set up.</p>
       </aside>
     </form>
   );
@@ -813,6 +835,7 @@ export function ReviewStep({
   const { control, handleSubmit, formState: { errors } } = form;
   const none = <span className="text-muted">None added</span>;
   const byDay = DAY_ORDER.map((d) => ({ d, ws: (data.availability ?? []).filter((w) => w.day === d) })).filter((x) => x.ws.length);
+  const currency = currencyForCountry(data.country);
 
   return (
     <form id={formId} noValidate onSubmit={handleSubmit(() => onValid())} className="space-y-4">
@@ -875,8 +898,8 @@ export function ReviewStep({
           {data.modes?.includes("in_person") && <Row label="Service radius">{data.serviceRadiusMiles} miles</Row>}
         </ReviewBlock>
         <ReviewBlock title="Pricing" step={6} onEdit={onEdit}>
-          <Row label="Hourly rate">{Number.isFinite(data.hourlyRate) ? `${formatCents((data.hourlyRate ?? 0) * 100)}/hr` : none}</Row>
-          <Row label="Trial lesson">{data.trialEnabled ? `${data.trialDuration} min · ${data.trialPrice ? formatCents((data.trialPrice ?? 0) * 100) : "free"}` : "Not offered"}</Row>
+          <Row label="Hourly rate">{Number.isFinite(data.hourlyRate) ? `${formatMoney(toMinor(data.hourlyRate ?? 0), currency)}/hr` : none}</Row>
+          <Row label="Trial lesson">{data.trialEnabled ? `${data.trialDuration} min · ${data.trialPrice ? formatMoney(toMinor(data.trialPrice ?? 0), currency) : "free"}` : "Not offered"}</Row>
         </ReviewBlock>
         <ReviewBlock title="Availability" step={7} onEdit={onEdit}>
           {byDay.length ? (

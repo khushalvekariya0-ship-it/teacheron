@@ -7,7 +7,8 @@ import type { Payment, Payout } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useViewerTimezone } from "@/lib/store/hooks";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDateTime, pluralize } from "@/lib/format";
+import { formatDateTime, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
@@ -17,10 +18,10 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import {
   ClearFilters, ExportButton, Facts, FilterSelect, MiniStat, Mono, PermissionNotice, PersonCell, RowOpen, SearchInput, Section, StatusPill, TextLink, Toolbar,
-  centsToDecimal, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam,
+  centsToDecimal, matches, useDirectory, useStaff, useSticky, useUrlParam,
 } from "./kit";
 import { PaymentRows } from "./BookingsView";
-import { DISPUTE_STATUS_META, PAYMENT_KIND_LABEL, PAYMENT_ROW_META, PAYOUT_META, formatCalendarDate, isDisputeOpen, refundSource, signedCents } from "./money";
+import { DISPUTE_STATUS_META, PAYMENT_KIND_LABEL, PAYMENT_ROW_META, PAYOUT_META, formatCalendarDate, isDisputeOpen, isRefundPending, refundSource, settledSums, signedMoney, sumRows } from "./money";
 
 type TabKey = "payments" | "refunds" | "payouts";
 type KindFilter = "all" | Payment["kind"];
@@ -48,7 +49,6 @@ const PAYOUT_OPTIONS: { value: PayoutFilter; label: string }[] = [
 
 const SOURCE_LABEL = { dispute: "Dispute resolution", policy: "Booking policy" } as const;
 
-const sum = (rows: { amountCents: number }[]) => rows.reduce((a, r) => a + r.amountCents, 0);
 const byNewest = <T extends { createdAt: string }>(a: T, b: T) => b.createdAt.localeCompare(a.createdAt);
 
 export function PaymentsView() {
@@ -101,7 +101,7 @@ function PaymentsInner() {
     [payouts, payoutStatus, q, dir],
   );
 
-  const platform = React.useMemo(() => settledNet(payments), [payments]);
+  const platform = React.useMemo(() => settledSums(payments), [payments]);
 
   const filtered = q.trim() !== "" || (tab === "payments" ? kind !== "all" || payStatus !== "all" : tab === "refunds" ? source !== "all" : payoutStatus !== "all");
   const clear = () => {
@@ -125,8 +125,19 @@ function PaymentsInner() {
       hideOnMobile: true,
     },
     { key: "kind", header: "Type", sortValue: (p) => p.kind, cell: (p) => PAYMENT_KIND_LABEL[p.kind] },
-    { key: "method", header: "Method", sortValue: (p) => p.method, cell: (p) => <span className="whitespace-nowrap">{p.method}</span>, hideOnMobile: true },
-    { key: "amount", header: "Amount", align: "right", sortValue: (p) => p.amountCents, cell: (p) => <span className="font-medium text-ink">{formatCents(p.amountCents)}</span> },
+    {
+      key: "method",
+      header: "Method",
+      sortValue: (p) => p.method,
+      cell: (p) => (
+        <span className="block whitespace-nowrap">
+          <span className="block">{p.method}</span>
+          {p.provider === "razorpay" && <span className="block text-[12px] text-muted">Razorpay</span>}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    { key: "amount", header: "Amount", align: "right", sortValue: (p) => p.amountCents, cell: (p) => <span className="font-medium text-ink">{formatMoney(p.amountCents, p.currency)}</span> },
     { key: "status", header: "Status", sortValue: (p) => p.status, cell: (p) => <StatusPill tone={PAYMENT_ROW_META[p.status].tone}>{PAYMENT_ROW_META[p.status].label}</StatusPill> },
   ];
 
@@ -136,13 +147,24 @@ function PaymentsInner() {
     { key: "description", header: "Reason", sortValue: (p) => p.description, cell: (p) => <span className="block max-w-64 truncate">{p.description.replace(/^Refund — /, "")}</span> },
     { key: "source", header: "Source", sortValue: (p) => refundSource(p), cell: (p) => <Badge size="sm">{SOURCE_LABEL[refundSource(p)]}</Badge> },
     { key: "booking", header: "Booking", sortValue: (p) => p.bookingId ?? "", cell: (p) => (p.bookingId ? <Mono>{p.bookingId}</Mono> : "—"), hideOnMobile: true },
-    { key: "amount", header: "Amount", align: "right", sortValue: (p) => p.amountCents, cell: (p) => <span className="font-medium text-ink">{signedCents(p.amountCents)}</span> },
+    {
+      key: "amount",
+      header: "Amount",
+      align: "right",
+      sortValue: (p) => p.amountCents,
+      cell: (p) => (
+        <span className="block whitespace-nowrap">
+          <span className="block font-medium text-ink">{signedMoney(p.amountCents, p.currency)}</span>
+          {isRefundPending(p) && <span className="block text-[12px] text-warning">Refund pending</span>}
+        </span>
+      ),
+    },
   ];
 
   const payoutColumns: Column<Payout>[] = [
     { key: "created", header: "Created", sortValue: (p) => p.createdAt, cell: (p) => <RowOpen onOpen={() => setOpenId(p.id)} label={`Open payout ${p.id}`} className="whitespace-nowrap tabular-nums">{formatDateTime(p.createdAt, tz)}</RowOpen> },
     { key: "tutor", header: "Tutor", sortValue: (p) => dir.name(p.tutorId), cell: (p) => <PersonCell name={dir.name(p.tutorId)} sub={<Mono>{p.id}</Mono>} /> },
-    { key: "amount", header: "Amount", align: "right", sortValue: (p) => p.amountCents, cell: (p) => <span className="font-medium text-ink">{formatCents(p.amountCents)}</span> },
+    { key: "amount", header: "Amount", align: "right", sortValue: (p) => p.amountCents, cell: (p) => <span className="font-medium text-ink">{formatMoney(p.amountCents, p.currency)}</span> },
     { key: "status", header: "Status", sortValue: (p) => p.status, cell: (p) => <StatusPill tone={PAYOUT_META[p.status].tone}>{PAYOUT_META[p.status].label}</StatusPill> },
     { key: "arrival", header: "Arrival date", sortValue: (p) => p.arrivalDate, cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatCalendarDate(p.arrivalDate)}</span> },
   ];
@@ -150,18 +172,26 @@ function PaymentsInner() {
   const exportConfig = {
     payments: {
       filename: "tutorlink-payments",
-      headers: ["ID", "Date (UTC)", "Payer", "Payer email", "Type", "Description", "Method", "Amount", "Status", "Booking ID"],
-      rows: () => charges.map((p) => [p.id, p.createdAt, dir.name(p.userId), dir.email(p.userId) ?? "", PAYMENT_KIND_LABEL[p.kind], p.description, p.method, centsToDecimal(p.amountCents), p.status, p.bookingId ?? ""]),
+      headers: ["ID", "Date (UTC)", "Payer", "Payer email", "Type", "Description", "Method", "Currency", "Amount", "Status", "Booking ID", "Razorpay payment ID"],
+      rows: () =>
+        charges.map((p) => [
+          p.id, p.createdAt, dir.name(p.userId), dir.email(p.userId) ?? "", PAYMENT_KIND_LABEL[p.kind], p.description, p.method, p.currency, centsToDecimal(p.amountCents), p.status,
+          p.bookingId ?? "", p.providerPaymentId ?? "",
+        ]),
     },
     refunds: {
       filename: "tutorlink-refunds",
-      headers: ["ID", "Date (UTC)", "Refunded to", "Email", "Reason", "Source", "Booking ID", "Amount"],
-      rows: () => refunds.map((p) => [p.id, p.createdAt, dir.name(p.userId), dir.email(p.userId) ?? "", p.description, SOURCE_LABEL[refundSource(p)], p.bookingId ?? "", centsToDecimal(p.amountCents)]),
+      headers: ["ID", "Date (UTC)", "Refunded to", "Email", "Reason", "Source", "Booking ID", "Currency", "Amount", "Razorpay refund ID"],
+      rows: () =>
+        refunds.map((p) => [
+          p.id, p.createdAt, dir.name(p.userId), dir.email(p.userId) ?? "", p.description, SOURCE_LABEL[refundSource(p)], p.bookingId ?? "", p.currency, centsToDecimal(p.amountCents),
+          p.providerRefundId ?? (isRefundPending(p) ? "pending" : ""),
+        ]),
     },
     payouts: {
       filename: "tutorlink-payouts",
-      headers: ["ID", "Created (UTC)", "Tutor", "Tutor ID", "Amount", "Status", "Arrival date"],
-      rows: () => payoutRows.map((p) => [p.id, p.createdAt, dir.name(p.tutorId), p.tutorId, centsToDecimal(p.amountCents), p.status, p.arrivalDate]),
+      headers: ["ID", "Created (UTC)", "Tutor", "Tutor ID", "Currency", "Amount", "Status", "Arrival date"],
+      rows: () => payoutRows.map((p) => [p.id, p.createdAt, dir.name(p.tutorId), p.tutorId, p.currency, centsToDecimal(p.amountCents), p.status, p.arrivalDate]),
     },
   }[tab];
 
@@ -201,7 +231,8 @@ function PaymentsInner() {
         }
       >
         Refunds are issued by resolving a dispute (requires <span className="font-mono text-[12px]">payments.refund</span>) or automatically by the booking policy when a booking is cancelled or a tutor
-        no-show is recorded. Card payments aren&apos;t connected yet; records show only a payment method label, never card details.
+        no-show is recorded. Card and UPI payments go through Razorpay and refunds go back the same way; records show only a payment method label, never card details. Each amount is in
+        its own currency, and totals show one figure per currency.
       </InlineAlert>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
@@ -213,15 +244,15 @@ function PaymentsInner() {
 
         <TabsContent value="payments">
           <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MiniStat label="Gross succeeded" value={formatCents(settledNet(charges).gross)} hint={`${pluralize(charges.filter((p) => p.status === "succeeded" || p.status === "partially_refunded").length, "charge")} in view`} />
-            <MiniStat label="Pending capture" value={formatCents(sum(charges.filter((p) => p.status === "pending")))} hint={`${pluralize(charges.filter((p) => p.status === "pending").length, "charge")} awaiting confirmation`} />
+            <MiniStat label="Gross succeeded" value={settledSums(charges).gross} hint={`${pluralize(charges.filter((p) => p.status === "succeeded" || p.status === "partially_refunded").length, "charge")} in view`} />
+            <MiniStat label="Pending capture" value={sumRows(charges.filter((p) => p.status === "pending"))} hint={`${pluralize(charges.filter((p) => p.status === "pending").length, "charge")} awaiting confirmation`} />
             <MiniStat
               label="Failed"
               value={charges.filter((p) => p.status === "failed").length}
-              hint={`${formatCents(sum(charges.filter((p) => p.status === "failed")))} not collected`}
+              hint={`${sumRows(charges.filter((p) => p.status === "failed"))} not collected`}
               tone={charges.some((p) => p.status === "failed") ? "danger" : undefined}
             />
-            <MiniStat label="Net settled" value={formatCents(platform.net)} hint="All charges minus all refunds" />
+            <MiniStat label="Net settled" value={platform.net} hint="All charges minus all refunds, per currency" />
           </div>
           <Toolbar summary={pluralize(charges.length, "payment")}>
             <SearchInput value={q} onChange={setQ} placeholder="Search payer, description or ID…" label="Search payments" />
@@ -241,10 +272,15 @@ function PaymentsInner() {
 
         <TabsContent value="refunds">
           <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MiniStat label="Refunded" value={formatCents(-sum(refunds))} hint={`${pluralize(refunds.length, "refund")} in view`} />
-            <MiniStat label="From disputes" value={formatCents(-sum(refunds.filter((p) => refundSource(p) === "dispute")))} hint={pluralize(refunds.filter((p) => refundSource(p) === "dispute").length, "refund")} />
-            <MiniStat label="From booking policy" value={formatCents(-sum(refunds.filter((p) => refundSource(p) === "policy")))} hint="Cancellations and tutor no-shows" />
-            <MiniStat label="Net settled" value={formatCents(platform.net)} hint={`${formatCents(platform.gross)} gross − ${formatCents(platform.refunds)} refunded`} />
+            <MiniStat
+              label="Refunded"
+              value={sumRows(refunds, -1)}
+              hint={`${pluralize(refunds.length, "refund")} in view${refunds.some(isRefundPending) ? ` · ${refunds.filter(isRefundPending).length} pending` : ""}`}
+              tone={refunds.some(isRefundPending) ? "warning" : undefined}
+            />
+            <MiniStat label="From disputes" value={sumRows(refunds.filter((p) => refundSource(p) === "dispute"), -1)} hint={pluralize(refunds.filter((p) => refundSource(p) === "dispute").length, "refund")} />
+            <MiniStat label="From booking policy" value={sumRows(refunds.filter((p) => refundSource(p) === "policy"), -1)} hint="Cancellations and tutor no-shows" />
+            <MiniStat label="Net settled" value={platform.net} hint={`${platform.gross} gross − ${platform.refunds} refunded`} />
           </div>
           <Toolbar summary={pluralize(refunds.length, "refund")}>
             <SearchInput value={q} onChange={setQ} placeholder="Search person, reason or ID…" label="Search refunds" />
@@ -276,7 +312,7 @@ function PaymentsInner() {
           <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(Object.keys(PAYOUT_META) as Payout["status"][]).map((s) => {
               const list = payoutRows.filter((p) => p.status === s);
-              return <MiniStat key={s} label={PAYOUT_META[s].label} value={formatCents(sum(list))} hint={pluralize(list.length, "payout")} tone={s === "failed" && list.length ? "danger" : undefined} />;
+              return <MiniStat key={s} label={PAYOUT_META[s].label} value={sumRows(list)} hint={pluralize(list.length, "payout")} tone={s === "failed" && list.length ? "danger" : undefined} />;
             })}
           </div>
           <Toolbar summary={pluralize(payoutRows.length, "payout")}>
@@ -306,7 +342,13 @@ const isPayout = (r: Payment | Payout): r is Payout => "tutorId" in r && "arriva
 
 function RecordSheet({ record: current, onClose }: { record: Payment | Payout | null; onClose: () => void }) {
   const record = useSticky(current);
-  const title = !record ? "Record" : isPayout(record) ? `Payout · ${formatCents(record.amountCents)}` : record.amountCents < 0 ? `Refund · ${formatCents(-record.amountCents)}` : `${PAYMENT_KIND_LABEL[record.kind]} payment · ${formatCents(record.amountCents)}`;
+  const title = !record
+    ? "Record"
+    : isPayout(record)
+      ? `Payout · ${formatMoney(record.amountCents, record.currency)}`
+      : record.amountCents < 0
+        ? `Refund · ${formatMoney(-record.amountCents, record.currency)}`
+        : `${PAYMENT_KIND_LABEL[record.kind]} payment · ${formatMoney(record.amountCents, record.currency)}`;
   return (
     <Sheet open={!!current} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" title={title} description={record?.id} className="sm:w-[34rem]" footer={record && !isPayout(record) ? <PaymentFooter payment={record} /> : undefined}>
@@ -327,26 +369,43 @@ function PaymentDetail({ payment: p }: { payment: Payment }) {
     [payments, p.bookingId],
   );
   const refund = p.amountCents < 0;
+  const razorpay = p.provider === "razorpay";
+  const pending = isRefundPending(p);
 
   return (
     <div className="divide-y divide-line">
       <div className="flex flex-wrap items-center gap-1.5 px-5 py-4">
         {refund ? <Badge size="sm">Refund · {SOURCE_LABEL[refundSource(p)]}</Badge> : <StatusPill tone={PAYMENT_ROW_META[p.status].tone}>{PAYMENT_ROW_META[p.status].label}</StatusPill>}
+        {pending && <StatusPill tone="warning">Refund pending</StatusPill>}
         <Badge size="sm">{PAYMENT_KIND_LABEL[p.kind]}</Badge>
+        {razorpay && <Badge size="sm">Razorpay</Badge>}
       </div>
 
       <Section title={refund ? "Refund" : "Charge"}>
         <Facts
           items={[
             { label: "Record ID", value: <Mono className="text-ink">{p.id}</Mono> },
-            { label: "Amount", value: <span className="tabular-nums">{signedCents(p.amountCents)}</span> },
+            { label: "Amount", value: <span className="tabular-nums">{signedMoney(p.amountCents, p.currency)}</span> },
+            { label: "Currency", value: p.currency },
             { label: "Description", value: <span className="font-normal text-ink-2">{p.description}</span> },
             { label: refund ? "Returned to" : "Payment method", value: p.method },
             { label: refund ? "Recorded" : "Created", value: <span className="tabular-nums">{formatDateTime(p.createdAt, tz)}</span> },
             ...(!refund ? [{ label: "Status", value: PAYMENT_ROW_META[p.status].label }] : []),
+            ...(razorpay && p.providerPaymentId ? [{ label: "Razorpay payment ID", value: <ProviderId id={p.providerPaymentId} /> }] : []),
+            ...(razorpay && p.providerOrderId && !refund ? [{ label: "Razorpay order ID", value: <ProviderId id={p.providerOrderId} /> }] : []),
+            ...(razorpay && refund
+              ? [{ label: "Razorpay refund ID", value: p.providerRefundId ? <ProviderId id={p.providerRefundId} /> : <span className="text-warning">Refund pending</span> }]
+              : []),
           ]}
         />
-        <p className="mt-2.5 text-[12.5px] text-muted">Card details are held by Stripe. The preview stores only the masked label shown here.</p>
+        {pending && (
+          <InlineAlert tone="warning" title="Refund pending" className="mt-3">
+            Razorpay hasn&apos;t confirmed this refund yet. It is retried automatically; there&apos;s nothing to do here.
+          </InlineAlert>
+        )}
+        <p className="mt-2.5 text-[12.5px] text-muted">
+          {razorpay ? "Card and UPI details are held by Razorpay. TutorLink stores only the masked label shown here." : "TutorLink stores only the payment method label shown here, never card details."}
+        </p>
       </Section>
 
       <Section title="Linked records">
@@ -372,6 +431,15 @@ function PaymentDetail({ payment: p }: { payment: Payment }) {
         </Section>
       )}
     </div>
+  );
+}
+
+/** A Razorpay id (pay_…, order_…, rfnd_…) in monospace, cut short if there's no room (full id on hover). */
+function ProviderId({ id }: { id: string }) {
+  return (
+    <span className="block max-w-56 truncate" title={id}>
+      <Mono className="text-ink">{id}</Mono>
+    </span>
   );
 }
 
@@ -428,7 +496,7 @@ function PayoutDetail({ payout: p }: { payout: Payout }) {
           items={[
             { label: "Payout ID", value: <Mono className="text-ink">{p.id}</Mono> },
             { label: "Tutor", value: <TextLink href={`/admin/tutors?id=${p.tutorId}`}>{dir.name(p.tutorId)}</TextLink> },
-            { label: "Amount", value: <span className="tabular-nums">{formatCents(p.amountCents)}</span> },
+            { label: "Amount", value: <span className="tabular-nums">{formatMoney(p.amountCents, p.currency)}</span> },
             { label: "Status", value: PAYOUT_META[p.status].label },
             { label: p.status === "paid" ? "Arrived" : "Expected arrival", value: <span className="tabular-nums">{formatCalendarDate(p.arrivalDate)}</span> },
             { label: "Created", value: <span className="tabular-nums">{formatDateTime(p.createdAt, tz)}</span> },
@@ -445,7 +513,7 @@ function PayoutDetail({ payout: p }: { payout: Payout }) {
               <li key={o.id}>
                 <Link href={`/admin/payments?id=${o.id}`} className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-[13px] transition-colors hover:bg-canvas">
                   <span className="min-w-0">
-                    <span className="block font-medium tabular-nums text-ink">{formatCents(o.amountCents)}</span>
+                    <span className="block font-medium tabular-nums text-ink">{formatMoney(o.amountCents, o.currency)}</span>
                     <span className="block text-muted">Arrival {formatCalendarDate(o.arrivalDate)}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">

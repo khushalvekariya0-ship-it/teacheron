@@ -119,7 +119,7 @@ export default async function ForParentsPage() {
             { icon: <Star />, title: "Reviews from real lessons", body: "Only families with a completed booking can review a tutor." },
             { icon: <MapPin />, title: "No home addresses", body: "In-person tutors share an approximate service area. You agree on a meeting place together — a library or your home, your choice." },
             { icon: <Link2 />, title: "Private meeting links", body: `Online meeting links appear on the lesson page ${DEFAULT_POLICY.meetingLinkVisibleMinutesBefore} minutes before the start time and are never posted publicly.` },
-            { icon: <CreditCard />, title: "Pay per lesson", body: `No subscription. Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson; payments are processed by Stripe.` },
+            { icon: <CreditCard />, title: "Pay per lesson", body: `No subscription. Free cancellation up to ${DEFAULT_POLICY.freeCancellationHours} hours before a lesson; payments are processed by Razorpay (UPI or card).` },
             { icon: <Users />, title: "A team behind every report", body: `Report a problem from the lesson page within ${DEFAULT_POLICY.disputeWindowDays} days. Our trust & safety team reviews every report.` },
           ]}
         />

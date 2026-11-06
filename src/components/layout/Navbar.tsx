@@ -48,7 +48,7 @@ const NAV: NavGroup[] = [
       { label: "Plans & pricing", href: "/pricing#tutors", description: "Commission, plans and lead credits", icon: Tag },
       { label: "Trust & safety", href: "/trust-safety", description: "Verification and community standards", icon: ShieldCheck },
     ],
-    feature: { title: "Teach on your terms", body: "Set your own rates, availability and service area. Get paid through Stripe.", href: "/become-a-tutor", cta: "Learn more" },
+    feature: { title: "Teach on your terms", body: "Set your own rates, availability and service area. Get paid to your bank account.", href: "/become-a-tutor", cta: "Learn more" },
   },
   { label: "How it works", href: "/how-it-works" },
   { label: "Pricing", href: "/pricing" },

@@ -7,7 +7,8 @@ import type { BookingType, Tutor } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useViewerTimezone } from "@/lib/store/hooks";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDuration, formatTime, formatWeekdayDate, tzAbbrev } from "@/lib/format";
+import { formatDuration, formatTime, formatWeekdayDate, tzAbbrev } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
@@ -28,10 +29,11 @@ export interface BookingSelection {
 }
 
 export function trialText(tutor: Tutor): string {
-  return `${tutor.trial.priceCents === 0 ? "Free" : formatCents(tutor.trial.priceCents)} ${tutor.trial.durationMin}-min trial`;
+  return `${tutor.trial.priceCents === 0 ? "Free" : formatMoney(tutor.trial.priceCents, tutor.currency)} ${tutor.trial.durationMin}-min trial`;
 }
 
-const money = (cents: number) => (cents === 0 ? "Free" : formatCents(cents, { exact: cents % 100 !== 0 }));
+/** A lesson total in the tutor's currency ("Free" for nothing to pay). */
+const money = (cents: number, currency: Currency) => (cents === 0 ? "Free" : formatMoney(cents, currency, { exact: cents % 100 !== 0 }));
 
 /**
  * Booking, right on the profile: pick a lesson length, a day and a start time, and the total is
@@ -90,7 +92,7 @@ export function BookingPanel({
     >
       <div className="flex items-start justify-between gap-3">
         <p className="text-ink">
-          <span className="font-heading text-[2rem] font-bold leading-none tracking-[-0.03em] tabular-nums">{formatCents(tutor.hourlyRateCents)}</span>
+          <span className="font-heading text-[2rem] font-bold leading-none tracking-[-0.03em] tabular-nums">{formatMoney(tutor.hourlyRateCents, tutor.currency)}</span>
           <span className="text-sm text-muted"> / hour</span>
         </p>
         <StarRating rating={tutor.rating} count={tutor.reviewCount} showStars={false} className="mt-1.5 shrink-0" />
@@ -149,8 +151,8 @@ export function BookingPanel({
           <p className="text-[13.5px] leading-snug text-muted">Pick a day and a start time. No charge until you confirm.</p>
         )}
         <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-3">
-          <span className="text-[13.5px] text-muted">{type === "trial" ? `Trial lesson · ${formatDuration(minutes)}` : `${formatDuration(minutes)} at ${formatCents(tutor.hourlyRateCents)}/hr`}</span>
-          <span className="font-heading text-[1.7rem] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">{money(total)}</span>
+          <span className="text-[13.5px] text-muted">{type === "trial" ? `Trial lesson · ${formatDuration(minutes)}` : `${formatDuration(minutes)} at ${formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr`}</span>
+          <span className="font-heading text-[1.7rem] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">{money(total, tutor.currency)}</span>
         </div>
       </div>
 
@@ -162,12 +164,12 @@ export function BookingPanel({
                 "Booking…"
               ) : (
                 <>
-                  <Zap className="fill-current" /> Book in one tap · {money(total)}
+                  <Zap className="fill-current" /> Book in one tap · {money(total, tutor.currency)}
                 </>
               )}
             </Button>
             <p className="text-center text-[12.5px] leading-snug text-muted">
-              Paid from your Study Credits ({formatCredits(balance)}). By booking you agree to the cancellation policy and{" "}
+              Paid from your Study Credits ({formatCredits(balance, tutor.currency)}). By booking you agree to the cancellation policy and{" "}
               <Link href="/terms" target="_blank" className="font-medium text-ink underline underline-offset-2">
                 Terms
               </Link>
@@ -215,7 +217,7 @@ export function BookingPanel({
           <li className="flex items-start gap-2.5">
             <Wallet className="mt-0.5 size-4 shrink-0 text-subtle" aria-hidden />
             <span>
-              {formatCredits(balance)} in Study Credits.{" "}
+              {formatCredits(balance, tutor.currency)} in Study Credits.{" "}
               <button type="button" onClick={() => setWalletOpen(true)} className="font-medium text-brand underline-offset-2 hover:underline">
                 Add credits to book in one tap
               </button>
@@ -243,7 +245,7 @@ export function MobileBookingBar({ tutor, type, total, hasTime, onPickTime, onCh
       <div className="mx-auto flex max-w-xl items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-lg font-semibold leading-tight tracking-tight tabular-nums text-ink">
-            {hasTime ? money(total) : formatCents(tutor.hourlyRateCents)}
+            {hasTime ? money(total, tutor.currency) : formatMoney(tutor.hourlyRateCents, tutor.currency)}
             {!hasTime && <span className="text-sm font-normal text-muted">/hr</span>}
           </p>
           <p className="truncate text-[12.5px] text-muted">{hasTime ? (type === "trial" ? "Trial lesson · time chosen" : "Lesson · time chosen") : `${tutor.firstName} ${tutor.lastName}`}</p>

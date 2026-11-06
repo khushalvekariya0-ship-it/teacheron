@@ -1,7 +1,7 @@
 import type * as React from "react";
 import type { StudentProfile, User } from "@/lib/types";
 import { GRADE_LABEL, MODE_LABEL, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
-import { formatCents } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 import { countryName } from "@/lib/location";
 import type { TutorSearch } from "@/lib/search";
 import { DAY_ORDER } from "@/components/jobs/jobUtils";
@@ -60,11 +60,13 @@ export function scheduleRows(p: StudentProfile): SummaryRow[] {
   ];
 }
 
-export function budgetRows(p: StudentProfile): SummaryRow[] {
+/** `currency`: the learner's own (useViewerCurrency); US dollars when not given. */
+export function budgetRows(p: StudentProfile, currency?: Currency): SummaryRow[] {
   const week = (cents: number) => Math.round(cents * (p.lessonMinutes / 60) * p.sessionsPerWeek);
+  const money = (minor: number) => formatMoney(minor, currency);
   return [
-    { label: "Budget", value: `${formatCents(p.budgetMinCents)}–${formatCents(p.budgetMaxCents)} an hour` },
-    { label: "About", value: `${formatCents(week(p.budgetMinCents))}–${formatCents(week(p.budgetMaxCents))} a week` },
+    { label: "Budget", value: `${money(p.budgetMinCents)}–${money(p.budgetMaxCents)} an hour` },
+    { label: "About", value: `${money(week(p.budgetMinCents))}–${money(week(p.budgetMaxCents))} a week` },
     { label: "Who pays", value: PAYER_LABEL[p.payer] },
     { label: "Payment method", value: PAY_METHOD_NAME[p.payMethod] },
   ];

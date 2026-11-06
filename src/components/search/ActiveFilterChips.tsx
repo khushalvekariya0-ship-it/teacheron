@@ -3,12 +3,13 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import type { TutorSearch } from "@/lib/search";
+import { useViewerCurrency } from "@/lib/store/hooks";
 import { AnimatePresence, motion } from "@/components/motion";
 import { clearedSearch, filterChips } from "./filters";
 
 /** Removable chips for every active filter. Chips animate in and out as filters change. */
 export function ActiveFilterChips({ value, onChange }: { value: TutorSearch; onChange: (next: TutorSearch) => void }) {
-  const chips = filterChips(value);
+  const chips = filterChips(value, useViewerCurrency());
   return (
     <AnimatePresence initial={false}>
       {chips.length > 0 && (

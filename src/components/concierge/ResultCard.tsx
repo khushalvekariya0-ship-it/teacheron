@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Check, ChevronDown, GitCompareArrows, MapPin, MessageSquare, Sparkles } from "lucide-react";
 import type { MatchCriteria, MatchResult } from "@/lib/matching";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { useFlag } from "@/lib/store/hooks";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -52,7 +52,7 @@ export function ResultCard({ result, rank, criteria }: { result: MatchResult; ra
           <p className="mt-0.5 line-clamp-2 text-sm text-ink-2">{t.headline}</p>
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] text-muted">
             <StarRating rating={t.rating} count={t.reviewCount} showStars={false} />
-            <span className="font-bold tabular-nums text-ink">{formatCents(t.hourlyRateCents)}/hr</span>
+            <span className="font-bold tabular-nums text-ink">{formatMoney(t.hourlyRateCents, t.currency)}/hr</span>
             <span className="inline-flex items-center gap-1">
               <MapPin className="size-3.5 text-subtle" aria-hidden />
               {t.city}, {t.state}
@@ -121,7 +121,7 @@ export function ResultCard({ result, rank, criteria }: { result: MatchResult; ra
           <MessageSquare /> Message
         </Button>
         <Button size="sm" variant="brand" className="ml-auto" onClick={offersTrial ? actions.bookTrial : actions.book}>
-          {offersTrial ? (t.trial.priceCents === 0 ? "Book free trial" : `Book trial · ${formatCents(t.trial.priceCents)}`) : "Book a lesson"}
+          {offersTrial ? (t.trial.priceCents === 0 ? "Book free trial" : `Book trial · ${formatMoney(t.trial.priceCents, t.currency)}`) : "Book a lesson"}
         </Button>
       </div>
     </article>

@@ -14,7 +14,8 @@ import { VerifiedBadge } from "./Badges";
 import { INTRO_SECONDS, IntroReel, OnlineNow, useOnlineNow } from "./TutorIntro";
 import { useTutorActions } from "./useTutorActions";
 import { subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
-import { formatCents, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { useHydrated, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { nextOpening } from "@/lib/time";
 
@@ -143,7 +144,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
   );
   const price = (
     <>
-      <p className="font-heading text-[19px] font-bold text-ink">{formatCents(tutor.hourlyRateCents)}</p>
+      <p className="font-heading text-[19px] font-bold text-ink">{formatMoney(tutor.hourlyRateCents, tutor.currency)}</p>
       <p className="text-[12.5px] text-muted">per hour</p>
     </>
   );
@@ -284,7 +285,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
             {availability}
             {tutor.trial.enabled && (
               <span className="text-[13px] text-muted">
-                {tutor.trial.priceCents === 0 ? "Free" : formatCents(tutor.trial.priceCents)} {tutor.trial.durationMin}-min trial
+                {tutor.trial.priceCents === 0 ? "Free" : formatMoney(tutor.trial.priceCents, tutor.currency)} {tutor.trial.durationMin}-min trial
               </span>
             )}
           </span>

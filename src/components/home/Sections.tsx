@@ -1131,7 +1131,7 @@ export function BecomeTutor() {
     {
       icon: CreditCard,
       title: "Get paid securely",
-      body: "Payments through Stripe with payouts to your bank on a clear schedule.",
+      body: "Families pay through Razorpay (UPI or card), and your earnings are paid to your bank account.",
     },
   ];
   return (

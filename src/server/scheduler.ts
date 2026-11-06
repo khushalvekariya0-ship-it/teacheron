@@ -4,6 +4,8 @@ import { placeTutor } from "./geocode";
 import { db } from "./db";
 import { runAction } from "./engine";
 import { emailNotifications } from "./notify-email";
+import { retryPendingRefunds } from "./payment-ops";
+import { razorpayReady } from "./razorpay";
 
 /*
  * Lifecycle jobs (expire unanswered booking requests, auto-complete finished lessons). They run from
@@ -20,7 +22,9 @@ export async function runScheduler(): Promise<number> {
   // Tutors outside the US whose city couldn't be placed on the map when they saved it (a few per run).
   const unplaced = await db()`select id from public.tutors where country is not null and country <> 'US' and lat = 0 and lng = 0 and city <> '' limit 5`.catch(() => []);
   for (const t of unplaced) await placeTutor(t.id as string);
-  return (r.ok ? (r.data as number) : 0) + closed;
+  // Card / UPI refunds that couldn't be sent to Razorpay when they were made (each is sent once, never twice).
+  const refunds = razorpayReady() ? await retryPendingRefunds().catch((e) => (console.error("[scheduler] refunds", e), 0)) : 0;
+  return (r.ok ? (r.data as number) : 0) + closed + refunds;
 }
 
 export async function maybeRunScheduler(): Promise<void> {

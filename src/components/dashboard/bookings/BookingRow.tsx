@@ -8,7 +8,8 @@ import type { Actor } from "@/lib/booking";
 import { canTransition, meetingLinkVisible } from "@/lib/booking";
 import { useApp } from "@/lib/store";
 import { subjectName, MODE_LABEL } from "@/lib/data/catalog";
-import { formatCents, formatDuration, formatWeekdayDate } from "@/lib/format";
+import { formatDuration, formatWeekdayDate } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -107,14 +108,14 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
         </div>
         <div className="hidden shrink-0 flex-col items-end justify-between gap-3 sm:flex">
           <p className={cn("text-[15px] font-semibold tabular-nums text-ink", muted && "text-muted line-through decoration-line-strong")}>
-            {total > 0 ? formatCents(total) : b.type === "trial" ? "Free trial" : formatCents(0)}
+            {total > 0 ? formatMoney(total, b.currency) : b.type === "trial" ? "Free trial" : formatMoney(0, b.currency)}
           </p>
           {hasActions && <div className="pointer-events-auto relative z-10 flex gap-2">{actions}</div>}
         </div>
       </div>
       {/* Mobile: price + actions on their own row, full width touch targets */}
       <div className="pointer-events-none relative mt-3 flex items-center justify-between gap-3 border-t border-line pt-3 sm:hidden">
-        <p className={cn("text-sm font-semibold tabular-nums text-ink", muted && "text-muted line-through")}>{total > 0 ? formatCents(total) : b.type === "trial" ? "Free trial" : formatCents(0)}</p>
+        <p className={cn("text-sm font-semibold tabular-nums text-ink", muted && "text-muted line-through")}>{total > 0 ? formatMoney(total, b.currency) : b.type === "trial" ? "Free trial" : formatMoney(0, b.currency)}</p>
         {hasActions ? <div className="pointer-events-auto relative z-10 flex gap-2 [&>*]:h-10">{actions}</div> : <span className="text-[12.5px] font-medium text-ink">View details</span>}
       </div>
       {canDecline && <DeclineDialog booking={b} open={declineOpen} onOpenChange={setDeclineOpen} counterpart={people.counterpart} />}

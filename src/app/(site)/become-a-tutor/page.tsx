@@ -24,7 +24,7 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: "Become a tutor",
   description:
-    "Teach online or in person on TutorLink. Set your own rates and schedule, get verified, apply to student jobs, and get paid through Stripe Connect. See plans, commission and requirements.",
+    "Teach online or in person on TutorLink. Set your own rates and schedule, get verified, apply to student jobs, and get paid to your bank account. See plans, commission and requirements.",
   alternates: { canonical: "/become-a-tutor" },
 };
 
@@ -47,7 +47,7 @@ const ONBOARDING_PHASES: { title: string; steps: { icon: LucideIcon; title: stri
     title: "Go live",
     steps: [
       { icon: BadgeCheck, title: "Submit verification", body: "Upload documents for identity, education and certifications, and complete background screening where applicable." },
-      { icon: Landmark, title: "Connect payouts", body: "Link a bank account through Stripe Connect so earnings from completed lessons can be paid out." },
+      { icon: Landmark, title: "Connect payouts", body: "Add your bank account so earnings from completed lessons (after TutorLink's fee) can be paid out to you." },
     ],
   },
 ];
@@ -188,7 +188,7 @@ function TutorWhy() {
         </ToolTile>
 
         {/* Payouts */}
-        <ToolTile icon={<ShieldCheck />} title="Get paid securely" body="Families pay through Stripe when they book. Earnings from completed lessons are paid out to your bank through Stripe Connect.">
+        <ToolTile icon={<ShieldCheck />} title="Get paid securely" body="Families pay through Razorpay (UPI or card) when they book. Earnings from completed lessons are paid out to your bank account.">
           <div className="flex items-center gap-2 rounded-xl border border-line bg-page px-3.5 py-3 text-[13px] text-ink-2">
             <span className="font-semibold text-ink">Booked</span>
             <ArrowRight className="size-3.5 text-muted" />
@@ -204,7 +204,8 @@ function TutorWhy() {
 
 export default async function BecomeATutorPage() {
   // The median listed rate when tutors exist; otherwise a round example rate for the commission table.
-  const median = medianRate(await listedTutors());
+  // Only tutors who charge in US dollars: the commission example below is in dollars (rates in different currencies are never mixed).
+  const median = medianRate((await listedTutors()).filter((t) => (t.currency ?? "USD") === "USD"));
   const rate = median || 5000;
   const tutorFaqs = (await publishedFaqs()).filter((f) => f.audience === "tutors");
 

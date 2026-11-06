@@ -9,7 +9,8 @@ import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { availableTransitions, cancellationRefund, endMs, STATUS_META } from "@/lib/booking";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDateTime, formatDuration, formatTime, percentOf, pluralize, tzAbbrev } from "@/lib/format";
+import { formatDateTime, formatDuration, formatTime, percentOf, pluralize, tzAbbrev } from "@/lib/format";
+import { CURRENCIES, asCurrency, formatMoney, fromDollarSetting } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { BookingStatusBadge, PaymentStatusBadge } from "@/components/domain/Badges";
@@ -27,7 +28,7 @@ import {
 } from "./kit";
 import {
   DISPUTE_REASON_LABEL, DISPUTE_STATUS_META, PAYMENT_ROW_META, adminTransitionLabel, attentionReason, bookingPaid, isDestructiveTransition,
-  isDisputeOpen, refundedCents, signedCents,
+  isDisputeOpen, isRefundPending, refundedCents, signedMoney,
 } from "./money";
 
 type TabKey = "upcoming" | "attention" | "all";
@@ -167,8 +168,8 @@ function BookingsInner() {
       sortValue: (b) => bookingPaid(b),
       cell: (b) => (
         <span className="block whitespace-nowrap">
-          <span className="block text-ink">{bookingPaid(b) === 0 ? "Free" : formatCents(bookingPaid(b))}</span>
-          {b.discountCents > 0 && <span className="block text-[12px] text-muted">−{formatCents(b.discountCents)} coupon</span>}
+          <span className="block text-ink">{bookingPaid(b) === 0 ? "Free" : formatMoney(bookingPaid(b), b.currency)}</span>
+          {b.discountCents > 0 && <span className="block text-[12px] text-muted">−{formatMoney(b.discountCents, b.currency)} coupon</span>}
         </span>
       ),
     },
@@ -203,11 +204,11 @@ function BookingsInner() {
         actions={
           <ExportButton
             filename="tutorlink-bookings"
-            headers={["ID", "Start (UTC)", "Duration (min)", "Subject", "Tutor", "Booked by", "Learner", "Type", "Mode", "List price", "Discount", "Charged", "Platform fee", "Status", "Payment status"]}
+            headers={["ID", "Start (UTC)", "Duration (min)", "Subject", "Tutor", "Booked by", "Learner", "Type", "Mode", "Currency", "List price", "Discount", "Charged", "Platform fee", "Status", "Payment status"]}
             rows={() =>
               rows.map((b) => [
                 b.id, b.startUtc, b.durationMin, subjectName(b.subject), dir.name(b.tutorId), dir.name(b.bookerId), b.childId ? dir.name(b.childId) : "",
-                b.type, b.mode, centsToDecimal(b.priceCents), centsToDecimal(b.discountCents), centsToDecimal(bookingPaid(b)), centsToDecimal(b.platformFeeCents),
+                b.type, b.mode, b.currency, centsToDecimal(b.priceCents), centsToDecimal(b.discountCents), centsToDecimal(bookingPaid(b)), centsToDecimal(b.platformFeeCents),
                 STATUS_META[b.status].label, b.paymentStatus,
               ])
             }
@@ -293,11 +294,14 @@ export function PaymentRows({ rows, tz, empty = "No payment records for this boo
               <span className="block truncate font-medium text-ink">{p.description}</span>
               <span className="block truncate text-muted">
                 {formatDateTime(p.createdAt, tz)} · {p.method}
+                {p.provider === "razorpay" && " · Razorpay"}
               </span>
             </span>
             <span className="shrink-0 text-right">
-              <span className="block font-medium tabular-nums text-ink">{signedCents(p.amountCents)}</span>
-              <span className="block text-[12px] text-muted">{p.amountCents < 0 ? "Refund" : PAYMENT_ROW_META[p.status].label}</span>
+              <span className="block font-medium tabular-nums text-ink">{signedMoney(p.amountCents, p.currency)}</span>
+              <span className={cn("block text-[12px]", isRefundPending(p) ? "text-warning" : "text-muted")}>
+                {p.amountCents < 0 ? (isRefundPending(p) ? "Refund pending" : "Refund") : PAYMENT_ROW_META[p.status].label}
+              </span>
             </span>
           </Link>
         </li>
@@ -470,12 +474,13 @@ function BookingDetail({ booking: b, onOpen }: { booking: Booking; onOpen: (id: 
       <Section title="Money">
         <Facts
           items={[
-            { label: "List price", value: <span className="tabular-nums">{formatCents(b.priceCents)}</span> },
-            { label: "Discount", value: <span className="tabular-nums">{b.discountCents ? `−${formatCents(b.discountCents)}` : "None"}</span> },
-            { label: b.paymentStatus === "authorized" ? "Authorized (not captured)" : "Booking total", value: <span className="tabular-nums">{paid === 0 ? "Nothing (free lesson)" : formatCents(paid)}</span> },
-            { label: "Platform fee (commission)", value: <span className="tabular-nums">{formatCents(b.platformFeeCents)}</span> },
-            { label: "Refunded", value: <span className="tabular-nums">{formatCents(refundedCents(data.rows))}</span> },
-            { label: "Net settled", value: <span className="tabular-nums">{formatCents(net.net)}</span> },
+            { label: "Currency", value: `${asCurrency(b.currency)} (${CURRENCIES[asCurrency(b.currency)].name})` },
+            { label: "List price", value: <span className="tabular-nums">{formatMoney(b.priceCents, b.currency)}</span> },
+            { label: "Discount", value: <span className="tabular-nums">{b.discountCents ? `−${formatMoney(b.discountCents, b.currency)}` : "None"}</span> },
+            { label: b.paymentStatus === "authorized" ? "Authorized (not captured)" : "Booking total", value: <span className="tabular-nums">{paid === 0 ? "Nothing (free lesson)" : formatMoney(paid, b.currency)}</span> },
+            { label: "Platform fee (commission)", value: <span className="tabular-nums">{formatMoney(b.platformFeeCents, b.currency)}</span> },
+            { label: "Refunded", value: <span className="tabular-nums">{formatMoney(refundedCents(data.rows), b.currency)}</span> },
+            { label: "Net settled", value: <span className="tabular-nums">{formatMoney(net.net, b.currency)}</span> },
           ]}
         />
       </Section>
@@ -532,21 +537,22 @@ function transitionRefund(b: Booking, to: BookingStatus, now: number, policy: Bo
 /** Plain-language consequence of an admin transition, computed from the same rules the store applies. */
 function consequence(b: Booking, to: BookingStatus, now: number, policy: BookingPolicy, refunded: number): { summary: string; refundCents: number } {
   const paid = bookingPaid(b);
+  const fmt = (minor: number) => formatMoney(minor, b.currency);
   const { cents, rule } = transitionRefund(b, to, now, policy);
   const held = b.paymentStatus === "authorized" && paid > 0;
   const lead = cents > 0 && rule ? `${rule} ` : "";
   const money =
-    cents > 0 ? `${formatCents(cents)} goes back to the original payment method.` : held ? "Nothing was captured, so no refund is due." : paid === 0 ? "Nothing was charged for this lesson." : "No refund is issued.";
+    cents > 0 ? `${fmt(cents)} goes back to the original payment method.` : held ? "Nothing was captured, so no refund is due." : paid === 0 ? "Nothing was charged for this lesson." : "No refund is issued.";
   switch (to) {
     case "confirmed":
-      return { summary: held ? `Captures the authorized ${formatCents(paid)} and confirms the lesson for both people.` : "Confirms the lesson for both people.", refundCents: 0 };
+      return { summary: held ? `Captures the authorized ${fmt(paid)} and confirms the lesson for both people.` : "Confirms the lesson for both people.", refundCents: 0 };
     case "cancelled_by_student":
     case "cancelled_by_tutor":
-      if (held) return { summary: `Releases the ${formatCents(paid)} card authorization — nothing was captured. The booker is notified.`, refundCents: 0 };
+      if (held) return { summary: `Releases the ${fmt(paid)} card authorization — nothing was captured. The booker is notified.`, refundCents: 0 };
       return { summary: `${lead}${money} The booker is notified.`, refundCents: cents };
     case "no_show_tutor":
       return {
-        summary: `${lead}${money}${policy.tutorNoShowCreditCents > 0 ? ` The booker also gets ${formatCents(policy.tutorNoShowCreditCents)} platform credit in their Study Credits.` : ""}`,
+        summary: `${lead}${money}${policy.tutorNoShowCreditCents > 0 ? ` The booker also gets ${fmt(fromDollarSetting(policy.tutorNoShowCreditCents, b.currency))} platform credit in their Study Credits.` : ""}`,
         refundCents: cents,
       };
     case "no_show_student":
@@ -559,7 +565,7 @@ function consequence(b: Booking, to: BookingStatus, now: number, policy: Booking
       return {
         summary:
           refunded > 0
-            ? `Closes the booking as refunded. ${formatCents(refunded)} is already recorded as refunded; this change doesn't create a new payment record.`
+            ? `Closes the booking as refunded. ${fmt(refunded)} is already recorded as refunded; this change doesn't create a new payment record.`
             : "Closes the booking as refunded. No refund is recorded for this booking and this change doesn't create one.",
         refundCents: 0,
       };
@@ -637,12 +643,12 @@ function BookingActions({ booking: b }: { booking: Booking }) {
             toast.error(res.error);
             return false;
           }
-          toast.success(`Booking ${STATUS_META[chosen].label.toLowerCase()}`, { description: info?.refundCents ? `${formatCents(info.refundCents)} refund recorded.` : "Recorded in the booking history." });
+          toast.success(`Booking ${STATUS_META[chosen].label.toLowerCase()}`, { description: info?.refundCents ? `${formatMoney(info.refundCents, b.currency)} refund recorded.` : "Recorded in the booking history." });
           return true;
         }}
       >
         {info && (
-          <InlineAlert tone={info.refundCents ? "warning" : "info"} title={info.refundCents ? `Refund: ${formatCents(info.refundCents)}` : "What happens"}>
+          <InlineAlert tone={info.refundCents ? "warning" : "info"} title={info.refundCents ? `Refund: ${formatMoney(info.refundCents, b.currency)}` : "What happens"}>
             {info.summary}
           </InlineAlert>
         )}

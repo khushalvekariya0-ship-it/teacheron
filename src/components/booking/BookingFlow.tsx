@@ -4,10 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
 import type { Booking, BookingType, PayMethod, Tutor } from "@/lib/types";
+import type { Result } from "@/lib/domain/data";
 import { useApp } from "@/lib/store";
 import { useFlag, useHydrated, useSession, useViewerTimezone, useWalletBalance } from "@/lib/store/hooks";
 import { policySummary } from "@/lib/booking";
-import { formatCents, formatDuration } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn, idempotencyKey } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
@@ -75,9 +77,11 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const bookings = useApp((s) => s.bookings);
   const policy = useApp((s) => s.policy);
   const createBooking = useApp((s) => s.createBooking);
+  const payOnline = useApp((s) => s.payOnline);
   const validateCoupon = useApp((s) => s.validateCoupon);
   const startConversation = useApp((s) => s.startConversation);
-  const balance = useWalletBalance();
+  // Study Credits pay only for lessons in the same currency, so this is the balance in the tutor's.
+  const balance = useWalletBalance(tutor.currency);
   const trialFlag = useFlag("trial_lessons");
   const instantFlag = useFlag("instant_booking");
   const onlineFlag = useFlag("online_lessons");
@@ -105,6 +109,8 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const [agree, setAgree] = React.useState(false);
   const [agreeError, setAgreeError] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  /** "Payment cancelled…" shown by the pay button (a toast there would cover it). */
+  const [payNote, setPayNote] = React.useState<string | null>(null);
   const [booking, setBooking] = React.useState<Booking | null>(null);
   const [messaging, setMessaging] = React.useState(false);
   // null = not chosen yet: Study Credits when they cover the lesson, otherwise the card.
@@ -212,7 +218,8 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
     if (!idem.current || idem.current.session !== session) idem.current = { session, key: idempotencyKey("book") };
     const key = idem.current.key;
     setSubmitting(true);
-    const res = await createBooking({
+    setPayNote(null);
+    const input = {
       tutorId: tutor.id,
       startUtc: draft.startUtc,
       durationMin: minutes,
@@ -224,9 +231,15 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
       couponCode: coupon && discount > 0 ? coupon.code : undefined,
       payWith: total > 0 ? payWith : undefined,
       idempotencyKey: key,
-    });
+    };
+    // UPI / card: Razorpay's window takes the payment (held until the tutor accepts a request), then the
+    // server books the lesson with it. Study Credits and free lessons book directly.
+    const viaRazorpay = total > 0 && payWith !== "wallet";
+    const paid = viaRazorpay ? await payOnline("booking", input) : null;
+    const res = !paid || (paid.ok && paid.data.free) ? await createBooking(input) : paid.ok ? bookedById(paid.data.resultId) : paid;
     setSubmitting(false);
     if (!res.ok) {
+      if (res.code === "cancelled") return void setPayNote(res.error);
       toast.error(res.error);
       if (SLOT_ERROR.test(res.error)) {
         set({ startUtc: null });
@@ -241,6 +254,12 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
     toast.success(res.data.status === "confirmed" ? "Lesson confirmed" : "Request sent", { description: `${tutor.firstName} · ${formatDuration(res.data.durationMin)}` });
     go("success");
   };
+
+  /** The lesson a payment just booked (the server's answer already updated the store). */
+  function bookedById(id: string | null | undefined): Result<Booking> {
+    const b = id ? useApp.getState().bookings.find((x) => x.id === id) : undefined;
+    return b ? { ok: true, data: b } : { ok: false, error: "Your payment went through, but the lesson didn't show up yet. Check Bookings in a moment." };
+  }
 
   const message = async () => {
     if (!booking) return;
@@ -269,7 +288,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
 
   const title = step === "success" && !gate ? (booking?.status === "confirmed" ? "You're booked" : "Request sent") : `${draft.type === "trial" ? "Book a trial" : "Book a lesson"} with ${tutor.firstName}`;
   const stepMeta = STEPS.find((s) => s.key === step);
-  const description = gate ? `${tutor.firstName} ${tutor.lastName} · ${formatCents(tutor.hourlyRateCents)}/hr` : stepMeta ? `Step ${STEPS.indexOf(stepMeta) + 1} of 3 · ${stepMeta.long}` : `${tutor.firstName} ${tutor.lastName}`;
+  const description = gate ? `${tutor.firstName} ${tutor.lastName} · ${formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr` : stepMeta ? `Step ${STEPS.indexOf(stepMeta) + 1} of 3 · ${stepMeta.long}` : `${tutor.firstName} ${tutor.lastName}`;
 
   const body = (
     <div ref={bodyRef} className="scroll-mt-4 px-5 py-5 sm:px-6">
@@ -329,13 +348,19 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const hintId = React.useId();
   const summary = (
     <p className="min-w-0 text-[13px] leading-tight text-muted">
-      <span className="block text-[15px] font-semibold tabular-nums text-ink">{subtotal === 0 ? "Free" : formatCents(subtotal, { exact: subtotal % 100 !== 0 })}</span>
+      <span className="block text-[15px] font-semibold tabular-nums text-ink">{subtotal === 0 ? "Free" : formatMoney(subtotal, tutor.currency)}</span>
       {formatDuration(minutes)} · {draft.type === "trial" ? "trial" : "lesson"}
     </p>
   );
 
   const footer =
     gate || step === "success" ? null : (
+      <>
+      {payNote && step === "review" && (
+        <p role="status" className="mb-2.5 text-right text-[13px] text-muted">
+          {payNote}
+        </p>
+      )}
       <div className="flex items-center gap-3">
         {step === "details" ? (
           <div className="min-w-0 flex-1">
@@ -373,10 +398,21 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
         {step === "review" && (
           <Button size="lg" variant="cta" onClick={confirm} loading={submitting} className="min-w-40">
             {!submitting && total > 0 && <Lock />}
-            {submitting ? "Processing…" : total === 0 ? (instant ? "Confirm booking" : "Send request") : instant ? `Pay ${formatCents(total, { exact: total % 100 !== 0 })}${payWith === "wallet" ? " with credits" : ""}` : "Send request"}
+            {submitting
+              ? "Processing…"
+              : total === 0
+                ? instant
+                  ? "Confirm booking"
+                  : "Send request"
+                : payWith === "wallet"
+                  ? instant
+                    ? `Pay ${formatMoney(total, tutor.currency)} with credits`
+                    : "Send request"
+                  : `Pay ${formatMoney(total, tutor.currency)}`}
           </Button>
         )}
       </div>
+      </>
     );
 
   return (

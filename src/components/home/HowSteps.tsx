@@ -10,7 +10,8 @@ import { useApp } from "@/lib/store";
 import { useHydrated, useNow, useListedTutors, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { getSubject } from "@/lib/data/catalog";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
-import { formatCents, formatDate, formatTime, sessionPrice, tzAbbrev } from "@/lib/format";
+import { formatDate, formatTime, sessionPrice, tzAbbrev } from "@/lib/format";
+import { asCurrency, formatMoney } from "@/lib/money";
 import { generateSlots, groupSlotsByDay } from "@/lib/time";
 import type { Tutor } from "@/lib/types";
 import { Avatar } from "@/components/ui/Avatar";
@@ -101,10 +102,11 @@ function TutorChip({ tutor, on, disabled, onClick, label }: { tutor: Tutor; on: 
 
 /* ─── Step 2 · Compare ───────────────────────────────────────────────────────── */
 
-type Row = { label: string; value: (t: Tutor) => React.ReactNode; score?: (t: Tutor) => number };
+/** `money`: the score is a price, so it is only compared when every tutor charges in the same currency. */
+type Row = { label: string; value: (t: Tutor) => React.ReactNode; score?: (t: Tutor) => number; money?: boolean };
 
 const ROWS: Row[] = [
-  { label: "Rate", value: (t) => `${formatCents(t.hourlyRateCents)}/hr`, score: (t) => -t.hourlyRateCents },
+  { label: "Rate", value: (t) => `${formatMoney(t.hourlyRateCents, t.currency)}/hr`, score: (t) => -t.hourlyRateCents, money: true },
   {
     label: "Rating",
     value: (t) =>
@@ -126,13 +128,14 @@ const ROWS: Row[] = [
   },
   {
     label: "Trial",
-    value: (t) => (!t.trial.enabled ? <span className="text-muted">None</span> : t.trial.priceCents === 0 ? `Free · ${t.trial.durationMin} min` : `${formatCents(t.trial.priceCents)} · ${t.trial.durationMin} min`),
+    value: (t) => (!t.trial.enabled ? <span className="text-muted">None</span> : t.trial.priceCents === 0 ? `Free · ${t.trial.durationMin} min` : `${formatMoney(t.trial.priceCents, t.currency)} · ${t.trial.durationMin} min`),
   },
 ];
 
 /** Ids holding the best value in a row — none when everyone ties. */
 function bestIds(row: Row, tutors: Tutor[]): Set<string> {
   if (!row.score || tutors.length < 2) return new Set();
+  if (row.money && new Set(tutors.map((t) => asCurrency(t.currency))).size > 1) return new Set();
   const scores = tutors.map((t) => row.score!(t));
   const top = Math.max(...scores);
   if (scores.every((s) => s === top)) return new Set();
@@ -370,7 +373,7 @@ export function BookStep() {
               <span className="font-semibold text-ink">
                 {formatDate(picked, tz, { weekday: "short", month: "short", day: "numeric" })} · {formatTime(picked, tz)}
               </span>{" "}
-              · {minutes} min · {price === 0 ? "Free" : formatCents(price)}
+              · {minutes} min · {price === 0 ? "Free" : formatMoney(price, tutor.currency)}
             </>
           ) : (
             <span className="inline-flex items-center gap-1.5 text-muted">

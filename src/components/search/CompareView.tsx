@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BadgeCheck, CircleDashed, Clock3, GitCompareArrows, Link2, Plus, Search, X } from "lucide-react";
 import type { Tutor, VerificationKind } from "@/lib/types";
 import { LEVELS, subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
+import { asCurrency, formatMoney } from "@/lib/money";
 import { useApp } from "@/lib/store";
 import { useHydrated, useNow, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
@@ -38,7 +39,8 @@ function highlights(tutors: Tutor[]): Record<string, string[]> {
     const winners = tutors.filter((t) => pick(t) === best);
     if (winners.length === 1) out[winners[0].id].push(label);
   };
-  unique((t) => t.hourlyRateCents, "min", "Lowest hourly rate");
+  // Rates are only compared when every tutor charges in the same currency (never converted).
+  if (new Set(tutors.map((t) => asCurrency(t.currency))).size === 1) unique((t) => t.hourlyRateCents, "min", "Lowest hourly rate");
   unique((t) => t.experienceYears, "max", "Most experience");
   unique((t) => t.lessonsCompleted, "max", "Most lessons completed");
   return out;
@@ -221,7 +223,7 @@ const ROWS: RowDef[] = [
     label: "Hourly rate",
     render: (t) => (
       <span className="text-[15px] font-semibold tabular-nums text-ink">
-        {formatCents(t.hourlyRateCents)}
+        {formatMoney(t.hourlyRateCents, t.currency)}
         <span className="text-[13px] font-normal text-muted">/hr</span>
       </span>
     ),
@@ -229,7 +231,7 @@ const ROWS: RowDef[] = [
   {
     key: "trial",
     label: "Trial lesson",
-    render: (t) => (t.trial.enabled ? `${t.trial.priceCents === 0 ? "Free" : formatCents(t.trial.priceCents)} · ${t.trial.durationMin} min` : <span className="text-muted">Not offered</span>),
+    render: (t) => (t.trial.enabled ? `${t.trial.priceCents === 0 ? "Free" : formatMoney(t.trial.priceCents, t.currency)} · ${t.trial.durationMin} min` : <span className="text-muted">Not offered</span>),
   },
   { key: "availability", label: "Availability", render: (t) => <AvailabilityCell tutor={t} /> },
   {
@@ -398,7 +400,7 @@ export function CompareView() {
                           <span className="mt-2.5 text-[14.5px] font-semibold text-ink">
                             {t.firstName} {t.lastName.charAt(0)}.
                           </span>
-                          <span className="text-[12.5px] tabular-nums text-muted">{formatCents(t.hourlyRateCents)}/hr</span>
+                          <span className="text-[12.5px] tabular-nums text-muted">{formatMoney(t.hourlyRateCents, t.currency)}/hr</span>
                         </div>
                       ) : (
                         <Link
@@ -497,7 +499,7 @@ export function CompareView() {
                     <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
                       {t.firstName} {t.lastName.charAt(0)}.
                     </span>
-                    <span className="ml-auto hidden shrink-0 text-[12.5px] tabular-nums text-muted sm:inline">{formatCents(t.hourlyRateCents)}/hr</span>
+                    <span className="ml-auto hidden shrink-0 text-[12.5px] tabular-nums text-muted sm:inline">{formatMoney(t.hourlyRateCents, t.currency)}/hr</span>
                   </motion.div>
                 ))}
               </AnimatePresence>

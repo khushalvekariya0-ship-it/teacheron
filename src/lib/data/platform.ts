@@ -1,4 +1,5 @@
 import type { FeatureFlag, PayMethod } from "@/lib/types";
+import { asCurrency, topUpAmounts, type Currency } from "@/lib/money";
 
 /**
  * Booking policies. These are DEFAULTS pending product-owner approval — see docs/DECISIONS.md.
@@ -68,15 +69,38 @@ export const CREDIT_PACKS = [
 ];
 
 /**
- * Study Credits: prepaid lesson money on a student or parent account. Credits are worth their face
- * value (no bonus, no fee) and pay for a lesson in one tap. Refunds for such lessons return to the wallet.
+ * What tutors pay TutorLink for a plan or a lead-credit pack: in rupees for tutors who charge in ₹, in US
+ * dollars for everyone else. The ₹ prices are starting points for the product owner to set.
  */
-export const STUDY_CREDIT_PACKS = [
-  { id: "sc_25", amountCents: 2500 },
-  { id: "sc_50", amountCents: 5000 },
-  { id: "sc_100", amountCents: 10000 },
-  { id: "sc_200", amountCents: 20000 },
-];
+export type PlatformCurrency = "USD" | "INR";
+const PLATFORM_PRICES: Record<PlatformCurrency, { plans: Record<string, number>; packs: Record<string, number> }> = {
+  USD: { plans: { free: 0, pro: 2900, premium: 5900 }, packs: { pack_10: 1500, pack_25: 3200, pack_60: 6900 } },
+  INR: { plans: { free: 0, pro: 99900, premium: 199900 }, packs: { pack_10: 49900, pack_25: 99900, pack_60: 199900 } },
+};
+export const platformCurrency = (tutorCurrency: Currency | string | undefined): PlatformCurrency => (asCurrency(tutorCurrency) === "INR" ? "INR" : "USD");
+/** A plan's monthly price for a tutor charging in `tutorCurrency`. */
+export function planPrice(planId: string, tutorCurrency: Currency | string | undefined): { amount: number; currency: PlatformCurrency } {
+  const currency = platformCurrency(tutorCurrency);
+  return { amount: PLATFORM_PRICES[currency].plans[planId] ?? TUTOR_PLANS.find((p) => p.id === planId)?.priceCents ?? 0, currency };
+}
+/** A lead-credit pack's price for a tutor charging in `tutorCurrency`. */
+export function packPrice(packId: string, tutorCurrency: Currency | string | undefined): { amount: number; currency: PlatformCurrency } {
+  const currency = platformCurrency(tutorCurrency);
+  return { amount: PLATFORM_PRICES[currency].packs[packId] ?? CREDIT_PACKS.find((p) => p.id === packId)?.priceCents ?? 0, currency };
+}
+
+/**
+ * Study Credits: prepaid lesson money on a student or parent account, kept in the learner's own currency.
+ * Credits are worth their face value (no bonus, no fee) and pay for a lesson with a tutor who charges in that
+ * currency in one tap. Refunds for such lessons return to the wallet. The four suggested amounts depend on
+ * the currency (₹500 / ₹1,000 / ₹2,000 / ₹5,000; $25 / $50 / $100 / $200…).
+ */
+export const STUDY_CREDIT_PACKS = [{ id: "sc_25" }, { id: "sc_50" }, { id: "sc_100" }, { id: "sc_200" }] as const;
+/** A Study Credit pack's amount (minor units) in a learner's currency, or null for an unknown pack. */
+export function studyPackAmount(packId: string, currency: Currency): number | null {
+  const i = STUDY_CREDIT_PACKS.findIndex((p) => p.id === packId);
+  return i < 0 ? null : (topUpAmounts(currency)[i] ?? null);
+}
 
 /** What a payment record shows as its method. */
 export const PAY_METHOD_LABEL: Record<PayMethod, string> = {

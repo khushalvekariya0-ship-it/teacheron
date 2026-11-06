@@ -1,9 +1,9 @@
 /**
  * Shared helpers for the admin Bookings, Payments and Disputes pages. Pure functions only (no JSX).
- * Money is integer cents throughout.
+ * Money is integers in each currency's minor unit, always shown with its own currency (never added across currencies).
  */
 import type { Booking, BookingStatus, Dispute, DisputeStatus, Payment, Payout } from "@/lib/types";
-import { formatCents } from "@/lib/format";
+import { CURRENCIES, asCurrency, formatMoney, formatSums, sumByCurrency, type Currency } from "@/lib/money";
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
 
@@ -12,14 +12,62 @@ export function bookingPaid(b: Pick<Booking, "priceCents" | "discountCents">): n
   return b.priceCents - b.discountCents;
 }
 
-/** Refund rows (negative amounts) recorded against a booking, as a positive total. */
+/** Refund rows (negative amounts) recorded against one booking (so all in its currency), as a positive total. */
 export function refundedCents(payments: Payment[]): number {
   return payments.reduce((sum, p) => (p.amountCents < 0 ? sum - p.amountCents : sum), 0);
 }
 
-/** "−$25" for refunds, "$95" for charges. */
-export function signedCents(cents: number): string {
-  return cents < 0 ? `−${formatCents(-cents)}` : formatCents(cents);
+/** "−₹250" / "−$25" for refunds, "₹950" / "$95" for charges. */
+export function signedMoney(minor: number, currency: Currency): string {
+  return minor < 0 ? `−${formatMoney(-minor, currency)}` : formatMoney(minor, currency);
+}
+
+/** A Razorpay refund row that Razorpay hasn't confirmed yet (no refund id). It is retried automatically. */
+export function isRefundPending(p: Payment): boolean {
+  return p.provider === "razorpay" && p.amountCents < 0 && !p.providerRefundId;
+}
+
+/** Rows added up for one line, one figure per currency ("₹12,000 + $340"); `sign` −1 shows refunds as positive amounts. */
+export function sumRows(rows: { amountCents: number; currency: Currency }[], sign: 1 | -1 = 1, opts: { exact?: boolean } = {}): string {
+  return formatSums(rows.map((r) => ({ amount: sign * r.amountCents, currency: r.currency })), undefined, opts);
+}
+
+/**
+ * Settled money across many payments: succeeded or partly refunded charges, refunds, and charges minus
+ * refunds. Each is one figure per currency (amounts in different currencies are never added together).
+ */
+export function settledSums(payments: Payment[]): { gross: string; refunds: string; net: string } {
+  const { gross, refunds } = settledRows(payments);
+  return { gross: sumRows(gross), refunds: sumRows(refunds, -1), net: sumRows([...gross, ...refunds]) };
+}
+
+function settledRows(payments: Payment[]): { gross: Payment[]; refunds: Payment[] } {
+  return {
+    gross: payments.filter((p) => p.amountCents > 0 && (p.status === "succeeded" || p.status === "partially_refunded")),
+    refunds: payments.filter((p) => p.amountCents < 0),
+  };
+}
+
+/**
+ * The currencies with settled money (charges minus refunds), largest first. A chart that can only plot
+ * one number series uses the first and says so.
+ */
+export function settledCurrencies(payments: Payment[]): Currency[] {
+  const { gross, refunds } = settledRows(payments);
+  return sumByCurrency([...gross, ...refunds].map((p) => ({ amount: p.amountCents, currency: p.currency }))).map((x) => x.currency);
+}
+
+/**
+ * A plan or lead-pack price in both lists TutorLink charges tutors in ("$29 / ₹999"): US dollars, and
+ * rupees for tutors who charge in ₹. Pass planPrice / packPrice for one id, e.g. `(c) => planPrice("pro", c)`.
+ */
+export function platformPrices(price: (currency: Currency) => { amount: number; currency: Currency }, opts: { exact?: boolean } = {}): string {
+  return (["USD", "INR"] as const)
+    .map((c) => {
+      const p = price(c);
+      return formatMoney(p.amount, p.currency, opts);
+    })
+    .join(" / ");
 }
 
 /* ─── Payments & payouts ─────────────────────────────────────────────────────── */
@@ -95,17 +143,34 @@ export const RESOLUTION_LABEL: Record<NonNullable<Dispute["resolution"]>["outcom
 /* ─── Money input ───────────────────────────────────────────────────────────── */
 
 /**
- * Parses a dollar amount typed by staff into integer cents without float drift.
- * Accepts "25", "25.5", "25.50", "$1,025.00". Rejects negatives and more than two decimals.
+ * Parses an amount typed by staff (in `currency`) into integer minor units without float drift.
+ * Accepts "25", "25.5", "25.50", "1,025.00" and the currency's symbol or code in front ("₹1,025", "INR 1025"). Rejects negatives and more than two decimals.
  */
-export function parseDollars(input: string): { ok: true; cents: number } | { ok: false; error: string } {
-  const raw = input.trim().replace(/^\$/, "").replace(/,/g, "");
+export function parseAmount(input: string, currency: Currency): { ok: true; cents: number } | { ok: false; error: string } {
+  const c = asCurrency(currency);
+  let raw = input.trim().replace(/,/g, "");
+  for (const prefix of [CURRENCIES[c].symbol, c]) {
+    if (raw.toUpperCase().startsWith(prefix.toUpperCase())) {
+      raw = raw.slice(prefix.length).trim();
+      break;
+    }
+  }
   if (!raw) return { ok: false, error: "Enter an amount." };
-  if (!/^\d+(\.\d{0,2})?$/.test(raw)) return { ok: false, error: "Enter a dollar amount with up to two decimals, e.g. 25.50." };
+  if (!/^\d+(\.\d{0,2})?$/.test(raw)) return { ok: false, error: "Enter an amount with up to two decimals, e.g. 25.50." };
   const [whole, frac = ""] = raw.split(".");
   if (whole.length > 7) return { ok: false, error: "That amount is too large." };
   const cents = Number(whole) * 100 + Number(frac.padEnd(2, "0") || "0");
   return { ok: true, cents };
+}
+
+/**
+ * Props for an <Input> taking an amount in `currency`: a short symbol ("₹", "$", "£") sits in front;
+ * longer ones ("CA$", "AED") don't fit there, so the code goes at the end instead.
+ */
+export function moneyInputProps(currency: Currency): { prefixText?: string; suffix?: string } {
+  const c = asCurrency(currency);
+  const symbol = CURRENCIES[c].symbol;
+  return symbol.length <= 1 ? { prefixText: symbol } : { suffix: c };
 }
 
 /* ─── Admin booking transitions ─────────────────────────────────────────────── */

@@ -5,7 +5,8 @@ import { FileText, Flag, Gavel, Paperclip, ShieldCheck, Star, X } from "lucide-r
 import type { Booking, Dispute, Review } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import type { BookingPolicy } from "@/lib/data/platform";
-import { formatCents, formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Badge } from "@/components/ui/Badge";
@@ -136,14 +137,15 @@ export function useLessonDispute(bookingId: string): Dispute | undefined {
   return React.useMemo(() => disputes.filter((d) => d.bookingId === bookingId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0], [disputes, bookingId]);
 }
 
-export function DisputeCard({ dispute: d, myId, tz }: { dispute: Dispute; myId: string; tz: string }) {
+/** `currency`: the lesson's (a decision's amount is in it). */
+export function DisputeCard({ dispute: d, myId, tz, currency }: { dispute: Dispute; myId: string; tz: string; currency: Currency }) {
   const meta = DISPUTE_STATUS[d.status];
   const closed = d.status === "resolved" || d.status === "rejected";
   const events: { at: string; title: string; body?: string }[] = [
     { at: d.createdAt, title: d.openedBy === myId ? "You reported a problem" : "The other party reported a problem", body: REASON_LABEL[d.reason] },
     ...d.adminNotes.map((n) => ({ at: n.at, title: "TutorLink support updated the case" })),
     ...(!closed && d.status !== "open" ? [{ at: d.updatedAt, title: `Status: ${meta.label}` }] : []),
-    ...(closed ? [{ at: d.updatedAt, title: d.resolution ? `Decision: ${OUTCOME_LABEL[d.resolution.outcome]}${d.resolution.amountCents ? ` · ${formatCents(d.resolution.amountCents, { exact: true })}` : ""}` : "Case closed", body: d.resolution?.note }] : []),
+    ...(closed ? [{ at: d.updatedAt, title: d.resolution ? `Decision: ${OUTCOME_LABEL[d.resolution.outcome]}${d.resolution.amountCents ? ` · ${formatMoney(d.resolution.amountCents, currency, { exact: true })}` : ""}` : "Case closed", body: d.resolution?.note }] : []),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
   return (
@@ -172,7 +174,7 @@ export function DisputeCard({ dispute: d, myId, tz }: { dispute: Dispute; myId: 
           <div className={cn("rounded-lg border p-3.5", d.resolution.outcome === "no_refund" ? "border-line" : "border-success-200 bg-success-50/60")}>
             <p className="text-[13px] font-medium text-ink">
               {OUTCOME_LABEL[d.resolution.outcome]}
-              {d.resolution.amountCents > 0 && <span className="tabular-nums"> · {formatCents(d.resolution.amountCents, { exact: true })}</span>}
+              {d.resolution.amountCents > 0 && <span className="tabular-nums"> · {formatMoney(d.resolution.amountCents, currency, { exact: true })}</span>}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{d.resolution.note}</p>
           </div>

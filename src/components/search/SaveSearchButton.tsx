@@ -6,7 +6,7 @@ import { BellPlus } from "lucide-react";
 import type { AlertFrequency } from "@/lib/types";
 import { describeSearch, toQueryString, toRecord, type TutorSearch } from "@/lib/search";
 import { useApp } from "@/lib/store";
-import { useSession } from "@/lib/store/hooks";
+import { useSession, useViewerCurrency } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
 import { RadioCards } from "@/components/ui/Controls";
@@ -24,6 +24,7 @@ const FREQUENCIES: { value: AlertFrequency; label: string; description: string }
 export function SaveSearchButton({ params, className, compact }: { params: TutorSearch; className?: string; compact?: boolean }) {
   const router = useRouter();
   const me = useSession();
+  const currency = useViewerCurrency();
   const saveSearch = useApp((s) => s.saveSearch);
   const [open, setOpen] = React.useState(false);
   const [label, setLabel] = React.useState("");
@@ -38,7 +39,7 @@ export function SaveSearchButton({ params, className, compact }: { params: Tutor
       router.push(`/login?next=${encodeURIComponent(`/tutors${qs ? `?${qs}` : ""}`)}`);
       return;
     }
-    setLabel(describeSearch(params));
+    setLabel(describeSearch(params, currency));
     setFrequency("daily");
     setError(undefined);
     setOpen(true);

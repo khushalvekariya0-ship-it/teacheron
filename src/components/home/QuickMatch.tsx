@@ -8,7 +8,8 @@ import { GRADES, subjectName } from "@/lib/data/catalog";
 import { DEFAULT_WEIGHTS, FACTOR_LABEL, type FactorKey } from "@/lib/matching";
 import { SCHEDULE_PRESETS, searchTutors, toQueryString, type SchedulePreset, type TutorSearch } from "@/lib/search";
 import type { Grade, TeachingMode } from "@/lib/types";
-import { useCatalog, useHydrated, useListedTutors } from "@/lib/store/hooks";
+import { useCatalog, useHydrated, useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
+import { formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
 import { motion } from "@/components/motion";
 import { SelectMenu, type SelectOption } from "@/components/ui/SelectMenu";
 
@@ -42,7 +43,9 @@ const MODE_OPTIONS: SelectOption[] = [
   { value: "in_person", label: "In person" },
 ];
 const SCHEDULE_OPTIONS: SelectOption[] = SCHEDULE_PRESETS.map((p) => ({ value: p.value, label: p.label }));
-const BUDGET_OPTIONS: SelectOption[] = BUDGETS.map((b) => ({ value: String(b), label: `Up to $${b}/hr` }));
+/** "Up to $60/hr", or the same steps in the visitor's currency (₹3,000…). */
+const budgetOptions = (currency: Currency): SelectOption[] =>
+  BUDGETS.map((b) => Math.round(fromDollarSetting(b * 100, currency) / 100)).map((b) => ({ value: String(b), label: `Up to ${formatMoney(b * 100, currency)}/hr` }));
 
 /**
  * Step 1 of "How it works", working for real: type a subject, set grade / lesson type / time / budget,
@@ -61,7 +64,14 @@ export function QuickMatch() {
   const [grade, setGrade] = React.useState<Grade | "">("9");
   const [mode, setMode] = React.useState<TeachingMode | "">("online");
   const [schedule, setSchedule] = React.useState<SchedulePreset | "">("weekday_evenings");
+  const currency = useViewerCurrency();
   const [budget, setBudget] = React.useState<number | "">(60);
+  // The default "up to 60" is in dollars; in another currency it starts at the same step there.
+  const [budgetCurrency, setBudgetCurrency] = React.useState<Currency>("USD");
+  if (budgetCurrency !== currency) {
+    setBudgetCurrency(currency);
+    if (budget !== "") setBudget(Math.round(fromDollarSetting(budget * 100, currency) / 100));
+  }
 
   // A typed subject name selects that subject; anything else searches by keyword.
   const { subjects } = useCatalog();
@@ -83,7 +93,7 @@ export function QuickMatch() {
     schedule: schedule || undefined,
     maxRate: budget || undefined,
   };
-  const matches = hydrated ? searchTutors(tutors, params).length : null;
+  const matches = hydrated ? searchTutors(tutors, params, currency).length : null;
 
   // Factors that count for this search — unset criteria are left out and the rest re-scaled (as in scoreTutor()).
   const counts: Record<FactorKey, boolean> = {
@@ -183,7 +193,7 @@ export function QuickMatch() {
         <ChipSelect label="Grade" placeholder="Any grade" options={GRADE_OPTIONS} value={grade} onChange={(v) => setGrade(v as Grade | "")} />
         <ChipSelect label="Lesson type" placeholder="Online or in person" options={MODE_OPTIONS} value={mode} onChange={(v) => setMode(v as TeachingMode | "")} />
         <ChipSelect label="When" placeholder="Any time" options={SCHEDULE_OPTIONS} value={schedule} onChange={(v) => setSchedule(v as SchedulePreset | "")} />
-        <ChipSelect label="Budget" placeholder="Any budget" options={BUDGET_OPTIONS} value={budget === "" ? "" : String(budget)} onChange={(v) => setBudget(v ? Number(v) : "")} />
+        <ChipSelect label="Budget" placeholder="Any budget" options={budgetOptions(currency)} value={budget === "" ? "" : String(budget)} onChange={(v) => setBudget(v ? Number(v) : "")} />
       </div>
 
       <p className="-mt-1 text-[13px] text-ink-2" aria-live="polite">

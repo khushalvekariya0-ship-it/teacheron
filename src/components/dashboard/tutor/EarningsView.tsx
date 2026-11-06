@@ -6,7 +6,8 @@ import type { Booking, Payout } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { endMs } from "@/lib/booking";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { CURRENCIES, asCurrency, formatMoney, formatSums, sumByCurrency, type Currency } from "@/lib/money";
 import { subjectName } from "@/lib/data/catalog";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +18,7 @@ import { EmptyState } from "@/components/ui/States";
 import { AreaChart, StatTile } from "@/components/charts";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { NeedsTutorProfile } from "./shared";
-import { DAY_MS, grossCents, isCleared, isEarned, learnerIdOf, netCents, sumCents, useLearnerName, useMyBookings, useMyTutor, weeklyNet } from "./hooks";
+import { DAY_MS, chartCurrency, grossCents, isCleared, isEarned, learnerIdOf, netCents, sumCents, useLearnerName, useMyBookings, useMyTutor, weeklyNet } from "./hooks";
 
 type TxStatus = "available" | "clearing" | "upcoming" | "on_hold" | "refunded";
 
@@ -38,6 +39,8 @@ const PAYOUT_META: Record<Payout["status"], { label: string; tone: "neutral" | "
 
 interface Tx {
   booking: Booking;
+  /** The booking's currency; every amount below is in it. */
+  currency: Currency;
   learner: string;
   gross: number;
   fee: number;
@@ -77,7 +80,7 @@ export function EarningsView() {
     const out: Tx[] = [];
     for (const b of bookings) {
       const refund = refundFor(b);
-      const base = { booking: b, learner: nameOf(learnerIdOf(b)), gross: grossCents(b), fee: b.platformFeeCents, refund };
+      const base = { booking: b, currency: asCurrency(b.currency), learner: nameOf(learnerIdOf(b)), gross: grossCents(b), fee: b.platformFeeCents, refund };
       if (isEarned(b)) {
         const cleared = isCleared(b, now, policy);
         out.push({ ...base, net: netCents(b), status: cleared ? "available" : "clearing", clearsAt: endMs(b) + policy.disputeWindowDays * DAY_MS });
@@ -92,33 +95,42 @@ export function EarningsView() {
     return out.sort((a, b) => b.booking.startUtc.localeCompare(a.booking.startUtc));
   }, [bookings, refundFor, nameOf, now, policy]);
 
-  const weekly = React.useMemo(() => weeklyNet(bookings, now, tz, 12), [bookings, now, tz]);
+  const chartIn = React.useMemo(() => chartCurrency(bookings, tutor?.currency), [bookings, tutor?.currency]);
+  const weekly = React.useMemo(() => weeklyNet(bookings, now, tz, 12, chartIn), [bookings, now, tz, chartIn]);
 
   if (!tutor) return <NeedsTutorProfile what="earnings" />;
 
+  // Amounts are never added across currencies: a tutor who changed currency sees one total per currency.
+  const own = asCurrency(tutor.currency);
+  const total = (items: { amount: number; currency: Currency }[]) => formatSums(items, own);
   const earned = txs.filter((t) => t.status === "available" || t.status === "clearing");
-  const totalNet = sumCents(earned.map((t) => t.net));
-  const clearedNet = sumCents(txs.filter((t) => t.status === "available").map((t) => t.net));
-  const clearingNet = sumCents(txs.filter((t) => t.status === "clearing").map((t) => t.net));
-  const upcomingNet = sumCents(txs.filter((t) => t.status === "upcoming").map((t) => t.net));
-  const pending = clearingNet + upcomingNet;
-  const paidOut = sumCents(payouts.filter((p) => p.status === "paid").map((p) => p.amountCents));
+  const totalNet = total(earned.map((t) => ({ amount: t.net, currency: t.currency })));
+  const upcomingNet = total(txs.filter((t) => t.status === "upcoming").map((t) => ({ amount: t.net, currency: t.currency })));
+  const payoutItems = (list: Payout[]) => list.map((p) => ({ amount: p.amountCents, currency: asCurrency(p.currency) }));
+  const paid = payouts.filter((p) => p.status === "paid");
+  const paidOut = total(payoutItems(paid));
   const inFlight = payouts.filter((p) => p.status === "scheduled" || p.status === "in_transit");
-  const upcomingPayout = sumCents(inFlight.map((p) => p.amountCents));
+  const upcomingPayout = total(payoutItems(inFlight));
   const nextArrival = [...inFlight].sort((a, b) => a.arrivalDate.localeCompare(b.arrivalDate))[0];
-  const allocated = sumCents(payouts.filter((p) => p.status !== "failed").map((p) => p.amountCents));
-  const available = Math.max(0, clearedNet - allocated);
-  const fees = sumCents(earned.map((t) => t.fee));
-  const refunds = sumCents(txs.map((t) => t.refund));
-  const nextClear = txs.filter((t) => t.status === "clearing").sort((a, b) => (a.clearsAt ?? 0) - (b.clearsAt ?? 0))[0];
+  // Owed to you: completed lessons minus TutorLink's fee, less anything already paid out or on its way.
+  const owed = total(
+    sumByCurrency([
+      ...earned.map((t) => ({ amount: t.net, currency: t.currency })),
+      ...payoutItems(payouts.filter((p) => p.status !== "failed")).map((x) => ({ ...x, amount: -x.amount })),
+    ]).map((x) => ({ ...x, amount: Math.max(0, x.amount) })),
+  );
+  const fees = total(earned.map((t) => ({ amount: t.fee, currency: t.currency })));
+  const refunds = total(txs.map((t) => ({ amount: t.refund, currency: t.currency })));
+  const severalCurrencies = new Set(txs.map((t) => t.currency)).size > 1;
 
   const downloadCsv = () => {
-    const header = ["Lesson date", "Subject", "Student", "Type", "Gross", "Platform fee", "Net", "Status"];
+    const header = ["Lesson date", "Subject", "Student", "Type", "Currency", "Gross", "Platform fee", "Net", "Status"];
     const lines = txs.map((t) => [
       formatDate(t.booking.startUtc, tz),
       subjectName(t.booking.subject),
       t.learner,
       t.booking.type,
+      t.currency,
       decimal(t.gross),
       decimal(t.fee),
       decimal(t.net),
@@ -149,9 +161,9 @@ export function EarningsView() {
       sortValue: (t) => subjectName(t.booking.subject),
     },
     { key: "date", header: "Date", cell: (t) => <span className="tabular-nums">{formatDate(t.booking.startUtc, tz)}</span>, sortValue: (t) => t.booking.startUtc },
-    { key: "gross", header: "Gross", align: "right", cell: (t) => (t.gross ? formatCents(t.gross) : "Free"), sortValue: (t) => t.gross },
-    { key: "fee", header: "Fee", align: "right", cell: (t) => (t.fee ? `−${formatCents(t.fee)}` : "—"), sortValue: (t) => t.fee, hideOnMobile: true },
-    { key: "net", header: "Net", align: "right", cell: (t) => <span className="font-medium text-ink">{formatCents(t.net)}</span>, sortValue: (t) => t.net },
+    { key: "gross", header: "Gross", align: "right", cell: (t) => (t.gross ? formatMoney(t.gross, t.currency) : "Free"), sortValue: (t) => t.gross },
+    { key: "fee", header: "Fee", align: "right", cell: (t) => (t.fee ? `−${formatMoney(t.fee, t.currency)}` : "—"), sortValue: (t) => t.fee, hideOnMobile: true },
+    { key: "net", header: "Net", align: "right", cell: (t) => <span className="font-medium text-ink">{formatMoney(t.net, t.currency)}</span>, sortValue: (t) => t.net },
     {
       key: "status",
       header: "Status",
@@ -169,7 +181,7 @@ export function EarningsView() {
 
   const payoutColumns: Column<Payout>[] = [
     { key: "arrival", header: "Arrival date", cell: (p) => <span className="font-medium tabular-nums text-ink">{formatDate(`${p.arrivalDate}T12:00:00Z`, "UTC")}</span>, sortValue: (p) => p.arrivalDate },
-    { key: "amount", header: "Amount", align: "right", cell: (p) => <span className="font-medium text-ink">{formatCents(p.amountCents)}</span>, sortValue: (p) => p.amountCents },
+    { key: "amount", header: "Amount", align: "right", cell: (p) => <span className="font-medium text-ink">{formatMoney(p.amountCents, p.currency)}</span>, sortValue: (p) => p.amountCents },
     { key: "created", header: "Initiated", cell: (p) => <span className="tabular-nums">{formatDate(p.createdAt, tz)}</span>, sortValue: (p) => p.createdAt },
     {
       key: "status",
@@ -197,46 +209,46 @@ export function EarningsView() {
 
       <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 [&>div>div]:h-full" stagger={0.05}>
         <StaggerItem>
-          <StatTile label="Total earned (net)" value={<span className="tabular-nums">{formatCents(totalNet)}</span>} icon={<CircleDollarSign />} hint={`${earned.length} paid ${earned.length === 1 ? "lesson" : "lessons"}`} />
+          <StatTile label="Total earned (net)" value={<span className="tabular-nums">{totalNet}</span>} icon={<CircleDollarSign />} hint={`${earned.length} paid ${earned.length === 1 ? "lesson" : "lessons"}`} />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Available balance" value={<span className="tabular-nums">{formatCents(available)}</span>} icon={<Wallet />} hint="Cleared, not yet paid out" />
+          <StatTile label="Owed to you" value={<span className="tabular-nums">{owed}</span>} icon={<Wallet />} hint="Completed lessons, minus TutorLink's fee" />
         </StaggerItem>
         <StaggerItem>
           <StatTile
-            label="Pending"
-            value={<span className="tabular-nums">{formatCents(pending)}</span>}
+            label="Upcoming lessons"
+            value={<span className="tabular-nums">{upcomingNet}</span>}
             icon={<Clock3 />}
-            hint={nextClear?.clearsAt ? `Next clears ${formatDate(new Date(nextClear.clearsAt).toISOString(), tz, { month: "short", day: "numeric" })}` : "Clearing and upcoming"}
+            hint="Paid, not taught yet"
           />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Paid out" value={<span className="tabular-nums">{formatCents(paidOut)}</span>} icon={<Banknote />} hint={`${payouts.filter((p) => p.status === "paid").length} payouts`} />
+          <StatTile label="Paid out" value={<span className="tabular-nums">{paidOut}</span>} icon={<Banknote />} hint={`${paid.length} ${paid.length === 1 ? "payout" : "payouts"}`} />
         </StaggerItem>
       </Stagger>
       <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 [&>div:first-child]:col-span-2 lg:[&>div:first-child]:col-span-1 [&>div>div]:h-full" stagger={0.05}>
         <StaggerItem>
           <StatTile
             label="Upcoming payout"
-            value={<span className="tabular-nums">{formatCents(upcomingPayout)}</span>}
+            value={<span className="tabular-nums">{upcomingPayout}</span>}
             icon={<CalendarClock />}
-            hint={nextArrival ? `Arrives ${formatDate(`${nextArrival.arrivalDate}T12:00:00Z`, "UTC", { month: "short", day: "numeric" })}` : "Nothing scheduled"}
+            hint={nextArrival ? `Arrives ${formatDate(`${nextArrival.arrivalDate}T12:00:00Z`, "UTC", { month: "short", day: "numeric" })}` : "Automatic payouts are being set up"}
           />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Platform fees" value={<span className="tabular-nums">{formatCents(fees)}</span>} icon={<Percent />} hint="On paid lessons" />
+          <StatTile label="Platform fees" value={<span className="tabular-nums">{fees}</span>} icon={<Percent />} hint="On paid lessons" />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Refund adjustments" value={<span className="tabular-nums">{formatCents(refunds)}</span>} icon={<Undo2 />} hint="Returned to families" />
+          <StatTile label="Refund adjustments" value={<span className="tabular-nums">{refunds}</span>} icon={<Undo2 />} hint="Returned to families" />
         </StaggerItem>
       </Stagger>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Card>
-          <CardHeader title="Net earnings by week" description="Last 12 weeks, by lesson date." />
+          <CardHeader title="Net earnings by week" description={`Last 12 weeks, by lesson date.${severalCurrencies ? ` Lessons in ${chartIn} (${CURRENCIES[chartIn].name}) only.` : ""}`} />
           <CardContent>
             {weekly.some((w) => w.value > 0) ? (
-              <AreaChart data={weekly} caption="Net earnings per week, last 12 weeks" format={(n) => formatCents(Math.round(n))} height={240} />
+              <AreaChart data={weekly} caption="Net earnings per week, last 12 weeks" format={(n) => formatMoney(Math.round(n), chartIn)} height={240} />
             ) : (
               <EmptyState compact icon={<Wallet />} title="No earnings yet" description="Your weekly earnings chart fills in after your first completed lesson." />
             )}
@@ -247,22 +259,22 @@ export function EarningsView() {
           <CardHeader
             title={
               <span className="inline-flex items-center gap-2">
-                <Landmark className="size-4 text-ink" aria-hidden /> Stripe Connect
+                <Landmark className="size-4 text-ink" aria-hidden /> Bank payouts
               </span>
             }
             action={
-              <Badge tone="success" size="sm" dot>
-                Connected · test mode
+              <Badge tone="neutral" size="sm" dot>
+                Being set up
               </Badge>
             }
           />
           <CardContent className="space-y-4 pt-4 text-[13.5px] leading-relaxed text-muted">
-            <p>Families pay through Stripe. TutorLink deducts the platform fee recorded on each booking and sends the rest to the bank account on your Stripe account.</p>
+            <p>TutorLink pays out to your bank account; automatic payouts are being set up.</p>
             <ol className="space-y-3">
               <li className="flex gap-2.5">
                 <CreditCard className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
                 <span>
-                  <span className="font-medium text-ink">Charged on confirmation.</span> Payment is captured when you accept a lesson (or instantly for instant bookings).
+                  <span className="font-medium text-ink">Families pay online.</span> With UPI or a card, in your currency. The payment is taken when you accept a lesson (or right away for instant bookings).
                 </span>
               </li>
               <li className="flex gap-2.5">
@@ -274,11 +286,11 @@ export function EarningsView() {
               <li className="flex gap-2.5">
                 <Banknote className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
                 <span>
-                  <span className="font-medium text-ink">Paid out.</span> Cleared earnings are grouped into payouts; each payout&apos;s arrival date is listed below.
+                  <span className="font-medium text-ink">Owed to you.</span> Each completed lesson, minus TutorLink&apos;s fee, is owed to you until it&apos;s paid to your bank.
                 </span>
               </li>
             </ol>
-            <p className="rounded-lg bg-canvas px-3 py-2 text-[12.5px]">Payouts to your bank aren&apos;t connected yet. Figures are computed from your lessons and the payouts recorded here.</p>
+            <p className="rounded-lg bg-canvas px-3 py-2 text-[12.5px]">Figures are worked out from your lessons and any payouts recorded below.</p>
           </CardContent>
         </Card>
       </div>
@@ -313,7 +325,7 @@ export function EarningsView() {
           columns={payoutColumns}
           rowKey={(p) => p.id}
           pageSize={6}
-          empty={<EmptyState compact icon={<Banknote />} title="No payouts yet" description="Your first payout is created once earnings clear the dispute window." />}
+          empty={<EmptyState compact icon={<Banknote />} title="No payouts yet" description="TutorLink pays out to your bank account; automatic payouts are being set up." />}
         />
       </section>
     </div>

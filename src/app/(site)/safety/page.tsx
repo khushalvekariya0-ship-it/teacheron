@@ -130,7 +130,7 @@ export default function SafetyPage() {
             {[
               { t: "“Let's pay outside the app — it's cheaper.”", b: "Off-platform payments aren't covered by refunds or disputes. Decline and report it." },
               { t: "Overpayments and refund requests", b: "Someone “accidentally” pays too much and asks you to send the difference back. Don't." },
-              { t: "Requests for ID or bank documents in messages", b: "Identity and payout details are only ever collected through verification and Stripe — never in a chat." },
+              { t: "Requests for ID or bank documents in messages", b: "Identity and payout details are only ever collected through verification and your payout settings — never in a chat." },
               { t: "Links to unfamiliar sites or apps", b: "Be cautious of links asking you to sign in or download something. Use the lesson page for meetings." },
               { t: "Pressure and urgency", b: "Legitimate tutors and families don't need you to decide right now. Take your time." },
             ].map((r) => (

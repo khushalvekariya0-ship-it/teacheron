@@ -49,7 +49,7 @@ function buildSteps(): Record<Audience, Step[]> {
       },
       {
         title: "Confirm and pay securely",
-        body: "You see the full price and the cancellation policy before you pay. Payments are processed by Stripe; we never store full card numbers.",
+        body: "You see the full price and the cancellation policy before you pay. Payments are processed by Razorpay (UPI or card); we never store full card numbers.",
         points: ["No subscription and no booking fee", "Charged when the tutor confirms your request", "Free cancellation windows shown up front"],
         visual: <CheckoutVignette />,
       },
@@ -90,7 +90,7 @@ function buildSteps(): Record<Audience, Step[]> {
       },
       {
         title: "Teach and get paid",
-        body: "Run lessons, post notes and homework, and get paid through Stripe Connect. Commission depends on your plan and is shown before you choose one.",
+        body: "Run lessons, post notes and homework, and get paid to your bank account. Commission depends on your plan and is shown before you choose one.",
         points: ["Earnings available after the dispute window", `Commission from ${maxCommission}% down to ${minCommission}% by plan`, "Reviews from completed lessons build your reputation"],
         visual: <GetPaidVignette />,
         link: { href: "/pricing#tutors", label: "Compare plans" },

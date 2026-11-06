@@ -6,7 +6,8 @@ import { ArrowUpRight, BadgeCheck, Check, GraduationCap, HeartHandshake, Monitor
 import type { Tutor } from "@/lib/types";
 import { LEVELS, subjectName, TUTOR_CATEGORY_LABEL } from "@/lib/data/catalog";
 import { useCatalog } from "@/lib/store/hooks";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Badge } from "@/components/ui/Badge";
@@ -70,7 +71,7 @@ export function AboutSection({ tutor }: { tutor: Tutor }) {
             <HeartHandshake className="mt-0.5 size-[18px] shrink-0 text-navy" aria-hidden />
             <div className="text-sm">
               <p className="font-medium text-ink">
-                {tutor.trial.priceCents === 0 ? "Free" : formatCents(tutor.trial.priceCents)} {tutor.trial.durationMin}-minute trial lesson
+                {tutor.trial.priceCents === 0 ? "Free" : formatMoney(tutor.trial.priceCents, tutor.currency)} {tutor.trial.durationMin}-minute trial lesson
               </p>
               <p className="mt-0.5 leading-relaxed text-muted">{tutor.trial.notes ?? `A short first lesson to meet ${tutor.firstName} and agree on goals before committing.`}</p>
             </div>

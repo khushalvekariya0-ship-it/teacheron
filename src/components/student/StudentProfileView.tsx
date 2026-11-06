@@ -8,6 +8,7 @@ import type { z } from "zod";
 import { ArrowRight, Check, Lock, Search } from "lucide-react";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { currencyForCountry } from "@/lib/money";
 import { useApp, type Result } from "@/lib/store";
 import { useSession } from "@/lib/store/hooks";
 import { GRADE_LABEL } from "@/lib/data/catalog";
@@ -21,7 +22,7 @@ import { Progress } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
 import { BasicFields, BudgetFields, LearningFields, PreferencesFields, ScheduleFields } from "./fields";
 import {
-  basicSchema, basicValues, budgetSchema, budgetToProfile, budgetValues, learningSchema, learningValues, preferencesSchema, preferencesValues,
+  basicSchema, basicValues, budgetSchemaFor, budgetToProfile, budgetValues, learningSchema, learningValues, preferencesSchema, preferencesValues,
   scheduleSchema, scheduleValues, studentChecklist, type BasicValues, type BudgetValues,
 } from "./schema";
 import { basicRows, budgetRows, learningRows, preferenceRows, scheduleRows, tutorSearchFor, type SummaryRow } from "./summary";
@@ -182,8 +183,8 @@ function Profile({ me }: { me: User }) {
             id="budget"
             title="Budget & payment"
             description="What you'd like to spend, and how you'll pay when you book."
-            rows={budgetRows(profile)}
-            schema={budgetSchema}
+            rows={budgetRows(profile, currencyForCountry(me.country))}
+            schema={budgetSchemaFor(currencyForCountry(me.country))}
             values={() => budgetValues(profile, teen)}
             onSave={(v: BudgetValues) => save(budgetToProfile(v), { step: 5 })}
             render={(form) => <BudgetFields form={form} schedule={profile} />}

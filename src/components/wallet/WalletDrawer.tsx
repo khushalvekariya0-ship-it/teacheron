@@ -6,9 +6,10 @@ import { usePathname } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, CreditCard, Lock, Plus, Smartphone, Wallet, Zap } from "lucide-react";
 import type { PayMethod, WalletTransaction } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useHydrated, useSession, useWalletBalance } from "@/lib/store/hooks";
-import { STUDY_CREDIT_PACKS } from "@/lib/data/platform";
-import { formatCents, formatDate } from "@/lib/format";
+import { useHydrated, useSession, useViewerCurrency, useWalletBalances } from "@/lib/store/hooks";
+import { STUDY_CREDIT_PACKS, studyPackAmount } from "@/lib/data/platform";
+import { formatDate } from "@/lib/format";
+import { formatMoney, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { RadioCards } from "@/components/ui/Controls";
@@ -18,9 +19,9 @@ import { toast } from "@/components/ui/Toast";
 
 type TopUpMethod = Exclude<PayMethod, "wallet">;
 
-/** Whole dollars read as "$50"; anything else keeps its cents. */
-export function formatCredits(cents: number): string {
-  return formatCents(cents, { exact: cents % 100 !== 0 });
+/** Whole amounts read as "₹500" / "$50"; anything else keeps its paise / cents. US dollars when no currency is given. */
+export function formatCredits(cents: number, currency?: Currency): string {
+  return formatMoney(cents, currency);
 }
 
 /**
@@ -42,16 +43,25 @@ function WalletBody({ onClose }: { onClose: () => void }) {
   const hydrated = useHydrated();
   const me = useSession();
   const pathname = usePathname();
-  const balance = useWalletBalance();
+  // Credits are added in the learner's own currency; balances held in any other currency are listed small.
+  const currency = useViewerCurrency();
+  const balances = useWalletBalances();
   const allTx = useApp((s) => s.walletTransactions);
-  const topUpWallet = useApp((s) => s.topUpWallet);
+  const payOnline = useApp((s) => s.payOnline);
   const paymentsEnabled = useApp((s) => s.config.paymentsEnabled);
-  const [packId, setPackId] = React.useState(STUDY_CREDIT_PACKS[1].id);
+  const [packId, setPackId] = React.useState<string>(STUDY_CREDIT_PACKS[1].id);
   const [method, setMethod] = React.useState<TopUpMethod>("card");
   const [paying, setPaying] = React.useState(false);
+  /** "Payment cancelled…" shown under the button (a toast there would cover it). */
+  const [payNote, setPayNote] = React.useState<string | null>(null);
 
   const recent = React.useMemo(() => (me ? allTx.filter((t) => t.userId === me.id).slice(0, 6) : []), [allTx, me]);
-  const pack = STUDY_CREDIT_PACKS.find((p) => p.id === packId) ?? STUDY_CREDIT_PACKS[0];
+  const balance = balances.find((x) => x.currency === currency)?.amount ?? 0;
+  const otherBalances = balances.filter((x) => x.currency !== currency && x.amount !== 0);
+  const amount = studyPackAmount(packId, currency) ?? 0;
+  // UPI is for payments in rupees; everywhere else credits are paid by card.
+  const upiAllowed = currency === "INR";
+  const payWith: TopUpMethod = upiAllowed ? method : "card";
 
   if (!hydrated) {
     return (
@@ -88,17 +98,18 @@ function WalletBody({ onClose }: { onClose: () => void }) {
   }
 
   const pay = async () => {
-    if (paying) return;
+    if (paying || !paymentsEnabled) return;
     setPaying(true);
-    // Stand-in for the payment round trip (test mode in the preview build).
-    await new Promise((r) => setTimeout(r, 700));
-    const res = await topUpWallet(pack.id, method);
+    setPayNote(null);
+    // Razorpay's window takes the payment; the server checks it and adds the credits.
+    const res = await payOnline("study_credits", { packId, method: payWith });
     setPaying(false);
     if (!res.ok) {
+      if (res.code === "cancelled") return void setPayNote(res.error);
       toast.error(res.error);
       return;
     }
-    toast.success(`${formatCredits(pack.amountCents)} added to your wallet`, { description: "You can now book a lesson in one tap." });
+    toast.success(`${formatCredits(amount, currency)} added to your Study Credits`, { description: "You can now book a lesson in one tap." });
   };
 
   return (
@@ -111,8 +122,11 @@ function WalletBody({ onClose }: { onClose: () => void }) {
             <Wallet className="size-4" aria-hidden /> Study Credits
           </p>
           <p className="mt-2 font-heading text-[2.6rem] font-bold leading-none tracking-[-0.04em] tabular-nums" aria-live="polite">
-            {formatCredits(balance)}
+            {formatCredits(balance, currency)}
           </p>
+          {otherBalances.length > 0 && (
+            <p className="mt-1.5 text-[13px] tabular-nums text-white/70">Also {otherBalances.map((x) => formatCredits(x.amount, x.currency)).join(" · ")}</p>
+          )}
           <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1.5 text-[13px] font-medium">
             <Zap className="size-3.5 fill-current" aria-hidden />
             {balance > 0 ? "Ready for one-tap booking" : "Add credits to book in one tap"}
@@ -139,7 +153,7 @@ function WalletBody({ onClose }: { onClose: () => void }) {
                     on ? "border-brand bg-brand-50 text-brand shadow-[0_0_0_1px_var(--color-brand)]" : "border-line bg-surface text-ink hover:border-line-strong",
                   )}
                 >
-                  {formatCredits(p.amountCents)}
+                  {formatCredits(studyPackAmount(p.id, currency) ?? 0, currency)}
                 </button>
               );
             })}
@@ -149,11 +163,13 @@ function WalletBody({ onClose }: { onClose: () => void }) {
           <RadioCards<TopUpMethod>
             name="wallet-method"
             columns={1}
-            value={method}
+            value={payWith}
             onValueChange={setMethod}
             options={[
-              { value: "card", label: "Card", icon: <CreditCard />, description: paymentsEnabled ? "Visa, Mastercard, Amex and more" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
-              { value: "upi", label: "UPI", icon: <Smartphone />, description: paymentsEnabled ? "Approve in your UPI app" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
+              { value: "card", label: "Card", icon: <CreditCard />, description: paymentsEnabled ? "Visa, Mastercard, RuPay, Amex and more" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled },
+              ...(upiAllowed
+                ? [{ value: "upi" as const, label: "UPI", icon: <Smartphone />, description: paymentsEnabled ? "Google Pay, PhonePe, Paytm or any UPI app" : "Not available yet — online payments are being set up", disabled: !paymentsEnabled }]
+                : []),
             ]}
           />
         </section>
@@ -176,17 +192,22 @@ function WalletBody({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="sticky bottom-0 mt-auto border-t border-line bg-surface/95 px-5 py-4 backdrop-blur">
-        <Button variant="cta" size="lg" className="w-full" onClick={pay} loading={paying}>
+        <Button variant="cta" size="lg" className="w-full" onClick={pay} loading={paying} disabled={!paymentsEnabled}>
           {paying ? (
             "Processing…"
           ) : (
             <>
-              <Plus /> Add {formatCredits(pack.amountCents)}
+              <Plus /> Add {formatCredits(amount, currency)}
             </>
           )}
         </Button>
+        {payNote && (
+          <p role="status" className="mt-2.5 text-center text-[13px] text-ink-2">
+            {payNote}
+          </p>
+        )}
         <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[12.5px] text-muted">
-          <Lock className="size-3.5" aria-hidden /> Test mode — no real charge. Credits are worth their full value.
+          <Lock className="size-3.5" aria-hidden /> {paymentsEnabled ? "Paid securely with Razorpay." : "Card and UPI payments aren't available yet."} Credits are worth their full value.
         </p>
       </div>
     </div>
@@ -216,7 +237,7 @@ function ActivityRow({ tx, onNavigate }: { tx: WalletTransaction; onNavigate: ()
       </div>
       <span className={cn("shrink-0 text-sm font-semibold tabular-nums", incoming ? "text-success" : "text-ink")}>
         {incoming ? "+" : "−"}
-        {formatCredits(Math.abs(tx.deltaCents))}
+        {formatCredits(Math.abs(tx.deltaCents), tx.currency)}
       </span>
     </li>
   );

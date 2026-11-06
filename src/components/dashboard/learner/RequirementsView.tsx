@@ -17,7 +17,8 @@ import { toast } from "@/components/ui/Toast";
 import { useApp, type Result } from "@/lib/store";
 import { useNow, useSession } from "@/lib/store/hooks";
 import { subjectName, GRADE_LABEL, MODE_LABEL } from "@/lib/data/catalog";
-import { formatCents, formatRelative, pluralize } from "@/lib/format";
+import { formatRelative, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { useMyChildren } from "./data";
 import { RequirementStatusBadge, isVisibleApplication } from "./meta";
 
@@ -246,7 +247,7 @@ function RequirementRow({
             ))}
           </p>
           <p className="mt-1 text-[12.5px] text-muted">
-            Budget {formatCents(req.budgetMinCents)}–{formatCents(req.budgetMaxCents)}/hr · Updated {formatRelative(req.updatedAt, now)}
+            Budget {formatMoney(req.budgetMinCents, req.currency)}–{formatMoney(req.budgetMaxCents, req.currency)}/hr · Updated {formatRelative(req.updatedAt, now)}
           </p>
         </div>
 

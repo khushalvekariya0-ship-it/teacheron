@@ -6,15 +6,17 @@ import { Check, Coins, Receipt } from "lucide-react";
 import type { LeadTransaction, Payment, Subscription } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useFlag, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
-import { CREDIT_PACKS, CREDITS_PER_APPLICATION, TUTOR_PLANS, type Plan } from "@/lib/data/platform";
-import { formatCents, formatDateTime, formatRelative, pluralize } from "@/lib/format";
+import { CREDIT_PACKS, CREDITS_PER_APPLICATION, TUTOR_PLANS, packPrice, planPrice, type Plan } from "@/lib/data/platform";
+import { formatDateTime, formatRelative, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/States";
-import { ExportButton, MiniStat, PersonCell, StatusPill, TextLink, humanize, settledNet, useDirectory } from "./kit";
+import { ExportButton, MiniStat, PersonCell, StatusPill, TextLink, humanize, useDirectory } from "./kit";
 import { PlatformFeeCard, bpsToPercent } from "./PlatformFeeCard";
+import { platformPrices, settledSums } from "./money";
 
 type SubStatus = Subscription["status"];
 const STATUS_LABEL: Record<SubStatus, string> = { active: "Active", past_due: "Past due", canceled: "Canceled" };
@@ -106,8 +108,13 @@ function MonetizationInner() {
     () =>
       CREDIT_PACKS.map((p) => {
         const purchases = ledger.filter((t) => t.reason === `Purchased ${p.credits} credits`).length;
-        const revenue = settledNet(payments.filter((x) => x.kind === "lead_credits" && x.description === `${p.credits} lead credits`)).net;
-        return { ...p, purchases, revenue, perCredit: Math.round(p.priceCents / p.credits) };
+        const revenue = settledSums(payments.filter((x) => x.kind === "lead_credits" && x.description === `${p.credits} lead credits`)).net;
+        const price = platformPrices((c) => packPrice(p.id, c));
+        const perCredit = platformPrices((c) => {
+          const x = packPrice(p.id, c);
+          return { ...x, amount: Math.round(x.amount / p.credits) };
+        }, { exact: true });
+        return { ...p, purchases, revenue, price, perCredit };
       }),
     [ledger, payments],
   );
@@ -116,7 +123,7 @@ function MonetizationInner() {
     const sub = payments.filter((p) => p.kind === "subscription");
     const lead = payments.filter((p) => p.kind === "lead_credits");
     const recent = [...sub, ...lead].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
-    return { sub: settledNet(sub), lead: settledNet(lead), subCount: sub.length, leadCount: lead.length, recent };
+    return { sub: settledSums(sub), lead: settledSums(lead), subCount: sub.length, leadCount: lead.length, recent };
   }, [payments]);
 
   const paidActive = planStats.counts.pro.active + planStats.counts.premium.active;
@@ -166,8 +173,8 @@ function MonetizationInner() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MiniStat label="Subscription revenue" value={formatCents(revenue.sub.net)} hint={`${pluralize(revenue.subCount, "payment")} · settled net`} />
-        <MiniStat label="Credit pack revenue" value={formatCents(revenue.lead.net)} hint={`${pluralize(revenue.leadCount, "payment")} · settled net`} />
+        <MiniStat label="Subscription revenue" value={revenue.sub.net} hint={`${pluralize(revenue.subCount, "payment")} · settled net`} />
+        <MiniStat label="Credit pack revenue" value={revenue.lead.net} hint={`${pluralize(revenue.leadCount, "payment")} · settled net`} />
         <MiniStat label="Paid subscribers" value={paidActive} hint={`of ${pluralize(planStats.total, "tutor")}`} />
         <MiniStat label="Credits outstanding" value={credit.outstanding.toLocaleString("en-US")} hint="Unspent across all tutors" />
       </div>
@@ -180,7 +187,7 @@ function MonetizationInner() {
               Tutor plans
             </h2>
             <p className="mt-0.5 text-[13px] text-muted">
-              Counts come from subscription records. <span className="font-medium text-ink-2">Tutors with no subscription record are on the Starter plan.</span> Professional and Premium commissions are fixed by each plan; Starter uses the editable default platform fee below.
+              Counts come from subscription records. <span className="font-medium text-ink-2">Tutors with no subscription record are on the Starter plan.</span> Professional and Premium commissions are fixed by each plan; Starter uses the editable default platform fee below. Prices are shown in US dollars / rupees: tutors who charge in ₹ pay in rupees, everyone else in US dollars.
             </p>
           </div>
         </div>
@@ -204,9 +211,9 @@ function MonetizationInner() {
                   description={p.description}
                 />
                 <CardContent className="flex flex-1 flex-col gap-4">
-                  <p className="flex items-baseline gap-1">
-                    <span className="text-2xl font-semibold tabular-nums tracking-tight text-ink">{p.priceCents ? formatCents(p.priceCents) : "Free"}</span>
-                    {p.priceCents > 0 && <span className="text-[13px] text-muted">/ month</span>}
+                  <p className="flex flex-wrap items-baseline gap-x-1">
+                    <span className="text-2xl font-semibold tabular-nums tracking-tight text-ink">{p.priceCents ? platformPrices((cur) => planPrice(p.id, cur)) : "Free"}</span>
+                    {p.priceCents > 0 && <span className="text-[13px] text-muted">per month</span>}
                   </p>
                   <dl className="grid grid-cols-2 gap-2.5 text-[13px]">
                     <div className="rounded-lg border border-line px-3 py-2">
@@ -270,7 +277,7 @@ function MonetizationInner() {
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <Card>
-            <CardHeader title="Credit packs" description="Purchases are counted from the credit ledger; revenue from settled payments." />
+            <CardHeader title="Credit packs" description="Prices in US dollars / rupees. Purchases are counted from the credit ledger; revenue from settled payments, per currency." />
             <CardContent className="pt-4">
               <div className="overflow-hidden rounded-lg border border-line">
                 <table className="w-full text-[13px]">
@@ -288,10 +295,10 @@ function MonetizationInner() {
                     {packs.map((p) => (
                       <tr key={p.id}>
                         <td className="px-3 py-2.5 font-medium text-ink">{p.credits} credits</td>
-                        <td className="px-3 py-2.5 text-right text-ink-2">{formatCents(p.priceCents)}</td>
-                        <td className="hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{formatCents(p.perCredit, { exact: true })}</td>
+                        <td className="px-3 py-2.5 text-right text-ink-2">{p.price}</td>
+                        <td className="hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{p.perCredit}</td>
                         <td className="px-3 py-2.5 text-right text-ink-2">{p.purchases}</td>
-                        <td className="px-3 py-2.5 text-right text-ink-2">{formatCents(p.revenue)}</td>
+                        <td className="px-3 py-2.5 text-right text-ink-2">{p.revenue}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -330,7 +337,7 @@ function MonetizationInner() {
       {/* Revenue */}
       <section className="mt-10 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]" aria-label="Revenue">
         <Card>
-          <CardHeader title="Revenue" description="Settled payments: succeeded or partly refunded charges, minus refunds." />
+          <CardHeader title="Revenue" description="Settled payments: succeeded or partly refunded charges, minus refunds. Each currency is shown on its own." />
           <CardContent className="space-y-3 pt-4">
             <RevenueBlock label="Subscriptions" totals={revenue.sub} />
             <RevenueBlock label="Credit packs" totals={revenue.lead} />
@@ -374,15 +381,15 @@ function VolumeRow({ label, hint, value, strong }: { label: string; hint: string
   );
 }
 
-function RevenueBlock({ label, totals }: { label: string; totals: { gross: number; refunds: number; net: number } }) {
+function RevenueBlock({ label, totals }: { label: string; totals: { gross: string; refunds: string; net: string } }) {
   return (
     <div className="rounded-lg border border-line px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-[13.5px] font-medium text-ink">{label}</p>
-        <p className="text-lg font-semibold tabular-nums text-ink">{formatCents(totals.net)}</p>
+        <p className="text-right text-lg font-semibold tabular-nums text-ink">{totals.net}</p>
       </div>
       <p className="mt-0.5 text-[12.5px] tabular-nums text-muted">
-        {formatCents(totals.gross)} charged · {formatCents(totals.refunds)} refunded
+        {totals.gross} charged · {totals.refunds} refunded
       </p>
     </div>
   );
@@ -399,7 +406,7 @@ function PaymentRow({ p, name, when }: { p: Payment; name: string; when: string 
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="font-medium tabular-nums text-ink">{formatCents(p.amountCents, { exact: true })}</span>
+        <span className="font-medium tabular-nums text-ink">{formatMoney(p.amountCents, p.currency, { exact: true })}</span>
         <StatusPill tone={tone}>{p.status === "succeeded" ? "Paid" : humanize(p.status)}</StatusPill>
       </span>
     </li>

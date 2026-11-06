@@ -5,7 +5,9 @@ import { CalendarX2, Flag, Repeat, UserX, UserRoundX, XCircle, CheckCircle2, typ
 import { cn } from "@/lib/utils";
 import { motion } from "@/components/motion";
 import { DEFAULT_POLICY, type BookingPolicy } from "@/lib/data/platform";
-import { formatCents, percentOf } from "@/lib/format";
+import { percentOf } from "@/lib/format";
+import { formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
+import { useViewerCurrency } from "@/lib/store/hooks";
 
 const WHEN = [
   { hours: 48, label: "2 days before" },
@@ -17,8 +19,12 @@ const WHEN = [
 /**
  * "What if I cancel?" — the same rule as cancellationRefund(): a full refund inside the free window
  * (24h regular, 4h trial), otherwise the late-cancellation percentage; rescheduling until the cut-off.
+ * The example lesson is in the visitor's own currency: `exampleCents` when it is in that currency
+ * (`exampleCurrency`, US dollars by default), otherwise a round local example amount.
  */
-export function RefundCalculator({ exampleCents, policy = DEFAULT_POLICY }: { exampleCents: number; policy?: BookingPolicy }) {
+export function RefundCalculator({ exampleCents: given, exampleCurrency = "USD", policy = DEFAULT_POLICY }: { exampleCents: number; exampleCurrency?: Currency; policy?: BookingPolicy }) {
+  const currency = useViewerCurrency();
+  const exampleCents = currency === exampleCurrency ? given : fromDollarSetting(5000, currency);
   const [type, setType] = React.useState<"regular" | "trial">("regular");
   const [when, setWhen] = React.useState(1);
   const hours = WHEN[when].hours;
@@ -47,7 +53,7 @@ export function RefundCalculator({ exampleCents, policy = DEFAULT_POLICY }: { ex
         {/* Choices */}
         <div className="border-b border-line p-6 sm:p-7 lg:border-b-0 lg:border-r">
           <p className="font-heading text-[19px] font-bold tracking-[-0.015em] text-ink">What if I cancel?</p>
-          <p className="mt-1 text-[14px] text-muted">Example: a {formatCents(exampleCents)} lesson. Pick the details.</p>
+          <p className="mt-1 text-[14px] text-muted">Example: a {formatMoney(exampleCents, currency)} lesson. Pick the details.</p>
 
           <fieldset className="mt-6">
             <legend className="mb-2 text-[13.5px] font-semibold text-ink">Lesson type</legend>
@@ -95,7 +101,7 @@ export function RefundCalculator({ exampleCents, policy = DEFAULT_POLICY }: { ex
         <div className="flex flex-col justify-center p-6 sm:p-7" aria-live="polite">
           <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">You get back</p>
           <motion.p key={`${type}-${when}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="mt-1 font-heading text-[52px] font-extrabold leading-none tracking-[-0.03em] text-ink tabular-nums">
-            {formatCents(back, { exact: true })}
+            {formatMoney(back, currency, { exact: true })}
           </motion.p>
           <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
             <motion.div className={cn("h-full rounded-full", full ? "bg-brand-gradient" : "bg-warning")} initial={false} animate={{ width: `${pct}%` }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} />

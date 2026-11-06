@@ -1,5 +1,7 @@
 "use client";
 
+import { currencySymbol } from "@/lib/money";
+import { useViewerCurrency } from "@/lib/store/hooks";
 import * as React from "react";
 import { Controller, useWatch, type Control, type FieldErrors } from "react-hook-form";
 import { MapPin, Monitor, Shuffle, Users } from "lucide-react";
@@ -57,6 +59,7 @@ const SUPPORT_OPTIONS = LEARNING_SUPPORT.map((s) => ({ value: s, label: s }));
 /** Renders one concierge answer as an editable control. */
 export function AnswerField({ name, control, errors, idPrefix = "cg", compact }: { name: AnswerKey; control: Control<Answers>; errors: FieldErrors<Answers>; idPrefix?: string; compact?: boolean }) {
   const id = `${idPrefix}-${name}`;
+  const viewerCurrency = useViewerCurrency();
   const mode = useWatch({ control, name: "mode" });
   const zip = useWatch({ control, name: "zip" });
   const err = (errors[name] as { message?: string } | undefined)?.message;
@@ -90,6 +93,7 @@ export function AnswerField({ name, control, errors, idPrefix = "cg", compact }:
       );
     case "budgetMax": {
       const hint = "Your maximum hourly rate. Leave blank if you're flexible.";
+      const currency = viewerCurrency;
       return (
         <Field label={ANSWER_LABEL.budgetMax} id={id} optional={!compact} error={err} hint={hint}>
           <Controller
@@ -99,9 +103,9 @@ export function AnswerField({ name, control, errors, idPrefix = "cg", compact }:
               <Input
                 id={id}
                 {...field}
-                onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 inputMode="numeric"
-                prefixText="$"
+                prefixText={currencySymbol(currency)}
                 suffix={<span className="pr-1 text-[13px]">/hr</span>}
                 placeholder="70"
                 className="max-w-48"

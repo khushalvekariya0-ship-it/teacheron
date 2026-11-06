@@ -73,7 +73,7 @@ const SECTIONS: DocSection[] = [
           <li>Set your own rates, availability and policies within the limits of the Services, and honor bookings you accept.</li>
           <li>Follow our <Link href="/safety">Safety Guidelines</Link>, including the safeguards for lessons with minors.</li>
           <li>You are responsible for your own taxes, insurance, licenses and compliance with laws that apply to your tutoring business.</li>
-          <li>You authorize us, through Stripe Connect, to collect lesson payments on your behalf, deduct the applicable commission, and pay out the balance to your connected account.</li>
+          <li>You authorize us to collect lesson payments on your behalf through our payment processor (Razorpay), deduct the applicable commission, and pay out the balance to your bank account.</li>
         </ul>
       </>
     ),
@@ -112,7 +112,7 @@ const SECTIONS: DocSection[] = [
     content: (
       <>
         <ul>
-          <li>Payments are processed by Stripe and are subject to Stripe&rsquo;s terms. We do not store full card numbers.</li>
+          <li>Payments are processed by Razorpay and are subject to Razorpay&rsquo;s terms. We do not store full card numbers or UPI details. Prices are in the tutor&rsquo;s currency.</li>
           <li>Clients pay the lesson price shown at checkout. There is no subscription for Clients.</li>
           <li>{SITE.name} earns a commission on each paid lesson, deducted from the Tutor&rsquo;s earnings. The rate depends on the Tutor&rsquo;s plan ({commissions}) and is shown on our <Link href="/pricing">Pricing</Link> page.</li>
           <li>Paid Tutor plans are billed monthly in advance and renew automatically until cancelled. Cancellation takes effect at the end of the current billing period.</li>

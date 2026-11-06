@@ -8,7 +8,8 @@ import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { STATUS_META } from "@/lib/booking";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDateTime, formatDuration, pluralize, tzAbbrev } from "@/lib/format";
+import { formatDateTime, formatDuration, pluralize, tzAbbrev } from "@/lib/format";
+import { asCurrency, formatMoney, fromDollarSetting, isCurrency, type Currency } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { BookingStatusBadge, PaymentStatusBadge } from "@/components/domain/Badges";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -21,7 +22,7 @@ import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { ConversationAccess, Facts, Mono, PermissionButton, PermissionNotice, StatusPill, TextLink, Timeline, formatAge, humanize, useDirectory, useStaff } from "./kit";
 import { PaymentRows, bookingHistoryItems } from "./BookingsView";
-import { DISPUTE_REASON_LABEL, DISPUTE_STATUS_META, RESOLUTION_LABEL, bookingPaid, isDisputeOpen, parseDollars, refundedCents } from "./money";
+import { DISPUTE_REASON_LABEL, DISPUTE_STATUS_META, RESOLUTION_LABEL, bookingPaid, isDisputeOpen, moneyInputProps, parseAmount, refundedCents } from "./money";
 import { FileLink } from "@/components/domain/FileLink";
 
 type Outcome = NonNullable<Dispute["resolution"]>["outcome"];
@@ -94,6 +95,8 @@ function DisputeInner({ id }: { id: string }) {
   const opener = dir.name(d.openedBy);
   const openerRole = b ? (d.openedBy === b.bookerId ? "booker" : "tutor") : undefined;
   const paid = b ? bookingPaid(b) : 0;
+  // Every amount on a dispute (its refund, credit and payments) is in the booking's currency.
+  const currency = asCurrency(b?.currency);
 
   return (
     <>
@@ -241,7 +244,7 @@ function DisputeInner({ id }: { id: string }) {
               }
             />
             <CardContent>
-              <Timeline items={related.audit.map((a) => auditItem(a, dir.name(a.actorId), tz))} empty="No staff actions recorded yet." />
+              <Timeline items={related.audit.map((a) => auditItem(a, dir.name(a.actorId), tz, currency))} empty="No staff actions recorded yet." />
             </CardContent>
           </Card>
         </div>
@@ -251,7 +254,7 @@ function DisputeInner({ id }: { id: string }) {
             <CardHeader title={closed ? "Decision" : "Status"} />
             <CardContent className="space-y-4">
               {closed ? (
-                <ResolutionSummary dispute={d} tz={tz} />
+                <ResolutionSummary dispute={d} tz={tz} currency={currency} />
               ) : (
                 <>
                   <StatusControl dispute={d} />
@@ -304,10 +307,10 @@ function DisputeInner({ id }: { id: string }) {
               <CardContent>
                 <Facts
                   items={[
-                    { label: b.paymentStatus === "authorized" ? "Authorized (not captured)" : "Booking total", value: <span className="tabular-nums">{paid ? formatCents(paid) : "Free lesson"}</span> },
-                    ...(b.discountCents ? [{ label: "Coupon", value: <span className="tabular-nums">−{formatCents(b.discountCents)}</span> }] : []),
-                    { label: "Refunded so far", value: <span className="tabular-nums">{formatCents(refundedCents(related.rows))}</span> },
-                    { label: "Platform fee (commission)", value: <span className="tabular-nums">{formatCents(b.platformFeeCents)}</span> },
+                    { label: b.paymentStatus === "authorized" ? "Authorized (not captured)" : "Booking total", value: <span className="tabular-nums">{paid ? formatMoney(paid, currency) : "Free lesson"}</span> },
+                    ...(b.discountCents ? [{ label: "Coupon", value: <span className="tabular-nums">−{formatMoney(b.discountCents, currency)}</span> }] : []),
+                    { label: "Refunded so far", value: <span className="tabular-nums">{formatMoney(refundedCents(related.rows), currency)}</span> },
+                    { label: "Platform fee (commission)", value: <span className="tabular-nums">{formatMoney(b.platformFeeCents, currency)}</span> },
                   ]}
                 />
               </CardContent>
@@ -323,7 +326,7 @@ function DisputeInner({ id }: { id: string }) {
 
 /* ─── Pieces ─────────────────────────────────────────────────────────────────── */
 
-function auditItem(a: AuditLog, actor: string, tz: string) {
+function auditItem(a: AuditLog, actor: string, tz: string, currency: Currency) {
   const meta = a.meta ?? {};
   let title: string;
   let tone: "default" | "accent" | "success" | "warning" | "danger" = "default";
@@ -341,7 +344,7 @@ function auditItem(a: AuditLog, actor: string, tz: string) {
     case "dispute.resolve": {
       const outcome = String(meta.outcome ?? "") as Outcome;
       const amount = typeof meta.amountCents === "number" ? meta.amountCents : 0;
-      title = `Decision: ${RESOLUTION_LABEL[outcome] ?? humanize(outcome)}${amount ? ` · ${formatCents(amount)}` : ""}`;
+      title = `Decision: ${RESOLUTION_LABEL[outcome] ?? humanize(outcome)}${amount ? ` · ${formatMoney(amount, isCurrency(meta.currency) ? meta.currency : currency)}` : ""}`;
       tone = "success";
       break;
     }
@@ -454,7 +457,7 @@ function NoteForm({ disputeId }: { disputeId: string }) {
   );
 }
 
-function ResolutionSummary({ dispute: d, tz }: { dispute: Dispute; tz: string }) {
+function ResolutionSummary({ dispute: d, tz, currency }: { dispute: Dispute; tz: string; currency: Currency }) {
   const r = d.resolution;
   return (
     <div className="space-y-3">
@@ -463,7 +466,7 @@ function ResolutionSummary({ dispute: d, tz }: { dispute: Dispute; tz: string })
           <Facts
             items={[
               { label: "Outcome", value: RESOLUTION_LABEL[r.outcome] },
-              ...(r.outcome !== "no_refund" ? [{ label: r.outcome === "credit" ? "Credit" : "Refund", value: <span className="tabular-nums">{formatCents(r.amountCents)}</span> }] : []),
+              ...(r.outcome !== "no_refund" ? [{ label: r.outcome === "credit" ? "Credit" : "Refund", value: <span className="tabular-nums">{formatMoney(r.amountCents, currency)}</span> }] : []),
               { label: "Closed", value: <span className="tabular-nums">{formatDateTime(d.updatedAt, tz)}</span> },
             ]}
           />
@@ -484,6 +487,8 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
   const policy = useApp((s) => s.policy);
   const { can } = useStaff();
   const paid = bookingPaid(b);
+  const currency = asCurrency(b.currency);
+  const fmt = (minor: number) => formatMoney(minor, currency);
   const canRefund = can("payments.refund");
   const refundable = canRefund && paid > 0;
 
@@ -503,12 +508,12 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
   }
 
   const needsAmount = outcome === "partial_refund" || outcome === "credit";
-  const parsed = parseDollars(amount);
+  const parsed = parseAmount(amount, currency);
   const amountError = (() => {
     if (!needsAmount) return undefined;
     if (!parsed.ok) return parsed.error;
-    if (parsed.cents <= 0) return "Enter an amount greater than $0.";
-    if (outcome === "partial_refund" && parsed.cents > paid) return `A refund can't exceed the ${formatCents(paid)} that was paid.`;
+    if (parsed.cents <= 0) return `Enter an amount greater than ${fmt(0)}.`;
+    if (outcome === "partial_refund" && parsed.cents > paid) return `A refund can't exceed the ${fmt(paid)} that was paid.`;
     if (outcome === "partial_refund" && parsed.cents === paid) return "That's the full amount — choose Full refund instead.";
     return undefined;
   })();
@@ -527,7 +532,7 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
       return;
     }
     toast.success(outcome === "no_refund" ? "Dispute rejected" : "Dispute resolved", {
-      description: outcome === "full_refund" || outcome === "partial_refund" ? `${formatCents(cents)} refund recorded. The booker has been notified.` : "The booker has been notified.",
+      description: outcome === "full_refund" || outcome === "partial_refund" ? `${fmt(cents)} refund recorded. The booker has been notified.` : "The booker has been notified.",
     });
     onOpenChange(false);
   };
@@ -536,7 +541,7 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Resolve dispute" description={`${DISPUTE_REASON_LABEL[d.reason]} · ${subjectName(b.subject)} · ${formatCents(paid)} charged`} size="lg">
+      <DialogContent title="Resolve dispute" description={`${DISPUTE_REASON_LABEL[d.reason]} · ${subjectName(b.subject)} · ${fmt(paid)} charged`} size="lg">
         <form onSubmit={submit} noValidate>
           <DialogBody className="space-y-5">
             {!canRefund && (
@@ -561,7 +566,7 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
                   setTouched((t) => ({ ...t, outcome: true }));
                 }}
                 options={[
-                  { value: "full_refund", label: "Full refund", description: refundable ? `Return ${formatCents(paid)} to the original payment method.` : !canRefund ? "Requires payments.refund." : "Nothing to refund.", disabled: !refundable },
+                  { value: "full_refund", label: "Full refund", description: refundable ? `Return ${fmt(paid)} to the original payment method.` : !canRefund ? "Requires payments.refund." : "Nothing to refund.", disabled: !refundable },
                   { value: "partial_refund", label: "Partial refund", description: refundable ? "Return part of the payment to the card." : !canRefund ? "Requires payments.refund." : "Nothing to refund.", disabled: !refundable },
                   { value: "credit", label: "Platform credit", description: "Record credit for the booker instead of a card refund." },
                   { value: "no_refund", label: "No refund", description: "Reject the claim. The dispute closes as rejected." },
@@ -576,14 +581,18 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
 
             {needsAmount && (
               <Field
-                label={outcome === "credit" ? "Credit amount" : "Refund amount"}
+                label={outcome === "credit" ? `Credit amount (${currency})` : `Refund amount (${currency})`}
                 required
                 error={touched.amount ? amountError : undefined}
-                hint={outcome === "credit" ? `Booking policy credit for a tutor no-show: ${formatCents(policy.tutorNoShowCreditCents)}. Added to the booker's Study Credits.` : `Up to ${formatCents(paid)}.`}
+                hint={
+                  outcome === "credit"
+                    ? `Booking policy credit for a tutor no-show: ${fmt(fromDollarSetting(policy.tutorNoShowCreditCents, currency))}. Added to the booker's Study Credits.`
+                    : `Up to ${fmt(paid)}.`
+                }
               >
                 <Input
                   inputMode="decimal"
-                  prefixText="$"
+                  {...moneyInputProps(currency)}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
@@ -614,9 +623,9 @@ function ResolveDialog({ open, onOpenChange, dispute: d, booking: b }: { open: b
                   </li>
                   <li>
                     {outcome === "full_refund" || outcome === "partial_refund"
-                      ? `${cents ? formatCents(cents) : "The amount above"} is refunded to the original payment method and recorded under Payments.`
+                      ? `${cents ? fmt(cents) : "The amount above"} is refunded to the original payment method and recorded under Payments.`
                       : outcome === "credit"
-                        ? `${cents ? formatCents(cents) : "The amount above"} is recorded as platform credit. No card refund is made.`
+                        ? `${cents ? fmt(cents) : "The amount above"} is recorded as platform credit. No card refund is made.`
                         : "No money is returned."}
                   </li>
                   <li>

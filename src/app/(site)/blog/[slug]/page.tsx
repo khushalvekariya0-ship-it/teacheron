@@ -39,7 +39,7 @@ const CTA: Record<BlogPost["category"], { title: string; description: string; pr
   Parents: { title: "Ready to find a tutor?", description: "Search is free. Every recommendation explains why it matches.", primary: { href: "/concierge", label: "Help me find a tutor" }, secondary: { href: "/for-parents", label: "Parent accounts" } },
   Students: { title: "Want help staying on track?", description: "Find a tutor who teaches exactly what you're studying.", primary: { href: "/tutors", label: "Find a tutor" }, secondary: { href: "/subjects/study-skills", label: "Study skills tutors" } },
   "Test prep": { title: "Build your plan with a tutor.", description: "Test prep specialists can turn a practice score into a week-by-week plan.", primary: { href: "/tutors?subject=sat", label: "SAT tutors" }, secondary: { href: "/subjects/act", label: "ACT tutors" } },
-  Tutors: { title: "Teach on your terms.", description: "Set your rates and schedule, and get paid through Stripe Connect.", primary: { href: "/become-a-tutor", label: "Become a tutor" }, secondary: { href: "/pricing#tutors", label: "Plans & commission" } },
+  Tutors: { title: "Teach on your terms.", description: "Set your rates and schedule, and get paid to your bank account.", primary: { href: "/become-a-tutor", label: "Become a tutor" }, secondary: { href: "/pricing#tutors", label: "Plans & commission" } },
 };
 
 export default async function BlogPostPage({ params }: Props) {

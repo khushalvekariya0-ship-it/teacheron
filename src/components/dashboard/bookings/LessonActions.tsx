@@ -30,6 +30,8 @@ export interface LessonAction {
   /** href opens another site (the lesson's Zoom / Google Meet) in a new tab. */
   external?: boolean;
   disabledReason?: string;
+  /** A handler is running (e.g. the payment window is open). */
+  loading?: boolean;
 }
 
 const ICONS: Partial<Record<BookingStatus, React.ComponentType<{ className?: string }>>> = {
@@ -51,7 +53,8 @@ export function buildLessonActions(
   actor: Actor,
   now: number,
   policy: BookingPolicy,
-  opts: { onAccept: () => void; onReview: () => void },
+  /** onPayAgain: a failed card / UPI payment is paid again through Razorpay (the plain transition is refused). */
+  opts: { onAccept: () => void; onReview: () => void; onPayAgain?: () => void; paying?: boolean },
 ): { primary: LessonAction | null; items: LessonAction[] } {
   const allowed = availableTransitions(b, actor, now, policy);
   const items: LessonAction[] = [];
@@ -61,7 +64,7 @@ export function buildLessonActions(
   const cancelTo: BookingStatus = actor === "tutor" ? "cancelled_by_tutor" : "cancelled_by_student";
 
   if (allowed.includes("confirmed")) add("confirmed", { onSelect: opts.onAccept, tone: "primary" });
-  if (allowed.includes("pending")) add("pending", { dialog: "pending", tone: "primary" });
+  if (allowed.includes("pending")) add("pending", opts.onPayAgain ? { label: "Pay again", onSelect: opts.onPayAgain, loading: opts.paying, tone: "primary" } : { dialog: "pending", tone: "primary" });
   // Starting a lesson whose time has fully passed isn't useful — wrap it up instead.
   if (allowed.includes("in_progress") && now < startMs(b) + b.durationMin * 60_000) add("in_progress", { dialog: "in_progress" });
   if (allowed.includes("completed")) add("completed", { dialog: "completed" });
@@ -88,7 +91,7 @@ export function buildLessonActions(
   explain(cancelTo);
   explain(actor === "tutor" ? "no_show_student" : "no_show_tutor", true);
 
-  // Primary: Join › Accept › Retry payment › wrap-up › Start › Review
+  // Primary: Join › Accept › Pay again (retry payment) › wrap-up › Start › Review
   let primary: LessonAction | null = null;
   if (videoJoinable(b, now)) primary = { key: "join", label: `Join ${videoLabel(b)}`, icon: Video, href: b.videoLink, external: true, tone: "primary" };
   else if (meetingLinkVisible(b, now, policy) && b.meetingUrl) primary = { key: "join", label: "Join lesson", icon: Video, href: `/classroom/${b.id}`, tone: "primary" };
@@ -131,6 +134,7 @@ function ActionButton({ action, onDialog, block, size = "md" }: { action: Lesson
       size={size}
       className={cn(block && "w-full", "justify-center")}
       disabled={!!action.disabledReason}
+      loading={action.loading}
       aria-describedby={action.disabledReason ? `why-${action.key}` : undefined}
       onClick={() => (action.dialog ? onDialog(action.dialog) : action.onSelect?.())}
     >

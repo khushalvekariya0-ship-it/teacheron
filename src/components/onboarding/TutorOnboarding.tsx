@@ -372,7 +372,8 @@ function Wizard({ me, onPublished }: { me: User; onPublished: (tutor: Tutor, idS
       case 5:
         return <ModesStep {...common} defaults={data as ModesValues} onValid={advance} />;
       case 6:
-        return <PricingStep {...common} defaults={data as PricingValues} onValid={advance} />;
+        // Prices are in the currency of the country chosen in step 1.
+        return <PricingStep {...common} defaults={data as PricingValues} country={data.country} onValid={advance} />;
       case 7:
         return <AvailabilityStep {...common} defaults={data as AvailabilityValues} onValid={advance} timezone={me.timezone} />;
       case 8:

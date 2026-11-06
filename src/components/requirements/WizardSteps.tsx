@@ -6,8 +6,8 @@ import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { FileText, Info, Monitor, Paperclip, Pencil, ShieldCheck, Shuffle, Upload, UserRound, Users, X } from "lucide-react";
 import type { Child, Grade, Role } from "@/lib/types";
 import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, subjectName } from "@/lib/data/catalog";
-import { formatCents } from "@/lib/format";
-import { useListedTutors } from "@/lib/store/hooks";
+import { currencySymbol, formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
+import { useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
@@ -474,15 +474,19 @@ function AttachmentsField() {
   );
 }
 
-function RateContext({ subject }: { subject: string }) {
+/** The rates of tutors who charge in the family's currency (prices in different currencies aren't compared). */
+function RateContext({ subject, currency }: { subject: string; currency: Currency }) {
   const tutors = useListedTutors();
-  const rates = React.useMemo(() => tutors.filter((t) => t.subjects.includes(subject)).map((t) => t.hourlyRateCents).sort((a, b) => a - b), [tutors, subject]);
+  const rates = React.useMemo(
+    () => tutors.filter((t) => t.subjects.includes(subject) && t.currency === currency).map((t) => t.hourlyRateCents).sort((a, b) => a - b),
+    [tutors, subject, currency],
+  );
   if (!subject || rates.length < 2) return null;
   return (
     <p className="flex items-start gap-2 text-[13px] text-muted">
       <Info className="mt-0.5 size-3.5 shrink-0 text-ink" aria-hidden />
       <span>
-        For reference, the {rates.length} tutors who list {subjectName(subject)} on TutorLink charge {formatCents(rates[0])}–{formatCents(rates[rates.length - 1])}/hr.
+        For reference, the {rates.length} tutors who list {subjectName(subject)} on TutorLink and charge in {currency} ask {formatMoney(rates[0], currency)}–{formatMoney(rates[rates.length - 1], currency)}/hr.
       </span>
     </p>
   );
@@ -492,8 +496,12 @@ export function StepBudget() {
   const { control, register, setValue, formState } = useFormContext<ReqForm>();
   const errors = formState.errors;
   const subject = useWatch<ReqForm, "subject">({ name: "subject" });
+  // A requirement's budget is in the poster's own currency.
+  const currency = useViewerCurrency();
+  // Example amounts: $40–$80 an hour, the same in local units elsewhere (e.g. ₹2,000–₹4,000).
+  const example = (usdCents: number) => String(Math.round(fromDollarSetting(usdCents, currency) / 100));
   const digitsOnly = (name: "budgetMin" | "budgetMax") => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const clean = e.target.value.replace(/\D/g, "").slice(0, 3);
+    const clean = e.target.value.replace(/\D/g, "").slice(0, 5);
     if (clean !== e.target.value) setValue(name, clean);
   };
   return (
@@ -501,13 +509,13 @@ export function StepBudget() {
       <div className="space-y-3">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Minimum hourly rate" id="req-bmin" required error={errors.budgetMin?.message}>
-            <Input id="req-bmin" inputMode="numeric" prefixText="$" suffix={<span className="pr-1 text-[13px]">/hr</span>} placeholder="40" {...register("budgetMin", { onChange: digitsOnly("budgetMin") })} />
+            <Input id="req-bmin" inputMode="numeric" prefixText={currencySymbol(currency)} suffix={<span className="pr-1 text-[13px]">/hr</span>} placeholder={example(4000)} {...register("budgetMin", { onChange: digitsOnly("budgetMin") })} />
           </Field>
           <Field label="Maximum hourly rate" id="req-bmax" required error={errors.budgetMax?.message}>
-            <Input id="req-bmax" inputMode="numeric" prefixText="$" suffix={<span className="pr-1 text-[13px]">/hr</span>} placeholder="80" {...register("budgetMax", { onChange: digitsOnly("budgetMax") })} />
+            <Input id="req-bmax" inputMode="numeric" prefixText={currencySymbol(currency)} suffix={<span className="pr-1 text-[13px]">/hr</span>} placeholder={example(8000)} {...register("budgetMax", { onChange: digitsOnly("budgetMax") })} />
           </Field>
         </div>
-        <RateContext subject={subject} />
+        <RateContext subject={subject} currency={currency} />
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
@@ -537,6 +545,7 @@ export function StepBudget() {
 
 export function StepPreview({ role, now, onEdit }: { role: Role; now: number; onEdit: (step: number) => void }) {
   const v = useWatch<ReqForm>() as unknown as ReqForm;
+  const currency = useViewerCurrency();
   const job = {
     title: v.title.trim(),
     subject: v.subject,
@@ -551,6 +560,8 @@ export function StepPreview({ role, now, onEdit }: { role: Role; now: number; on
     sessionsPerWeek: v.sessionsPerWeek,
     budgetMinCents: Number(v.budgetMin || 0) * 100,
     budgetMaxCents: Number(v.budgetMax || 0) * 100,
+    // The budget is shown in the poster's currency.
+    currency,
     minExperienceYears: v.minExperience ? Number(v.minExperience) : undefined,
     languages: v.languages,
     preferences: v.preferences,

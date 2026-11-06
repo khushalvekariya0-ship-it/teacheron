@@ -8,8 +8,9 @@ import type { LeadTransaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { useCreditBalance, useFlag, useViewerTimezone } from "@/lib/store/hooks";
-import { CREDITS_PER_APPLICATION, CREDIT_PACKS } from "@/lib/data/platform";
-import { formatCents, formatDate } from "@/lib/format";
+import { CREDITS_PER_APPLICATION, CREDIT_PACKS, packPrice, planPrice } from "@/lib/data/platform";
+import { formatDate } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -34,8 +35,10 @@ export function CreditsView() {
   const balance = useCreditBalance(tutor?.id);
   const { plan } = useMyPlan(tutor?.id);
   const all = useApp((s) => s.leadTransactions);
-  const buyCredits = useApp((s) => s.buyCredits);
+  const payOnline = useApp((s) => s.payOnline);
+  const paymentsOn = useApp((s) => s.config.paymentsEnabled);
   const [pack, setPack] = React.useState<Pack | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
   const rows: TxRow[] = React.useMemo(() => {
     if (!tutor) return [];
@@ -46,7 +49,21 @@ export function CreditsView() {
 
   if (!tutor) return <NeedsTutorProfile what="lead credits" />;
 
-  const basePer = Math.round(CREDIT_PACKS[0].priceCents / CREDIT_PACKS[0].credits);
+  // What TutorLink charges this tutor: in ₹ for tutors who charge in ₹, otherwise in US dollars.
+  const priceOf = (p: Pack) => packPrice(p.id, tutor.currency);
+  const money = (p: Pack) => formatMoney(priceOf(p).amount, priceOf(p).currency);
+  const basePer = Math.round(priceOf(CREDIT_PACKS[0]).amount / CREDIT_PACKS[0].credits);
+  const canBuy = enabled && paymentsOn;
+
+  const buy = async (p: Pack) => {
+    // Razorpay's payment window opens on top of the page, so the dialog closes first.
+    setPack(null);
+    setBusy(true);
+    const res = await payOnline("lead_credits", { packId: p.id });
+    setBusy(false);
+    if (!res.ok) return void (res.code === "cancelled" ? toast(res.error) : toast.error(res.error));
+    toast.success(`${p.credits} credits added`, { description: `New balance: ${balance + p.credits} credits` });
+  };
   const spent = rows.filter((r) => r.delta < 0).reduce((n, r) => n - r.delta, 0);
 
   const columns: Column<TxRow>[] = [
@@ -104,7 +121,7 @@ export function CreditsView() {
             <ol className="space-y-4">
               {[
                 { icon: Send, title: `${CREDITS_PER_APPLICATION} credit per application`, body: "Credits are used only when you send an application. Messaging families who contact you is always free." },
-                { icon: Repeat, title: `${plan.monthlyLeadCredits} credits each month on ${plan.name}`, body: plan.priceCents ? "Monthly credits are added when your plan renews. Unused credits roll over." : "Upgrade to Professional or Premium for more monthly credits." },
+                { icon: Repeat, title: `${plan.monthlyLeadCredits} credits each month on ${plan.name}`, body: planPrice(plan.id, tutor.currency).amount ? "Monthly credits are added each time you pay for a month of your plan. Unused credits roll over." : "Upgrade to Professional or Premium for more monthly credits." },
                 { icon: Tag, title: "Top up any time", body: "Buy a pack below when you need more. Larger packs cost less per credit." },
               ].map((s, i) => (
                 <li key={s.title} className="flex gap-3">
@@ -126,9 +143,14 @@ export function CreditsView() {
         <h2 id="packs-h" className="mb-3 text-[15px] font-semibold tracking-tight text-ink">
           Buy credits
         </h2>
+        {enabled && !paymentsOn && (
+          <InlineAlert tone="info" className="mb-4" title="Credit packs aren't available yet">
+            Online payments are being set up. Your monthly plan credits keep coming in the meantime.
+          </InlineAlert>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           {CREDIT_PACKS.map((p, i) => {
-            const per = Math.round(p.priceCents / p.credits);
+            const per = Math.round(priceOf(p).amount / p.credits);
             const save = Math.round((1 - per / basePer) * 100);
             return (
               <motion.div
@@ -149,9 +171,9 @@ export function CreditsView() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted">
-                  <span className="font-medium tabular-nums text-ink">{formatCents(p.priceCents)}</span> · {formatCents(per)} per credit
+                  <span className="font-medium tabular-nums text-ink">{money(p)}</span> · {formatMoney(per, priceOf(p).currency)} per credit
                 </p>
-                <Button className="mt-5" variant={i === 1 ? "primary" : "secondary"} disabled={!enabled} onClick={() => setPack(p)}>
+                <Button className="mt-5" variant={i === 1 ? "primary" : "secondary"} disabled={!canBuy || busy} onClick={() => setPack(p)}>
                   Buy {p.credits} credits
                 </Button>
               </motion.div>
@@ -179,15 +201,9 @@ export function CreditsView() {
         open={!!pack}
         onOpenChange={(o) => !o && setPack(null)}
         title={pack ? `Buy ${pack.credits} credits?` : ""}
-        description={pack ? `${formatCents(pack.priceCents)} is charged to your card on file. Credits are added to your balance right away.` : undefined}
-        confirmLabel={pack ? `Pay ${formatCents(pack.priceCents)}` : "Confirm"}
-        onConfirm={async () => {
-          if (!pack) return;
-          const res = await buyCredits(pack.id);
-          if (!res.ok) toast.error(res.error);
-          else toast.success(`${pack.credits} credits added`, { description: `New balance: ${balance + pack.credits} credits` });
-          setPack(null);
-        }}
+        description={pack ? `${money(pack)}, paid with UPI or a card. Credits are added to your balance as soon as the payment goes through.` : undefined}
+        confirmLabel={pack ? `Pay ${money(pack)}` : "Confirm"}
+        onConfirm={() => pack && void buy(pack)}
       />
     </div>
   );

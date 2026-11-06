@@ -1,7 +1,7 @@
 import type { Grade, Level, TeachingMode, Tutor } from "@/lib/types";
 import { getCatalog, getSubject, gradeToLevel, LEVEL_LABEL, TIMES_OF_DAY, WEEKDAYS, subjectName } from "@/lib/data/catalog";
 import { distanceMiles, resolveLocation } from "@/lib/data/geo";
-import { formatCents } from "@/lib/format";
+import { asCurrency, CURRENCIES, DEFAULT_CURRENCY, formatMoney, type Currency } from "@/lib/money";
 
 /**
  * Transparent, rules-based matching. Every factor, weight and explanation is visible to the user.
@@ -14,7 +14,13 @@ export interface MatchCriteria {
   modes?: TeachingMode[]; // acceptable modes
   location?: string; // ZIP or city
   maxDistanceMiles?: number;
+  /** In `budgetCurrency`'s minor units. */
   budgetMaxCents?: number;
+  /**
+   * The budget's currency (US dollars when not set). A budget is only checked against tutors who charge
+   * in the same currency; for anyone else it is left out of the score (amounts are never converted).
+   */
+  budgetCurrency?: Currency;
   days?: string[]; // "Mon"...
   timesOfDay?: ("morning" | "afternoon" | "evening")[];
   minExperienceYears?: number;
@@ -138,10 +144,15 @@ export function scoreTutor(tutor: Tutor, c: MatchCriteria, weights = DEFAULT_WEI
   // Budget
   if (c.budgetMaxCents) {
     const rate = tutor.hourlyRateCents;
-    if (rate <= c.budgetMaxCents) push("budget", 1, `${formatCents(rate)}/hr is within budget`);
+    const currency = asCurrency(tutor.currency);
+    const budgetCurrency = asCurrency(c.budgetCurrency);
+    if (currency !== budgetCurrency) {
+      // Another currency: there are no exchange rates, so the budget doesn't count for this tutor.
+      push("budget", 1, `${formatMoney(rate, currency)}/hr in ${currency}, so it isn't compared with your ${budgetCurrency} budget`, true);
+    } else if (rate <= c.budgetMaxCents) push("budget", 1, `${formatMoney(rate, currency)}/hr is within budget`);
     else {
       const over = (rate - c.budgetMaxCents) / c.budgetMaxCents;
-      push("budget", over <= 0.15 ? 0.5 : 0, `${formatCents(rate)}/hr is ${formatCents(rate - c.budgetMaxCents)} above budget`);
+      push("budget", over <= 0.15 ? 0.5 : 0, `${formatMoney(rate, currency)}/hr is ${formatMoney(rate - c.budgetMaxCents, currency)} above budget`);
     }
   } else push("budget", 1, "No budget specified", true);
 
@@ -205,11 +216,20 @@ export function rankTutors(tutors: Tutor[], c: MatchCriteria, weights = DEFAULT_
     .sort((a, b) => Number(a.disqualified) - Number(b.disqualified) || b.percent - a.percent || b.tutor.lessonsCompleted - a.tutor.lessonsCompleted || a.tutor.lastName.localeCompare(b.tutor.lastName));
 }
 
+/** Money symbols and words a budget can be typed with ("₹800", "rs 800", "800 rupees", "£40"…). */
+const BUDGET_UNITS: Record<string, Currency> = {
+  "₹": "INR", rs: "INR", "rs.": "INR", inr: "INR", rupees: "INR",
+  "£": "GBP", gbp: "GBP", pounds: "GBP",
+  "€": "EUR", eur: "EUR", euros: "EUR",
+  usd: "USD", dollars: "USD",
+};
+
 /**
  * Lightweight natural-language parser for the concierge text box. Runs locally — no personal
  * data leaves the browser. Everything it extracts is shown back to the user for confirmation.
+ * A budget typed without a currency ("60 an hour") is read in `currency`, the visitor's own.
  */
-export function parseNaturalLanguage(text: string): MatchCriteria {
+export function parseNaturalLanguage(text: string, currency: Currency = DEFAULT_CURRENCY): MatchCriteria {
   const t = text.toLowerCase();
   const c: MatchCriteria = {};
 
@@ -230,10 +250,18 @@ export function parseNaturalLanguage(text: string): MatchCriteria {
   else if (/sophomore/.test(t)) c.grade = "10";
   else if (/freshman/.test(t)) c.grade = "9";
 
-  const budget = t.match(/\$\s?(\d{2,3})/) ?? t.match(/(\d{2,3})\s?(?:dollars|\/hr|per hour|an hour)/);
-  if (budget) c.budgetMaxCents = +budget[1] * 100;
+  // "$60", "₹800", "rs 1,200" — or an amount and a unit: "800 rupees", "60/hr", "60 an hour".
+  const before = t.match(/(₹|\$|£|€|\b(?:rs\.?|inr|usd|gbp|eur))\s?(\d{1,3}(?:,\d{3})+|\d{2,6})\b/);
+  const after = before ? null : t.match(/\b(\d{1,3}(?:,\d{3})+|\d{2,6})\s?(rupees|dollars|pounds|euros|\/hr|per hour|an hour)/);
+  const budget = before ? { text: before[0], amount: before[2], unit: before[1] } : after ? { text: after[0], amount: after[1], unit: after[2] } : null;
+  if (budget) {
+    c.budgetMaxCents = Number(budget.amount.replace(/,/g, "")) * 100;
+    // "$" alone is the visitor's own dollar (CA$, A$…) when they use one, otherwise US dollars.
+    c.budgetCurrency = budget.unit === "$" ? (CURRENCIES[currency].symbol.endsWith("$") ? currency : "USD") : (BUDGET_UNITS[budget.unit] ?? currency);
+  }
 
-  const zip = t.match(/\b(\d{5})\b/);
+  // The budget's digits are left out, so "₹15000" is never read as a ZIP code.
+  const zip = (budget ? t.replace(budget.text, " ") : t).match(/\b(\d{5})\b/);
   if (zip) c.location = zip[1];
 
   const inPerson = /in[- ]person|at (?:our|my) home|in my area|nearby|local/.test(t);

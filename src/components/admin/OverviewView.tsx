@@ -7,7 +7,8 @@ import type { Permission } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { zonedParts, zonedToUtc } from "@/lib/time";
-import { formatCents, formatDate, formatDateTime, formatRelative } from "@/lib/format";
+import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { subjectName } from "@/lib/data/catalog";
 import { VERIFICATION_LABEL } from "@/components/domain/Badges";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -19,6 +20,7 @@ import { InlineAlert } from "@/components/ui/States";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { Mono, PermissionNotice, formatAge, humanize, settledNet, useDirectory, useStaff } from "./kit";
+import { settledCurrencies, settledSums } from "./money";
 
 const DAY = 86_400_000;
 const WEEKS = 8;
@@ -76,8 +78,13 @@ export function OverviewView() {
       if (i >= 0) perWeek[i]++;
     }
     const bookingPayments = payments.filter((p) => p.kind === "booking");
-    const gmv = settledNet(bookingPayments);
-    const gmvWeeks = starts.map((_, i) => settledNet(bookingPayments.filter((p) => bucketIndex(new Date(p.createdAt).getTime(), starts) === i)).net);
+    // GMV is one figure per currency. The weekly trend needs one number series, so it shows only the
+    // currency with the most settled money, and the chart says which.
+    const gmv = settledSums(bookingPayments);
+    const gmvCurrencies = settledCurrencies(bookingPayments);
+    const chartCurrency = gmvCurrencies[0] ?? "USD";
+    const chartPayments = bookingPayments.filter((p) => p.currency === chartCurrency);
+    const gmvWeeks = starts.map((_, i) => settledNet(chartPayments.filter((p) => bucketIndex(new Date(p.createdAt).getTime(), starts) === i)).net);
 
     const activeTutorIds = new Set(
       bookings
@@ -93,6 +100,8 @@ export function OverviewView() {
       perWeek,
       gmv,
       gmvWeeks,
+      chartCurrency,
+      otherCurrencies: gmvCurrencies.length > 1,
       activeTutors: activeTutorIds.size,
       queue,
       openDisputes,
@@ -135,10 +144,15 @@ export function OverviewView() {
           <StaggerItem>
             <StatTile
               label="GMV (settled)"
-              value={formatCents(m.gmv.net)}
+              value={m.gmv.net}
               icon={<CircleDollarSign />}
               trend={m.gmvWeeks}
-              hint={<span>Booking charges {formatCents(m.gmv.gross)} − refunds {formatCents(m.gmv.refunds)}</span>}
+              hint={
+                <span>
+                  Booking charges {m.gmv.gross} − refunds {m.gmv.refunds}
+                  {m.otherCurrencies && ` · trend in ${m.chartCurrency} only`}
+                </span>
+              }
             />
           </StaggerItem>
         )}
@@ -176,9 +190,19 @@ export function OverviewView() {
         </Card>
         {can("payments.read") ? (
           <Card>
-            <CardHeader title="GMV by week" description="Settled booking charges minus refunds, by payment date" />
+            <CardHeader
+              title={`GMV by week (${m.chartCurrency})`}
+              description={`Settled booking charges minus refunds, by payment date${
+                m.otherCurrencies ? `. Shows ${m.chartCurrency} only, the largest currency; the GMV tile has every currency.` : ""
+              }`}
+            />
             <div className="px-3 pb-4 pt-3 sm:px-5">
-              <AreaChart data={m.labels.map((label, i) => ({ label, value: Math.max(0, m.gmvWeeks[i]) }))} caption="GMV by week" format={(n) => formatCents(Math.round(n))} height={220} />
+              <AreaChart
+                data={m.labels.map((label, i) => ({ label, value: Math.max(0, m.gmvWeeks[i]) }))}
+                caption={`GMV by week in ${m.chartCurrency}`}
+                format={(n) => formatMoney(Math.round(n), m.chartCurrency)}
+                height={220}
+              />
             </div>
           </Card>
         ) : (
@@ -210,7 +234,7 @@ export function OverviewView() {
                 key={d.id}
                 href={`/admin/disputes/${d.id}`}
                 title={DISPUTE_REASON_LABEL[d.reason]}
-                sub={b ? `${subjectName(b.subject)} · ${formatCents(b.priceCents - b.discountCents)} at stake` : d.bookingId}
+                sub={b ? `${subjectName(b.subject)} · ${formatMoney(b.priceCents - b.discountCents, b.currency)} at stake` : d.bookingId}
                 right={<Badge size="sm" tone={d.status === "escalated" ? "danger" : d.status === "open" ? "warning" : "neutral"}>{humanize(d.status)}</Badge>}
                 age={formatAge(now - new Date(d.createdAt).getTime())}
               />

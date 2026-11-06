@@ -10,6 +10,7 @@ import { actorFor, canViewBooking } from "@/lib/permissions";
 import { useApp } from "@/lib/store";
 import { useNow, useSession, useViewerTimezone } from "@/lib/store/hooks";
 import { subjectName } from "@/lib/data/catalog";
+import { PAY_METHOD_LABEL } from "@/lib/data/platform";
 import { formatDate, formatDateTime, formatWeekdayDate } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Badge } from "@/components/ui/Badge";
@@ -81,10 +82,13 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
   const transition = useApp((s) => s.transitionBooking);
   const startConversation = useApp((s) => s.startConversation);
   const contactLearner = useApp((s) => s.contactLearner);
+  const payOnline = useApp((s) => s.payOnline);
+  const payments = useApp((s) => s.payments);
   const peopleFor = usePeople();
   const review = useLessonReview(b);
   const dispute = useLessonDispute(b.id);
   const [dialog, setDialog] = React.useState<LessonDialog | null>(null);
+  const [paying, setPaying] = React.useState(false);
 
   const actor = actorFor(me, b) ?? "booker";
   const isTutor = actor === "tutor";
@@ -106,6 +110,21 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     if (!res.ok) return void toast.error(res.error);
     toast.success("Booking accepted", { description: `${people.counterpart} has been notified.` });
   };
+  // A card / UPI payment that didn't go through is paid again in Razorpay's window (Study Credits never left).
+  const paidWithCredits = payments.some((p) => p.bookingId === b.id && p.method === PAY_METHOD_LABEL.wallet && p.amountCents > 0);
+  const canPayAgain = actor === "booker" && b.status === "payment_failed" && b.priceCents - b.discountCents > 0 && !paidWithCredits;
+  const payAgain = async () => {
+    if (paying) return;
+    setPaying(true);
+    const paid = await payOnline("booking_retry", { bookingId: b.id });
+    // Nothing owed after all: send the request again the normal way.
+    const free = paid.ok && !!paid.data.free;
+    const res = free ? await transition(b.id, "pending") : paid;
+    setPaying(false);
+    if (!res.ok) return void (res.code === "cancelled" ? toast(res.error) : toast.error(res.error));
+    const tutorName = people.tutor?.firstName ?? "Your tutor";
+    toast.success(free ? `${tutorName} has been asked to accept again.` : `Payment done. ${tutorName} has been asked to accept again.`);
+  };
   const goToReview = () => {
     const el = document.getElementById("review");
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -117,7 +136,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     router.push(`/dashboard/messages?c=${res.data.id}`);
   };
 
-  const { primary, items } = buildLessonActions(b, actor, now, policy, { onAccept: accept, onReview: goToReview });
+  const { primary, items } = buildLessonActions(b, actor, now, policy, { onAccept: accept, onReview: goToReview, onPayAgain: canPayAgain ? payAgain : undefined, paying });
 
   const statusNote = (() => {
     switch (b.status) {
@@ -132,7 +151,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
       case "rescheduled":
         return "This booking was moved to a new time.";
       case "payment_failed":
-        return "The payment didn't go through.";
+        return canPayAgain ? "The payment didn't go through. Nothing was charged — pay again to keep this lesson." : "The payment didn't go through.";
       case "disputed":
         return "A reported problem is being reviewed.";
       default:
@@ -218,7 +237,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
             <div className="order-3 min-w-0 space-y-6">
               {showReviewForm && <ReviewForm booking={b} tutorFirstName={tutorFirst} />}
               {review && <ReviewDisplay review={review} isTutor={isTutor} tz={tz} />}
-              {dispute && <DisputeCard dispute={dispute} myId={me.id} tz={tz} />}
+              {dispute && <DisputeCard dispute={dispute} myId={me.id} tz={tz} currency={b.currency} />}
               {canDispute && <ReportProblemCard onReport={() => setDialog("dispute")} policy={policy} />}
             </div>
           )}

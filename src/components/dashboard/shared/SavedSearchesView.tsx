@@ -17,11 +17,12 @@ import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, Dropdow
 import { EmptyState } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { useApp } from "@/lib/store";
-import { useSession, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
-import { parseTutorSearch, searchTutors, SCHEDULE_PRESETS, SORT_OPTIONS, type TutorSearch } from "@/lib/search";
+import { useSession, useListedTutors, useViewerCurrency, useViewerTimezone } from "@/lib/store/hooks";
+import { formatRate, parseTutorSearch, searchTutors, SCHEDULE_PRESETS, SORT_OPTIONS, type TutorSearch } from "@/lib/search";
 import { GRADE_LABEL, LEVEL_LABEL, MODE_LABEL, TIMES_OF_DAY, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
 import { locationLabel } from "@/lib/data/geo";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import type { Currency } from "@/lib/money";
 
 const FREQUENCY_OPTIONS: { value: AlertFrequency; label: string }[] = [
   { value: "instant", label: "Instantly" },
@@ -30,8 +31,8 @@ const FREQUENCY_OPTIONS: { value: AlertFrequency; label: string }[] = [
   { value: "off", label: "Off" },
 ];
 
-/** Readable chips for a tutor-search URL. */
-function tutorChips(s: TutorSearch): string[] {
+/** Readable chips for a tutor-search URL. Rates are in the visitor's own currency, as the search runs. */
+function tutorChips(s: TutorSearch, currency: Currency): string[] {
   const chips: string[] = [];
   if (s.q) chips.push(`“${s.q}”`);
   if (s.subject) chips.push(subjectName(s.subject));
@@ -42,9 +43,9 @@ function tutorChips(s: TutorSearch): string[] {
   if (s.schedule) chips.push(SCHEDULE_PRESETS.find((p) => p.value === s.schedule)?.label ?? s.schedule);
   if (s.days?.length) chips.push(s.days.join(", "));
   if (s.times?.length) chips.push(s.times.map((t) => TIMES_OF_DAY.find((x) => x.value === t)?.label ?? t).join(", "));
-  if (s.minRate && s.maxRate) chips.push(`${formatCents(s.minRate * 100)}–${formatCents(s.maxRate * 100)}/hr`);
-  else if (s.maxRate) chips.push(`Up to ${formatCents(s.maxRate * 100)}/hr`);
-  else if (s.minRate) chips.push(`From ${formatCents(s.minRate * 100)}/hr`);
+  if (s.minRate && s.maxRate) chips.push(`${formatRate(s.minRate, currency)}–${formatRate(s.maxRate, currency)}/hr`);
+  else if (s.maxRate) chips.push(`Up to ${formatRate(s.maxRate, currency)}/hr`);
+  else if (s.minRate) chips.push(`From ${formatRate(s.minRate, currency)}/hr`);
   if (s.exp) chips.push(`${s.exp}+ yrs experience`);
   if (s.lang) chips.push(`Speaks ${s.lang}`);
   if (s.rating) chips.push(`${s.rating}+ stars`);
@@ -82,6 +83,7 @@ function Inner({ me }: { me: User }) {
   const updateSavedSearch = useApp((s) => s.updateSavedSearch);
   const deleteSavedSearch = useApp((s) => s.deleteSavedSearch);
   const tutors = useListedTutors();
+  const currency = useViewerCurrency();
   const [renaming, setRenaming] = React.useState<SavedSearch | null>(null);
   const [deleting, setDeleting] = React.useState<SavedSearch | null>(null);
   const isTutor = me.role === "tutor";
@@ -95,14 +97,14 @@ function Inner({ me }: { me: User }) {
           const params = new URLSearchParams(s.query);
           if (s.kind === "tutors") {
             const parsed = parseTutorSearch(params);
-            return { search: s, chips: tutorChips(parsed), count: searchTutors(tutors, parsed).length, noun: "tutor", href: `/tutors${params.size ? `?${params}` : ""}` };
+            return { search: s, chips: tutorChips(parsed, currency), count: searchTutors(tutors, parsed, currency).length, noun: "tutor", href: `/tutors${params.size ? `?${params}` : ""}` };
           }
           const subjects = (s.query.subject ?? "").split(",").filter(Boolean);
           const count = requirements.filter((r) => r.status === "published" && (!subjects.length || subjects.includes(r.subject))).length;
           const base = isTutor ? "/dashboard/jobs" : "/tutor-jobs";
           return { search: s, chips: jobChips(s.query), count, noun: "open job", href: `${base}${params.size ? `?${params}` : ""}` };
         }),
-    [saved, me.id, tutors, requirements, isTutor],
+    [saved, me.id, tutors, currency, requirements, isTutor],
   );
 
   const setFrequency = async (s: SavedSearch, frequency: AlertFrequency) => {

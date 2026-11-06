@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Message, Role, SignInMethods } from "@/lib/types";
+import { openCheckout, type CheckoutKind, type CheckoutOrder } from "@/lib/checkout";
 import type { DomainActions } from "@/lib/domain/actions";
 import { emptyData, fail, ok, type ClientConfig, type Data, type Result } from "@/lib/domain/data";
 import { DEFAULT_FLAGS, DEFAULT_POLICY } from "@/lib/data/platform";
@@ -112,6 +113,13 @@ interface ClientOnly {
   startAddEmail(email: string): Promise<Result>;
   finishAddEmail(code: string): Promise<Result>;
   resendParentalConsent(): Promise<Result>;
+  /**
+   * Pays with Razorpay (UPI, cards…): the server makes the order for the exact amount, Razorpay's window
+   * takes the payment, the server checks it and does what was paid for (books the lesson, adds credits…).
+   * `free`: nothing was owed, so do it the normal way. The result's `code` is "cancelled" when the window
+   * was closed.
+   */
+  payOnline(kind: CheckoutKind, payload: Record<string, unknown>): Promise<Result<{ free?: boolean; resultId?: string | null }>>;
 }
 
 export type AppState = Data & ServerActions & ClientOnly;
@@ -384,6 +392,27 @@ export const useApp = create<AppState>()(
         resendParentalConsent: async () => {
           const r = await auth("consent", {});
           return r.ok ? ok(undefined) : r;
+        },
+        async payOnline(kind, payload) {
+          const start = await post("/api/pay/start", { kind, payload });
+          const sr = start.body?.result as Result<CheckoutOrder | { free: true }> | undefined;
+          if (!sr) return fail(statusError(start.status, start.body));
+          if (!sr.ok) return sr;
+          if ("free" in sr.data) return ok({ free: true });
+          const order = sr.data;
+          const paid = await openCheckout(order);
+          if (!paid.ok) return { ...fail(paid.error), code: "cancelled" };
+          const seq = ++requested;
+          saving++;
+          try {
+            const { status, body } = await post("/api/pay/finish", { orderId: order.orderId, paymentId: paid.paymentId, signature: paid.signature });
+            apply(seq, body, true);
+            const r = body?.result as Result<{ resultId: string | null }> | undefined;
+            if (!r) return fail(statusError(status, body));
+            return r.ok ? ok({ resultId: r.data.resultId }) : r;
+          } finally {
+            saving--;
+          }
         },
       };
     },

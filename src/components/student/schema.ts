@@ -2,10 +2,11 @@ import { z } from "zod";
 import type { Gender, PayMethod, StudentProfile, User } from "@/lib/types";
 import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
 import { isCountryCode, startCountry } from "@/lib/location";
+import { budgetLimits, budgetPresets, formatMoney, type Currency } from "@/lib/money";
 
 /*
  * Student learning profile: one zod schema per setup step. The same schemas back the sections of
- * Dashboard → My profile. Money is entered in whole dollars here and stored in cents.
+ * Dashboard → My profile. Money is entered in whole units of the learner's currency and stored in minor units.
  */
 
 export const GENDERS: { value: Gender; label: string }[] = [
@@ -54,12 +55,8 @@ export const PAY_METHOD_OPTIONS: { value: PayMethod; label: string; description:
 ];
 export const PAY_METHOD_NAME = Object.fromEntries(PAY_METHOD_OPTIONS.map((o) => [o.value, o.label])) as Record<PayMethod, string>;
 
-export const BUDGET_PRESETS = [
-  { label: "Under $30", min: 15, max: 30 },
-  { label: "$30–$50", min: 30, max: 50 },
-  { label: "$50–$80", min: 50, max: 80 },
-  { label: "$80+", min: 80, max: 150 },
-];
+/** Quick budget choices in the learner's currency. */
+export const BUDGET_PRESETS = (currency: Currency) => budgetPresets(currency);
 
 /** Basic information. Age limits depend on how the student signed up (13–17 with a parent's consent, or 18+). */
 export function basicSchema(teen: boolean) {
@@ -108,26 +105,31 @@ export const scheduleSchema = z.object({
   startWhen: z.enum(["asap", "this_month", "exploring"]),
 });
 
-const dollars = z
-  .number({ invalid_type_error: "Enter a whole-dollar amount." })
-  .int("Use whole dollars.")
-  .min(10, "The lowest is $10 an hour.")
-  .max(500, "The highest is $500 an hour.");
-
-export const budgetSchema = z
-  .object({
-    budgetMin: dollars,
-    budgetMax: dollars,
-    payer: z.enum(["self", "parent"]),
-    payMethod: z.enum(["card", "upi", "wallet"]),
-  })
-  .refine((v) => v.budgetMin <= v.budgetMax, { path: ["budgetMax"], message: "This has to be at least your lowest amount." });
+/** The budget step, in the learner's currency (whole units: $10–$500, ₹100–₹20,000…). */
+export function budgetSchemaFor(currency: Currency) {
+  const { min, max } = budgetLimits(currency);
+  const whole = z
+    .number({ invalid_type_error: "Enter a whole amount." })
+    .int("Use a whole amount.")
+    .min(min, `The lowest is ${formatMoney(min * 100, currency)} an hour.`)
+    .max(max, `The highest is ${formatMoney(max * 100, currency)} an hour.`);
+  return z
+    .object({
+      budgetMin: whole,
+      budgetMax: whole,
+      payer: z.enum(["self", "parent"]),
+      payMethod: z.enum(["card", "upi", "wallet"]),
+    })
+    .refine((v) => v.budgetMin <= v.budgetMax, { path: ["budgetMax"], message: "This has to be at least your lowest amount." });
+}
+/** US dollars; screens use budgetSchemaFor(the learner's currency). */
+export const budgetSchema = budgetSchemaFor("USD");
 
 export type BasicValues = z.infer<ReturnType<typeof basicSchema>>;
 export type LearningValues = z.infer<typeof learningSchema>;
 export type PreferencesValues = z.infer<typeof preferencesSchema>;
 export type ScheduleValues = z.infer<typeof scheduleSchema>;
-export type BudgetValues = z.infer<typeof budgetSchema>;
+export type BudgetValues = z.infer<ReturnType<typeof budgetSchemaFor>>;
 
 export const STUDENT_STEPS = [
   { n: 1, title: "Basic information", short: "Basic info", description: "Who you are. Only you can see your age, gender and contact details." },

@@ -5,10 +5,12 @@ import { validateWeek } from "@/components/dashboard/tutor/AvailabilityEditor";
 import { parseIntroVideo } from "@/lib/video";
 import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
 import { isCountryCode, startCountry } from "@/lib/location";
+import { currencyForCountry, formatMoney, rateProblem, toMinor, trialPriceMax, type Currency } from "@/lib/money";
 
 /*
  * Tutor onboarding: one zod schema per step. Keys match what the store's `submitOnboarding()` reads
- * (hourlyRate and trialPrice are whole dollars; everything else is stored as-is).
+ * (hourlyRate and trialPrice are whole units of the currency of the country chosen in step 1: rupees in
+ * India, dollars in the US…; everything else is stored as-is).
  */
 
 const MAX_YEAR = new Date().getFullYear() + 6;
@@ -83,20 +85,31 @@ export const modesSchema = z.object({
 
 export const TRIAL_LENGTHS = [15, 30, 45, 60] as const;
 
-export const pricingSchema = z.object({
-  hourlyRate: z
-    .number({ invalid_type_error: "Enter your hourly rate." })
-    .int("Use whole dollars.")
-    .min(15, "The minimum rate is $15 per hour.")
-    .max(500, "The maximum rate is $500 per hour."),
-  trialEnabled: z.boolean(),
-  trialPrice: z
-    .number({ invalid_type_error: "Enter a trial price (0 for free)." })
-    .int("Use whole dollars.")
-    .min(0, "Enter 0 or more.")
-    .max(200, "Trial lessons can be up to $200."),
-  trialDuration: z.number().refine((v) => (TRIAL_LENGTHS as readonly number[]).includes(v), "Choose a trial length."),
-});
+/**
+ * The highest trial price, in minor units of the tutor's currency (the profile editor's trial setting allows
+ * up to this much).
+ */
+/** The most a trial can cost, in the tutor's currency (minor units). */
+export const TRIAL_PRICE_MAX = (currency: Currency) => trialPriceMax(currency);
+
+/** Prices follow the country from step 1 (kept in the data), so its currency's limits apply. */
+export const pricingSchema = z
+  .object({
+    country: z.string().optional(),
+    hourlyRate: z.number({ invalid_type_error: "Enter your hourly rate." }).int("Use a whole number."),
+    trialEnabled: z.boolean(),
+    trialPrice: z
+      .number({ invalid_type_error: "Enter a trial price (0 for free)." })
+      .int("Use a whole number.")
+      .min(0, "Enter 0 or more."),
+    trialDuration: z.number().refine((v) => (TRIAL_LENGTHS as readonly number[]).includes(v), "Choose a trial length."),
+  })
+  .superRefine((v, ctx) => {
+    const currency = currencyForCountry(v.country);
+    const rate = rateProblem(toMinor(v.hourlyRate), currency, "Your hourly rate");
+    if (rate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["hourlyRate"], message: rate });
+    if (toMinor(v.trialPrice) > TRIAL_PRICE_MAX(currency)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["trialPrice"], message: `Trial lessons can be up to ${formatMoney(TRIAL_PRICE_MAX(currency), currency)}.` });
+  });
 
 export const availabilitySchema = z.object({
   availability: z

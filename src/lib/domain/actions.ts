@@ -5,9 +5,10 @@ import type {
   Subscription, TeachingMode, TrialConfig, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WalletTransaction,
   WeeklyWindow,
 } from "@/lib/types";
-import { CREDIT_PACKS, CREDITS_PER_APPLICATION, PAY_METHOD_LABEL, STUDY_CREDIT_PACKS, TUTOR_PLANS, type BookingPolicy } from "@/lib/data/platform";
+import { CREDIT_PACKS, CREDITS_PER_APPLICATION, PAY_METHOD_LABEL, TUTOR_PLANS, packPrice, planPrice, studyPackAmount, type BookingPolicy } from "@/lib/data/platform";
+import { asCurrency, currencyForCountry, CURRENCIES, formatMoney, fromDollarSetting, isCurrency, rateProblem, trialPriceMax, type Currency } from "@/lib/money";
 import { SITE } from "@/lib/site";
-import { applyBps, formatCents, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
+import { applyBps, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
 import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
 import { isFlagOn } from "@/lib/flags";
 import { resolveLocation } from "@/lib/data/geo";
@@ -69,12 +70,36 @@ const uniqueSlug = (base: string, taken: string[]): string => {
   return slug;
 };
 
+/**
+ * A card / UPI payment that the server has checked with Razorpay (Checkout's signature and the payment
+ * itself) for this one action. Only /api/pay passes it; it can never come from the browser.
+ */
+export interface VerifiedPayment {
+  provider: "razorpay";
+  paymentId: string;
+  orderId: string;
+  amount: number;
+  currency: Currency;
+  /** false: the money is only held (a lesson request), taken when the tutor accepts. */
+  captured: boolean;
+  /** "Visa •••• 1111", "UPI", … */
+  method: string;
+}
+
+/** Razorpay calls an action needs; the engine makes them before anything is saved (a failure saves nothing). */
+export type ProviderOp =
+  | { kind: "capture"; paymentId: string; amount: number; currency: Currency; bookingId: string }
+  | { kind: "refund"; paymentId: string; amount: number; currency: Currency; paymentRowId: string };
+
 export interface DomainEnv {
-  /** Card and UPI charges can only be taken once a payment provider is connected (docs/SUPABASE_SETUP.md). */
+  /** Card and UPI charges can only be taken once a payment provider (Razorpay) is connected. */
   paymentsEnabled: boolean;
+  payment?: VerifiedPayment;
+  providerOps?: ProviderOp[];
 }
 
 const PAYMENTS_OFF = "Card and UPI payments aren't switched on yet, so only free lessons can be booked for now.";
+const PAY_ONLINE = "Pay online with UPI or a card to continue.";
 
 export interface DomainActions {
   // account
@@ -114,7 +139,8 @@ export interface DomainActions {
   removeLessonVideo(bookingId: string): Result<Booking>;
   /** The tutor (or staff) adds or removes ("") the recording link of an online lesson once it has started. */
   setLessonRecording(bookingId: string, link: string): Result<Booking>;
-  validateCoupon(code: string, subtotalCents: number): Result<{ coupon: Coupon; discountCents: number }>;
+  /** `currency`: the lesson's (the tutor's); fixed-amount codes only work in their own currency. */
+  validateCoupon(code: string, subtotalCents: number, currency?: Currency): Result<{ coupon: Coupon; discountCents: number }>;
   /** Adds Study Credits to the signed-in learner's wallet, paid by card or UPI. */
   topUpWallet(packId: string, method: Exclude<PayMethod, "wallet">): Result<WalletTransaction>;
   submitReview(bookingId: string, rating: Review["rating"], body: string): Result<Review>;
@@ -132,6 +158,13 @@ export interface DomainActions {
    * check stopped for containing contact details. Returns whether messaging is now paused.
    */
   recordContactFlag(input: { channel: ContactFlag["channel"]; contextId?: string; kinds: ContactKind[]; fileName?: string }): Result<{ paused: boolean }>;
+  /**
+   * Server only: a held card / UPI payment couldn't be taken (the hold ran out before the tutor accepted, or the
+   * bank declined it). The lesson waits for the family to pay again; both sides are told.
+   */
+  markPaymentFailed(bookingId: string, reason: string): Result;
+  /** Server only: what a booking would cost (all the booking checks, nothing saved), for checkout. */
+  quoteBooking(input: CreateBookingInput): Result<{ charge: number; currency: Currency; instant: boolean; description: string }>;
   /** A person whose messaging is paused asks Trust & Safety to unlock it (once per pause). */
   requestChatUnlock(note: string): Result;
   // notifications
@@ -153,7 +186,7 @@ export interface DomainActions {
     patch: Partial<
       Pick<
         Tutor,
-        | "headline" | "bio" | "approach" | "hourlyRateCents" | "modes" | "subjects" | "specialties" | "levels" | "languages" | "serviceRadiusMiles" | "learningSupport"
+        | "headline" | "bio" | "approach" | "hourlyRateCents" | "currency" | "modes" | "subjects" | "specialties" | "levels" | "languages" | "serviceRadiusMiles" | "learningSupport"
         | "photoUrl" | "introVideoUrl" | "experienceYears" | "category" | "education" | "certifications"
       >
     >,
@@ -361,8 +394,37 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     if (b.mode !== "online") return fail("Meeting links are for online lessons. In-person lessons have a meeting place instead.");
     return ok({ booking: b, actor });
   };
-  const addPayment = (p: Omit<Payment, "id" | "createdAt">) => set((s) => ({ payments: [{ ...p, id: uid("pay"), createdAt: nowIso() }, ...s.payments] }));
-  const walletBalance = (userId: string) => get().walletTransactions.filter((t) => t.userId === userId).reduce((sum, t) => sum + t.deltaCents, 0);
+  const addPayment = (p: Omit<Payment, "id" | "createdAt">): Payment => {
+    const row: Payment = { ...p, id: uid("pay"), createdAt: nowIso() };
+    set((s) => ({ payments: [row, ...s.payments] }));
+    return row;
+  };
+  /** Study Credits a learner holds in one currency. */
+  const walletBalance = (userId: string, currency: Currency) =>
+    get().walletTransactions.filter((t) => t.userId === userId && asCurrency(t.currency) === currency).reduce((sum, t) => sum + t.deltaCents, 0);
+  /** A learner's own currency (Study Credits, job budgets). */
+  const currencyOfUser = (u: User) => currencyForCountry(u.country);
+  /**
+   * The checked card / UPI payment for an amount, or why there isn't one. Free (0) needs none. Without a
+   * payment: "pay online" once payments are on, otherwise the honest "not switched on yet".
+   */
+  const onlinePayment = (amount: number, currency: Currency): Result<VerifiedPayment | null> => {
+    if (amount <= 0) return ok(null);
+    const p = env.payment;
+    if (!p) return env.paymentsEnabled ? fail(PAY_ONLINE, "payment_required") : fail(PAYMENTS_OFF);
+    if (p.amount !== amount || p.currency !== currency) return fail("That payment doesn't match the price, so it wasn't used. Please try again.");
+    return ok(p);
+  };
+  /** The booking's Razorpay charge (positive row), if it was paid online. */
+  const onlineCharge = (bookingId: string) => get().payments.find((p) => p.bookingId === bookingId && p.provider === "razorpay" && p.amountCents > 0 && !!p.providerPaymentId);
+  /** Refunds a booking's online payment through Razorpay (the engine makes the call before saving). */
+  const refundOnline = (b: Booking, amount: number, description: string): boolean => {
+    const charge = onlineCharge(b.id);
+    if (!charge?.providerPaymentId || amount <= 0) return false;
+    const row = addPayment({ bookingId: b.id, userId: b.bookerId, kind: "booking", amountCents: -amount, currency: asCurrency(b.currency), status: "refunded", description, method: charge.method, provider: "razorpay", providerPaymentId: charge.providerPaymentId, providerOrderId: charge.providerOrderId });
+    env.providerOps?.push({ kind: "refund", paymentId: charge.providerPaymentId, amount, currency: asCurrency(b.currency), paymentRowId: row.id });
+    return true;
+  };
   const addWalletTx = (t: Omit<WalletTransaction, "id" | "createdAt">): WalletTransaction => {
     const tx: WalletTransaction = { ...t, id: uid("wt"), createdAt: nowIso() };
     set((s) => ({ walletTransactions: [tx, ...s.walletTransactions] }));
@@ -370,8 +432,56 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   };
   /** A lesson paid with Study Credits is refunded to the wallet, never to a card. */
   const paidFromWallet = (bookingId: string) => get().payments.some((p) => p.bookingId === bookingId && p.method === PAY_METHOD_LABEL.wallet && p.amountCents > 0);
+  /**
+   * Every check and the price for a booking, without saving anything: used by createBooking, and by checkout
+   * (quoteBooking) to know the exact amount to ask Razorpay for.
+   */
+  const bookingQuote = (user: User, input: CreateBookingInput) => {
+    if (user.parentalConsent?.status === "pending") return fail("A parent or guardian needs to approve your account before you can book.");
+    const tutor = resolveTutor(get(), input.tutorId);
+    if (!tutor || tutor.hidden) return fail("This tutor isn't available right now.");
+    if (user.role === "parent" && !input.childId) return fail("Choose which child this lesson is for.");
+    if (input.childId && !get().children.some((c) => c.id === input.childId && c.parentId === user.id)) return fail("Choose one of your children.");
+    if (!tutor.modes.includes(input.mode)) return fail(`This tutor doesn't teach ${input.mode === "online" ? "online" : "in person"}.`);
+    if (input.mode === "online" && !flag("online_lessons")) return fail("Online lessons are temporarily unavailable.");
+    if (!tutor.subjects.includes(input.subject)) return fail("Choose a subject this tutor teaches.");
+    if (input.type === "trial") {
+      if (!flag("trial_lessons") || !tutor.trial.enabled) return fail("This tutor isn't offering trial lessons.");
+      if (input.durationMin !== tutor.trial.durationMin) return fail("Trial length doesn't match the tutor's trial.");
+      const learner = input.childId ?? user.id;
+      if (get().bookings.some((b) => b.tutorId === tutor.id && b.type === "trial" && (b.childId ?? b.bookerId) === learner && !b.status.startsWith("cancelled"))) {
+        return fail("You've already had a trial with this tutor. Book a regular lesson instead.");
+      }
+    }
+    const availErr = withinAvailability(tutor, input.startUtc, input.durationMin);
+    if (availErr) return fail(availErr);
+    // Checked inside the transaction (and by a database constraint) so two people can't take the same slot.
+    if (slotConflict(tutor.id, input.startUtc, input.durationMin)) return fail("That time was just booked. Please choose another slot.");
+
+    // Until online payments are connected, trial lessons are free (families see them as free; the tutor's
+    // own trial price applies again once payments are on).
+    // Everything about this lesson's money is in the tutor's currency.
+    const currency = asCurrency(tutor.currency);
+    const priceCents = input.type === "trial" ? (env.paymentsEnabled ? tutor.trial.priceCents : 0) : sessionPrice(tutor.hourlyRateCents, input.durationMin);
+    let discountCents = 0;
+    let couponId: string | null = null;
+    if (input.couponCode) {
+      const c = get().validateCoupon(input.couponCode, priceCents, currency);
+      if (!c.ok) return c;
+      discountCents = c.data.discountCents;
+      couponId = c.data.coupon.id;
+    }
+    const instant = !tutor.rules.requiresApproval && flag("instant_booking");
+    const charge = priceCents - discountCents;
+    const payWith: PayMethod = input.payWith ?? "card";
+    if (!(payWith in PAY_METHOD_LABEL)) return fail("Choose how you'd like to pay.");
+    if (payWith === "upi" && charge > 0 && currency !== "INR") return fail("UPI is for payments in rupees. Pay with a card instead.");
+    if (payWith === "wallet" && charge > walletBalance(user.id, currency)) return fail("You don't have enough Study Credits in this currency for this lesson. Add credits or choose another way to pay.");
+    return ok({ tutor, currency, priceCents, discountCents, couponId, charge, instant, payWith });
+  };
   const refundToWallet = (bookingId: string, userId: string, cents: number, description: string) => {
-    if (cents > 0 && paidFromWallet(bookingId)) addWalletTx({ userId, deltaCents: cents, kind: "refund", description, bookingId });
+    const b = get().bookings.find((x) => x.id === bookingId);
+    if (cents > 0 && paidFromWallet(bookingId)) addWalletTx({ userId, deltaCents: cents, currency: asCurrency(b?.currency), kind: "refund", description, bookingId });
   };
   /** Why an account can't be deleted yet, or null. */
   const removalProblem = (u: User, self: boolean): string | null => {
@@ -566,9 +676,12 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const req: Requirement = {
         id: existing?.id ?? uid("req"), ownerId: r.data.id, title: "", subject: "", grade: "9", objectives: "", modes: ["online"],
         country: r.data.country, city: r.data.city ?? "", state: r.data.state ?? "", zip: r.data.zip ?? "", days: [], timesOfDay: [], sessionsPerWeek: 1,
-        budgetMinCents: 4000, budgetMaxCents: 8000, languages: ["English"], preferences: "", details: "", status: "draft",
+        currency: currencyOfUser(r.data), budgetMinCents: currencyOfUser(r.data) === "INR" ? 30000 : 4000, budgetMaxCents: currencyOfUser(r.data) === "INR" ? 80000 : 8000,
+        languages: ["English"], preferences: "", details: "", status: "draft",
         createdAt: nowIso(), ...existing, ...definedOnly(editable), updatedAt: nowIso(),
       } as Requirement;
+      // A job's budget stays in the currency it was first saved in.
+      req.currency = existing?.currency ?? currencyOfUser(r.data);
       // Owner and status can't be changed through a draft save.
       req.ownerId = r.data.id;
       req.status = existing?.status ?? "draft";
@@ -632,10 +745,12 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (get().applications.some((a) => a.requirementId === requirementId && a.tutorId === tutorId && a.status !== "withdrawn")) return fail("You've already applied to this job.");
       if (message.trim().length < 40) return fail("Write at least 40 characters so the family knows why you're a good fit.");
       if (message.trim().length > 3000) return fail("Keep your message under 3,000 characters.");
-      if (!Number.isInteger(proposedRateCents) || proposedRateCents < 1500 || proposedRateCents > 50000) return fail("Enter a rate between $15 and $500 per hour.");
+      const tutorCurrency = asCurrency(resolveTutor(get(), tutorId)?.currency);
+      const rateErr = rateProblem(proposedRateCents, tutorCurrency, "Your rate");
+      if (rateErr) return fail(rateErr);
       if (flag("lead_credits") && creditBalance(tutorId) < CREDITS_PER_APPLICATION) return fail("You're out of lead credits. Buy credits or upgrade your plan to apply.");
       const { text } = maskContactInfo(message.trim());
-      const app: Application = { id: uid("app"), requirementId, tutorId, message: text, proposedRateCents, status: "applied", createdAt: nowIso(), updatedAt: nowIso() };
+      const app: Application = { id: uid("app"), requirementId, tutorId, message: text, proposedRateCents, currency: tutorCurrency, status: "applied", createdAt: nowIso(), updatedAt: nowIso() };
       set((s) => ({
         applications: [app, ...s.applications],
         leadTransactions: flag("lead_credits") ? [{ id: uid("lt"), tutorId, delta: -CREDITS_PER_APPLICATION, reason: `Applied: ${req.title}`, createdAt: nowIso() }, ...s.leadTransactions] : s.leadTransactions,
@@ -666,7 +781,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     },
 
     /* ─── Bookings ─────────────────────────────────────────── */
-    validateCoupon(code, subtotalCents) {
+    validateCoupon(code, subtotalCents, currency = "USD") {
       if (!flag("coupons")) return fail("Promo codes aren't available right now.");
       const r = requireUser(["student", "parent"]);
       if (!r.ok) return r;
@@ -674,7 +789,10 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!c || !c.active) return fail("This code isn't valid.");
       if (new Date(c.expiresAt).getTime() < Date.now()) return fail("This code has expired.");
       if (c.redemptions >= c.maxRedemptions) return fail("This code has reached its usage limit.");
-      if (subtotalCents < c.minPurchaseCents) return fail(`This code needs a minimum of ${formatCents(c.minPurchaseCents)}.`);
+      // A fixed amount (and any minimum) is in the code's currency; a percentage code without one works in any.
+      const codeCurrency = c.currency ? asCurrency(c.currency) : c.kind === "fixed" || c.minPurchaseCents > 0 ? "USD" : null;
+      if (codeCurrency && codeCurrency !== currency) return fail(`This code is for lessons paid in ${CURRENCIES[codeCurrency].name}s.`);
+      if (subtotalCents < c.minPurchaseCents) return fail(`This code needs a minimum of ${formatMoney(c.minPurchaseCents, currency)}.`);
       if (c.firstBookingOnly && get().bookings.some((b) => b.bookerId === r.data.id && b.priceCents > 0 && !b.status.startsWith("cancelled"))) return fail("This code is for your first paid booking only.");
       const discountCents = c.kind === "percent" ? Math.round((subtotalCents * c.value) / 100) : Math.min(c.value, subtotalCents);
       return ok({ coupon: c, discountCents });
@@ -683,13 +801,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const r = requireUser(["student", "parent"]);
       if (!r.ok) return r;
       if (r.data.parentalConsent?.status === "pending") return fail("A parent or guardian needs to approve your account before you can add credits.");
-      const pack = STUDY_CREDIT_PACKS.find((p) => p.id === packId);
-      if (!pack) return fail("Choose an amount to add.");
+      const currency = currencyOfUser(r.data);
+      const amount = studyPackAmount(packId, currency);
+      if (!amount) return fail("Choose an amount to add.");
       if (method !== "card" && method !== "upi") return fail("Pay for credits with a card or UPI.");
       if (!env.paymentsEnabled) return fail("Adding Study Credits needs card or UPI payments, which aren't switched on yet.");
-      const label = `${formatCents(pack.amountCents)} Study Credits`;
-      addPayment({ userId: r.data.id, kind: "study_credits", amountCents: pack.amountCents, status: "succeeded", description: label, method: PAY_METHOD_LABEL[method] });
-      const tx = addWalletTx({ userId: r.data.id, deltaCents: pack.amountCents, kind: "top_up", description: `Added with ${method === "upi" ? "UPI" : "card"}` });
+      const paid = onlinePayment(amount, currency);
+      if (!paid.ok) return paid;
+      const p = paid.data!;
+      const label = `${formatMoney(amount, currency)} Study Credits`;
+      addPayment({ userId: r.data.id, kind: "study_credits", amountCents: amount, currency, status: "succeeded", description: label, method: p.method, provider: "razorpay", providerPaymentId: p.paymentId, providerOrderId: p.orderId });
+      const tx = addWalletTx({ userId: r.data.id, deltaCents: amount, currency, kind: "top_up", description: `Added with ${p.method}` });
       notify(r.data.id, { type: "payment", title: "Study Credits added", body: `${label} are in your wallet. Pay for any lesson in one tap.`, href: "/dashboard/payments" });
       return ok(tx);
     },
@@ -699,53 +821,22 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const user = r.data;
       const dupe = get().bookings.find((b) => b.idempotencyKey === input.idempotencyKey);
       if (dupe) return dupe.bookerId === user.id ? ok(dupe) : fail("This booking request was already used. Please try again."); // idempotent retry
-      if (user.parentalConsent?.status === "pending") return fail("A parent or guardian needs to approve your account before you can book.");
-      const tutor = resolveTutor(get(), input.tutorId);
-      if (!tutor || tutor.hidden) return fail("This tutor isn't available right now.");
-      if (user.role === "parent" && !input.childId) return fail("Choose which child this lesson is for.");
-      if (input.childId && !get().children.some((c) => c.id === input.childId && c.parentId === user.id)) return fail("Choose one of your children.");
-      if (!tutor.modes.includes(input.mode)) return fail(`This tutor doesn't teach ${input.mode === "online" ? "online" : "in person"}.`);
-      if (input.mode === "online" && !flag("online_lessons")) return fail("Online lessons are temporarily unavailable.");
-      if (!tutor.subjects.includes(input.subject)) return fail("Choose a subject this tutor teaches.");
-      if (input.type === "trial") {
-        if (!flag("trial_lessons") || !tutor.trial.enabled) return fail("This tutor isn't offering trial lessons.");
-        if (input.durationMin !== tutor.trial.durationMin) return fail("Trial length doesn't match the tutor's trial.");
-        const learner = input.childId ?? user.id;
-        if (get().bookings.some((b) => b.tutorId === tutor.id && b.type === "trial" && (b.childId ?? b.bookerId) === learner && !b.status.startsWith("cancelled"))) {
-          return fail("You've already had a trial with this tutor. Book a regular lesson instead.");
-        }
-      }
-      const availErr = withinAvailability(tutor, input.startUtc, input.durationMin);
-      if (availErr) return fail(availErr);
-      // Checked inside the transaction (and by a database constraint) so two people can't take the same slot.
-      if (slotConflict(tutor.id, input.startUtc, input.durationMin)) return fail("That time was just booked. Please choose another slot.");
-
-      // Until online payments are connected, trial lessons are free (families see them as free; the tutor's
-      // own trial price applies again once payments are on).
-      const priceCents = input.type === "trial" ? (env.paymentsEnabled ? tutor.trial.priceCents : 0) : sessionPrice(tutor.hourlyRateCents, input.durationMin);
-      let discountCents = 0;
-      let couponId: string | null = null;
-      if (input.couponCode) {
-        const c = get().validateCoupon(input.couponCode, priceCents);
-        if (!c.ok) return c;
-        discountCents = c.data.discountCents;
-        couponId = c.data.coupon.id;
-      }
-      const instant = !tutor.rules.requiresApproval && flag("instant_booking");
+      const quote = bookingQuote(user, input);
+      if (!quote.ok) return quote;
+      const { tutor, currency, priceCents, discountCents, couponId, charge, instant, payWith } = quote.data;
       const status: BookingStatus = instant ? "confirmed" : "pending";
-      const charge = priceCents - discountCents;
-      const payWith: PayMethod = input.payWith ?? "card";
-      if (!(payWith in PAY_METHOD_LABEL)) return fail("Choose how you'd like to pay.");
-      if (charge > 0 && payWith !== "wallet" && !env.paymentsEnabled) return fail(PAYMENTS_OFF);
-      if (payWith === "wallet" && charge > walletBalance(user.id)) return fail("You don't have enough Study Credits for this lesson. Add credits or choose another way to pay.");
+      // A card / UPI payment the server has checked with Razorpay: held for a request, taken for an instant booking.
+      const online = charge > 0 && payWith !== "wallet" ? onlinePayment(charge, currency) : ok(null);
+      if (!online.ok) return online;
+      const paidOnline = online.data;
       if (couponId) set((s) => ({ coupons: s.coupons.map((x) => (x.id === couponId ? { ...x, redemptions: x.redemptions + 1 } : x)) }));
       const id = uid("bk");
       const booking: Booking = {
         id, tutorId: tutor.id, bookerId: user.id, childId: input.childId, subject: input.subject, type: input.type, status,
-        startUtc: new Date(input.startUtc).toISOString(), durationMin: input.durationMin, mode: input.mode, priceCents, discountCents,
+        startUtc: new Date(input.startUtc).toISOString(), durationMin: input.durationMin, mode: input.mode, currency, priceCents, discountCents,
         platformFeeCents: applyBps(charge, commissionBps(tutor.id)),
-        // Pending bookings are authorized and captured on confirmation (see docs: Stripe manual capture).
-        paymentStatus: charge === 0 ? "unpaid" : instant ? "paid" : "authorized",
+        // Card / UPI payments for a request are held (Razorpay manual capture) and taken when the tutor accepts.
+        paymentStatus: charge === 0 ? "unpaid" : instant || paidOnline?.captured ? "paid" : "authorized",
         // Online lessons happen in the built-in classroom page.
         meetingUrl: input.mode === "online" ? `/classroom/${id}` : undefined,
         locationNote: input.mode === "in_person" ? `Meeting place is agreed in messages. Tutor serves within ${tutor.serviceRadiusMiles} mi of ${tutor.city}.` : undefined,
@@ -760,9 +851,16 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       set((s) => ({ bookings: [booking, ...s.bookings] }));
       if (charge > 0) {
         const description = `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.`;
-        addPayment({ bookingId: id, userId: user.id, kind: "booking", amountCents: charge, status: instant ? "succeeded" : "pending", description, method: PAY_METHOD_LABEL[payWith] });
+        const taken = instant || !!paidOnline?.captured;
+        addPayment({
+          bookingId: id, userId: user.id, kind: "booking", amountCents: charge, currency, status: taken ? "succeeded" : "pending", description,
+          method: paidOnline ? paidOnline.method : PAY_METHOD_LABEL[payWith],
+          ...(paidOnline ? { provider: "razorpay" as const, providerPaymentId: paidOnline.paymentId, providerOrderId: paidOnline.orderId } : {}),
+        });
+        // An instant booking takes a held payment straight away.
+        if (paidOnline && !paidOnline.captured && instant) env.providerOps?.push({ kind: "capture", paymentId: paidOnline.paymentId, amount: charge, currency, bookingId: id });
         // Credits leave the wallet straight away; a declined or expired request puts them back.
-        if (payWith === "wallet") addWalletTx({ userId: user.id, deltaCents: -charge, kind: "lesson", description, bookingId: id });
+        if (payWith === "wallet") addWalletTx({ userId: user.id, deltaCents: -charge, currency, kind: "lesson", description, bookingId: id });
       }
       get().startConversation(tutor.id, { childId: input.childId, subject: input.subject });
       const tutorUser = tutorUserId(tutor.id);
@@ -800,20 +898,26 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (actor === "admin" && refund && refund.cents > 0 && !hasPermission(r.data, "payments.refund")) {
         return fail("This change issues a refund. It needs the payments.refund permission.");
       }
-      if (to === "pending" && b.status === "payment_failed" && paid > 0 && !paidFromWallet(id) && !env.paymentsEnabled) return fail(PAYMENTS_OFF);
+      const bookingCurrency = asCurrency(b.currency);
+      // Paying again after a failed payment needs a new card / UPI payment (Study Credits were never taken back).
+      const retryPayment = to === "pending" && b.status === "payment_failed" && paid > 0 && !paidFromWallet(id) ? onlinePayment(paid, bookingCurrency) : ok(null);
+      if (!retryPayment.ok) return retryPayment;
 
       const safeNote = note ? maskContactInfo(note).text : note;
       const patch: Partial<Booking> = { status: to, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to, note: [safeNote, refund?.rule].filter(Boolean).join(" · ") || undefined }] };
       const tutor = resolveTutor(get(), b.tutorId)!;
       if (to === "confirmed" && paid > 0) {
-        // Capture the authorized payment now that the tutor accepted.
+        // The tutor accepted: take the held payment (Razorpay capture, made before this is saved).
+        const held = b.paymentStatus === "authorized" ? onlineCharge(id) : undefined;
+        if (held?.providerPaymentId && held.status === "pending") env.providerOps?.push({ kind: "capture", paymentId: held.providerPaymentId, amount: paid, currency: bookingCurrency, bookingId: id });
         patch.paymentStatus = "paid";
         set((s) => ({ payments: s.payments.map((p) => (p.bookingId === id && p.status === "pending" ? { ...p, status: "succeeded" } : p)) }));
       }
       if (to === "pending" && b.status === "payment_failed") {
-        // Retry payment: place a fresh authorization.
-        patch.paymentStatus = paid > 0 ? "authorized" : "unpaid";
-        if (paid > 0) addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: paid, status: "pending", description: "Payment retry — authorized", method: PAY_METHOD_LABEL.card });
+        // Paying again: a new card / UPI payment, held until the tutor accepts.
+        const p = retryPayment.data;
+        patch.paymentStatus = paid > 0 ? (p?.captured ? "paid" : "authorized") : "unpaid";
+        if (p) addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: paid, currency: bookingCurrency, status: p.captured ? "succeeded" : "pending", description: "Payment for your lesson (paid again)", method: p.method, provider: "razorpay", providerPaymentId: p.paymentId, providerOrderId: p.orderId });
       }
       if (b.paymentStatus === "authorized" && (to === "cancelled_by_student" || to === "cancelled_by_tutor")) {
         patch.paymentStatus = "refunded"; // authorization released, nothing was charged
@@ -821,13 +925,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         refundToWallet(id, b.bookerId, paid, "Request cancelled — credits returned");
       } else if (refund && refund.cents > 0) {
         patch.paymentStatus = refund.cents >= paid ? "refunded" : "partially_refunded";
-        addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: -refund.cents, status: "refunded", description: `Refund — ${refund.rule}`, method: paidFromWallet(id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
-        refundToWallet(id, b.bookerId, refund.cents, `Refund — ${refund.rule}`);
+        // Card / UPI payments are refunded through Razorpay; Study Credits back to the wallet.
+        if (!refundOnline(b, refund.cents, `Refund — ${refund.rule}`)) {
+          addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: -refund.cents, currency: bookingCurrency, status: "refunded", description: `Refund — ${refund.rule}`, method: paidFromWallet(id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
+          refundToWallet(id, b.bookerId, refund.cents, `Refund — ${refund.rule}`);
+        }
       }
       patchBooking(id, patch);
-      if (to === "no_show_tutor" && policy.tutorNoShowCreditCents > 0) {
-        addWalletTx({ userId: b.bookerId, deltaCents: policy.tutorNoShowCreditCents, kind: "credit", description: "Platform credit — tutor didn't show", bookingId: id });
-        notify(b.bookerId, { type: "refund", title: "We're sorry your tutor didn't show", body: `${formatCents(policy.tutorNoShowCreditCents)} platform credit has been added to your account.`, href: `/dashboard/bookings/${id}` });
+      const noShowCredit = fromDollarSetting(policy.tutorNoShowCreditCents, bookingCurrency);
+      if (to === "no_show_tutor" && noShowCredit > 0) {
+        addWalletTx({ userId: b.bookerId, deltaCents: noShowCredit, currency: bookingCurrency, kind: "credit", description: "Platform credit — tutor didn't show", bookingId: id });
+        notify(b.bookerId, { type: "refund", title: "We're sorry your tutor didn't show", body: `${formatMoney(noShowCredit, bookingCurrency)} platform credit has been added to your account.`, href: `/dashboard/bookings/${id}` });
       }
       if (actor === "admin") audit("booking.transition", "booking", id, { from: b.status, to });
 
@@ -1096,6 +1204,25 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       }));
       return ok(rep);
     },
+    quoteBooking(input) {
+      const r = requireUser(["student", "parent"]);
+      if (!r.ok) return r;
+      const q = bookingQuote(r.data, input);
+      if (!q.ok) return q;
+      const { tutor, charge, currency, instant } = q.data;
+      return ok({ charge, currency, instant, description: `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.` });
+    },
+    markPaymentFailed(bookingId, reason) {
+      const b = get().bookings.find((x) => x.id === bookingId);
+      if (!b) return fail("Booking not found.");
+      if (b.status === "payment_failed") return ok(undefined);
+      const tutor = resolveTutor(get(), b.tutorId);
+      patchBooking(b.id, { status: "payment_failed", paymentStatus: "failed", history: [...b.history, { at: nowIso(), by: "system", from: b.status, to: "payment_failed", note: reason }] });
+      set((s) => ({ payments: s.payments.map((p) => (p.bookingId === b.id && p.amountCents > 0 && p.provider === "razorpay" && (p.status === "pending" || p.status === "succeeded") ? { ...p, status: "failed", description: `${p.description} — not taken` } : p)) }));
+      notify(b.bookerId, { type: "payment", title: "Your payment didn't go through", body: `Pay again to keep your ${subjectName(b.subject)} lesson${tutor ? ` with ${tutor.firstName}` : ""}. Nothing was charged.`, href: `/dashboard/bookings/${b.id}` });
+      notify(tutorUserId(b.tutorId), { type: "payment", title: "A lesson is waiting for payment", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(tutorUserId(b.tutorId)))}. We've asked the family to pay again.`, href: `/dashboard/bookings/${b.id}` });
+      return ok(undefined);
+    },
     recordContactFlag(input) {
       const r = requireUser();
       if (!r.ok) return r;
@@ -1292,7 +1419,15 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     updateTutorProfile(patch) {
       const r = requireUser(["tutor"]);
       if (!r.ok || !r.data.tutorId) return r.ok ? fail("Tutor profile not found.") : r;
-      if (patch.hourlyRateCents !== undefined && (!Number.isInteger(patch.hourlyRateCents) || patch.hourlyRateCents < 1500 || patch.hourlyRateCents > 50000)) return fail("Hourly rate must be between $15 and $500.");
+      const before = resolveTutor(get(), r.data.tutorId);
+      if (patch.currency !== undefined && !isCurrency(patch.currency)) return fail("Choose a currency.");
+      const nextCurrency = asCurrency(patch.currency ?? before?.currency);
+      // Changing the currency means entering the hourly rate in it too (₹45 isn't $45).
+      if (patch.currency !== undefined && patch.currency !== before?.currency && patch.hourlyRateCents === undefined) return fail("Enter your hourly rate in the new currency too.");
+      if (patch.hourlyRateCents !== undefined) {
+        const err = rateProblem(patch.hourlyRateCents, nextCurrency);
+        if (err) return fail(err);
+      }
       if (patch.bio !== undefined && patch.bio.trim().length < 80) return fail("Your bio should be at least 80 characters.");
       if (patch.introVideoUrl && !parseIntroVideo(patch.introVideoUrl)) return fail("Use a YouTube or Vimeo link, a direct MP4 link, or upload a video file.");
       if (patch.experienceYears !== undefined && (!Number.isInteger(patch.experienceYears) || patch.experienceYears < 0 || patch.experienceYears > 60)) return fail("Years of experience must be between 0 and 60.");
@@ -1358,7 +1493,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const r = requireUser(["tutor"]);
       if (!r.ok || !r.data.tutorId) return r.ok ? fail("Tutor profile not found.") : r;
       const next = { ...resolveTutor(get(), r.data.tutorId)!.trial, ...definedOnly(trial) };
-      if (next.priceCents < 0 || next.priceCents > 20000 || !Number.isInteger(next.priceCents)) return fail("Trial price must be between $0 and $200.");
+      const trialCurrency = asCurrency(resolveTutor(get(), r.data.tutorId)!.currency);
+      const trialMax = trialPriceMax(trialCurrency);
+      if (next.priceCents < 0 || next.priceCents > trialMax || !Number.isInteger(next.priceCents)) return fail(`Trial price must be between ${formatMoney(0, trialCurrency)} and ${formatMoney(trialMax, trialCurrency)}.`);
       if (![15, 20, 25, 30, 45, 60].includes(next.durationMin)) return fail("Choose a trial length between 15 and 60 minutes.");
       patchTutor(r.data.tutorId, { trial: next });
       return ok(undefined);
@@ -1379,7 +1516,11 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const need = ["headline", "bio", "subjects", "hourlyRate", "modes", "zip"].filter((k) => !d[k] || (Array.isArray(d[k]) && !(d[k] as unknown[]).length));
       if (need.length) return fail(`Missing: ${need.join(", ")}.`);
       const hourlyRateCents = Math.round(Number(d.hourlyRate) * 100);
-      if (!Number.isInteger(hourlyRateCents) || hourlyRateCents < 1500 || hourlyRateCents > 50000) return fail("Hourly rate must be between $15 and $500.");
+      // A new tutor charges in their country's currency (₹ in India, $ in the US…).
+      const onboardCountry = isCountryCode(String(d.country ?? "")) ? String(d.country) : (r.data.country ?? "US");
+      const tutorCurrency = currencyForCountry(onboardCountry);
+      const rateErr = rateProblem(hourlyRateCents, tutorCurrency);
+      if (rateErr) return fail(rateErr);
       // Tutors who already have a profile keep it — onboarding never creates a duplicate.
       if (r.data.tutorId && resolveTutor(get(), r.data.tutorId)) return ok(resolveTutor(get(), r.data.tutorId)!);
       const id = r.data.tutorId ?? uid("tut");
@@ -1401,8 +1542,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
           return p ? { lat: p.lat, lng: p.lng } : { lat: 39.83, lng: -98.58 };
         })(),
         serviceRadiusMiles: Math.min(100, Math.max(0, Math.round(Number(d.serviceRadiusMiles ?? 10)) || 10)), timezone: r.data.timezone, modes: strs(d.modes) as TeachingMode[],
+        currency: tutorCurrency,
         hourlyRateCents,
-        trial: { enabled: Boolean(d.trialEnabled ?? true), priceCents: Math.min(20000, Math.max(0, Math.round(Number(d.trialPrice ?? 0) * 100) || 0)), durationMin: [15, 20, 25, 30, 45, 60].includes(Number(d.trialDuration)) ? Number(d.trialDuration) : 30 },
+        trial: { enabled: Boolean(d.trialEnabled ?? true), priceCents: Math.min(trialPriceMax(tutorCurrency), Math.max(0, Math.round(Number(d.trialPrice ?? 0) * 100) || 0)), durationMin: [15, 20, 25, 30, 45, 60].includes(Number(d.trialDuration)) ? Number(d.trialDuration) : 30 },
         rules: { minNoticeHours: 12, maxAdvanceDays: 45, bufferMinutes: 15, sessionLengths: [60], requiresApproval: true },
         experienceYears: Math.min(60, Math.max(0, Math.round(Number(d.experienceYears ?? 0)) || 0)),
         education: (Array.isArray(d.education) ? (d.education as unknown as Tutor["education"]) : []).slice(0, 6).map((e) => ({ degree: maskContactInfo(str(e.degree, 80)).text, field: maskContactInfo(str(e.field, 80)).text, institution: maskContactInfo(str(e.institution, 120)).text, year: Number(e.year) || 0, verified: false })),
@@ -1449,9 +1591,13 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const pack = CREDIT_PACKS.find((p) => p.id === packId);
       if (!pack) return fail("Choose a credit pack.");
       if (!env.paymentsEnabled) return fail("Buying credits needs card payments, which aren't switched on yet.");
+      const price = packPrice(pack.id, resolveTutor(get(), r.data.tutorId)?.currency);
+      const paid = onlinePayment(price.amount, price.currency);
+      if (!paid.ok) return paid;
+      const p = paid.data!;
       const tx: LeadTransaction = { id: uid("lt"), tutorId: r.data.tutorId, delta: pack.credits, reason: `Purchased ${pack.credits} credits`, createdAt: nowIso() };
       set((s) => ({ leadTransactions: [tx, ...s.leadTransactions] }));
-      addPayment({ userId: r.data.id, kind: "lead_credits", amountCents: pack.priceCents, status: "succeeded", description: `${pack.credits} lead credits`, method: PAY_METHOD_LABEL.card });
+      addPayment({ userId: r.data.id, kind: "lead_credits", amountCents: price.amount, currency: price.currency, status: "succeeded", description: `${pack.credits} lead credits`, method: p.method, provider: "razorpay", providerPaymentId: p.paymentId, providerOrderId: p.orderId });
       return ok(tx);
     },
     changePlan(plan) {
@@ -1460,10 +1606,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const p = TUTOR_PLANS.find((x) => x.id === plan);
       if (!p) return fail("Choose a plan.");
       if (p.priceCents > 0 && !env.paymentsEnabled) return fail("Paid plans need card payments, which aren't switched on yet.");
+      const price = planPrice(p.id, resolveTutor(get(), r.data.tutorId)?.currency);
+      const paid = onlinePayment(price.amount, price.currency);
+      if (!paid.ok) return paid;
       const tutorId = r.data.tutorId;
-      set((s) => ({ subscriptions: { ...s.subscriptions, [tutorId]: { plan, status: "active", renewsAt: new Date(Date.now() + 30 * 86_400_000).toISOString() } } }));
+      // A month at a time: renewing the same plan early adds the month after the time already paid for.
+      const current = get().subscriptions[tutorId];
+      const paidUntil = current?.plan === plan && current.renewsAt ? Math.max(Date.now(), new Date(current.renewsAt).getTime()) : Date.now();
+      set((s) => ({ subscriptions: { ...s.subscriptions, [tutorId]: { plan, status: "active", renewsAt: new Date(paidUntil + 30 * 86_400_000).toISOString() } } }));
       if (p.priceCents > 0) {
-        addPayment({ userId: r.data.id, kind: "subscription", amountCents: p.priceCents, status: "succeeded", description: `${p.name} plan — monthly`, method: PAY_METHOD_LABEL.card });
+        const pay = paid.data!;
+        addPayment({ userId: r.data.id, kind: "subscription", amountCents: price.amount, currency: price.currency, status: "succeeded", description: `${p.name} plan — one month`, method: pay.method, provider: "razorpay", providerPaymentId: pay.paymentId, providerOrderId: pay.orderId });
         set((s) => ({ leadTransactions: [{ id: uid("lt"), tutorId, delta: p.monthlyLeadCredits, reason: `${p.name} plan — monthly credits`, createdAt: nowIso() }, ...s.leadTransactions] }));
       }
       return ok(undefined);
@@ -1516,7 +1669,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const b = get().bookings.find((x) => x.id === d.bookingId)!;
       const paid = b.priceCents - b.discountCents;
       if (outcome !== "no_refund" && outcome !== "credit" && !hasPermission(r.data, "payments.refund")) return fail("Refunds require the payments.refund permission.");
-      if (!Number.isInteger(amountCents) || amountCents < 0 || (outcome !== "credit" && amountCents > paid)) return fail(`Refund must be between $0 and ${formatCents(paid)}.`);
+      const disputeCurrency = asCurrency(b.currency);
+      if (!Number.isInteger(amountCents) || amountCents < 0 || (outcome !== "credit" && amountCents > paid)) return fail(`Refund must be between ${formatMoney(0, disputeCurrency)} and ${formatMoney(paid, disputeCurrency)}.`);
       if (note.trim().length < 10) return fail("Explain the decision (10+ characters).");
       const amount = outcome === "full_refund" ? paid : amountCents;
       set((s) => ({ disputes: s.disputes.map((x) => (x.id === id ? { ...x, status: outcome === "no_refund" ? "rejected" : "resolved", resolution: { outcome, amountCents: amount, note: note.trim() }, updatedAt: nowIso() } : x)) }));
@@ -1526,12 +1680,14 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       }
       if ((outcome === "full_refund" || outcome === "partial_refund") && amount > 0) {
         const description = `Dispute refund (${outcome.replace("_", " ")})`;
-        addPayment({ bookingId: b.id, userId: b.bookerId, kind: "booking", amountCents: -amount, status: "refunded", description, method: paidFromWallet(b.id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
-        refundToWallet(b.id, b.bookerId, amount, description);
+        if (!refundOnline(b, amount, description)) {
+          addPayment({ bookingId: b.id, userId: b.bookerId, kind: "booking", amountCents: -amount, currency: disputeCurrency, status: "refunded", description, method: paidFromWallet(b.id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
+          refundToWallet(b.id, b.bookerId, amount, description);
+        }
       }
-      if (outcome === "credit" && amount > 0) addWalletTx({ userId: b.bookerId, deltaCents: amount, kind: "credit", description: "Platform credit — dispute decision", bookingId: b.id });
+      if (outcome === "credit" && amount > 0) addWalletTx({ userId: b.bookerId, deltaCents: amount, currency: disputeCurrency, kind: "credit", description: "Platform credit — dispute decision", bookingId: b.id });
       audit("dispute.resolve", "dispute", id, { outcome, amountCents: amount });
-      notify(b.bookerId, { type: "refund", title: "Dispute resolved", body: outcome === "no_refund" ? "No refund was issued. See details in your booking." : outcome === "credit" ? `${formatCents(amount)} platform credit added to your Study Credits.` : `${formatCents(amount)} refund issued.`, href: `/dashboard/bookings/${b.id}` });
+      notify(b.bookerId, { type: "refund", title: "Dispute resolved", body: outcome === "no_refund" ? "No refund was issued. See details in your booking." : outcome === "credit" ? `${formatMoney(amount, disputeCurrency)} platform credit added to your Study Credits.` : `${formatMoney(amount, disputeCurrency)} refund issued.`, href: `/dashboard/bookings/${b.id}` });
       notify(tutorUserId(b.tutorId), { type: "booking_cancelled", title: "Dispute resolved", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(tutorUserId(b.tutorId)))}`, href: `/dashboard/bookings/${b.id}` });
       return ok(undefined);
     },
@@ -1717,10 +1873,13 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (get().coupons.some((c) => c.code === code && c.id !== input.id)) return fail("That code already exists.");
       if (input.kind === "percent" && (input.value <= 0 || input.value > 100)) return fail("Percent discounts must be 1–100.");
       if (input.kind === "fixed" && (input.value <= 0 || !Number.isInteger(input.value))) return fail("Enter a fixed discount in cents.");
+      // A fixed amount and a minimum are in one currency; a plain percentage code works in any currency.
+      if (input.currency !== undefined && !isCurrency(input.currency)) return fail("Choose a currency.");
+      if ((input.kind === "fixed" || input.minPurchaseCents > 0) && !input.currency) return fail("Choose the currency for the amount.");
       if (Number.isNaN(new Date(input.expiresAt).getTime())) return fail("Choose an expiry date.");
       const existing = input.id ? get().coupons.find((c) => c.id === input.id) : undefined;
       if (input.id && !existing) return fail("Coupon not found.");
-      const coupon: Coupon = { ...input, code, id: existing?.id ?? uid("cpn"), redemptions: existing?.redemptions ?? 0 };
+      const coupon: Coupon = { ...input, code, currency: input.kind === "fixed" || input.minPurchaseCents > 0 ? input.currency : undefined, id: existing?.id ?? uid("cpn"), redemptions: existing?.redemptions ?? 0 };
       set((s) => ({ coupons: existing ? s.coupons.map((c) => (c.id === coupon.id ? coupon : c)) : [coupon, ...s.coupons] }));
       audit(existing ? "coupon.update" : "coupon.create", "coupon", coupon.id, { code });
       return ok(coupon);

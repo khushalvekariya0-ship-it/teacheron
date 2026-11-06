@@ -6,7 +6,8 @@ import type { NextConfig } from "next";
  *   - browsers use only HTTPS once they've seen the site over HTTPS (ignored on http://localhost);
  *   - no MIME sniffing, a privacy-friendly referrer, and forms can only post to this site;
  *   - camera, microphone and screen sharing only for this site (the live classroom), location too
- *     ("Find my address"); payment, USB and similar browser features are off.
+ *     ("Find my address"); the browser's payment feature only for this site and Razorpay's checkout;
+ *     USB and similar browser features are off.
  * Scripts aren't restricted further here: Next.js, Supabase and LiveKit would need nonces for that.
  */
 const SECURITY_HEADERS = [
@@ -15,7 +16,7 @@ const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
-  { key: "Permissions-Policy", value: "camera=(self), microphone=(self), display-capture=(self), geolocation=(self), clipboard-read=(self), clipboard-write=(self), payment=(), usb=(), serial=(), bluetooth=()" },
+  { key: "Permissions-Policy", value: 'camera=(self), microphone=(self), display-capture=(self), geolocation=(self), clipboard-read=(self), clipboard-write=(self), payment=(self "https://api.razorpay.com" "https://checkout.razorpay.com"), usb=(), serial=(), bluetooth=()' },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
 ];
 

@@ -9,7 +9,7 @@ import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDate, formatDateTime, formatRelative, pluralize } from "@/lib/format";
+import { formatDate, formatDateTime, formatRelative, pluralize } from "@/lib/format";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
@@ -24,9 +24,10 @@ import { toast } from "@/components/ui/Toast";
 import { describeAudit } from "./AuditLogView";
 import {
   ALL_PERMISSIONS, BulkBar, ClearFilters, ExportButton, Facts, FilterSelect, PERMISSION_META, PermissionButton, PermissionNotice, ReasonDialog, SearchInput, Section,
-  RowOpen, StatusPill, TextLink, Timeline, Toolbar, fullName, humanize, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam,
+  RowOpen, StatusPill, TextLink, Timeline, Toolbar, fullName, humanize, matches, useDirectory, useStaff, useSticky, useUrlParam,
 } from "./kit";
 import { ChatPauseControls } from "./ChatSafetyView";
+import { settledSums } from "./money";
 import { POSTAL_MAX_LENGTH, postalLabel } from "@/lib/postal";
 import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/location";
 
@@ -280,7 +281,8 @@ function UserDetail({ user }: { user: User }) {
   const data = React.useMemo(() => {
     const booked = bookings.filter((b) => b.bookerId === user.id);
     const taught = user.tutorId ? bookings.filter((b) => b.tutorId === user.tutorId) : [];
-    const spend = settledNet(payments.filter((p) => p.userId === user.id && p.kind === "booking")).net;
+    // One figure per currency: a learner may have booked tutors who charge in different currencies.
+    const spend = settledSums(payments.filter((p) => p.userId === user.id && p.kind === "booking")).net;
     const reqs = requirements.filter((r) => r.ownerId === user.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const appCount = new Map<string, number>();
     for (const a of applications) appCount.set(a.requirementId, (appCount.get(a.requirementId) ?? 0) + 1);
@@ -349,7 +351,7 @@ function UserDetail({ user }: { user: User }) {
             ) : (
               <>
                 <Metric label="Bookings" value={data.booked.length} />
-                <Metric label="Net spend" value={formatCents(data.spend)} />
+                <Metric label="Net spend" value={data.spend} />
               </>
             )}
           </div>

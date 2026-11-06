@@ -4,29 +4,53 @@ import * as React from "react";
 import { BadgeCheck, CalendarClock, Landmark, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "@/components/motion";
-import { DEFAULT_POLICY, TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents } from "@/lib/format";
+import { DEFAULT_POLICY, planPrice, platformCurrency, TUTOR_PLANS, type PlatformCurrency } from "@/lib/data/platform";
+import { applyBps } from "@/lib/format";
+import { formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
+import { useViewerCurrency } from "@/lib/store/hooks";
 
-const MIN = 2000;
-const MAX = 15000;
-const STEP = 500;
+/** The rate slider in minor units: $20–$150 in $5 steps, scaled with TutorLink's local amounts elsewhere (₹ ×50). */
+function rateScale(currency: PlatformCurrency) {
+  return { min: fromDollarSetting(2000, currency), max: fromDollarSetting(15000, currency), step: fromDollarSetting(500, currency) };
+}
+function startRate(currency: PlatformCurrency, cents: number): number {
+  const { min, max, step } = rateScale(currency);
+  return Math.min(max, Math.max(min, Math.round(cents / step) * step));
+}
 
 /**
  * Interactive split of one paid one-hour lesson: pick a rate and a plan, see what you keep,
  * the commission, and how many lesson hours a month make a paid plan worth it. Plan data only.
+ *
+ * The plan fee is set against the lesson money, so both are in one currency: rupees for visitors who
+ * charge in ₹, US dollars for everyone else (the currencies plans are billed in). `initialRateCents`
+ * is in `currency` (US dollars by default); in any other currency the slider starts at a round example.
  */
-export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents: number; isMedian: boolean }) {
-  const [rate, setRate] = React.useState(() => Math.min(MAX, Math.max(MIN, Math.round(initialRateCents / STEP) * STEP)));
+export function EarningsSplit({ initialRateCents, isMedian, currency: given = "USD" }: { initialRateCents: number; isMedian: boolean; currency?: Currency }) {
+  const viewer = useViewerCurrency();
+  const currency = platformCurrency(viewer);
+  const ownRate = currency === given;
+  const startCents = ownRate ? initialRateCents : fromDollarSetting(5000, currency);
+  const [rate, setRate] = React.useState(() => startRate(currency, startCents));
+  // The visitor's currency is known only after the page loads: start again in it.
+  const [shownIn, setShownIn] = React.useState(currency);
+  if (shownIn !== currency) {
+    setShownIn(currency);
+    setRate(startRate(currency, startCents));
+  }
+  const scale = rateScale(currency);
+  const money = (cents: number, opts?: { exact?: boolean }) => formatMoney(cents, currency, opts);
   const [planId, setPlanId] = React.useState(TUTOR_PLANS.find((p) => p.highlighted)?.id ?? TUTOR_PLANS[0].id);
   const plan = TUTOR_PLANS.find((p) => p.id === planId) ?? TUTOR_PLANS[0];
   const base = TUTOR_PLANS[0];
+  const fee = (planId: string) => planPrice(planId, currency).amount;
 
   const commission = applyBps(rate, plan.commissionBps);
   const keep = rate - commission;
   const keepPct = 100 - plan.commissionBps / 100;
   // Hours of lessons per month after which the plan's lower commission covers its monthly fee.
   const savedPerHour = applyBps(rate, base.commissionBps - plan.commissionBps);
-  const breakEven = plan.priceCents > 0 && savedPerHour > 0 ? Math.ceil(plan.priceCents / savedPerHour) : null;
+  const breakEven = fee(plan.id) > 0 && savedPerHour > 0 ? Math.ceil(fee(plan.id) / savedPerHour) : null;
 
   return (
     <div className="grid overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_24px_60px_-36px_rgb(15_23_42/0.45)] lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -38,27 +62,28 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
               Your hourly rate
             </label>
             <p className="mt-1 font-heading text-[44px] font-extrabold leading-none tracking-[-0.03em] text-ink tabular-nums">
-              {formatCents(rate)}
+              {money(rate)}
               <span className="text-[18px] font-semibold text-muted">/hr</span>
             </p>
           </div>
-          {isMedian && rate === Math.round(initialRateCents / STEP) * STEP && <span className="rounded-md bg-canvas px-2 py-1 text-[12px] font-medium text-muted">Median rate listed today</span>}
+          {isMedian && ownRate && rate === startRate(currency, initialRateCents) && <span className="rounded-md bg-canvas px-2 py-1 text-[12px] font-medium text-muted">Median rate listed today</span>}
         </div>
         <input
           id="es-rate"
           type="range"
-          min={MIN}
-          max={MAX}
-          step={STEP}
+          min={scale.min}
+          max={scale.max}
+          step={scale.step}
           value={rate}
           onChange={(e) => setRate(Number(e.target.value))}
-          aria-valuetext={`${formatCents(rate)} per hour`}
+          aria-valuetext={`${money(rate)} per hour`}
           className="mt-5 w-full accent-[#4f46e5]"
         />
         <div className="mt-1 flex justify-between text-[12px] tabular-nums text-muted">
-          <span>{formatCents(MIN)}</span>
-          <span>{formatCents(MAX)}</span>
+          <span>{money(scale.min)}</span>
+          <span>{money(scale.max)}</span>
         </div>
+        {viewer !== currency && <p className="mt-2 text-[12.5px] leading-relaxed text-muted">Shown in US dollars: tutors outside India pay for plans in US dollars.</p>}
 
         <div className="mt-6" role="radiogroup" aria-label="Plan">
           <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Plan</p>
@@ -76,7 +101,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
                 >
                   {on && <motion.span layoutId="es-plan" className="absolute inset-0 rounded-lg bg-surface shadow-sm ring-1 ring-line" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
                   <span className="relative block text-[14px] font-semibold">{p.name}</span>
-                  <span className="relative block text-[12px] tabular-nums text-muted">{p.priceCents ? `${formatCents(p.priceCents)}/mo` : "Free"}</span>
+                  <span className="relative block text-[12px] tabular-nums text-muted">{fee(p.id) ? `${money(fee(p.id))}/mo` : "Free"}</span>
                 </button>
               );
             })}
@@ -87,7 +112,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
         <div className="mt-7">
           <div className="flex items-baseline justify-between text-[13px] text-ink-2">
             <span>One paid 1-hour lesson</span>
-            <span className="tabular-nums">Family pays {formatCents(rate)}</span>
+            <span className="tabular-nums">Family pays {money(rate)}</span>
           </div>
           <div className="mt-2 flex h-12 overflow-hidden rounded-xl" aria-hidden>
             <motion.div
@@ -104,12 +129,12 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
             <div className="rounded-xl border border-line p-4">
               <dt className="text-[12.5px] text-muted">You keep</dt>
               <dd className="mt-1 font-heading text-[26px] font-bold tabular-nums text-ink" aria-live="polite">
-                {formatCents(keep, { exact: true })}
+                {money(keep, { exact: true })}
               </dd>
             </div>
             <div className="rounded-xl border border-line p-4">
               <dt className="text-[12.5px] text-muted">TutorLink commission</dt>
-              <dd className="mt-1 font-heading text-[26px] font-bold tabular-nums text-ink-2">{formatCents(commission, { exact: true })}</dd>
+              <dd className="mt-1 font-heading text-[26px] font-bold tabular-nums text-ink-2">{money(commission, { exact: true })}</dd>
             </div>
           </dl>
           <p className="mt-4 text-[13.5px] leading-relaxed text-ink-2">
@@ -131,7 +156,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
           {[
             { icon: BadgeCheck, title: "Lesson completed", body: "The family paid when they booked; you teach the lesson." },
             { icon: CalendarClock, title: `${DEFAULT_POLICY.disputeWindowDays}-day review window`, body: `Families can report a problem within ${DEFAULT_POLICY.disputeWindowDays} days of a lesson.` },
-            { icon: Landmark, title: "Paid out to your bank", body: "Earnings become available and are paid out through Stripe Connect." },
+            { icon: Landmark, title: "Paid out to your bank", body: "Earnings become available and are paid out to your bank account." },
           ].map((s, i, arr) => (
             <li key={s.title} className="relative flex gap-4">
               {i < arr.length - 1 && <span className="absolute left-5 top-11 h-[calc(100%-1rem)] w-px bg-line" aria-hidden />}
@@ -150,7 +175,7 @@ export function EarningsSplit({ initialRateCents, isMedian }: { initialRateCents
             <Wallet className="size-4 text-brand" aria-hidden /> {plan.name} plan
           </p>
           <ul className="mt-2 space-y-1 text-[13.5px] text-ink-2">
-            <li>{plan.priceCents ? `${formatCents(plan.priceCents)} a month` : "No monthly fee"}</li>
+            <li>{fee(plan.id) ? `${money(fee(plan.id))} a month` : "No monthly fee"}</li>
             <li>{plan.commissionBps / 100}% commission per paid lesson</li>
             <li>{plan.monthlyLeadCredits} job application credits a month</li>
           </ul>

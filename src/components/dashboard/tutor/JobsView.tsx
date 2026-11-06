@@ -17,7 +17,8 @@ import { useCatalog, useCreditBalance, useFlag, useNow } from "@/lib/store/hooks
 import { scoreTutor, type MatchResult } from "@/lib/matching";
 import { GRADE_LABEL, LEVELS, MODE_LABEL, gradeToLevel, subjectName } from "@/lib/data/catalog";
 import { CREDITS_PER_APPLICATION } from "@/lib/data/platform";
-import { formatCents, formatRelative } from "@/lib/format";
+import { formatRelative } from "@/lib/format";
+import { CURRENCIES, formatMoney, rateLimits, rateProblem, toMinor, type Currency } from "@/lib/money";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -29,7 +30,7 @@ import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MatchRing, NeedsTutorProfile } from "./shared";
-import { useMyTutor } from "./hooks";
+import { priceInputProps, useMyTutor } from "./hooks";
 import { APPLICATION_STATUS_META, budgetLabel, requirementCriteria, scheduleLabel } from "./jobs-shared";
 
 type Tab = "all" | "saved" | "applied";
@@ -334,7 +335,7 @@ export function JobsView() {
         )}
       </div>
 
-      <ApplyDialog req={applyTo} onClose={() => setApplyTo(null)} defaultRate={Math.round(tutor.hourlyRateCents / 100)} credits={credits} creditsOn={creditsOn} />
+      <ApplyDialog req={applyTo} onClose={() => setApplyTo(null)} defaultRate={Math.round(tutor.hourlyRateCents / 100)} currency={tutor.currency} credits={credits} creditsOn={creditsOn} />
     </div>
   );
 }
@@ -450,18 +451,26 @@ function JobCard({ row, now, onSave, onApply }: { row: Row; now: number; onSave:
   );
 }
 
-const applySchema = z.object({
-  message: z.string().trim().min(40, "Write at least 40 characters so the family knows why you're a good fit.").max(1500, "Keep your message under 1,500 characters."),
-  rate: z.number({ invalid_type_error: "Enter your proposed hourly rate." }).int("Use whole dollars.").min(10, "Enter a rate of at least $10.").max(500, "Enter a rate up to $500."),
-});
-type ApplyValues = z.infer<typeof applySchema>;
+/** The proposed rate is in the tutor's own currency, within the same range as their profile rate. */
+const applySchemaFor = (currency: Currency) =>
+  z.object({
+    message: z.string().trim().min(40, "Write at least 40 characters so the family knows why you're a good fit.").max(1500, "Keep your message under 1,500 characters."),
+    rate: z
+      .number({ invalid_type_error: "Enter your proposed hourly rate." })
+      .int("Use a whole number.")
+      .superRefine((v, ctx) => {
+        const problem = rateProblem(toMinor(v), currency, "Your rate");
+        if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+      }),
+  });
+type ApplyValues = z.infer<ReturnType<typeof applySchemaFor>>;
 
-function ApplyDialog({ req, onClose, defaultRate, credits, creditsOn }: { req: Requirement | null; onClose: () => void; defaultRate: number; credits: number; creditsOn: boolean }) {
+function ApplyDialog({ req, onClose, defaultRate, currency, credits, creditsOn }: { req: Requirement | null; onClose: () => void; defaultRate: number; currency: Currency; credits: number; creditsOn: boolean }) {
   return (
     <Dialog open={!!req} onOpenChange={(o) => !o && onClose()}>
       {req && (
         <DialogContent title="Apply to this job" description={req.title} size="lg">
-          <ApplyForm key={req.id} req={req} onClose={onClose} defaultRate={defaultRate} credits={credits} creditsOn={creditsOn} />
+          <ApplyForm key={req.id} req={req} onClose={onClose} defaultRate={defaultRate} currency={currency} credits={credits} creditsOn={creditsOn} />
         </DialogContent>
       )}
     </Dialog>
@@ -469,15 +478,18 @@ function ApplyDialog({ req, onClose, defaultRate, credits, creditsOn }: { req: R
 }
 
 /** Mounted fresh for each job, so the form always starts clean. */
-function ApplyForm({ req, onClose, defaultRate, credits, creditsOn }: { req: Requirement; onClose: () => void; defaultRate: number; credits: number; creditsOn: boolean }) {
+function ApplyForm({ req, onClose, defaultRate, currency, credits, creditsOn }: { req: Requirement; onClose: () => void; defaultRate: number; currency: Currency; credits: number; creditsOn: boolean }) {
   const applyToJob = useApp((s) => s.applyToJob);
   const [error, setError] = React.useState<string | null>(null);
-  const form = useForm<ApplyValues>({ resolver: zodResolver(applySchema), defaultValues: { message: "", rate: defaultRate }, mode: "onTouched" });
+  const schema = React.useMemo(() => applySchemaFor(currency), [currency]);
+  const form = useForm<ApplyValues>({ resolver: zodResolver(schema), defaultValues: { message: "", rate: defaultRate }, mode: "onTouched" });
   const { register, handleSubmit, formState: { errors, isSubmitting } } = form;
   const outOfCredits = creditsOn && credits < CREDITS_PER_APPLICATION;
+  const limits = rateLimits(currency);
+  const otherCurrency = req.currency && req.currency !== currency;
 
   const onSubmit = async (v: ApplyValues) => {
-    const res = await applyToJob(req.id, v.message, v.rate * 100);
+    const res = await applyToJob(req.id, v.message, toMinor(v.rate));
     if (!res.ok) {
       setError(res.error);
       return;
@@ -524,8 +536,23 @@ function ApplyForm({ req, onClose, defaultRate, credits, creditsOn }: { req: Req
         <Field label="Message to the family" required hint="Explain how you'd approach their goals. Contact details are hidden automatically until you're booked." error={errors.message?.message}>
           <Textarea rows={6} maxLength={1500} showCount placeholder="Hi — I'd start with a short diagnostic to see where things stand…" {...register("message")} />
         </Field>
-        <Field label="Your proposed rate" required hint={`Your profile rate is ${formatCents(defaultRate * 100)}/hr.`} error={errors.rate?.message} className="max-w-56">
-          <Input type="number" inputMode="numeric" prefixText="$" suffix={<span className="pr-1 text-sm">/hr</span>} {...register("rate", { valueAsNumber: true })} />
+        <Field
+          label="Your proposed rate"
+          required
+          hint={`Your profile rate is ${formatMoney(toMinor(defaultRate), currency)}/hr.${otherCurrency ? ` The family's budget is in ${req.currency}; your rate is in ${currency} (${CURRENCIES[currency].name}).` : ""}`}
+          error={errors.rate?.message}
+        >
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={limits.min / 100}
+            max={limits.max / 100}
+            step={1}
+            {...priceInputProps(currency)}
+            suffix={<span className="pr-1 text-sm">/hr</span>}
+            className="max-w-56"
+            {...register("rate", { valueAsNumber: true })}
+          />
         </Field>
       </DialogBody>
       <DialogFooter className="sm:items-center">

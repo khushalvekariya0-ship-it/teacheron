@@ -6,7 +6,8 @@ import { useApp } from "@/lib/store";
 import { useViewerTimezone } from "@/lib/store/hooks";
 import { SITE } from "@/lib/site";
 import { TUTOR_PLANS } from "@/lib/data/platform";
-import { applyBps, formatCents, formatDateTime } from "@/lib/format";
+import { applyBps, formatDateTime } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Input";
@@ -132,11 +133,11 @@ export function PlatformFeeCard({ className, id }: { className?: string; id?: st
               <div className="rounded-lg border border-line px-3 py-2.5">
                 <dt className="text-muted">Fee on a $100 Starter lesson</dt>
                 <dd className="mt-0.5 flex items-center gap-1.5 font-medium tabular-nums text-ink">
-                  {formatCents(feeNow, { exact: true })}
+                  {formatMoney(feeNow, "USD", { exact: true })}
                   {dirty && feeNext !== null && (
                     <>
                       <ArrowRight className="size-3.5 text-muted" aria-hidden /><span className="sr-only">changes to</span>
-                      {formatCents(feeNext, { exact: true })}
+                      {formatMoney(feeNext, "USD", { exact: true })}
                     </>
                   )}
                 </dd>
@@ -144,11 +145,11 @@ export function PlatformFeeCard({ className, id }: { className?: string; id?: st
               <div className="rounded-lg border border-line px-3 py-2.5">
                 <dt className="text-muted">Tutor keeps</dt>
                 <dd className="mt-0.5 flex items-center gap-1.5 font-medium tabular-nums text-ink">
-                  {formatCents(EXAMPLE_CENTS - feeNow, { exact: true })}
+                  {formatMoney(EXAMPLE_CENTS - feeNow, "USD", { exact: true })}
                   {dirty && feeNext !== null && (
                     <>
                       <ArrowRight className="size-3.5 text-muted" aria-hidden /><span className="sr-only">changes to</span>
-                      {formatCents(EXAMPLE_CENTS - feeNext, { exact: true })}
+                      {formatMoney(EXAMPLE_CENTS - feeNext, "USD", { exact: true })}
                     </>
                   )}
                 </dd>
@@ -207,8 +208,8 @@ export function PlatformFeeCard({ className, id }: { className?: string; id?: st
         {nextBps !== null && (
           <dl className="divide-y divide-line rounded-lg border border-line text-[13.5px]">
             <CompareRow label="Commission" from={`${bpsToPercent(bps)}%`} to={`${bpsToPercent(nextBps)}%`} />
-            <CompareRow label="Fee on a $100 Starter lesson" from={formatCents(feeNow, { exact: true })} to={formatCents(applyBps(EXAMPLE_CENTS, nextBps), { exact: true })} />
-            <CompareRow label="Tutor keeps" from={formatCents(EXAMPLE_CENTS - feeNow, { exact: true })} to={formatCents(EXAMPLE_CENTS - applyBps(EXAMPLE_CENTS, nextBps), { exact: true })} />
+            <CompareRow label="Fee on a $100 Starter lesson" from={formatMoney(feeNow, "USD", { exact: true })} to={formatMoney(applyBps(EXAMPLE_CENTS, nextBps), "USD", { exact: true })} />
+            <CompareRow label="Tutor keeps" from={formatMoney(EXAMPLE_CENTS - feeNow, "USD", { exact: true })} to={formatMoney(EXAMPLE_CENTS - applyBps(EXAMPLE_CENTS, nextBps), "USD", { exact: true })} />
           </dl>
         )}
       </ConfirmDialog>

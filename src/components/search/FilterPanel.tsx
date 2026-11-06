@@ -3,9 +3,10 @@
 import * as React from "react";
 import { MapPin, Search, X } from "lucide-react";
 import type { Grade, Level, TutorCategory } from "@/lib/types";
-import { RADIUS_OPTIONS, type TutorSearch } from "@/lib/search";
+import { RADIUS_OPTIONS, ratePresets, type TutorSearch } from "@/lib/search";
 import { GRADES, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
-import { useCatalog } from "@/lib/store/hooks";
+import { useCatalog, useViewerCurrency } from "@/lib/store/hooks";
+import { currencySymbol } from "@/lib/money";
 import { isValidZip, locationLabel, pointLocation, resolveLocation } from "@/lib/data/geo";
 import { cn } from "@/lib/utils";
 import { Field, Input, Select } from "@/components/ui/Input";
@@ -156,7 +157,10 @@ export function LocationField({ value, onCommit }: { value: string | undefined; 
   );
 }
 
+/** Min / max hourly rate in whole units of the visitor's own currency (only tutors who charge in it match). */
 export function RateFields({ min, max, onCommit }: { min: number | undefined; max: number | undefined; onCommit: (min: number | undefined, max: number | undefined) => void }) {
+  const currency = useViewerCurrency();
+  const symbol = currencySymbol(currency);
   const [minText, setMinText] = React.useState(min ? String(min) : "");
   const [maxText, setMaxText] = React.useState(max ? String(max) : "");
   const [prev, setPrev] = React.useState(`${min}|${max}`);
@@ -171,7 +175,7 @@ export function RateFields({ min, max, onCommit }: { min: number | undefined; ma
   const parse = (t: string): number | undefined | null => {
     const v = t.trim();
     if (!v) return undefined;
-    if (!/^\d{1,4}$/.test(v)) return null;
+    if (!/^\d{1,6}$/.test(v)) return null;
     const n = Number(v);
     return n === 0 ? undefined : n;
   };
@@ -179,7 +183,7 @@ export function RateFields({ min, max, onCommit }: { min: number | undefined; ma
   const commit = () => {
     const a = parse(minText);
     const b = parse(maxText);
-    if (a === null || b === null) return setError("Enter whole dollar amounts, like 40.");
+    if (a === null || b === null) return setError(`Enter whole amounts, like ${ratePresets(currency)[0].max}.`);
     if (a !== undefined && b !== undefined && a > b) return setError("Minimum can't be more than maximum.");
     setError(undefined);
     if (a !== min || b !== max) onCommit(a, b);
@@ -198,8 +202,8 @@ export function RateFields({ min, max, onCommit }: { min: number | undefined; ma
       <div className="grid grid-cols-2 gap-2.5">
         <Field>
           <Input
-            aria-label="Minimum hourly rate in dollars"
-            prefixText="$"
+            aria-label={`Minimum hourly rate in ${currency}`}
+            prefixText={symbol}
             inputMode="numeric"
             placeholder="Min"
             value={minText}
@@ -211,8 +215,8 @@ export function RateFields({ min, max, onCommit }: { min: number | undefined; ma
         </Field>
         <Field>
           <Input
-            aria-label="Maximum hourly rate in dollars"
-            prefixText="$"
+            aria-label={`Maximum hourly rate in ${currency}`}
+            prefixText={symbol}
             inputMode="numeric"
             placeholder="Max"
             value={maxText}
@@ -223,6 +227,7 @@ export function RateFields({ min, max, onCommit }: { min: number | undefined; ma
           />
         </Field>
       </div>
+      <p className="mt-1.5 text-[12.5px] leading-snug text-muted">In {currency}. Tutors who charge in another currency are hidden while a price is set.</p>
       <AnimatePresence initial={false}>
         {error && (
           <motion.p role="alert" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-[13px] text-danger">

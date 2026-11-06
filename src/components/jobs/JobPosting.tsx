@@ -13,7 +13,7 @@ export type JobPostingData = Pick<
   Requirement,
   | "title" | "subject" | "grade" | "objectives" | "modes" | "city" | "state" | "zip" | "days" | "timesOfDay" | "sessionsPerWeek"
   | "budgetMinCents" | "budgetMaxCents" | "minExperienceYears" | "languages" | "preferences" | "details" | "attachments" | "learningSupport"
-> & { publishedAt?: string; createdAt?: string };
+> & { publishedAt?: string; createdAt?: string; currency?: Requirement["currency"] };
 
 /** Week strip: selected days are filled, others dashed — shape and text carry meaning, not just color. */
 export function WeekStrip({ days, className }: { days: readonly string[]; className?: string }) {

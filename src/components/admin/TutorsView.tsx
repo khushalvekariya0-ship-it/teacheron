@@ -8,7 +8,8 @@ import { useApp } from "@/lib/store";
 import { useCatalog, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
 import { TUTOR_PLANS } from "@/lib/data/platform";
 import { MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
-import { formatCents, formatDate, formatDuration, pluralize } from "@/lib/format";
+import { formatDate, formatDuration, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Sheet, SheetContent } from "@/components/ui/Overlay";
@@ -158,7 +159,7 @@ function TutorsInner() {
     { key: "verification", header: "Verification", cell: (t) => <VerificationChips tutor={t} />, sortValue: (t) => KINDS.filter((k) => t.verification[k] === "verified").length },
     { key: "rating", header: "Rating", sortValue: (t) => t.rating ?? 0, cell: (t) => <StarRating rating={t.rating} count={t.reviewCount} showStars={false} /> },
     { key: "lessons", header: "Lessons", align: "right", sortValue: (t) => t.lessonsCompleted, cell: (t) => t.lessonsCompleted.toLocaleString("en-US") },
-    { key: "rate", header: "Rate", align: "right", sortValue: (t) => t.hourlyRateCents, cell: (t) => `${formatCents(t.hourlyRateCents)}/hr` },
+    { key: "rate", header: "Rate", align: "right", sortValue: (t) => t.hourlyRateCents, cell: (t) => `${formatMoney(t.hourlyRateCents, t.currency)}/hr` },
     { key: "plan", header: "Plan", sortValue: (t) => plan(t), cell: (t) => <Badge size="sm" tone={plan(t) === "free" ? "neutral" : "accent"}>{planName(plan(t))}</Badge> },
     { key: "featured", header: "Featured", sortValue: (t) => (t.featured ? 1 : 0), cell: (t) => (t.featured ? <span className="inline-flex items-center gap-1 text-ink-2"><Sparkles className="size-3.5 text-ink" aria-hidden /> Yes</span> : <span className="text-muted">No</span>) },
     { key: "modes", header: "Modes", cell: (t) => t.modes.map((m) => MODE_LABEL[m]).join(" · "), hideOnMobile: true },
@@ -174,9 +175,9 @@ function TutorsInner() {
         actions={
           <ExportButton
             filename="tutorlink-tutors"
-            headers={["ID", "Name", "City", "State", "Identity", "Education", "Certification", "Background", "Rating", "Reviews", "Lessons", "Hourly rate (USD)", "Plan", "Featured", "Modes"]}
+            headers={["ID", "Name", "City", "State", "Identity", "Education", "Certification", "Background", "Rating", "Reviews", "Lessons", "Currency", "Hourly rate", "Plan", "Featured", "Modes"]}
             rows={() =>
-              rows.map((t) => [t.id, fullName(t), t.city, t.state, t.verification.identity, t.verification.education, t.verification.certification, t.verification.background, t.rating, t.reviewCount, t.lessonsCompleted, centsToDecimal(t.hourlyRateCents), planName(plan(t)), t.featured, t.modes.join(" ")])
+              rows.map((t) => [t.id, fullName(t), t.city, t.state, t.verification.identity, t.verification.education, t.verification.certification, t.verification.background, t.rating, t.reviewCount, t.lessonsCompleted, t.currency, centsToDecimal(t.hourlyRateCents), planName(plan(t)), t.featured, t.modes.join(" ")])
             }
           />
         }
@@ -333,8 +334,8 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
             { label: "Experience", value: pluralize(tutor.experienceYears, "year") },
             { label: "Location", value: `${tutor.city}, ${tutor.state} ${tutor.zip}` },
             { label: "Modes", value: tutor.modes.map((m) => (m === "in_person" ? `In person (${tutor.serviceRadiusMiles} mi)` : MODE_LABEL[m])).join(" · ") },
-            { label: "Rate", value: `${formatCents(tutor.hourlyRateCents)}/hr` },
-            { label: "Trial", value: tutor.trial.enabled ? `${formatDuration(tutor.trial.durationMin)} · ${tutor.trial.priceCents ? formatCents(tutor.trial.priceCents) : "Free"}` : "Not offered" },
+            { label: "Rate", value: `${formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr` },
+            { label: "Trial", value: tutor.trial.enabled ? `${formatDuration(tutor.trial.durationMin)} · ${tutor.trial.priceCents ? formatMoney(tutor.trial.priceCents, tutor.currency) : "Free"}` : "Not offered" },
             { label: "Booking", value: tutor.rules.requiresApproval ? "Requires approval" : "Instant booking" },
             { label: "Levels", value: tutor.levels.map((l) => LEVEL_LABEL[l]).join(", ") },
             { label: "Languages", value: tutor.languages.join(", ") },

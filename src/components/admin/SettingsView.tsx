@@ -6,7 +6,8 @@ import { useApp } from "@/lib/store";
 import { useViewerTimezone } from "@/lib/store/hooks";
 import { DEFAULT_POLICY, type BookingPolicy } from "@/lib/data/platform";
 import { policySummary } from "@/lib/booking";
-import { formatCents, formatDateTime, pluralize } from "@/lib/format";
+import { formatDateTime, pluralize } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -71,9 +72,9 @@ const GROUPS: { title: string; description: string; icon: React.ReactNode; field
       },
       {
         key: "tutorNoShowCreditCents",
-        label: "Tutor no-show credit",
+        label: "Tutor no-show credit (US dollars)",
         unit: "dollars",
-        hint: "Platform credit the learner is told they've received after a tutor no-show.",
+        hint: "Platform credit the learner is told they've received after a tutor no-show. Lessons in other currencies get the local equivalent.",
         previewNote: "Added to the learner's Study Credits, and they're notified.",
       },
     ],
@@ -106,7 +107,7 @@ function formatValue(unit: Unit, n: number): string {
     case "minutes":
       return `${n} min`;
     case "dollars":
-      return formatCents(n, { exact: true });
+      return formatMoney(n, "USD", { exact: true });
   }
 }
 

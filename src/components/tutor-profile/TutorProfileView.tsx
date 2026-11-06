@@ -101,7 +101,8 @@ function TutorNotFound() {
 function Profile({ tutor }: { tutor: Tutor }) {
   const hydrated = useHydrated();
   const me = useSession();
-  const balance = useWalletBalance();
+  // Study Credits in the tutor's currency (only those can pay this tutor).
+  const balance = useWalletBalance(tutor.currency);
   const bookings = useApp((s) => s.bookings);
   const allChildren = useApp((s) => s.children);
   const createBooking = useApp((s) => s.createBooking);

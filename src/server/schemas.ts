@@ -218,7 +218,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   setFlag: t(text(60), z.object({ enabled: z.boolean().optional(), rolloutPercent: z.number().optional() })),
   updatePolicy: t(policyPatch),
   setPlatformFee: t(z.number()),
-  saveCoupon: t(z.object({ id: id.optional(), code: text(20), kind: z.enum(["percent", "fixed"]), value: z.number(), minPurchaseCents: int(0, 10_000_000), maxRedemptions: int(0, 10_000_000), expiresAt: iso, firstBookingOnly: z.boolean(), active: z.boolean() })),
+  saveCoupon: t(z.object({ id: id.optional(), code: text(20), kind: z.enum(["percent", "fixed"]), value: z.number(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), minPurchaseCents: int(0, 10_000_000), maxRedemptions: int(0, 10_000_000), expiresAt: iso, firstBookingOnly: z.boolean(), active: z.boolean() })),
   saveSubjectArea: t(z.object({ slug: text(80).optional(), name: text(120), description: text(400), hidden: z.boolean().optional() })),
   deleteSubjectArea: t(text(80)),
   saveSubject: t(z.object({ slug: text(80).optional(), name: text(120), category: text(80), summary: text(400), popular: z.boolean().optional(), hidden: z.boolean().optional() })),

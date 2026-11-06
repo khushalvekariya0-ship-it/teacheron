@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { Child, Requirement, User } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useHydrated, useNow, useSession } from "@/lib/store/hooks";
+import { useHydrated, useNow, useSession, useViewerCurrency } from "@/lib/store/hooks";
 import { formatRelative } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -203,9 +203,12 @@ function WizardForm({
   const topRef = React.useRef<HTMLDivElement>(null);
   const headingRef = React.useRef<HTMLHeadingElement>(null);
 
+  // The budget is in the job's own currency (the poster's: an existing post keeps the one it was saved in).
+  const viewerCurrency = useViewerCurrency();
+  const budgetCurrency = requirement?.currency ?? viewerCurrency;
   const methods = useForm<ReqForm, WizardContext>({
     resolver: wizardResolver,
-    context: { step, role },
+    context: { step, role, currency: budgetCurrency },
     defaultValues: initial.values,
     mode: "onTouched",
   });
@@ -297,7 +300,7 @@ function WizardForm({
       const ok = await trigger(undefined, { shouldFocus: true });
       if (!ok) return;
       completedRef.current = Math.max(completedRef.current, step + 1);
-      const bad = firstInvalidStep(getValues(), role);
+      const bad = firstInvalidStep(getValues(), role, budgetCurrency);
       if (bad && bad.step < target) {
         showStepErrors(bad);
         return;
@@ -329,7 +332,7 @@ function WizardForm({
 
   const publish = async () => {
     setPublishError(null);
-    const bad = firstInvalidStep(getValues(), role);
+    const bad = firstInvalidStep(getValues(), role, budgetCurrency);
     if (bad) {
       showStepErrors(bad);
       toast.error(`Please finish “${STEPS[bad.step].title}” first.`);

@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { Subject } from "@/lib/types";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
+import { rateSummary } from "@/lib/search";
 import { cn } from "@/lib/utils";
-import { useListedTutors } from "@/lib/store/hooks";
-import { rateRange, tutorsForSubject } from "./insights";
+import { useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
+import { tutorsForSubject } from "./insights";
 
 /** Subject link card. Shows real tutor counts and the starting rate when tutors teach it. */
 export function SubjectTile({ subject, className, showSummary = true }: { subject: Subject; className?: string; showSummary?: boolean }) {
   const tutors = tutorsForSubject(subject.slug, useListedTutors());
-  const range = rateRange(tutors);
+  // The lowest rate in the visitor's currency when tutors charge in it (rates are never converted).
+  const range = rateSummary(tutors, useViewerCurrency());
   return (
     <Link
       href={`/subjects/${subject.slug}`}
@@ -32,7 +34,7 @@ export function SubjectTile({ subject, className, showSummary = true }: { subjec
               <span className="font-semibold">
                 {tutors.length} {tutors.length === 1 ? "tutor" : "tutors"}
               </span>
-              {range && <span className="text-muted"> · from {formatCents(range.min)}/hr</span>}
+              {range && <span className="text-muted"> · from {formatMoney(range.min, range.currency)}/hr</span>}
             </>
           ) : (
             <span className="font-medium text-brand">See tutors</span>

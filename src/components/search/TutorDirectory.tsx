@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ChevronDown, Compass, Search, SearchX, ShieldCheck, SlidersHorizontal, UserPlus, Wallet, type LucideIcon } from "lucide-react";
 import { describeSearch, parseTutorSearch, searchTutors, toQueryString, type TutorSearch } from "@/lib/search";
-import { useCatalog, useListedTutors } from "@/lib/store/hooks";
+import { useCatalog, useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
@@ -162,13 +162,15 @@ export function TutorDirectory() {
   const params = React.useMemo(() => parseTutorSearch(new URLSearchParams(qs)), [qs]);
   const tutors = useListedTutors();
   const catalog = useCatalog();
+  // Price filters and price sorting work in the visitor's own currency (never converted).
+  const currency = useViewerCurrency();
   const quickSubjects = React.useMemo(() => {
     const shown = new Set(catalog.subjects.map((s) => s.slug));
     const picks = QUICK_SUBJECTS.filter((slug) => shown.has(slug));
     for (const s of catalog.subjects) if (picks.length < 6 && s.popular && !picks.includes(s.slug)) picks.push(s.slug);
     return picks;
   }, [catalog]);
-  const results = React.useMemo(() => searchTutors(tutors, params), [tutors, params]);
+  const results = React.useMemo(() => searchTutors(tutors, params, currency), [tutors, params, currency]);
   const activeCount = filterCount(params);
 
   const update = React.useCallback(
@@ -192,7 +194,7 @@ export function TutorDirectory() {
   // Mobile filter sheet edits a draft and applies it on press.
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<TutorSearch>(params);
-  const draftCount = React.useMemo(() => (sheetOpen ? searchTutors(tutors, draft).length : 0), [sheetOpen, tutors, draft]);
+  const draftCount = React.useMemo(() => (sheetOpen ? searchTutors(tutors, draft, currency).length : 0), [sheetOpen, tutors, draft, currency]);
   const openSheet = () => {
     setDraft(params);
     setSheetOpen(true);
@@ -286,7 +288,7 @@ export function TutorDirectory() {
                 </>
               )}
             </h2>
-            <p className="mt-0.5 truncate text-sm text-muted">{describeSearch(params)}</p>
+            <p className="mt-0.5 truncate text-sm text-muted">{describeSearch(params, currency)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {activeCount > 0 && (

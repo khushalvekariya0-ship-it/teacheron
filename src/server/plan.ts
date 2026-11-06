@@ -67,6 +67,8 @@ export const PLANS: Record<ActionName, Plan> = {
     await Promise.all([L.self(me), L.load("coupons", "code = upper($1)", [String(code ?? "").trim()])]);
   },
   topUpWallet: self,
+  // A quote needs exactly what createBooking does (same checks, same price).
+  quoteBooking: (L, me, args) => PLANS.createBooking(L, me, args),
   createBooking: async (L, me, [input]) => {
     const i = obj(input);
     await Promise.all([
@@ -76,6 +78,7 @@ export const PLANS: Record<ActionName, Plan> = {
     ]);
   },
   transitionBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  markPaymentFailed: (L, me, [id]) => L.bookingParticipants(str(id), me),
   rescheduleBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
   // The tutor's world holds their other upcoming lessons (for "use this link for my other lessons").
   setLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),

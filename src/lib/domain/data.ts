@@ -15,7 +15,7 @@ import { maskMatches, scanContact } from "./contact";
  */
 
 /** `code` marks failures the interface treats specially (a message stopped for contact details, a paused account). */
-export type FailCode = "contact_blocked" | "chat_paused";
+export type FailCode = "contact_blocked" | "chat_paused" | "payment_required";
 export type Result<T = undefined> = { ok: true; data: T } | { ok: false; error: string; code?: string };
 export const ok = <T,>(data: T): Result<T> => ({ ok: true, data });
 export const fail = (error: string, code?: FailCode): Result<never> => (code ? { ok: false, error, code } : { ok: false, error });

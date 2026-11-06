@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { budgetLimits, formatMoney, type Currency } from "@/lib/money";
 import type { Resolver, ResolverResult } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Child, Grade, Requirement, TeachingMode, User } from "@/lib/types";
@@ -63,15 +64,18 @@ export const PREVIEW_STEP = STEPS.length - 1;
 
 export const LIMITS = { objectivesMin: 20, objectivesMax: 1500, titleMin: 8, titleMax: 100, preferencesMax: 500, detailsMax: 1500, maxFiles: 3, maxFileMb: 10 };
 
-const dollars = (label: string) =>
-  z
+/** A budget amount in whole units of the job's currency ($10–$500, ₹100–₹20,000…). */
+const amount = (label: string, currency: Currency) => {
+  const { min, max } = budgetLimits(currency);
+  return z
     .string()
     .min(1, `Enter a ${label} hourly rate.`)
-    .refine((v) => /^\d+$/.test(v), "Use whole dollars.")
-    .refine((v) => +v >= 10 && +v <= 500, "Enter an amount between $10 and $500.");
+    .refine((v) => /^\d+$/.test(v), "Use a whole amount.")
+    .refine((v) => +v >= min && +v <= max, `Enter an amount between ${formatMoney(min * 100, currency)} and ${formatMoney(max * 100, currency)}.`);
+};
 
-/** One schema per step (the preview step has none). Parents must pick a child. */
-export function stepSchema(step: number, role: FamilyRole) {
+/** One schema per step (the preview step has none). Parents must pick a child. `currency`: the job's budget currency. */
+export function stepSchema(step: number, role: FamilyRole, currency: Currency = "USD") {
   switch (step) {
     case 0:
       return z.object({
@@ -121,8 +125,8 @@ export function stepSchema(step: number, role: FamilyRole) {
     case 4:
       return z
         .object({
-          budgetMin: dollars("minimum"),
-          budgetMax: dollars("maximum"),
+          budgetMin: amount("minimum", currency),
+          budgetMax: amount("maximum", currency),
           minExperience: z.string(),
           languages: z.array(z.string()).min(1, "Choose at least one language."),
           preferences: z.string().max(LIMITS.preferencesMax, `Keep this under ${LIMITS.preferencesMax} characters.`),
@@ -152,20 +156,22 @@ export const STEP_FIELDS: (keyof ReqForm)[][] = [
 export interface WizardContext {
   step: number;
   role: FamilyRole;
+  /** The job's budget currency (the poster's). */
+  currency?: Currency;
 }
 
 /** Validates only the current step (read from the form's context on every call). */
 export const wizardResolver: Resolver<ReqForm, WizardContext> = async (values, context, options) => {
-  const schema = stepSchema(context?.step ?? 0, context?.role ?? "student");
+  const schema = stepSchema(context?.step ?? 0, context?.role ?? "student", context?.currency);
   if (!schema) return { values, errors: {} };
   const run = zodResolver(schema as z.ZodTypeAny, undefined, { raw: true }) as unknown as Resolver<ReqForm, WizardContext>;
   return (await run(values, context, options)) as ResolverResult<ReqForm>;
 };
 
 /** Returns the first step whose schema fails, with its issues, or null when everything is valid. */
-export function firstInvalidStep(values: ReqForm, role: FamilyRole): { step: number; issues: { path: keyof ReqForm; message: string }[] } | null {
+export function firstInvalidStep(values: ReqForm, role: FamilyRole, currency: Currency = "USD"): { step: number; issues: { path: keyof ReqForm; message: string }[] } | null {
   for (let s = 0; s < PREVIEW_STEP; s++) {
-    const r = stepSchema(s, role)!.safeParse(values);
+    const r = stepSchema(s, role, currency)!.safeParse(values);
     if (!r.success) return { step: s, issues: r.error.issues.map((i) => ({ path: i.path[0] as keyof ReqForm, message: i.message })) };
   }
   return null;
@@ -223,7 +229,7 @@ export function toPayload(v: ReqForm, role: FamilyRole): Partial<Requirement> {
 export function fromRequirement(req: Requirement): ReqForm {
   const completed = req.status === "draft" ? req.draftStep ?? 0 : PREVIEW_STEP;
   const untouchedFormat = completed <= 2 && req.modes.length === 1 && req.modes[0] === "online";
-  const untouchedBudget = completed <= 4 && req.budgetMinCents === 4000 && req.budgetMaxCents === 8000;
+  const untouchedBudget = completed <= 4 && ((req.budgetMinCents === 4000 && req.budgetMaxCents === 8000) || (req.budgetMinCents === 30000 && req.budgetMaxCents === 80000));
   return {
     childId: req.childId ?? "",
     subject: req.subject,

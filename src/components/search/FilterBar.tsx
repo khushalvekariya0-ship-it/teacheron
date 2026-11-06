@@ -3,11 +3,11 @@
 import * as React from "react";
 import { BookOpen, CalendarClock, Check, ChevronDown, Monitor, Wallet, type LucideIcon } from "lucide-react";
 import type { Grade, Level, TutorCategory } from "@/lib/types";
-import { RADIUS_OPTIONS, type TutorSearch } from "@/lib/search";
+import { formatRate, RADIUS_OPTIONS, ratePresets, type TutorSearch } from "@/lib/search";
 import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
-import { useCatalog } from "@/lib/store/hooks";
+import { useCatalog, useViewerCurrency } from "@/lib/store/hooks";
+import type { Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { formatCents } from "@/lib/format";
 import { locationLabel } from "@/lib/data/geo";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Overlay";
 import { Checkbox, ChipGroup, Segmented } from "@/components/ui/Controls";
@@ -105,10 +105,11 @@ function OptionList({ options, value, anyLabel, onSelect }: { options: Option[];
 
 /* ─── Labels for the current values ─────────────────────────────────────── */
 
-function priceLabel(min?: number, max?: number) {
-  if (min && max) return `${formatCents(min)} – ${formatCents(max)}`;
-  if (min) return `${formatCents(min)}+`;
-  if (max) return `Up to ${formatCents(max)}`;
+/** Rate filter values are whole units of the visitor's currency. */
+function priceLabel(currency: Currency, min?: number, max?: number) {
+  if (min && max) return `${formatRate(min, currency)} – ${formatRate(max, currency)}`;
+  if (min) return `${formatRate(min, currency)}+`;
+  if (max) return `Up to ${formatRate(max, currency)}`;
   return "Any price";
 }
 
@@ -126,18 +127,12 @@ function availabilityLabel(s: TutorSearch) {
   return t ? `${d} · ${t}` : d;
 }
 
-const PRICE_PRESETS: { label: string; min?: number; max?: number }[] = [
-  { label: "Under $40", max: 4000 },
-  { label: "$40 – $70", min: 4000, max: 7000 },
-  { label: "$70 – $100", min: 7000, max: 10000 },
-  { label: "$100+", min: 10000 },
-];
-
 /* ─── The bar ────────────────────────────────────────────────────────────── */
 
 export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (next: TutorSearch) => void }) {
   const set = (patch: Patch) => onChange(applyPatch(value, patch));
   const catalog = useCatalog();
+  const currency = useViewerCurrency();
   const schedule = effectiveSchedule(value);
   const moreCount = [value.verified, value.certified, value.trial, value.instant, value.exp, value.rating, value.support].filter(Boolean).length;
 
@@ -185,11 +180,11 @@ export function FilterBar({ value, onChange }: { value: TutorSearch; onChange: (
           )}
         </FilterBox>
 
-        <FilterBox icon={Wallet} label="Price per hour" value={priceLabel(value.minRate, value.maxRate)} active={!!(value.minRate || value.maxRate)}>
+        <FilterBox icon={Wallet} label="Price per hour" value={priceLabel(currency, value.minRate, value.maxRate)} active={!!(value.minRate || value.maxRate)}>
           {(close) => (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                {PRICE_PRESETS.map((p) => {
+                {ratePresets(currency).map((p) => {
                   const on = value.minRate === p.min && value.maxRate === p.max;
                   return (
                     <button

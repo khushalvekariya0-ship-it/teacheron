@@ -5,7 +5,7 @@ import { CircleCheck, CircleX, CircleMinus, CircleDashed } from "lucide-react";
 import { motion, CountUp, EASE } from "@/components/motion";
 import type { FactorKey, FactorResult, MatchResult } from "@/lib/matching";
 import { subjectName, LEVEL_LABEL, gradeToLevel } from "@/lib/data/catalog";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import type { MatchCriteria } from "@/lib/matching";
 import { cn } from "@/lib/utils";
 
@@ -122,7 +122,7 @@ function clauseFor(f: FactorResult, r: MatchResult, c: MatchCriteria): string | 
     case "schedule":
       return "is available on all of your preferred days";
     case "budget":
-      return `charges ${formatCents(t.hourlyRateCents)}/hr, within your budget`;
+      return `charges ${formatMoney(t.hourlyRateCents, t.currency)}/hr, within your budget`;
     case "location":
       if (r.distanceMiles != null && c.modes?.includes("in_person") && t.modes.includes("in_person")) {
         return `can meet in person (about ${Math.max(1, Math.round(r.distanceMiles))} mi away)`;

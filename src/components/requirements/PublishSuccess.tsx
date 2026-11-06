@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ExternalLink, Plus, Search } from "lucide-react";
 import type { Requirement } from "@/lib/types";
 import { rankTutors } from "@/lib/matching";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { useListedTutors } from "@/lib/store/hooks";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -115,7 +115,7 @@ export function PublishSuccess({ req, outcome, onPostAnother }: { req: Requireme
                     </div>
                   </div>
                   <div className="mt-4 flex items-center justify-between text-[13px]">
-                    <span className="font-bold tabular-nums text-ink">{formatCents(r.tutor.hourlyRateCents)}/hr</span>
+                    <span className="font-bold tabular-nums text-ink">{formatMoney(r.tutor.hourlyRateCents, r.tutor.currency)}/hr</span>
                     <span className="tabular-nums text-muted">{r.percent}% match</span>
                   </div>
                   <MatchBar value={r.percent} className="mt-2" />

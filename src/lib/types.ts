@@ -1,8 +1,11 @@
 /**
- * Domain types shared by every page. Monetary values are always integer cents.
+ * Domain types shared by every page. Monetary values are always integers in the currency's minor unit
+ * ("cents": paise for ₹, cents for $, pence for £), with the currency stored next to them (src/lib/money.ts).
  * Timestamps are ISO-8601 strings in UTC; convert to the viewer's time zone only when rendering.
  */
+import type { Currency } from "./money";
 
+export type { Currency };
 export type ID = string;
 export type Cents = number;
 export type ISODate = string;
@@ -265,6 +268,8 @@ export interface Tutor {
   serviceRadiusMiles: number;
   timezone: string;
   modes: TeachingMode[];
+  /** The currency the tutor charges in (hourly rate, trial price, their bookings and earnings). */
+  currency: Currency;
   hourlyRateCents: Cents;
   trial: TrialConfig;
   rules: BookingRules;
@@ -327,6 +332,8 @@ export interface Requirement {
   days: string[]; // "Mon" ...
   timesOfDay: ("morning" | "afternoon" | "evening")[];
   sessionsPerWeek: number;
+  /** The poster's currency, for the budget. */
+  currency: Currency;
   budgetMinCents: Cents;
   budgetMaxCents: Cents;
   minExperienceYears?: number;
@@ -361,7 +368,9 @@ export interface Application {
   requirementId: ID;
   tutorId: ID;
   message: string;
+  /** In the tutor's currency. */
   proposedRateCents: Cents;
+  currency: Currency;
   status: ApplicationStatus;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -408,6 +417,8 @@ export interface Booking {
   startUtc: ISODate;
   durationMin: number;
   mode: TeachingMode;
+  /** The tutor's currency when booked; every amount below and the booking's payments use it. */
+  currency: Currency;
   priceCents: Cents;
   platformFeeCents: Cents;
   discountCents: Cents;
@@ -564,6 +575,8 @@ export interface WalletTransaction {
   id: ID;
   userId: ID;
   deltaCents: Cents;
+  /** Study Credits are kept per currency (normally just the learner's own). */
+  currency: Currency;
   /** credit = platform credit given by TutorLink (tutor no-show, dispute decision). */
   kind: "top_up" | "lesson" | "refund" | "credit";
   description: string;
@@ -577,16 +590,23 @@ export interface Payment {
   userId: ID;
   kind: "booking" | "subscription" | "lead_credits" | "study_credits";
   amountCents: Cents;
+  currency: Currency;
   status: "succeeded" | "pending" | "failed" | "refunded" | "partially_refunded";
   description: string;
   createdAt: ISODate;
   method: string; // "Visa •••• 4242"
+  /** Set for card / UPI payments taken through Razorpay (refund rows carry the refund id too). */
+  provider?: "razorpay";
+  providerPaymentId?: string;
+  providerOrderId?: string;
+  providerRefundId?: string;
 }
 
 export interface Payout {
   id: ID;
   tutorId: ID;
   amountCents: Cents;
+  currency: Currency;
   status: "scheduled" | "in_transit" | "paid" | "failed";
   arrivalDate: string;
   createdAt: ISODate;
@@ -702,6 +722,8 @@ export interface Coupon {
   code: string;
   kind: "percent" | "fixed";
   value: number; // percent (0-100) or cents
+  /** A fixed amount (and the minimum) is in this currency; percentage codes without one work in any currency. */
+  currency?: Currency;
   minPurchaseCents: Cents;
   maxRedemptions: number;
   redemptions: number;

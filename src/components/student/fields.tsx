@@ -7,7 +7,9 @@ import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { imageFileToDataUrl } from "@/lib/image";
 import { GRADES, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
-import { formatCents, tzAbbrev } from "@/lib/format";
+import { tzAbbrev } from "@/lib/format";
+import { currencySymbol, formatMoney, rateLimits, budgetLimits } from "@/lib/money";
+import { useViewerCurrency } from "@/lib/store/hooks";
 import { DAY_ORDER } from "@/components/jobs/jobUtils";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -328,15 +330,19 @@ export function ScheduleFields({ form, timezone }: { form: UseFormReturn<Schedul
 
 export function BudgetFields({ form, schedule }: { form: UseFormReturn<BudgetValues>; schedule: { sessionsPerWeek: number; lessonMinutes: number } }) {
   const { register, control, setValue, formState: { errors } } = form;
+  // The budget is in the learner's own currency (from their country).
+  const currency = useViewerCurrency();
+  const rates = rateLimits(currency);
   const [min, max] = useWatch({ control, name: ["budgetMin", "budgetMax"] });
-  const valid = Number.isInteger(min) && Number.isInteger(max) && min >= 10 && max <= 500 && min <= max;
+  const limits = budgetLimits(currency);
+  const valid = Number.isInteger(min) && Number.isInteger(max) && min >= limits.min && max <= limits.max && min <= max;
   const perWeek = (rate: number) => Math.round(rate * 100 * (schedule.lessonMinutes / 60) * schedule.sessionsPerWeek);
 
   return (
     <div className="space-y-7">
-      <GroupField legend="Budget per hour" required hint="Tutors on TutorLink charge $15–$500 an hour. Pick a range or type your own.">
+      <GroupField legend="Budget per hour" required hint={`Tutors on TutorLink charge ${formatMoney(rates.min, currency)}–${formatMoney(rates.max, currency)} an hour. Pick a range or type your own.`}>
         <div className="flex flex-wrap gap-2">
-          {BUDGET_PRESETS.map((p) => {
+          {BUDGET_PRESETS(currency).map((p) => {
             const on = min === p.min && max === p.max;
             return (
               <button
@@ -359,17 +365,17 @@ export function BudgetFields({ form, schedule }: { form: UseFormReturn<BudgetVal
         </div>
         <div className="mt-4 flex flex-wrap items-start gap-3">
           <Field label="From" error={errors.budgetMin?.message} className="w-36">
-            <Input type="number" inputMode="numeric" prefixText="$" suffix={<span className="pr-1 text-sm">/hr</span>} {...register("budgetMin", { valueAsNumber: true })} />
+            <Input type="number" inputMode="numeric" prefixText={currencySymbol(currency)} suffix={<span className="pr-1 text-sm">/hr</span>} {...register("budgetMin", { valueAsNumber: true })} />
           </Field>
           <Field label="To" error={errors.budgetMax?.message} className="w-36">
-            <Input type="number" inputMode="numeric" prefixText="$" suffix={<span className="pr-1 text-sm">/hr</span>} {...register("budgetMax", { valueAsNumber: true })} />
+            <Input type="number" inputMode="numeric" prefixText={currencySymbol(currency)} suffix={<span className="pr-1 text-sm">/hr</span>} {...register("budgetMax", { valueAsNumber: true })} />
           </Field>
         </div>
         {valid && (
           <p className="mt-3 text-[13px] text-muted">
             With {schedule.sessionsPerWeek} × {schedule.lessonMinutes}-minute {schedule.sessionsPerWeek === 1 ? "lesson" : "lessons"} a week, that&apos;s about{" "}
             <span className="font-medium tabular-nums text-ink">
-              {formatCents(perWeek(min))}–{formatCents(perWeek(max))}
+              {formatMoney(perWeek(min), currency)}–{formatMoney(perWeek(max), currency)}
             </span>{" "}
             a week.
           </p>

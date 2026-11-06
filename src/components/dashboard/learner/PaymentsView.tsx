@@ -15,9 +15,10 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogClose } from "@/components/ui/Overlay";
 import { EmptyState } from "@/components/ui/States";
 import { useApp } from "@/lib/store";
-import { useSession, useViewerTimezone, useWalletBalance } from "@/lib/store/hooks";
+import { useSession, useViewerCurrency, useViewerTimezone, useWalletBalances } from "@/lib/store/hooks";
 import { WalletDrawer, formatCredits } from "@/components/wallet/WalletDrawer";
-import { formatCents, formatDate, formatDateTime, pluralize, tzAbbrev } from "@/lib/format";
+import { formatDate, formatDateTime, pluralize, tzAbbrev } from "@/lib/format";
+import { formatMoney, formatSums, type Currency } from "@/lib/money";
 import { subjectName } from "@/lib/data/catalog";
 import { SITE } from "@/lib/site";
 import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks";
@@ -25,7 +26,8 @@ import { tutorFullName, useTutorMap } from "@/components/dashboard/shared/hooks"
 type Tone = "neutral" | "success" | "warning" | "danger";
 
 function statusMeta(p: Payment): { label: string; tone: Tone } {
-  if (p.amountCents < 0) return { label: "Refund", tone: "neutral" };
+  // A Razorpay refund without a refund id hasn't been confirmed by Razorpay yet (it's retried automatically).
+  if (p.amountCents < 0) return p.provider === "razorpay" && !p.providerRefundId ? { label: "Refund on its way", tone: "warning" } : { label: "Refund", tone: "neutral" };
   switch (p.status) {
     case "succeeded":
       return { label: "Paid", tone: "success" };
@@ -40,8 +42,9 @@ function statusMeta(p: Payment): { label: string; tone: Tone } {
   }
 }
 
-function signedAmount(cents: number) {
-  return cents < 0 ? `−${formatCents(-cents, { exact: true })}` : formatCents(cents, { exact: true });
+/** Every payment row is shown in its own currency (a lesson's is the tutor's; Study Credits the learner's). */
+function signedAmount(cents: number, currency: Currency) {
+  return cents < 0 ? `−${formatMoney(-cents, currency, { exact: true })}` : formatMoney(cents, currency, { exact: true });
 }
 
 function downloadText(filename: string, text: string) {
@@ -73,7 +76,11 @@ function Inner() {
   const tutorMap = useTutorMap();
   const [filter, setFilter] = React.useState<FilterKey>("all");
   const [receipt, setReceipt] = React.useState<Payment | null>(null);
-  const balance = useWalletBalance();
+  const currency = useViewerCurrency();
+  // Study Credits per currency, the learner's own first (most people only have that one).
+  const [own, ...otherBalances] = useWalletBalances();
+  const balance = own?.amount ?? 0;
+  const extraBalances = otherBalances.filter((x) => x.amount !== 0);
   const [walletOpen, setWalletOpen] = React.useState(false);
 
   const bookingById = React.useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
@@ -86,15 +93,17 @@ function Inner() {
     const refundedBookings = new Set(refundRows.map((p) => p.bookingId).filter(Boolean));
     // A charge marked "refunded" with no separate refund row was refunded in full on the original charge.
     const refundedOnCharge = charges.filter((p) => p.status === "refunded" && !(p.bookingId && refundedBookings.has(p.bookingId)));
-    const paid = charges.reduce((s, p) => s + p.amountCents, 0);
-    const refunds = refundRows.reduce((s, p) => s - p.amountCents, 0) + refundedOnCharge.reduce((s, p) => s + p.amountCents, 0);
+    // Totals stay per currency (never added across currencies): one line like "₹12,000 + $340".
+    const item = (p: Payment, sign = 1) => ({ amount: sign * p.amountCents, currency: p.currency });
+    const paid = charges.map((p) => item(p));
+    const refunds = [...refundRows.map((p) => item(p, -1)), ...refundedOnCharge.map((p) => item(p))];
     // Lessons with money still kept after refunds.
     const netByBooking = new Map<string, number>();
     const add = (id: string, cents: number) => netByBooking.set(id, (netByBooking.get(id) ?? 0) + cents);
     for (const p of charges) if (p.kind === "booking" && p.bookingId) add(p.bookingId, refundedOnCharge.includes(p) ? 0 : p.amountCents);
     for (const p of refundRows) if (p.bookingId) add(p.bookingId, p.amountCents);
     const lessonsPaid = [...netByBooking.values()].filter((v) => v > 0).length;
-    const pending = mine.filter((p) => p.status === "pending" && p.amountCents > 0).reduce((s, p) => s + p.amountCents, 0);
+    const pending = mine.filter((p) => p.status === "pending" && p.amountCents > 0).map((p) => item(p));
     const methods = new Map<string, string>();
     for (const p of mine) if (p.method && !/original payment method/i.test(p.method) && !methods.has(p.method)) methods.set(p.method, p.createdAt);
     return { paid, refunds, refundCount: refundRows.length + refundedOnCharge.length, lessonsPaid, pending, methods: [...methods.entries()] };
@@ -125,7 +134,7 @@ function Inner() {
       key: "amount",
       header: "Amount",
       align: "right",
-      cell: (p) => <span className={p.amountCents < 0 ? "font-medium text-success" : "font-medium text-ink"}>{signedAmount(p.amountCents)}</span>,
+      cell: (p) => <span className={p.amountCents < 0 ? "font-medium text-success" : "font-medium text-ink"}>{signedAmount(p.amountCents, p.currency)}</span>,
       sortValue: (p) => p.amountCents,
     },
     {
@@ -168,8 +177,13 @@ function Inner() {
       <Stagger className="space-y-5" stagger={0.06} amount={0.05}>
         <StaggerItem>
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatTile label="Total paid" value={formatCents(summary.paid, { exact: summary.paid % 100 !== 0 })} icon={<Wallet />} hint={summary.pending ? `${formatCents(summary.pending)} authorized, not yet charged` : `Net ${formatCents(summary.paid - summary.refunds)} after refunds`} />
-            <StatTile label="Refunds" value={formatCents(summary.refunds, { exact: summary.refunds % 100 !== 0 })} icon={<RotateCcw />} hint={summary.refundCount ? pluralize(summary.refundCount, "refund") : "No refunds"} />
+            <StatTile
+              label="Total paid"
+              value={formatSums(summary.paid, currency)}
+              icon={<Wallet />}
+              hint={summary.pending.length ? `${formatSums(summary.pending, currency)} authorized, not yet charged` : `Net ${formatSums([...summary.paid, ...summary.refunds.map((x) => ({ ...x, amount: -x.amount }))], currency)} after refunds`}
+            />
+            <StatTile label="Refunds" value={formatSums(summary.refunds, currency)} icon={<RotateCcw />} hint={summary.refundCount ? pluralize(summary.refundCount, "refund") : "No refunds"} />
             <StatTile label="Lessons paid" value={summary.lessonsPaid} icon={<BookOpenCheck />} hint="Trials with no charge aren't counted" />
           </div>
         </StaggerItem>
@@ -217,7 +231,10 @@ function Inner() {
             <Card>
               <CardHeader title="Study wallet" description="Prepaid credits for one-tap booking." />
               <CardContent className="pt-3">
-                <p className="font-heading text-[2rem] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">{formatCredits(balance)}</p>
+                <p className="font-heading text-[2rem] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">{formatCredits(balance, own?.currency ?? currency)}</p>
+                {extraBalances.length > 0 && (
+                  <p className="mt-1.5 text-[12.5px] tabular-nums text-muted">Also {extraBalances.map((x) => formatCredits(x.amount, x.currency)).join(" · ")}</p>
+                )}
                 <p className="mt-2 text-[13px] leading-snug text-muted">Refunds for lessons paid with credits come back here.</p>
                 <Button variant="cta" className="mt-4 w-full" onClick={() => setWalletOpen(true)}>
                   <Plus /> Add credits
@@ -281,9 +298,10 @@ function ReceiptDialog({ payment, booking, tutorMap, tz, me, onClose }: { paymen
           ]
         : []),
       `Payment method: ${payment.method}`,
+      ...(payment.providerPaymentId ? [`Razorpay payment ID: ${payment.providerPaymentId}`] : []),
       `Status: ${meta?.label}`,
       "",
-      `Amount: ${signedAmount(payment.amountCents)} USD`,
+      `Amount: ${signedAmount(payment.amountCents, payment.currency)} ${payment.currency}`,
       "",
       "Card details are never stored by TutorLink.",
     ];
@@ -298,7 +316,7 @@ function ReceiptDialog({ payment, booking, tutorMap, tz, me, onClose }: { paymen
             <div className="flex items-end justify-between gap-4 rounded-lg border border-line bg-canvas px-4 py-4">
               <div>
                 <p className="text-[12px] text-muted">{payment.amountCents < 0 ? "Refunded" : "Amount"}</p>
-                <p className="mt-1 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-ink">{signedAmount(payment.amountCents)}</p>
+                <p className="mt-1 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-ink">{signedAmount(payment.amountCents, payment.currency)}</p>
               </div>
               <Badge tone={meta.tone}>{meta.label}</Badge>
             </div>
@@ -315,10 +333,15 @@ function ReceiptDialog({ payment, booking, tutorMap, tz, me, onClose }: { paymen
                   </DetailRow>
                   <DetailRow label="Tutor">{tutorFullName(tutor)}</DetailRow>
                   <DetailRow label="Lesson date">{formatDateTime(booking.startUtc, tz)}</DetailRow>
-                  {booking.discountCents > 0 && <DetailRow label="Discount">−{formatCents(booking.discountCents, { exact: true })}</DetailRow>}
+                  {booking.discountCents > 0 && <DetailRow label="Discount">−{formatMoney(booking.discountCents, booking.currency, { exact: true })}</DetailRow>}
                 </>
               )}
               <DetailRow label="Payment method">{payment.method}</DetailRow>
+              {payment.providerPaymentId && (
+                <DetailRow label="Razorpay payment ID">
+                  <span className="font-mono text-[12.5px]">{payment.providerPaymentId}</span>
+                </DetailRow>
+              )}
               <DetailRow label="Billed to">
                 {me.firstName} {me.lastName}
               </DetailRow>

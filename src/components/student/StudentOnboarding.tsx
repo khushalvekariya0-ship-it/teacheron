@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, LayoutDashboard, Lock, LogIn, Pencil, Search, ShieldAlert, Sparkles, UserPlus } from "lucide-react";
 import type { StudentProfile, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { currencyForCountry } from "@/lib/money";
 import { useApp, type Result } from "@/lib/store";
 import { useHydrated, useSession } from "@/lib/store/hooks";
 import { toQueryString } from "@/lib/search";
@@ -22,7 +23,7 @@ import { EASE } from "@/components/motion";
 import { setSaveExitHandler } from "@/components/onboarding/saveExit";
 import { BasicFields, BudgetFields, LearningFields, PreferencesFields, ScheduleFields } from "./fields";
 import {
-  STUDENT_STEPS, STUDENT_TOTAL_STEPS, basicSchema, basicValues, budgetSchema, budgetToProfile, budgetValues, learningSchema, learningValues,
+  STUDENT_STEPS, STUDENT_TOTAL_STEPS, basicSchema, basicValues, budgetSchemaFor, budgetToProfile, budgetValues, learningSchema, learningValues,
   preferencesSchema, preferencesValues, scheduleSchema, scheduleValues,
 } from "./schema";
 import { basicRows, budgetRows, learningRows, preferenceRows, scheduleRows, tutorSearchFor, type SummaryRow } from "./summary";
@@ -180,9 +181,9 @@ function ScheduleStep(p: StepProps) {
 }
 
 function BudgetStep(p: StepProps) {
-  const form = useForm({ resolver: zodResolver(budgetSchema), defaultValues: budgetValues(p.profile, !!p.me.parentalConsent), mode: "onTouched" });
+  const form = useForm({ resolver: zodResolver(budgetSchemaFor(currencyForCountry(p.me.country))), defaultValues: budgetValues(p.profile, !!p.me.parentalConsent), mode: "onTouched" });
   return (
-    <StepForm n={5} form={form} schema={budgetSchema} {...p}>
+    <StepForm n={5} form={form} schema={budgetSchemaFor(currencyForCountry(p.me.country))} {...p}>
       <BudgetFields form={form} schedule={p.profile} />
     </StepForm>
   );
@@ -228,7 +229,7 @@ function ReviewStep({ formId, me, profile, onEdit, onFinish }: { formId: string;
         <SummaryBlock title="Tutor preferences" rows={preferenceRows(profile)} onEdit={() => onEdit(3)} />
         <SummaryBlock title="Schedule & availability" rows={scheduleRows(profile)} onEdit={() => onEdit(4)} />
       </div>
-      <SummaryBlock title="Budget & payment" rows={budgetRows(profile)} onEdit={() => onEdit(5)} />
+      <SummaryBlock title="Budget & payment" rows={budgetRows(profile, currencyForCountry(me.country))} onEdit={() => onEdit(5)} />
       <p className="flex items-center gap-2 text-[13px] text-muted">
         <Lock className="size-4 shrink-0 text-navy" aria-hidden /> Only you can see your profile. We use it to suggest tutors who fit you.
       </p>
@@ -346,7 +347,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
       [2, learningSchema.safeParse(learningValues(profile)).success],
       [3, preferencesSchema.safeParse(preferencesValues(profile)).success],
       [4, scheduleSchema.safeParse(scheduleValues(profile)).success],
-      [5, budgetSchema.safeParse(budgetValues(profile, teen)).success],
+      [5, budgetSchemaFor(currencyForCountry(me.country)).safeParse(budgetValues(profile, teen)).success],
     ];
     const missing = parts.find(([, valid]) => !valid);
     if (missing) {

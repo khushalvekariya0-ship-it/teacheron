@@ -2,7 +2,7 @@ import type { Grade, Level, TeachingMode, Tutor, TutorCategory } from "@/lib/typ
 import { getSubject, gradeToLevel, subjectName, WEEKDAYS, TIMES_OF_DAY, GRADE_LABEL, LEVEL_LABEL } from "@/lib/data/catalog";
 import { distanceMiles, locationLabel, resolveLocation } from "@/lib/data/geo";
 import { rankTutors, type MatchCriteria } from "@/lib/matching";
-import { formatCents } from "@/lib/format";
+import { asCurrency, DEFAULT_CURRENCY, formatMoney, fromDollarSetting, toMinor, type Currency } from "@/lib/money";
 
 /**
  * URL contract for tutor search. Used by the homepage search, /tutors, subject/location landing pages
@@ -19,8 +19,9 @@ export interface TutorSearch {
   schedule?: SchedulePreset;
   days?: string[]; // Mon..Sun
   times?: ("morning" | "afternoon" | "evening")[];
-  minRate?: number; // dollars
-  maxRate?: number; // dollars
+  /** Whole units of the visitor's own currency (see searchTutors); only tutors who charge in it can match. */
+  minRate?: number;
+  maxRate?: number;
   exp?: number; // min years
   lang?: string;
   rating?: number; // min rating
@@ -119,8 +120,26 @@ export function activeFilterCount(s: TutorSearch): number {
   return Object.values(rest).filter((v) => v !== undefined && v !== false && !(Array.isArray(v) && !v.length)).length;
 }
 
-/** Human summary for saved-search labels and result headings. */
-export function describeSearch(s: TutorSearch): string {
+/** A rate filter value (whole units) as money: 1000 in ₹ → "₹1,000". */
+export const formatRate = (whole: number, currency: Currency): string => formatMoney(toMinor(whole), currency);
+
+/**
+ * Quick price choices for the filter, in whole units of `currency`. The dollar steps are scaled with
+ * TutorLink's own local amounts (₹ ×50 and so on) — a starting point to pick from, not an exchange rate.
+ */
+export function ratePresets(currency: Currency): { label: string; min?: number; max?: number }[] {
+  const [a, b, c] = [40, 70, 100].map((d) => fromDollarSetting(d * 100, currency) / 100);
+  const f = (n: number) => formatRate(n, currency);
+  return [
+    { label: `Under ${f(a)}`, max: a },
+    { label: `${f(a)} – ${f(b)}`, min: a, max: b },
+    { label: `${f(b)} – ${f(c)}`, min: b, max: c },
+    { label: `${f(c)}+`, min: c },
+  ];
+}
+
+/** Human summary for saved-search labels and result headings. Rates are in the visitor's `currency`. */
+export function describeSearch(s: TutorSearch, currency: Currency = DEFAULT_CURRENCY): string {
   const parts: string[] = [];
   if (s.subject) parts.push(subjectName(s.subject));
   else if (s.q) parts.push(`“${s.q}”`);
@@ -128,11 +147,11 @@ export function describeSearch(s: TutorSearch): string {
   else if (s.level) parts.push(LEVEL_LABEL[s.level]);
   if (s.mode) parts.push(s.mode === "online" ? "Online" : "In person");
   if (s.location) parts.push(`Near ${locationLabel(s.location)}`);
-  if (s.maxRate) parts.push(`Up to ${formatCents(s.maxRate * 100)}/hr`);
+  if (s.maxRate) parts.push(`Up to ${formatRate(s.maxRate, currency)}/hr`);
   return parts.join(" · ") || "All tutors";
 }
 
-function toCriteria(s: TutorSearch): MatchCriteria {
+function toCriteria(s: TutorSearch, currency: Currency): MatchCriteria {
   const preset = SCHEDULE_PRESETS.find((p) => p.value === s.schedule);
   return {
     subject: s.subject,
@@ -140,7 +159,8 @@ function toCriteria(s: TutorSearch): MatchCriteria {
     modes: s.mode ? [s.mode] : undefined,
     location: s.location,
     maxDistanceMiles: s.radius,
-    budgetMaxCents: s.maxRate ? s.maxRate * 100 : undefined,
+    budgetMaxCents: s.maxRate ? toMinor(s.maxRate) : undefined,
+    budgetCurrency: currency,
     days: s.days ?? preset?.days,
     timesOfDay: s.times ?? preset?.times,
     minExperienceYears: s.exp,
@@ -173,8 +193,12 @@ function availableIn(t: Tutor, days?: string[], times?: TutorSearch["times"]): b
 /**
  * Filters then sorts. Filters are hard constraints; "Best match" ordering uses the same transparent
  * factors shown on the concierge page. Featured status and subscription tier never affect order.
+ *
+ * `currency` is the visitor's own (useViewerCurrency()). Prices are never converted, so a price filter
+ * keeps only tutors who charge in it, and sorting by price orders tutors within one currency: the
+ * visitor's first, then each other currency in turn.
  */
-export function searchTutors(tutors: Tutor[], s: TutorSearch): SearchResult[] {
+export function searchTutors(tutors: Tutor[], s: TutorSearch, currency: Currency = DEFAULT_CURRENCY): SearchResult[] {
   const point = s.location ? resolveLocation(s.location) : null;
   const preset = SCHEDULE_PRESETS.find((p) => p.value === s.schedule);
   const days = s.days ?? preset?.days;
@@ -197,8 +221,9 @@ export function searchTutors(tutors: Tutor[], s: TutorSearch): SearchResult[] {
       // Either mode: online tutors are always reachable; in-person-only tutors must be within the radius.
       if (distanceMiles(point, t) > s.radius) return false;
     }
-    if (s.minRate && t.hourlyRateCents < s.minRate * 100) return false;
-    if (s.maxRate && t.hourlyRateCents > s.maxRate * 100) return false;
+    if ((s.minRate || s.maxRate) && asCurrency(t.currency) !== currency) return false;
+    if (s.minRate && t.hourlyRateCents < toMinor(s.minRate)) return false;
+    if (s.maxRate && t.hourlyRateCents > toMinor(s.maxRate)) return false;
     if (s.exp && t.experienceYears < s.exp) return false;
     if (s.lang && !t.languages.includes(s.lang)) return false;
     if (s.rating && (t.rating ?? 0) < s.rating) return false;
@@ -212,19 +237,62 @@ export function searchTutors(tutors: Tutor[], s: TutorSearch): SearchResult[] {
     return true;
   });
 
-  const ranked = rankTutors(filtered, toCriteria(s));
+  const ranked = rankTutors(filtered, toCriteria(s, currency));
   const results: SearchResult[] = ranked.map((r) => ({ tutor: r.tutor, distance: point ? Math.round(distanceMiles(point, r.tutor) * 10) / 10 : null, matchPercent: r.percent }));
+
+  // Rates are only compared within one currency: the visitor's first, then the others by code.
+  const currencyOrder = (a: SearchResult, b: SearchResult) => {
+    const ca = asCurrency(a.tutor.currency);
+    const cb = asCurrency(b.tutor.currency);
+    return ca === cb ? 0 : ca === currency ? -1 : cb === currency ? 1 : ca.localeCompare(cb);
+  };
 
   switch (s.sort ?? "match") {
     case "rating":
       return results.sort((a, b) => (b.tutor.rating ?? 0) - (a.tutor.rating ?? 0) || b.tutor.reviewCount - a.tutor.reviewCount);
     case "price_asc":
-      return results.sort((a, b) => a.tutor.hourlyRateCents - b.tutor.hourlyRateCents);
+      return results.sort((a, b) => currencyOrder(a, b) || a.tutor.hourlyRateCents - b.tutor.hourlyRateCents);
     case "price_desc":
-      return results.sort((a, b) => b.tutor.hourlyRateCents - a.tutor.hourlyRateCents);
+      return results.sort((a, b) => currencyOrder(a, b) || b.tutor.hourlyRateCents - a.tutor.hourlyRateCents);
     case "experience":
       return results.sort((a, b) => b.tutor.experienceYears - a.tutor.experienceYears);
     default:
       return results;
   }
+}
+
+/** Hourly rates of some tutors who all charge in one currency. */
+export interface RateSummary {
+  currency: Currency;
+  min: number;
+  /** The lower middle rate, so it is always a real listed rate. */
+  median: number;
+  max: number;
+  count: number;
+}
+
+/** Listed hourly rates, one summary per currency (rates in different currencies are never mixed), most tutors first. */
+export function ratesByCurrency(tutors: Tutor[]): RateSummary[] {
+  const groups = new Map<Currency, number[]>();
+  for (const t of tutors) {
+    const c = asCurrency(t.currency);
+    groups.set(c, [...(groups.get(c) ?? []), t.hourlyRateCents]);
+  }
+  return [...groups]
+    .map(([currency, rates]) => {
+      const sorted = [...rates].sort((a, b) => a - b);
+      return { currency, min: sorted[0], median: sorted[Math.floor((sorted.length - 1) / 2)], max: sorted[sorted.length - 1], count: sorted.length };
+    })
+    .sort((a, b) => b.count - a.count || a.currency.localeCompare(b.currency));
+}
+
+/** Rates in one currency: `prefer` (usually the visitor's) when any tutor charges in it, otherwise the one most tutors use. */
+export function rateSummary(tutors: Tutor[], prefer: Currency = DEFAULT_CURRENCY): RateSummary | null {
+  const all = ratesByCurrency(tutors);
+  return all.find((r) => r.currency === prefer) ?? all[0] ?? null;
+}
+
+/** "₹500–₹2,000" (or one amount when every rate is the same). */
+export function formatRateRange(r: Pick<RateSummary, "currency" | "min" | "max">): string {
+  return r.min === r.max ? formatMoney(r.min, r.currency) : `${formatMoney(r.min, r.currency)}–${formatMoney(r.max, r.currency)}`;
 }

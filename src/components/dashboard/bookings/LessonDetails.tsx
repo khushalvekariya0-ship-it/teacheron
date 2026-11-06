@@ -5,7 +5,9 @@ import Link from "next/link";
 import { ArrowUpRight, Copy, Users } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import { subjectName } from "@/lib/data/catalog";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
+import { useApp } from "@/lib/store";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card, CardContent, CardHeader, DetailRow, Separator } from "@/components/ui/Card";
 import { toast } from "@/components/ui/Toast";
@@ -15,6 +17,11 @@ import { bookingRef, shortName, type BookingPeople } from "./shared";
 export function LessonDetails({ booking: b, people, isTutor, tz }: { booking: Booking; people: BookingPeople; isTutor: boolean; tz: string }) {
   const total = b.priceCents - b.discountCents;
   const net = total - b.platformFeeCents;
+  const money = (minor: number) => formatMoney(minor, b.currency, { exact: true });
+  // How the lesson was paid ("Visa •••• 4242", "UPI", "Study Credits"), from its latest payment that went through.
+  const paidWith = useApp((s) =>
+    s.payments.filter((p) => p.bookingId === b.id && p.amountCents > 0 && p.status !== "failed" && p.method).sort((x, y) => y.createdAt.localeCompare(x.createdAt))[0]?.method,
+  );
   const ref = bookingRef(b.id);
   const copyRef = async () => {
     try {
@@ -68,13 +75,13 @@ export function LessonDetails({ booking: b, people, isTutor, tz }: { booking: Bo
         <Separator className="my-4" />
 
         <dl className="text-sm" aria-label="Price breakdown">
-          <PriceRow label={b.type === "trial" ? "Trial price" : `Lesson (${b.durationMin} min)`} value={b.priceCents === 0 ? "Free" : formatCents(b.priceCents, { exact: true })} />
-          {b.discountCents > 0 && <PriceRow label="Discount" value={`−${formatCents(b.discountCents, { exact: true })}`} />}
-          <PriceRow label={isTutor ? "Family pays" : "Total"} value={formatCents(total, { exact: true })} strong={!isTutor} />
+          <PriceRow label={b.type === "trial" ? "Trial price" : `Lesson (${b.durationMin} min)`} value={b.priceCents === 0 ? "Free" : money(b.priceCents)} />
+          {b.discountCents > 0 && <PriceRow label="Discount" value={`−${money(b.discountCents)}`} />}
+          <PriceRow label={isTutor ? "Family pays" : "Total"} value={money(total)} strong={!isTutor} />
           {isTutor && (
             <>
-              <PriceRow label="Platform fee" value={b.platformFeeCents ? `−${formatCents(b.platformFeeCents, { exact: true })}` : formatCents(0, { exact: true })} />
-              <PriceRow label="Your earnings" value={formatCents(net, { exact: true })} strong />
+              <PriceRow label="Platform fee" value={b.platformFeeCents ? `−${money(b.platformFeeCents)}` : money(0)} />
+              <PriceRow label="Your earnings" value={money(net)} strong />
             </>
           )}
           <div className="flex items-center justify-between gap-3 pt-2.5">
@@ -83,6 +90,12 @@ export function LessonDetails({ booking: b, people, isTutor, tz }: { booking: Bo
               <PaymentStatusBadge status={b.paymentStatus} />
             </dd>
           </div>
+          {paidWith && (
+            <div className="flex items-center justify-between gap-3 pt-1.5 text-ink-2">
+              <dt className="text-muted">Paid with</dt>
+              <dd className="text-right">{paidWith}</dd>
+            </div>
+          )}
         </dl>
 
         <Separator className="my-4" />

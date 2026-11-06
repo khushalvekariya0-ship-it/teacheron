@@ -9,6 +9,7 @@ import { zonedParts, zonedToUtc } from "@/lib/time";
 import { endMs } from "@/lib/booking";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { TUTOR_PLANS, type Plan } from "@/lib/data/platform";
+import { asCurrency, currencySymbol, sumByCurrency, type Currency } from "@/lib/money";
 import { toast } from "@/components/ui/Toast";
 
 export const DAY_MS = 86_400_000;
@@ -37,7 +38,7 @@ export function useMyPlan(tutorId: string | undefined): { plan: Plan; status: st
   }, [subs, tutorId]);
 }
 
-/* ─── Money (integer cents only) ────────────────────────────────────────────── */
+/* ─── Money (integer minor units, in each booking's own currency) ───────────── */
 
 /** What the learner paid for a booking. */
 export const grossCents = (b: Booking): number => b.priceCents - b.discountCents;
@@ -54,6 +55,22 @@ export function isCleared(b: Booking, now: number, policy: BookingPolicy): boole
 }
 
 export const sumCents = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+
+/**
+ * The one currency an earnings chart shows (amounts in different currencies are never added): the tutor's
+ * own, unless all their earnings so far are in another one (they changed currency later).
+ */
+export function chartCurrency(bookings: Booking[], tutorCurrency: Currency | undefined): Currency {
+  const own = asCurrency(tutorCurrency);
+  const sums = sumByCurrency(bookings.filter(isEarned).map((b) => ({ amount: netCents(b), currency: b.currency })));
+  return !sums.length || sums.some((x) => x.currency === own) ? own : sums[0].currency;
+}
+
+/** A price input's currency symbol in front, with room for the longer ones ("AED", "CA$", "kr"). */
+export function priceInputProps(currency: Currency): { prefixText: string; style?: React.CSSProperties } {
+  const prefixText = currencySymbol(currency);
+  return prefixText.length > 1 ? { prefixText, style: { paddingLeft: `calc(1.25rem + ${(prefixText.length * 0.7).toFixed(1)}em)` } } : { prefixText };
+}
 
 /* ─── Calendar buckets ──────────────────────────────────────────────────────── */
 
@@ -79,12 +96,13 @@ export function weekBuckets(now: number, tz: string, weeks: number): { start: nu
   return out;
 }
 
-/** Net earnings per week from earned lessons (by lesson date). */
-export function weeklyNet(bookings: Booking[], now: number, tz: string, weeks: number): { label: string; value: number }[] {
+/** Net earnings per week from earned lessons (by lesson date); only lessons in `currency` when given. */
+export function weeklyNet(bookings: Booking[], now: number, tz: string, weeks: number, currency?: Currency): { label: string; value: number }[] {
   const buckets = weekBuckets(now, tz, weeks);
+  const earned = bookings.filter((b) => isEarned(b) && (!currency || asCurrency(b.currency) === currency));
   return buckets.map((w) => ({
     label: w.label,
-    value: sumCents(bookings.filter((b) => isEarned(b)).filter((b) => {
+    value: sumCents(earned.filter((b) => {
       const s = new Date(b.startUtc).getTime();
       return s >= w.start && s < w.end;
     }).map(netCents)),

@@ -275,6 +275,51 @@ How it behaves:
 
 ---
 
+## 10. Payments with Razorpay (UPI, cards, netbanking)
+
+Families pay for lessons, and tutors for plans and lead credits, through Razorpay's own payment window:
+TutorLink never sees card or UPI details. Each tutor charges in their own country's currency (₹ in India,
+$ in the US, £ in the UK, € in the euro area…); a lesson's payment, refunds and the tutor's earnings stay
+in that currency. Study Credits are kept in each family's own currency.
+
+1. Create an account at <https://razorpay.com> (sign up, then the KYC for your business: PAN, bank
+   account). You can test before KYC is finished.
+2. **Test keys first.** In the Razorpay Dashboard switch to **Test mode**, then **Account & Settings →
+   API Keys → Generate Test Key**. Put them in `.env.local` (never in chat or in the code):
+
+   ```bash
+   RAZORPAY_KEY_ID=rzp_test_...
+   RAZORPAY_KEY_SECRET=...
+   ```
+
+   Restart the site. Card and UPI payments switch on by themselves once both are set. In test mode use
+   Razorpay's test cards and the UPI id `success@razorpay`; no real money moves.
+3. **Webhook** (so a payment still counts if someone closes the browser right after paying): Dashboard →
+   **Webhooks → Add New Webhook**: URL `https://your-domain.com/api/pay/webhook`, a secret you make up,
+   events `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed`. Put the same
+   secret in `.env.local` as `RAZORPAY_WEBHOOK_SECRET=...`. (Webhooks need your real https domain; on your
+   own computer the site still works, it just relies on the browser's confirmation.)
+4. **Payments in other currencies** ($, £, € …): ask Razorpay to switch on **International payments**
+   (Account & Settings → Payment methods). Until then, only tutors charging in ₹ can be paid. UPI is only
+   for rupees.
+5. **Going live:** after KYC, generate **Live** keys (`rzp_live_...`) and a live webhook, and replace the
+   test values. To switch payments off in an emergency without removing the keys, set
+   `PAYMENTS_DISABLED=1` and restart.
+
+How it works on the site:
+- **A lesson request** (the tutor approves each booking): the family pays and the money is only **held**.
+  When the tutor accepts, it's taken. If the tutor declines or doesn't answer in time, the hold is released
+  automatically (Razorpay returns it; nothing is charged). If the hold runs out before the tutor accepts,
+  the lesson shows "Payment failed" and the family is asked to pay again.
+- **Instant booking:** the payment is taken straight away.
+- **Cancellations, no-shows and dispute decisions** refund through Razorpay to the card or UPI account that
+  paid (Study Credits go back to Study Credits). A refund that can't be sent at once is retried by the
+  scheduled job, never sent twice.
+- **What tutors pay TutorLink** (plans, lead credits): in ₹ for tutors who charge in ₹, in US dollars for
+  everyone else. Plans are paid a month at a time. The ₹ prices are in `src/lib/data/platform.ts`.
+- **Paying tutors** isn't automatic yet: Razorpay Route / RazorpayX need their own approval from Razorpay.
+  Until then each tutor's dashboard shows what they're owed, and you pay them by bank transfer.
+
 ## Optional extras
 
 | Feature | What to do |
@@ -305,7 +350,7 @@ How it behaves:
 | ☐ | Supabase: **Allow manual linking** on (Authentication → Sign In / Providers), if you switched on Google / Facebook / Apple | "Connect" in Settings → Security |
 | ☐ | Supabase: a paid plan with daily backups (or download a backup weekly) | So data can be restored |
 | ☐ | A lawyer reads Terms, Privacy and Safety for the countries you serve | The texts are a starting point, not legal advice |
-| ☐ | Payments connected (see below) before charging for lessons | Until then only free lessons can be booked |
+| ☐ | Razorpay live keys and webhook (step 10), international payments if tutors charge in $ / £ / € | Until then only free lessons and trials can be booked |
 
 Already in place: security headers on every page (no framing by other sites, HTTPS-only once seen,
 no MIME sniffing, camera / microphone / screen only for this site), rate limits on sign-in, codes,
@@ -318,12 +363,13 @@ shared store (for example Upstash Redis).
 These need an outside service and an account of your own before they can work. The site doesn't
 pretend they work: the buttons say "not available yet" or the server refuses with a clear message.
 
-- **Card and UPI payments** (Stripe or Razorpay). Until connected, trial lessons are free to book for
-  everyone (families see "Free"; each tutor's own trial price applies once payments are connected),
+- **Card and UPI payments** need your Razorpay keys (step 10). Until they're set, trial lessons are free
+  to book for everyone (families see "Free"; each tutor's own trial price applies once payments are on),
   paid regular lessons can't be booked, and buying Study Credits, lead credits or a paid tutor plan is
   switched off. Bookings, trials included, follow the tutor's "approve each booking" setting: a request
   until the tutor accepts it, or booked straight away with instant booking on.
-- **Payouts to tutors** (Stripe Connect).
+- **Automatic payouts to tutors** (Razorpay Route / RazorpayX, which need Razorpay's approval). Until
+  then, pay tutors by bank transfer; their dashboard shows what they're owed.
 - **Two-way video in the classroom** needs your LiveKit keys (step 9). Without them, lessons use the
   basic classroom (own camera, whiteboard and chat) or the tutor's Zoom / Google Meet link.
 - **Text-message notifications** (Twilio).
