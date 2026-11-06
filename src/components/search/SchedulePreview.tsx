@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
 import { TIMES_OF_DAY } from "@/lib/data/catalog";
 import { formatDateTime, tzAbbrev } from "@/lib/format";
 import { nextOpening } from "@/lib/time";
-import { useApp } from "@/lib/store";
-import { useHydrated, useViewerTimezone } from "@/lib/store/hooks";
+import { useHydrated, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { WEEK_ORDER } from "./filters";
@@ -33,7 +32,7 @@ function teaches(tutor: Tutor, day: number, band: { start: number; end: number }
  */
 export function SchedulePreview({ tutor }: { tutor: Tutor }) {
   const hydrated = useHydrated();
-  const bookings = useApp((s) => s.bookings);
+  const bookings = useSlotBookings();
   const tz = useViewerTimezone();
   const opening = React.useMemo(() => (hydrated ? nextOpening(tutor, bookings, tz) : undefined), [hydrated, tutor, bookings, tz]);
   const name = `${tutor.firstName} ${tutor.lastName}`;

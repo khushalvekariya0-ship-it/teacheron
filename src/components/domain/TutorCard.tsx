@@ -15,8 +15,7 @@ import { INTRO_SECONDS, IntroReel, OnlineNow, useOnlineNow } from "./TutorIntro"
 import { useTutorActions } from "./useTutorActions";
 import { subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
 import { formatCents, formatDateTime } from "@/lib/format";
-import { useApp } from "@/lib/store";
-import { useHydrated, useViewerTimezone } from "@/lib/store/hooks";
+import { useHydrated, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { nextOpening } from "@/lib/time";
 
 /**
@@ -53,7 +52,7 @@ function useIntroPlayback() {
 
 function useNextOpening(tutor: Tutor) {
   const hydrated = useHydrated();
-  const bookings = useApp((s) => s.bookings);
+  const bookings = useSlotBookings();
   const tz = useViewerTimezone();
   return React.useMemo(() => (hydrated ? nextOpening(tutor, bookings, tz) : undefined), [hydrated, tutor, bookings, tz]);
 }

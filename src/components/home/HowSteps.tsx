@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarDays, Check, Mic, MicOff, Plus, ShieldCheck, Star, Video, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
-import { useHydrated, useNow, useListedTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { useHydrated, useNow, useListedTutors, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { getSubject } from "@/lib/data/catalog";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 import { formatCents, formatDate, formatTime, sessionPrice, tzAbbrev } from "@/lib/format";
@@ -252,7 +252,7 @@ export function BookStep() {
 
   const [kind, setKind] = React.useState<"trial" | "regular">("trial");
   const tz = useViewerTimezone();
-  const bookings = useApp((s) => s.bookings);
+  const bookings = useSlotBookings();
   const now = useNow(60_000);
   const [pick, setPick] = React.useState<string | null>(null);
 

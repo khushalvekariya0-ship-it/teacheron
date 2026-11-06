@@ -130,6 +130,12 @@ export interface Data {
   /** Main subjects and their sub-categories, as edited in Admin → Subjects. Every page reads this (see useCatalog). */
   catalog: { categories: SubjectCategory[]; subjects: Subject[] };
   loginHistory: LoginEvent[];
+  /**
+   * Other people's upcoming lessons with the listed tutors, as busy times only (no names or ids), so
+   * calendars and time pickers don't offer times that are already requested or booked. Sent by the
+   * server with the state; never saved.
+   */
+  tutorBusy: { tutorId: string; startUtc: string; durationMin: number }[];
   blogPosts: BlogPostItem[];
   faqs: FaqItem[];
   testimonials: TestimonialItem[];
@@ -155,7 +161,7 @@ export function emptyData(defaults: Pick<Data, "flags" | "policy" | "platformFee
     users: [], children: [], tutorOverrides: {}, registeredTutors: [], onboarding: {}, studentProfiles: {}, favorites: {}, savedSearches: [],
     savedJobs: {}, requirements: [], applications: [], bookings: [], reviews: [], conversations: [], messages: [], notifications: [],
     notificationPrefs: {}, goals: [], progressNotes: [], homework: [], payments: [], payouts: [], leadTransactions: [], walletTransactions: [],
-    subscriptions: {}, reports: [], contactFlags: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [],
+    subscriptions: {}, reports: [], contactFlags: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [], tutorBusy: [],
     blogPosts: [], faqs: [], testimonials: [],
     ...defaults,
   };

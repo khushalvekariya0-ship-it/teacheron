@@ -3,12 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Check, CalendarClock, CircleX, CreditCard, Flag, Play, CircleCheck, Star, UserX, Video, ChevronDown } from "lucide-react";
+import { Check, CalendarClock, CalendarPlus, CircleX, CreditCard, Download, Flag, Play, CircleCheck, Star, UserX, Video, ChevronDown } from "lucide-react";
 import type { Booking, BookingStatus } from "@/lib/types";
 import type { Actor } from "@/lib/booking";
 import { ACTION_LABEL, TRANSITIONS, availableTransitions, canTransition, meetingLinkVisible, policySummary, startMs } from "@/lib/booking";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { cn } from "@/lib/utils";
+import { downloadIcs, googleCalendarUrl, type CalendarEvent } from "@/lib/calendar";
 import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -145,6 +146,7 @@ export function LessonActionsPanel({
   onDialog,
   policy,
   statusNote,
+  calendar,
 }: {
   booking: Booking;
   primary: LessonAction | null;
@@ -152,8 +154,11 @@ export function LessonActionsPanel({
   onDialog: (d: LessonDialog) => void;
   policy: BookingPolicy;
   statusNote: string;
+  /** For an upcoming confirmed lesson: "Add to calendar" (url is the lesson page's path). */
+  calendar?: CalendarEvent;
 }) {
   const [policyOpen, setPolicyOpen] = React.useState(false);
+  const withFullUrl = (e: CalendarEvent) => ({ ...e, url: new URL(e.url, window.location.origin).toString() });
   return (
     <Card>
       <CardHeader title="Manage lesson" description={statusNote} />
@@ -172,6 +177,19 @@ export function LessonActionsPanel({
           ))}
         </AnimatePresence>
         {!primary && !items.length && <p className="rounded-lg bg-canvas px-3 py-2.5 text-[13px] text-muted">There&apos;s nothing to do on this lesson right now.</p>}
+        {calendar && (
+          <div className="border-t border-line pt-3">
+            <p className="text-[13px] font-medium text-ink-2">Add to your calendar</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button variant="secondary" size="sm" onClick={() => window.open(googleCalendarUrl(withFullUrl(calendar)), "_blank", "noopener,noreferrer")}>
+                <CalendarPlus /> Google
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => downloadIcs(withFullUrl(calendar))} aria-label="Download for Apple Calendar, Outlook or your phone (.ics)">
+                <Download /> Apple / Outlook
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="border-t border-line pt-3">
           <button
             type="button"

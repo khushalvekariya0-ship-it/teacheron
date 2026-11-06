@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CalendarX2, ChevronLeft, ChevronRight, Globe } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/lib/store";
-import { useViewerTimezone } from "@/lib/store/hooks";
+import { useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { generateSlots, groupSlotsByDay } from "@/lib/time";
 import { formatTime, tzAbbrev } from "@/lib/format";
 import { EmptyState } from "@/components/ui/States";
@@ -32,7 +31,7 @@ export function SlotPicker({
   days?: number;
 }) {
   const tz = useViewerTimezone();
-  const allBookings = useApp((s) => s.bookings);
+  const allBookings = useSlotBookings();
   const bookings = React.useMemo(() => allBookings.filter((b) => b.id !== excludeBookingId), [allBookings, excludeBookingId]);
   const groups = React.useMemo(() => groupSlotsByDay(generateSlots(tutor, { durationMin, viewerTz: tz, bookings, days })), [tutor, durationMin, tz, bookings, days]);
   const [dayKey, setDayKey] = React.useState<string | null>(null);

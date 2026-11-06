@@ -4,8 +4,7 @@ import * as React from "react";
 import { CalendarX2, ChevronLeft, ChevronRight, Globe } from "lucide-react";
 import type { Tutor } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/lib/store";
-import { useHydrated, useNow, useViewerTimezone } from "@/lib/store/hooks";
+import { useHydrated, useNow, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { dateKey, generateSlots, groupSlotsByDay } from "@/lib/time";
 import { formatTime, tzAbbrev } from "@/lib/format";
 import { AnimatePresence, motion } from "@/components/motion";
@@ -48,7 +47,7 @@ export function BookingCalendar({ tutor, durationMin, value, onChange, className
   const hydrated = useHydrated();
   const tz = useViewerTimezone();
   const now = useNow(60_000);
-  const bookings = useApp((s) => s.bookings);
+  const bookings = useSlotBookings();
   const groups = React.useMemo(() => (hydrated ? groupSlotsByDay(generateSlots(tutor, { durationMin, viewerTz: tz, bookings, days: 60 })) : []), [hydrated, tutor, durationMin, tz, bookings]);
   const byDay = React.useMemo(() => new Map(groups.map((g) => [g.day, g.slots])), [groups]);
   const [pickedDay, setPickedDay] = React.useState<string | null>(null);

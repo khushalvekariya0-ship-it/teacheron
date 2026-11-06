@@ -142,6 +142,20 @@ export async function buildState(userId: string | null): Promise<ClientState> {
     // Until online payments are connected, trial lessons are free to book: families see them as free. Staff
     // and the tutor themselves still see the tutor's own trial price (it applies again once payments are on).
     if (!env.paymentsEnabled) d.registeredTutors = d.registeredTutors.map((t) => (staff || t.id === me?.tutorId || !t.trial.priceCents ? t : { ...t, trial: { ...t.trial, priceCents: 0 } }));
+    // Other people's upcoming lessons with these tutors, as busy times only (no names, ids or details),
+    // so time pickers don't offer a time someone else has already requested or booked.
+    const visibleBookings = new Set(d.bookings.map((b) => b.id));
+    const tutorIds = d.registeredTutors.map((t) => t.id).join(",");
+    d.tutorBusy = tutorIds
+      ? (await L.raw(
+          `select id, tutor_id, start_utc, duration_min from public.bookings
+           where tutor_id = any(string_to_array($1, ',')) and status in ('pending', 'confirmed', 'in_progress') and end_utc > now()
+           order by start_utc limit 5000`,
+          [tutorIds],
+        ))
+          .filter((r) => !visibleBookings.has(String(r.id)))
+          .map((r) => ({ tutorId: String(r.tutor_id), startUtc: new Date(r.start_utc as string).toISOString(), durationMin: Number(r.duration_min) }))
+      : [];
     // Personal records (learning profile, drafts, preferences, favorites, saved items) are only ever the viewer's own.
     for (const key of ["studentProfiles", "notificationPrefs", "onboarding", "favorites", "savedJobs"] as const) {
       const own = (d[key] as Record<string, unknown>)[myId ?? ""];

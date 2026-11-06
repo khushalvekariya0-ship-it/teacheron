@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarX2, Lock, MessageSquare } from "lucide-react";
 import type { Booking, User } from "@/lib/types";
-import { availableTransitions, STATUS_META } from "@/lib/booking";
+import { availableTransitions, startMs, STATUS_META } from "@/lib/booking";
 import { actorFor, canViewBooking } from "@/lib/permissions";
 import { useApp } from "@/lib/store";
 import { useNow, useSession, useViewerTimezone } from "@/lib/store/hooks";
@@ -234,7 +234,26 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
         </div>
 
         <aside className="order-2 min-w-0 space-y-6" aria-label="Lesson actions and details">
-          <LessonActionsPanel booking={b} primary={primary} items={items} onDialog={setDialog} policy={policy} statusNote={statusNote} />
+          <LessonActionsPanel
+            booking={b}
+            primary={primary}
+            items={items}
+            onDialog={setDialog}
+            policy={policy}
+            statusNote={statusNote}
+            calendar={
+              b.status === "confirmed" && startMs(b) > now
+                ? {
+                    uid: b.id,
+                    title: `${subject} ${b.type === "trial" ? "trial " : ""}lesson with ${people.counterpart} (TutorLink)`,
+                    startUtc: b.startUtc,
+                    durationMin: b.durationMin,
+                    details: `${b.mode === "online" ? "Online lesson. Join from the lesson page on TutorLink" : "In-person lesson. Details are on the lesson page on TutorLink"}:`,
+                    url: `/dashboard/bookings/${b.id}`,
+                  }
+                : undefined
+            }
+          />
           <LessonDetails booking={b} people={people} isTutor={isTutor} tz={tz} />
         </aside>
       </div>

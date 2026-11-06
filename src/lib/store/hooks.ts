@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { Review, Tutor, User } from "@/lib/types";
+import type { Booking, Review, Tutor, User } from "@/lib/types";
 import { useApp, resolveTutor } from "./index";
 import { isFlagOn } from "@/lib/flags";
 import { buildCatalog, type Catalog } from "@/lib/data/catalog";
@@ -70,6 +70,22 @@ export function useTutor(idOrSlug: string | undefined): Tutor | undefined {
 }
 
 /** Feature flag for the current viewer, honoring gradual rollout percentages. */
+/**
+ * The bookings that block a tutor's times, for calendars and time pickers: the viewer's own bookings plus
+ * other people's upcoming lessons, which arrive as busy times only (no names or details).
+ */
+export function useSlotBookings(): Booking[] {
+  const bookings = useApp((s) => s.bookings);
+  const busy = useApp((s) => s.tutorBusy);
+  return useMemo(
+    () =>
+      busy?.length
+        ? [...bookings, ...busy.map((x, i) => ({ id: `busy_${i}`, tutorId: x.tutorId, startUtc: x.startUtc, durationMin: x.durationMin, status: "confirmed" }) as Booking)]
+        : bookings,
+    [bookings, busy],
+  );
+}
+
 export function useFlag(key: string): boolean {
   const flags = useApp((s) => s.flags);
   const userId = useApp((s) => s.sessionUserId);
