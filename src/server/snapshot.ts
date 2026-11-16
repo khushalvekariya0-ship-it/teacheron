@@ -94,7 +94,10 @@ export async function buildState(userId: string | null): Promise<ClientState> {
         }
         if (can("bookings.manage") || can("payments.read") || can("disputes.manage")) loads.push(L.load("bookings", "true", [], 3000), L.load("tutors", "true"));
         if (can("payments.read")) {
-          loads.push(L.load("payments", "true", [], 3000), L.load("wallet_transactions", "true", [], 3000), L.load("lead_transactions", "true", [], 3000), L.load("payouts", "true", [], 3000), L.load("subscriptions", "true"));
+          loads.push(
+            L.load("payments", "true", [], 3000), L.load("wallet_transactions", "true", [], 3000), L.load("lead_transactions", "true", [], 3000), L.load("payouts", "true", [], 3000),
+            L.load("subscriptions", "true"), L.load("payout_accounts", "true"),
+          );
         }
         if (can("disputes.manage")) loads.push(L.load("disputes", "true", [], 2000));
         if (can("reports.moderate")) loads.push(L.load("reports", "true", [], 2000), L.load("reviews", "true", [], 3000), L.load("contact_flags", "true", [], 3000));
@@ -122,9 +125,20 @@ export async function buildState(userId: string | null): Promise<ClientState> {
     d.users = d.users.map((u) => (u.id === myId || fullUsers ? u : moderator && u.chatModeration ? { ...stub(u), chatModeration: u.chatModeration } : stub(u)));
     if (!moderator) d.contactFlags = [];
     if (!can("payments.read")) {
-      d.payments = d.payments.filter((p) => p.userId === myId);
+      // A tutor also sees refunds on their own lessons (they lower what the tutor is owed), as amounts only:
+      // not how the family paid or Razorpay's ids.
+      const myLessons = new Set(me?.tutorId ? d.bookings.filter((b) => b.tutorId === me.tutorId).map((b) => b.id) : []);
+      d.payments = d.payments
+        .filter((p) => p.userId === myId || (p.amountCents < 0 && !!p.bookingId && myLessons.has(p.bookingId)))
+        .map((p) => (p.userId === myId ? p : { id: p.id, bookingId: p.bookingId, userId: p.userId, kind: p.kind, amountCents: p.amountCents, currency: p.currency, status: p.status, description: p.description, method: "", createdAt: p.createdAt }));
       d.walletTransactions = d.walletTransactions.filter((t) => t.userId === myId);
+      d.payouts = d.payouts.filter((p) => !!me?.tutorId && p.tutorId === me.tutorId);
     }
+    // Payout details: the tutor's own in full. Staff who can't send money (payments.read only) see the
+    // account number's last 4 digits; staff with payments.refund see it all, to make the transfer.
+    d.payoutAccounts = d.payoutAccounts
+      .filter((a) => (!!me?.tutorId && a.tutorId === me.tutorId) || can("payments.read"))
+      .map((a) => (a.tutorId === me?.tutorId || can("payments.refund") || !a.accountNumber ? a : { ...a, accountNumber: `•••• ${a.accountNumber.slice(-4)}` }));
     if (!can("disputes.manage")) {
       // The other person in a dispute doesn't see contact details in it: they're masked in the description,
       // and evidence files that show them can only be opened by staff and the person who added them.

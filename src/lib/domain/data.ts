@@ -1,6 +1,6 @@
 import type {
   Application, AppNotification, AuditLog, Booking, BookingType, Child, Conversation, Coupon, Dispute, FeatureFlag, Homework,
-  LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod, Payment, Payout, ProgressNote, Report, Requirement, Review,
+  LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod, Payment, Payout, PayoutAccount, ProgressNote, Report, Requirement, Review,
   SavedSearch, StudentProfile, Subject, SubjectCategory, Subscription, TeachingMode, Tutor, User, VerificationRequest, WalletTransaction,
   ContactFlag,
 } from "@/lib/types";
@@ -113,6 +113,8 @@ export interface Data {
   homework: Homework[];
   payments: Payment[];
   payouts: Payout[];
+  /** Where tutors want to be paid (the tutor's own; staff with payments.read see all). */
+  payoutAccounts: PayoutAccount[];
   leadTransactions: LeadTransaction[];
   /** Study Credits: every top-up, lesson payment and refund on learner wallets. */
   walletTransactions: WalletTransaction[];
@@ -160,7 +162,7 @@ export function emptyData(defaults: Pick<Data, "flags" | "policy" | "platformFee
     sessionUserId: null,
     users: [], children: [], tutorOverrides: {}, registeredTutors: [], onboarding: {}, studentProfiles: {}, favorites: {}, savedSearches: [],
     savedJobs: {}, requirements: [], applications: [], bookings: [], reviews: [], conversations: [], messages: [], notifications: [],
-    notificationPrefs: {}, goals: [], progressNotes: [], homework: [], payments: [], payouts: [], leadTransactions: [], walletTransactions: [],
+    notificationPrefs: {}, goals: [], progressNotes: [], homework: [], payments: [], payouts: [], payoutAccounts: [], leadTransactions: [], walletTransactions: [],
     subscriptions: {}, reports: [], contactFlags: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [], tutorBusy: [],
     blogPosts: [], faqs: [], testimonials: [],
     ...defaults,

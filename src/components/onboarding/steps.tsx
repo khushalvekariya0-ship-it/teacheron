@@ -524,7 +524,7 @@ export function PricingStep({ formId, defaults, onValid, bindValues, country }: 
             Trial: {trialDuration} min · {trialCents === 0 ? "free" : formatMoney(trialCents, currency)}
           </p>
         )}
-        <p className="mt-3 text-[12px] leading-snug text-muted">TutorLink pays out to your bank account; automatic payouts are being set up.</p>
+        <p className="mt-3 text-[12px] leading-snug text-muted">TutorLink sends what you earn to your UPI ID or bank account: add them under Earnings once you&apos;re set up.</p>
       </aside>
     </form>
   );

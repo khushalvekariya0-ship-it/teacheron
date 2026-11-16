@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDownToLine, Banknote, CalendarClock, CircleDollarSign, Clock3, CreditCard, Landmark, Percent, ShieldCheck, Undo2, Wallet } from "lucide-react";
+import { ArrowDownToLine, Banknote, CalendarClock, CircleDollarSign, Clock3, CreditCard, Percent, ShieldCheck, Undo2, Wallet } from "lucide-react";
 import type { Booking, Payout } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { endMs } from "@/lib/booking";
 import { formatDate } from "@/lib/format";
-import { CURRENCIES, asCurrency, formatMoney, formatSums, sumByCurrency, type Currency } from "@/lib/money";
+import { CURRENCIES, asCurrency, formatMoney, formatSums, type Currency } from "@/lib/money";
 import { subjectName } from "@/lib/data/catalog";
 import { PageHeader } from "@/components/dashboard/Shell";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,8 @@ import { EmptyState } from "@/components/ui/States";
 import { AreaChart, StatTile } from "@/components/charts";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { NeedsTutorProfile } from "./shared";
+import { PAYOUT_METHOD_NAME, PayoutDetailsCard } from "./PayoutDetails";
+import { payoutBalances } from "@/lib/earnings";
 import { DAY_MS, chartCurrency, grossCents, isCleared, isEarned, learnerIdOf, netCents, sumCents, useLearnerName, useMyBookings, useMyTutor, weeklyNet } from "./hooks";
 
 type TxStatus = "available" | "clearing" | "upcoming" | "on_hold" | "refunded";
@@ -33,8 +35,8 @@ const TX_META: Record<TxStatus, { label: string; tone: "neutral" | "accent" | "s
 const PAYOUT_META: Record<Payout["status"], { label: string; tone: "neutral" | "accent" | "success" | "warning" | "danger" }> = {
   scheduled: { label: "Scheduled", tone: "accent" },
   in_transit: { label: "In transit", tone: "warning" },
-  paid: { label: "Paid", tone: "success" },
-  failed: { label: "Failed", tone: "danger" },
+  paid: { label: "Sent", tone: "success" },
+  failed: { label: "Not received", tone: "danger" },
 };
 
 interface Tx {
@@ -112,13 +114,9 @@ export function EarningsView() {
   const inFlight = payouts.filter((p) => p.status === "scheduled" || p.status === "in_transit");
   const upcomingPayout = total(payoutItems(inFlight));
   const nextArrival = [...inFlight].sort((a, b) => a.arrivalDate.localeCompare(b.arrivalDate))[0];
-  // Owed to you: completed lessons minus TutorLink's fee, less anything already paid out or on its way.
-  const owed = total(
-    sumByCurrency([
-      ...earned.map((t) => ({ amount: t.net, currency: t.currency })),
-      ...payoutItems(payouts.filter((p) => p.status !== "failed")).map((x) => ({ ...x, amount: -x.amount })),
-    ]).map((x) => ({ ...x, amount: Math.max(0, x.amount) })),
-  );
+  // Owed to you: completed, paid lessons minus TutorLink's fee and refunds, less anything already paid out
+  // (the same figures Admin → Payments pays from).
+  const owed = total(payoutBalances(tutor.id, bookings, payments, payouts, now, policy).map((b) => ({ amount: Math.max(0, b.available + b.clearing), currency: b.currency })));
   const fees = total(earned.map((t) => ({ amount: t.fee, currency: t.currency })));
   const refunds = total(txs.map((t) => ({ amount: t.refund, currency: t.currency })));
   const severalCurrencies = new Set(txs.map((t) => t.currency)).size > 1;
@@ -180,16 +178,29 @@ export function EarningsView() {
   ];
 
   const payoutColumns: Column<Payout>[] = [
-    { key: "arrival", header: "Arrival date", cell: (p) => <span className="font-medium tabular-nums text-ink">{formatDate(`${p.arrivalDate}T12:00:00Z`, "UTC")}</span>, sortValue: (p) => p.arrivalDate },
+    { key: "arrival", header: "Sent on", cell: (p) => <span className="font-medium tabular-nums text-ink">{formatDate(`${p.arrivalDate}T12:00:00Z`, "UTC")}</span>, sortValue: (p) => p.arrivalDate },
     { key: "amount", header: "Amount", align: "right", cell: (p) => <span className="font-medium text-ink">{formatMoney(p.amountCents, p.currency)}</span>, sortValue: (p) => p.amountCents },
-    { key: "created", header: "Initiated", cell: (p) => <span className="tabular-nums">{formatDate(p.createdAt, tz)}</span>, sortValue: (p) => p.createdAt },
+    {
+      key: "reference",
+      header: "Reference",
+      cell: (p) => (
+        <span className="block min-w-0">
+          <span className="block truncate font-mono text-[12.5px] text-ink">{p.reference ?? "—"}</span>
+          {p.method && <span className="block text-[12px] text-muted">{PAYOUT_METHOD_NAME[p.method]}</span>}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
     {
       key: "status",
       header: "Status",
       cell: (p) => (
-        <Badge tone={PAYOUT_META[p.status].tone} size="sm">
-          {PAYOUT_META[p.status].label}
-        </Badge>
+        <span className="inline-flex flex-col items-start gap-0.5">
+          <Badge tone={PAYOUT_META[p.status].tone} size="sm">
+            {PAYOUT_META[p.status].label}
+          </Badge>
+          {p.status === "failed" && p.failureReason && <span className="max-w-[16rem] text-[11.5px] text-muted">{p.failureReason}</span>}
+        </span>
       ),
       sortValue: (p) => p.status,
     },
@@ -212,7 +223,7 @@ export function EarningsView() {
           <StatTile label="Total earned (net)" value={<span className="tabular-nums">{totalNet}</span>} icon={<CircleDollarSign />} hint={`${earned.length} paid ${earned.length === 1 ? "lesson" : "lessons"}`} />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Owed to you" value={<span className="tabular-nums">{owed}</span>} icon={<Wallet />} hint="Completed lessons, minus TutorLink's fee" />
+          <StatTile label="Owed to you" value={<span className="tabular-nums">{owed}</span>} icon={<Wallet />} hint="Paid lessons, minus TutorLink's fee and payouts" />
         </StaggerItem>
         <StaggerItem>
           <StatTile
@@ -232,7 +243,7 @@ export function EarningsView() {
             label="Upcoming payout"
             value={<span className="tabular-nums">{upcomingPayout}</span>}
             icon={<CalendarClock />}
-            hint={nextArrival ? `Arrives ${formatDate(`${nextArrival.arrivalDate}T12:00:00Z`, "UTC", { month: "short", day: "numeric" })}` : "Automatic payouts are being set up"}
+            hint={nextArrival ? `Arrives ${formatDate(`${nextArrival.arrivalDate}T12:00:00Z`, "UTC", { month: "short", day: "numeric" })}` : "Nothing on its way right now"}
           />
         </StaggerItem>
         <StaggerItem>
@@ -255,21 +266,17 @@ export function EarningsView() {
           </CardContent>
         </Card>
 
+        <div className="space-y-6">
+        <PayoutDetailsCard tutorId={tutor.id} disputeDays={policy.disputeWindowDays} />
         <Card>
           <CardHeader
             title={
               <span className="inline-flex items-center gap-2">
-                <Landmark className="size-4 text-ink" aria-hidden /> Bank payouts
+                <ShieldCheck className="size-4 text-ink" aria-hidden /> How earnings work
               </span>
-            }
-            action={
-              <Badge tone="neutral" size="sm" dot>
-                Being set up
-              </Badge>
             }
           />
           <CardContent className="space-y-4 pt-4 text-[13.5px] leading-relaxed text-muted">
-            <p>TutorLink pays out to your bank account; automatic payouts are being set up.</p>
             <ol className="space-y-3">
               <li className="flex gap-2.5">
                 <CreditCard className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
@@ -286,13 +293,14 @@ export function EarningsView() {
               <li className="flex gap-2.5">
                 <Banknote className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
                 <span>
-                  <span className="font-medium text-ink">Owed to you.</span> Each completed lesson, minus TutorLink&apos;s fee, is owed to you until it&apos;s paid to your bank.
+                  <span className="font-medium text-ink">Owed to you.</span> Each completed, paid lesson, minus TutorLink&apos;s fee, is owed to you until TutorLink sends it to your payout details.
                 </span>
               </li>
             </ol>
             <p className="rounded-lg bg-canvas px-3 py-2 text-[12.5px]">Figures are worked out from your lessons and any payouts recorded below.</p>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       <section aria-labelledby="tx-h" className="space-y-3">
@@ -318,14 +326,14 @@ export function EarningsView() {
           <h2 id="po-h" className="text-[15px] font-semibold tracking-tight text-ink">
             Payouts
           </h2>
-          <p className="text-[13px] text-muted">Transfers to your bank account.</p>
+          <p className="text-[13px] text-muted">Money TutorLink sent to your UPI ID or bank account.</p>
         </div>
         <DataTable
           rows={payouts}
           columns={payoutColumns}
           rowKey={(p) => p.id}
           pageSize={6}
-          empty={<EmptyState compact icon={<Banknote />} title="No payouts yet" description="TutorLink pays out to your bank account; automatic payouts are being set up." />}
+          empty={<EmptyState compact icon={<Banknote />} title="No payouts yet" description="Payouts appear here when TutorLink sends what you're owed. You'll get an email each time." />}
         />
       </section>
     </div>

@@ -317,8 +317,15 @@ How it works on the site:
   scheduled job, never sent twice.
 - **What tutors pay TutorLink** (plans, lead credits): in ₹ for tutors who charge in ₹, in US dollars for
   everyone else. Plans are paid a month at a time. The ₹ prices are in `src/lib/data/platform.ts`.
-- **Paying tutors** isn't automatic yet: Razorpay Route / RazorpayX need their own approval from Razorpay.
-  Until then each tutor's dashboard shows what they're owed, and you pay them by bank transfer.
+- **Paying tutors** is done by hand (automatic payouts with Razorpay Route / RazorpayX need their own
+  approval from Razorpay). Tutors add their UPI ID or bank account (or, outside India, written
+  instructions) under **Earnings → How you get paid**. In **Admin → Payments → Payouts**, "Owed to tutors"
+  shows what each tutor is owed per currency (paid lessons minus TutorLink's fee and refunds; "ready" once
+  the dispute window has passed) and where to send it. Send the money from your bank or UPI app, then click
+  **Record payout** with the UPI / bank reference: the tutor is emailed. If the money comes back, open the
+  payout and choose **Mark as not received**; it's owed again. Recording payouts needs the
+  `payments.refund` permission ("Refunds & payouts"); staff with only `payments.read` see account numbers
+  masked.
 
 ## Optional extras
 
@@ -326,7 +333,7 @@ How it works on the site:
 |---|---|
 | **Google / Facebook / Apple sign-in** | See step 8. The "Continue with …" buttons appear on the site automatically for each provider you switch on in Supabase. |
 | **Emails from the site** (password reset links, parent approval for 13–17 students, and email copies of notifications: booking requests and changes, messages, payments, job applications, homework, account and security notices) | See step 7: an SMTP mailbox (`SMTP_*`) or a Resend API key (`RESEND_API_KEY`), plus `EMAIL_FROM`. Each person chooses which emails they get under **Notifications**; account and security notices always go out. Announcements are emailed only to people who switched on "Tips & product news". Without these settings, everything still shows in the site's notifications, but no email is sent. |
-| **Scheduled jobs** (lesson reminders the day before and an hour before, expiring unanswered booking requests, finishing past lessons, closing finished classrooms) | Run by themselves at most every 5 minutes while people use the site. For reminders to be on time even when nobody is on the site, set `CRON_SECRET` to any long random text and have `https://your-domain.com/api/cron` called **every 10 minutes** with the header `Authorization: Bearer <CRON_SECRET>`: Vercel Pro can do it from `vercel.json`; on the free plan use a free service such as cron-job.org. (`vercel.json` already calls it once a day.) |
+| **Scheduled jobs** (lesson reminders the day before and an hour before, expiring unanswered booking requests, finishing past lessons, closing finished classrooms) | Run by themselves at most every 5 minutes while people use the site. For reminders to be on time even when nobody is on the site, set `CRON_SECRET` to any long random text (the same value in `.env.local` and on your host), then run `npm run db:scheduler -- https://your-domain.com`: your Supabase database then calls `/api/cron` **every 10 minutes** (Supabase's pg_cron and pg_net, free; the address and secret are kept in Supabase Vault). Check it with `npm run db:scheduler -- --status`, switch it off with `--off`, and run it again whenever the site's address or `CRON_SECRET` changes. The regular calls also keep a free Supabase project from pausing. (`vercel.json` also calls it once a day.) |
 
 ## Going live on Vercel
 
@@ -343,7 +350,7 @@ How it works on the site:
 | ☐ | Your own domain with **https** (Vercel adds the certificate) | Emailed links (reset, confirm) only work with a real https address; phones need https for the camera in the classroom |
 | ☐ | `NEXT_PUBLIC_SITE_URL=https://your-domain.com`, and the same address in Supabase → URL Configuration | Sign-in, email links and Google / Facebook / Apple return here |
 | ☐ | Email from your domain (Resend or your domain's SMTP), `EMAIL_FROM` on that domain | Gmail sends at most ~500 a day and lands in spam more often |
-| ☐ | `CRON_SECRET` and a call to `/api/cron` every 10 minutes (see "Scheduled jobs" above) | Lesson reminders on time |
+| ☐ | `CRON_SECRET` and `npm run db:scheduler -- https://your-domain.com` (see "Scheduled jobs" above) | Lesson reminders on time |
 | ☐ | Live classroom: LiveKit keys (step 9) | Video in lessons; without them lessons use the basic classroom |
 | ☐ | Google / Facebook / Apple keys (step 8), if you want those buttons | Social sign-in |
 | ☐ | Two-step login on every staff account (Admin → Security) | Protects the admin panel |
@@ -369,7 +376,7 @@ pretend they work: the buttons say "not available yet" or the server refuses wit
   switched off. Bookings, trials included, follow the tutor's "approve each booking" setting: a request
   until the tutor accepts it, or booked straight away with instant booking on.
 - **Automatic payouts to tutors** (Razorpay Route / RazorpayX, which need Razorpay's approval). Until
-  then, pay tutors by bank transfer; their dashboard shows what they're owed.
+  then, send payouts by UPI or bank transfer and record them in Admin → Payments → Payouts (see step 10).
 - **Two-way video in the classroom** needs your LiveKit keys (step 9). Without them, lessons use the
   basic classroom (own camera, whiteboard and chat) or the tutor's Zoom / Google Meet link.
 - **Text-message notifications** (Twilio).

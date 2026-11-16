@@ -21,6 +21,8 @@ import {
   centsToDecimal, matches, useDirectory, useStaff, useSticky, useUrlParam,
 } from "./kit";
 import { PaymentRows } from "./BookingsView";
+import { OwedToTutors, PayoutFailedButton } from "./PayoutsOwed";
+import { PAYOUT_METHOD_NAME } from "@/components/dashboard/tutor/PayoutDetails";
 import { DISPUTE_STATUS_META, PAYMENT_KIND_LABEL, PAYMENT_ROW_META, PAYOUT_META, formatCalendarDate, isDisputeOpen, isRefundPending, refundSource, settledSums, signedMoney, sumRows } from "./money";
 
 type TabKey = "payments" | "refunds" | "payouts";
@@ -166,7 +168,8 @@ function PaymentsInner() {
     { key: "tutor", header: "Tutor", sortValue: (p) => dir.name(p.tutorId), cell: (p) => <PersonCell name={dir.name(p.tutorId)} sub={<Mono>{p.id}</Mono>} /> },
     { key: "amount", header: "Amount", align: "right", sortValue: (p) => p.amountCents, cell: (p) => <span className="font-medium text-ink">{formatMoney(p.amountCents, p.currency)}</span> },
     { key: "status", header: "Status", sortValue: (p) => p.status, cell: (p) => <StatusPill tone={PAYOUT_META[p.status].tone}>{PAYOUT_META[p.status].label}</StatusPill> },
-    { key: "arrival", header: "Arrival date", sortValue: (p) => p.arrivalDate, cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatCalendarDate(p.arrivalDate)}</span> },
+    { key: "arrival", header: "Sent on", sortValue: (p) => p.arrivalDate, cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatCalendarDate(p.arrivalDate)}</span> },
+    { key: "reference", header: "Reference", sortValue: (p) => p.reference ?? "", cell: (p) => (p.reference ? <Mono className="text-ink">{p.reference}</Mono> : "—"), hideOnMobile: true },
   ];
 
   const exportConfig = {
@@ -190,8 +193,11 @@ function PaymentsInner() {
     },
     payouts: {
       filename: "tutorlink-payouts",
-      headers: ["ID", "Created (UTC)", "Tutor", "Tutor ID", "Currency", "Amount", "Status", "Arrival date"],
-      rows: () => payoutRows.map((p) => [p.id, p.createdAt, dir.name(p.tutorId), p.tutorId, p.currency, centsToDecimal(p.amountCents), p.status, p.arrivalDate]),
+      headers: ["ID", "Created (UTC)", "Tutor", "Tutor ID", "Currency", "Amount", "Status", "Sent on", "Method", "Reference", "Recorded by"],
+      rows: () =>
+        payoutRows.map((p) => [
+          p.id, p.createdAt, dir.name(p.tutorId), p.tutorId, p.currency, centsToDecimal(p.amountCents), p.status, p.arrivalDate, p.method ?? "", p.reference ?? "", p.recordedBy ? dir.name(p.recordedBy) : "",
+        ]),
     },
   }[tab];
 
@@ -309,6 +315,7 @@ function PaymentsInner() {
         </TabsContent>
 
         <TabsContent value="payouts">
+          <OwedToTutors />
           <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(Object.keys(PAYOUT_META) as Payout["status"][]).map((s) => {
               const list = payoutRows.filter((p) => p.status === s);
@@ -326,7 +333,7 @@ function PaymentsInner() {
             rowKey={(p) => p.id}
             onRowClick={(p) => setOpenId(p.id)}
             pageSize={12}
-            empty={filtered ? emptyFiltered : <EmptyState icon={<Landmark />} title="No payouts yet" description="Payouts appear here once tutors have completed paid lessons." />}
+            empty={filtered ? emptyFiltered : <EmptyState icon={<Landmark />} title="No payouts yet" description="Payouts you record above appear here." />}
           />
         </TabsContent>
       </Tabs>
@@ -351,7 +358,13 @@ function RecordSheet({ record: current, onClose }: { record: Payment | Payout | 
         : `${PAYMENT_KIND_LABEL[record.kind]} payment · ${formatMoney(record.amountCents, record.currency)}`;
   return (
     <Sheet open={!!current} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" title={title} description={record?.id} className="sm:w-[34rem]" footer={record && !isPayout(record) ? <PaymentFooter payment={record} /> : undefined}>
+      <SheetContent
+        side="right"
+        title={title}
+        description={record?.id}
+        className="sm:w-[34rem]"
+        footer={record ? isPayout(record) ? <PayoutFooter payout={record} /> : <PaymentFooter payment={record} /> : undefined}
+      >
         {record && (isPayout(record) ? <PayoutDetail payout={record} /> : <PaymentDetail payment={record} />)}
       </SheetContent>
     </Sheet>
@@ -443,6 +456,16 @@ function ProviderId({ id }: { id: string }) {
   );
 }
 
+function PayoutFooter({ payout }: { payout: Payout }) {
+  if (payout.status === "failed") return <p className="text-[13px] text-muted">This payout was marked as not received; the amount is owed to the tutor again.</p>;
+  return (
+    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-[13px] text-muted">The tutor says the money didn&apos;t arrive, or the bank returned it?</p>
+      <PayoutFailedButton payout={payout} />
+    </div>
+  );
+}
+
 function PaymentFooter({ payment: p }: { payment: Payment }) {
   const disputes = useApp((s) => s.disputes);
   const { can } = useStaff();
@@ -498,11 +521,16 @@ function PayoutDetail({ payout: p }: { payout: Payout }) {
             { label: "Tutor", value: <TextLink href={`/admin/tutors?id=${p.tutorId}`}>{dir.name(p.tutorId)}</TextLink> },
             { label: "Amount", value: <span className="tabular-nums">{formatMoney(p.amountCents, p.currency)}</span> },
             { label: "Status", value: PAYOUT_META[p.status].label },
-            { label: p.status === "paid" ? "Arrived" : "Expected arrival", value: <span className="tabular-nums">{formatCalendarDate(p.arrivalDate)}</span> },
-            { label: "Created", value: <span className="tabular-nums">{formatDateTime(p.createdAt, tz)}</span> },
+            ...(p.failureReason ? [{ label: "What happened", value: <span className="font-normal text-ink-2">{p.failureReason}</span> }] : []),
+            { label: "Sent on", value: <span className="tabular-nums">{formatCalendarDate(p.arrivalDate)}</span> },
+            ...(p.method ? [{ label: "Sent by", value: PAYOUT_METHOD_NAME[p.method] }] : []),
+            ...(p.reference ? [{ label: "Reference", value: <Mono className="text-ink">{p.reference}</Mono> }] : []),
+            ...(p.note ? [{ label: "Note", value: <span className="font-normal text-ink-2">{p.note}</span> }] : []),
+            ...(p.recordedBy ? [{ label: "Recorded by", value: dir.name(p.recordedBy) }] : []),
+            { label: "Recorded", value: <span className="tabular-nums">{formatDateTime(p.createdAt, tz)}</span> },
           ]}
         />
-        <p className="mt-2.5 text-[12.5px] text-muted">Bank transfers to tutors are handled by the payment processor in production. The preview shows sample payout records only.</p>
+        <p className="mt-2.5 text-[12.5px] text-muted">Payouts are sent by hand (UPI or bank transfer) and recorded here; the tutor gets an email with the reference.</p>
       </Section>
       <Section title="Other payouts to this tutor">
         {others.length === 0 ? (

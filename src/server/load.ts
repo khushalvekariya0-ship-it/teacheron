@@ -126,6 +126,7 @@ export class Loader {
       this.load("lead_transactions", "tutor_id = any($1)", [t]),
       this.load("verification_requests", "tutor_id = any($1)", [t]),
       this.load("payouts", "tutor_id = any($1)", [t]),
+      this.load("payout_accounts", "tutor_id = any($1)", [t]),
       this.load("conversations", "user_id = any($1) or tutor_id = any($2)", [u, t]),
       this.load("wallet_transactions", "user_id = any($1)", [u]),
       this.load("reports", "reporter_id = any($1)", [u]),

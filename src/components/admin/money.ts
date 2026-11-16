@@ -90,8 +90,8 @@ export const PAYMENT_ROW_META: Record<Payment["status"], { label: string; tone: 
 export const PAYOUT_META: Record<Payout["status"], { label: string; tone: Tone }> = {
   scheduled: { label: "Scheduled", tone: "accent" },
   in_transit: { label: "In transit", tone: "warning" },
-  paid: { label: "Paid", tone: "success" },
-  failed: { label: "Failed", tone: "danger" },
+  paid: { label: "Sent", tone: "success" },
+  failed: { label: "Not received", tone: "danger" },
 };
 
 /** Refund rows come from two places: dispute resolutions and the booking policy. */

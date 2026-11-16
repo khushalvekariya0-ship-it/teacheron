@@ -181,6 +181,12 @@ const PAYMENT: Record<string, Col> = {
 
 const PAYOUT: Record<string, Col> = {
   id: ["id", "v"], tutorId: ["tutor_id", "v"], amountCents: ["amount_cents", "v"], currency: ["currency", "v", true], status: ["status", "v"], arrivalDate: ["arrival_date", "v"], createdAt: ["created_at", "ts"],
+  method: ["method", "v", true], reference: ["reference", "v", true], note: ["note", "v", true], failureReason: ["failure_reason", "v", true], recordedBy: ["recorded_by", "v", true],
+};
+
+const PAYOUT_ACCOUNT: Record<string, Col> = {
+  tutorId: ["tutor_id", "v"], method: ["method", "v"], accountHolder: ["account_holder", "v"], upiId: ["upi_id", "v", true], accountNumber: ["account_number", "v", true],
+  ifsc: ["ifsc", "v", true], bankName: ["bank_name", "v", true], details: ["details", "v", true], updatedAt: ["updated_at", "ts"],
 };
 
 const LEAD_TX: Record<string, Col> = { id: ["id", "v"], tutorId: ["tutor_id", "v"], delta: ["delta", "v"], reason: ["reason", "v"], createdAt: ["created_at", "ts"] };
@@ -320,6 +326,7 @@ export const SPECS: TableSpec[] = [
   arraySpec("homework", "homework", HOMEWORK, "created_at desc"),
   arraySpec("payments", "payments", PAYMENT, "created_at desc"),
   arraySpec("payouts", "payouts", PAYOUT, "created_at desc"),
+  arraySpec("payoutAccounts", "payout_accounts", PAYOUT_ACCOUNT, "tutor_id", { key: ["tutor_id"] }),
   arraySpec("leadTransactions", "lead_transactions", LEAD_TX, "created_at desc"),
   arraySpec("walletTransactions", "wallet_transactions", WALLET_TX, "created_at desc"),
   arraySpec("reports", "reports", REPORT, "created_at desc"),
@@ -377,7 +384,7 @@ for (const [table, cols] of [["student_profiles", ["profile"]], ["notification_p
 /** Tables are written parents-first (and deleted children-first) so foreign keys hold. */
 export const WRITE_ORDER = [
   "subject_categories", "subjects", "feature_flags", "platform_settings", "tutors", "users", "children", "student_profiles", "notification_prefs",
-  "onboarding_drafts", "subscriptions", "lead_transactions", "verification_requests", "payouts", "favorites", "saved_searches", "requirements",
+  "onboarding_drafts", "subscriptions", "lead_transactions", "verification_requests", "payouts", "payout_accounts", "favorites", "saved_searches", "requirements",
   "saved_jobs", "applications", "bookings", "reviews", "disputes", "conversations", "messages", "notifications", "learning_goals", "progress_notes",
   "homework", "payments", "wallet_transactions", "coupons", "reports", "contact_flags", "audit_logs", "blog_posts", "faqs", "testimonials",
 ];

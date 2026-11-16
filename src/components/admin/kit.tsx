@@ -25,7 +25,7 @@ export const PERMISSION_META: Record<Permission, { label: string; description: s
   "tutors.verify": { label: "Review verification", description: "Approve or reject identity, education, certification and background checks." },
   "bookings.manage": { label: "Manage bookings", description: "View all bookings and apply admin status changes." },
   "payments.read": { label: "View payments", description: "Payments, refunds and tutor payouts." },
-  "payments.refund": { label: "Issue refunds", description: "Resolve disputes with a full or partial refund." },
+  "payments.refund": { label: "Refunds & payouts", description: "Resolve disputes with a full or partial refund, and record payouts sent to tutors." },
   "disputes.manage": { label: "Manage disputes", description: "Work the dispute queue, add notes and record decisions." },
   "reports.moderate": { label: "Moderate reports", description: "Work the report queue, moderate reviews and handle chat safety (warn people, pause messaging)." },
   "conversations.read_flagged": { label: "Read flagged conversations", description: "Open private conversations for a logged reason." },

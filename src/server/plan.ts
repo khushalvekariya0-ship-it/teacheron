@@ -173,6 +173,14 @@ export const PLANS: Record<ActionName, Plan> = {
   submitVerification: self,
   buyCredits: self,
   changePlan: self,
+  savePayoutAccount: self,
+
+  // What the tutor is owed comes from their whole world: bookings, refunds on them and earlier payouts.
+  recordPayout: (L, me, [input]) => L.world([me?.id], [me?.tutorId, str(obj(input).tutorId)]),
+  markPayoutFailed: async (L, me, [id]) => {
+    const [p] = await L.byId("payouts", [str(id)]);
+    await L.world([me?.id], [me?.tutorId, p?.tutor_id as string]);
+  },
 
   openDispute: (L, me, [bookingId]) => L.bookingParticipants(str(bookingId), me),
   addDisputeNote: disputePlan,

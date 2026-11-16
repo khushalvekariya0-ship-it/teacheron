@@ -142,7 +142,7 @@ const ACTIONS: (keyof DomainActions)[] = [
   "transitionBooking", "rescheduleBooking", "setLessonVideo", "removeLessonVideo", "setLessonRecording","validateCoupon", "topUpWallet", "submitReview", "respondToReview", "startConversation", "sendMessage",
   "markConversationRead", "toggleBlock", "report", "markNotificationRead", "markAllNotificationsRead", "setNotificationPref", "saveChild", "removeChild",
   "addProgressNote", "assignHomework", "submitHomework", "reviewHomework", "setTopicStatus", "addGoal", "updateTutorProfile", "setAvailability",
-  "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "openDispute",
+  "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "savePayoutAccount", "recordPayout", "markPayoutFailed", "openDispute",
   "addDisputeNote", "setDisputeStatus", "resolveDispute", "reviewVerification", "setUserStatus", "setReportStatus", "moderateReview", "setFlag",
   "updatePolicy", "setPlatformFee", "saveCoupon", "saveSubjectArea", "deleteSubjectArea", "saveSubject", "deleteSubject", "moveCatalogItem",
   "loadStarterCatalog", "logConversationAccess", "contactLearner", "warnChatUser", "restrictChat", "setContactFlagStatus", "requestChatUnlock", "declineChatUnlock", "setStaffAccess", "updateUserDetails", "deleteAccount", "setTutorListing", "takeDownRequirement", "sendAnnouncement", "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",

@@ -6,13 +6,12 @@ import type { Booking, Child, Tutor, User, WeeklyWindow } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useSession, useTutors } from "@/lib/store/hooks";
 import { zonedParts, zonedToUtc } from "@/lib/time";
-import { endMs } from "@/lib/booking";
-import type { BookingPolicy } from "@/lib/data/platform";
 import { TUTOR_PLANS, type Plan } from "@/lib/data/platform";
+import { DAY_MS, isEarned, netCents } from "@/lib/earnings";
 import { asCurrency, currencySymbol, sumByCurrency, type Currency } from "@/lib/money";
 import { toast } from "@/components/ui/Toast";
 
-export const DAY_MS = 86_400_000;
+export { DAY_MS };
 
 /* ─── Current tutor ─────────────────────────────────────────────────────────── */
 
@@ -40,19 +39,8 @@ export function useMyPlan(tutorId: string | undefined): { plan: Plan; status: st
 
 /* ─── Money (integer minor units, in each booking's own currency) ───────────── */
 
-/** What the learner paid for a booking. */
-export const grossCents = (b: Booking): number => b.priceCents - b.discountCents;
-/** What the tutor keeps: paid amount minus the platform fee recorded at booking time. */
-export const netCents = (b: Booking): number => b.priceCents - b.discountCents - b.platformFeeCents;
-
-/** Lessons the tutor is paid for: completed lessons and student no-shows (charged per policy). */
-export const EARNED_STATUSES: Booking["status"][] = ["completed", "no_show_student"];
-export const isEarned = (b: Booking): boolean => EARNED_STATUSES.includes(b.status) && b.paymentStatus !== "refunded";
-
-/** Earned lessons become available for payout once the dispute window has passed. */
-export function isCleared(b: Booking, now: number, policy: BookingPolicy): boolean {
-  return endMs(b) + policy.disputeWindowDays * DAY_MS <= now;
-}
+// Shared with Admin → Payments and the server's payout check (src/lib/earnings.ts).
+export { EARNED_STATUSES, grossCents, isCleared, isEarned, netCents } from "@/lib/earnings";
 
 export const sumCents = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
 

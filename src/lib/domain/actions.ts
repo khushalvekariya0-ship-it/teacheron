@@ -1,14 +1,14 @@
 import type {
   AlertFrequency, Application, ApplicationStatus, AppNotification, AuditLog, AvailabilityException, Booking, BookingRules, BookingStatus, Child,
   ContactFlag, Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod,
-  Payment, Permission, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch, StudentProfile, Subject, SubjectCategory,
+  Payment, Payout, PayoutAccount, PayoutMethod, Permission, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch, StudentProfile, Subject, SubjectCategory,
   Subscription, TeachingMode, TrialConfig, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WalletTransaction,
   WeeklyWindow,
 } from "@/lib/types";
 import { CREDIT_PACKS, CREDITS_PER_APPLICATION, PAY_METHOD_LABEL, TUTOR_PLANS, packPrice, planPrice, studyPackAmount, type BookingPolicy } from "@/lib/data/platform";
 import { asCurrency, currencyForCountry, CURRENCIES, formatMoney, fromDollarSetting, isCurrency, rateProblem, trialPriceMax, type Currency } from "@/lib/money";
 import { SITE } from "@/lib/site";
-import { applyBps, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
+import { applyBps, formatDate, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
 import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
 import { isFlagOn } from "@/lib/flags";
 import { resolveLocation } from "@/lib/data/geo";
@@ -20,6 +20,7 @@ import { ALL_PERMISSIONS } from "@/lib/data/users";
 import { parseIntroVideo } from "@/lib/video";
 import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/postal";
 import { isCountryCode } from "@/lib/location";
+import { DAY_MS, payoutBalances } from "@/lib/earnings";
 import { blockedMessage, contactIn, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, type ContactKind } from "./contact";
 import {
   DEFAULT_NOTIFICATION_PREFS, emptyStudentProfile, fail, maskContactInfo, ok, resolveTutor,
@@ -99,6 +100,14 @@ export interface DomainEnv {
 }
 
 const PAYMENTS_OFF = "Card and UPI payments aren't switched on yet, so only free lessons can be booked for now.";
+
+/* Payout details: a UPI ID (name@bank) and an Indian IFSC code (4 letters, 0, 6 letters or digits). */
+const UPI_ID = /^[a-z0-9._-]{2,100}@[a-z][a-z0-9.-]{1,63}$/;
+const IFSC = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const PAYOUT_METHOD_LABEL: Record<PayoutMethod, string> = { upi: "UPI", bank: "bank transfer", other: "the method you gave" };
+/** Where a payout goes, in words, without the full account number. */
+const payoutTarget = (a: PayoutAccount) =>
+  a.method === "upi" ? `the UPI ID ${a.upiId}` : a.method === "bank" ? `the bank account ending ${a.accountNumber?.slice(-4)}` : "the payment details you wrote";
 const PAY_ONLINE = "Pay online with UPI or a card to continue.";
 
 export interface DomainActions {
@@ -200,11 +209,21 @@ export interface DomainActions {
   submitVerification(kind: VerificationKind, documents: { name: string; sizeKb: number; path?: string }[]): Result<VerificationRequest>;
   buyCredits(packId: string): Result<LeadTransaction>;
   changePlan(plan: Subscription["plan"]): Result;
+  /** Where the tutor wants to be paid: a UPI ID, an Indian bank account, or written instructions (other countries). */
+  savePayoutAccount(input: { method: PayoutMethod; accountHolder: string; upiId?: string; accountNumber?: string; ifsc?: string; bankName?: string; details?: string }): Result<PayoutAccount>;
   // disputes
   openDispute(bookingId: string, reason: Dispute["reason"], details: string, evidence: Dispute["evidence"]): Result<Dispute>;
   addDisputeNote(id: string, body: string): Result;
   setDisputeStatus(id: string, status: DisputeStatus): Result;
   resolveDispute(id: string, outcome: NonNullable<Dispute["resolution"]>["outcome"], amountCents: number, note: string): Result;
+  // payouts (staff with payments.refund)
+  /**
+   * Records a payout staff sent by hand (UPI or bank transfer): at most what the tutor is owed for cleared
+   * lessons in that currency. The tutor is told, with the reference.
+   */
+  recordPayout(input: { tutorId: string; amountCents: number; currency: Currency; method: PayoutMethod; reference: string; sentOn: string; note?: string }): Result<Payout>;
+  /** The money didn't arrive (returned by the bank, wrong details): the amount is owed again and the tutor is told. */
+  markPayoutFailed(id: string, reason: string): Result;
   // admin
   reviewVerification(id: string, decision: Extract<VerificationStatus, "verified" | "rejected" | "under_review">, note?: string): Result;
   setUserStatus(userId: string, status: User["status"], reason: string): Result;
@@ -1619,6 +1638,92 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         addPayment({ userId: r.data.id, kind: "subscription", amountCents: price.amount, currency: price.currency, status: "succeeded", description: `${p.name} plan — one month`, method: pay.method, provider: "razorpay", providerPaymentId: pay.paymentId, providerOrderId: pay.orderId });
         set((s) => ({ leadTransactions: [{ id: uid("lt"), tutorId, delta: p.monthlyLeadCredits, reason: `${p.name} plan — monthly credits`, createdAt: nowIso() }, ...s.leadTransactions] }));
       }
+      return ok(undefined);
+    },
+
+    /* ─── Payouts (sent by hand, recorded by staff) ────────── */
+    savePayoutAccount(input) {
+      const r = requireUser(["tutor"]);
+      if (!r.ok || !r.data.tutorId) return r.ok ? fail("Tutor profile not found.") : r;
+      const tutorId = r.data.tutorId;
+      const accountHolder = input.accountHolder.trim().replace(/\s+/g, " ");
+      if (accountHolder.length < 2 || accountHolder.length > 100) return fail("Enter the name on the account.");
+      const base = { tutorId, method: input.method, accountHolder, updatedAt: nowIso() };
+      let account: PayoutAccount;
+      if (input.method === "upi") {
+        const upiId = (input.upiId ?? "").trim().toLowerCase();
+        if (!UPI_ID.test(upiId)) return fail("Enter a UPI ID like yourname@okhdfcbank.");
+        account = { ...base, upiId };
+      } else if (input.method === "bank") {
+        const accountNumber = (input.accountNumber ?? "").replace(/[\s-]/g, "");
+        const ifsc = (input.ifsc ?? "").trim().toUpperCase();
+        if (!/^\d{9,18}$/.test(accountNumber)) return fail("Enter the bank account number (9 to 18 digits).");
+        if (!IFSC.test(ifsc)) return fail("Enter the IFSC code: 11 characters, like HDFC0001234.");
+        const bankName = (input.bankName ?? "").trim().slice(0, 100);
+        account = { ...base, accountNumber, ifsc, ...(bankName ? { bankName } : {}) };
+      } else if (input.method === "other") {
+        const details = (input.details ?? "").trim();
+        if (details.length < 5 || details.length > 500) return fail("Explain how to pay you, for example your PayPal email, or your IBAN and SWIFT code.");
+        account = { ...base, details };
+      } else {
+        return fail("Choose how you want to be paid.");
+      }
+      const changed = get().payoutAccounts.some((a) => a.tutorId === tutorId);
+      set((s) => ({ payoutAccounts: [...s.payoutAccounts.filter((a) => a.tutorId !== tutorId), account] }));
+      // A security notice (always emailed): changing payout details is how a stolen account would redirect money.
+      if (changed) notify(r.data.id, { type: "security", title: "Your payout details were changed", body: `Payouts now go to ${payoutTarget(account)}. If this wasn't you, change your password and contact support right away.`, href: "/dashboard/earnings" });
+      return ok(account);
+    },
+    recordPayout(input) {
+      const r = requireStaff(["admin", "support"], "payments.refund", "You don't have permission to record payouts.");
+      if (!r.ok) return r;
+      const tutor = resolveTutor(get(), input.tutorId);
+      const to = tutorUserId(input.tutorId);
+      if (!tutor || !to) return fail("Tutor not found.");
+      if (!isCurrency(input.currency)) return fail("Choose the currency.");
+      const currency = input.currency;
+      if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) return fail("Enter the amount you sent.");
+      const owed = payoutBalances(input.tutorId, get().bookings, get().payments, get().payouts, Date.now(), get().policy).find((x) => x.currency === currency);
+      const available = Math.max(0, owed?.available ?? 0);
+      if (input.amountCents > available) {
+        return fail(available > 0 ? `That's more than this tutor is owed for cleared lessons: at most ${formatMoney(available, currency)}.` : `Nothing is owed to this tutor in ${currency} for cleared lessons right now.`);
+      }
+      if (input.method !== "upi" && input.method !== "bank" && input.method !== "other") return fail("Choose how you sent it.");
+      const reference = input.reference.trim();
+      if (reference.length < 4 || reference.length > 100) return fail("Enter the payment reference (the UPI or bank transaction ID).");
+      const sent = /^\d{4}-\d{2}-\d{2}$/.test(input.sentOn) ? Date.parse(`${input.sentOn}T00:00:00Z`) : NaN;
+      if (Number.isNaN(sent) || sent > Date.now() + DAY_MS || sent < Date.now() - 366 * DAY_MS) return fail("Enter the day you sent it (not in the future).");
+      const note = (input.note ?? "").trim().slice(0, 500);
+      const payout: Payout = {
+        id: uid("po"), tutorId: input.tutorId, amountCents: input.amountCents, currency, status: "paid", arrivalDate: input.sentOn, createdAt: nowIso(),
+        method: input.method, reference, ...(note ? { note } : {}), recordedBy: r.data.id,
+      };
+      set((s) => ({ payouts: [payout, ...s.payouts] }));
+      audit("payout.record", "payout", payout.id, { tutorId: input.tutorId, amountCents: input.amountCents, currency, method: input.method });
+      notify(to, {
+        type: "payout",
+        title: `Payout sent: ${formatMoney(input.amountCents, currency)}`,
+        body: `Sent by ${PAYOUT_METHOD_LABEL[input.method]} on ${formatDate(`${input.sentOn}T12:00:00Z`, "UTC")}. Reference: ${reference}. It can take up to a day to reach your account.`,
+        href: "/dashboard/earnings",
+      });
+      return ok(payout);
+    },
+    markPayoutFailed(id, reason) {
+      const r = requireStaff(["admin", "support"], "payments.refund", "You don't have permission to change payouts.");
+      if (!r.ok) return r;
+      const p = get().payouts.find((x) => x.id === id);
+      if (!p) return fail("Payout not found.");
+      if (p.status === "failed") return fail("This payout is already marked as not received.");
+      const why = reason.trim().slice(0, 500);
+      if (why.length < 5) return fail("Say what happened (5+ characters).");
+      set((s) => ({ payouts: s.payouts.map((x) => (x.id === id ? { ...x, status: "failed" as const, failureReason: why } : x)) }));
+      audit("payout.failed", "payout", id, { tutorId: p.tutorId, amountCents: p.amountCents, currency: p.currency });
+      notify(tutorUserId(p.tutorId), {
+        type: "payout",
+        title: `A payout didn't reach you: ${formatMoney(p.amountCents, asCurrency(p.currency))}`,
+        body: `${why} The amount is owed to you again. Check your payout details under Earnings.`,
+        href: "/dashboard/earnings",
+      });
       return ok(undefined);
     },
 

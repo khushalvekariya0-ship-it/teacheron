@@ -10,6 +10,7 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:status": "node scripts/db-migrate.mjs --check",
     "db:make-admin": "node scripts/make-admin.mjs",
+    "db:scheduler": "node scripts/setup-scheduler.mjs",
     "email:check": "node scripts/check-email.mjs"
   },
   "dependencies": {

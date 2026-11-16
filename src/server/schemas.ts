@@ -103,7 +103,8 @@ const tutorPatch = z.object({
   headline: text(120).optional(),
   bio: text(5000).optional(),
   approach: text(5000).optional(),
-  hourlyRateCents: int(0, 1_000_000).optional(),
+  // In the tutor's own currency (₹20,000 = 2,000,000 paise); the range per currency is checked by the action.
+  hourlyRateCents: int(0, 10_000_000).optional(),
   modes: z.array(MODE).max(2).optional(),
   subjects: strings(10).optional(),
   specialties: strings(8, 40).optional(),
@@ -149,7 +150,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   setRequirementStatus: t(id, z.enum(["draft", "published", "paused", "closed"])),
   deleteRequirement: t(id),
 
-  applyToJob: t(id, text(3000), int(0, 1_000_000)),
+  applyToJob: t(id, text(3000), int(0, 10_000_000)),
   setApplicationStatus: t(id, APPLICATION_STATUS),
 
   createBooking: t(z.object({
@@ -205,6 +206,16 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   submitVerification: t(z.enum(["identity", "education", "certification", "background"]), z.array(file).max(10)),
   buyCredits: t(text(20)),
   changePlan: t(z.enum(["free", "pro", "premium"])),
+  savePayoutAccount: t(z.object({
+    method: z.enum(["upi", "bank", "other"]), accountHolder: text(200), upiId: text(320).optional(), accountNumber: text(40).optional(),
+    ifsc: text(20).optional(), bankName: text(200).optional(), details: text(1000).optional(),
+  })),
+
+  recordPayout: t(z.object({
+    tutorId: id, amountCents: int(1, 100_000_000), currency: z.string().regex(/^[A-Z]{3}$/), method: z.enum(["upi", "bank", "other"]),
+    reference: text(200), sentOn: day, note: text(1000).optional(),
+  })),
+  markPayoutFailed: t(id, text(1000)),
 
   openDispute: t(id, z.enum(["missed_session", "tutor_no_show", "student_no_show", "service_issue", "payment_issue", "refund_issue", "other"]), text(4000), z.array(file).max(10)),
   addDisputeNote: t(id, text(4000)),

@@ -602,14 +602,40 @@ export interface Payment {
   providerRefundId?: string;
 }
 
+/** How a tutor is paid: a UPI ID, an Indian bank account (number + IFSC), or written instructions (other countries). */
+export type PayoutMethod = "upi" | "bank" | "other";
+
 export interface Payout {
   id: ID;
   tutorId: ID;
   amountCents: Cents;
   currency: Currency;
   status: "scheduled" | "in_transit" | "paid" | "failed";
+  /** The day the money was sent (YYYY-MM-DD). */
   arrivalDate: string;
   createdAt: ISODate;
+  /** Payouts sent by hand and recorded by staff: how it was sent, the bank / UPI reference and a note. */
+  method?: PayoutMethod;
+  reference?: string;
+  note?: string;
+  /** Why it was marked as not received (returned by the bank, wrong details…). */
+  failureReason?: string;
+  recordedBy?: ID;
+}
+
+/** Where a tutor wants their earnings sent. Only the tutor and staff who handle payments see it. */
+export interface PayoutAccount {
+  tutorId: ID;
+  method: PayoutMethod;
+  /** The name on the account. */
+  accountHolder: string;
+  upiId?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  bankName?: string;
+  /** "other": how to pay them (PayPal email, IBAN and SWIFT…). */
+  details?: string;
+  updatedAt: ISODate;
 }
 
 export interface LeadTransaction {
