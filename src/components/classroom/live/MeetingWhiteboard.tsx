@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRoomContext } from "@livekit/components-react";
-import { RoomEvent, type Participant } from "livekit-client";
+import { ConnectionState, RoomEvent, type Participant } from "livekit-client";
 import {
   ArrowDownToLine, ArrowUpToLine, Check, Circle, Copy, Eraser, Eye, ImagePlus, Minus, MousePointer2, PenLine, Redo2, Scissors, Share2, Square, Trash2, Type, Undo2, X,
 } from "lucide-react";
@@ -318,12 +318,14 @@ export function MeetingWhiteboard({
 
   const send = React.useCallback(
     (msg: Record<string, unknown>) => {
+      // Before the room has connected nothing can be sent; the board asks for the current state once it has.
+      if (room.state === ConnectionState.Connecting || room.state === ConnectionState.Disconnected) return;
       try {
         const enc = new TextEncoder().encode(JSON.stringify(msg));
-        if (enc.length < 60_000) void room.localParticipant.publishData(enc, { reliable: true });
+        if (enc.length < 60_000) room.localParticipant.publishData(enc, { reliable: true }).catch((e: unknown) => console.warn("[whiteboard] send failed", e));
         else console.warn("[whiteboard] message too large to send:", enc.length);
       } catch (e) {
-        console.error("[whiteboard] send failed", e);
+        console.warn("[whiteboard] send failed", e);
       }
     },
     [room],
@@ -459,11 +461,23 @@ export function MeetingWhiteboard({
     };
   }, [room, redraw, isHost, broadcastSnapshot, sendSnapshot, send, rebaseHistory, resetHistory, refreshSel, selectImage]);
 
-  // Ask for the current board on arrival (the host too: after a refresh the room has it).
+  // Ask for the current board once connected (the host too: after a refresh the room has it), and again after
+  // a reconnect. The board is set up while the room is still connecting, and a request sent then is lost.
   React.useEffect(() => {
-    const t = window.setTimeout(() => send({ type: TOPIC.sync }), 400);
-    return () => window.clearTimeout(t);
-  }, [send]);
+    let t: number | undefined;
+    const ask = () => {
+      window.clearTimeout(t);
+      t = window.setTimeout(() => send({ type: TOPIC.sync }), 400);
+    };
+    if (room.state === ConnectionState.Connected) ask();
+    room.on(RoomEvent.Connected, ask);
+    room.on(RoomEvent.Reconnected, ask);
+    return () => {
+      window.clearTimeout(t);
+      room.off(RoomEvent.Connected, ask);
+      room.off(RoomEvent.Reconnected, ask);
+    };
+  }, [room, send]);
 
   // The host re-announces the board and its editors whenever someone arrives.
   React.useEffect(() => {

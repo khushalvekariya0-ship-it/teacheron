@@ -253,6 +253,8 @@ function MeetingRoom({
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const isHost = ticket.me.isHost;
   const isNarrow = useNarrow();
+  // The room only renders in the browser (after the join call), so this is never part of server HTML.
+  const canShareScreen = typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
   const [panel, setPanel] = React.useState<"people" | "chat" | "transcript" | null>(null);
   const [showBoard, setShowBoard] = React.useState(false);
@@ -362,11 +364,8 @@ function MeetingRoom({
     if (!chat) return "Chat isn't available here.";
     const err = await chat.onSend(body);
     if (!err) {
-      try {
-        void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.chat })), { reliable: true });
-      } catch {
-        // the other side still sees it on its next refresh
-      }
+      // If this ping is lost, the other side still sees the message on its next refresh.
+      room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.chat })), { reliable: true }).catch(() => {});
     }
     return err;
   };
@@ -417,12 +416,8 @@ function MeetingRoom({
           setLines((prev) => [...prev.slice(-2), { id, speaker: me, text }]);
           setTranscript((prev) => `${prev}[${timeLabel()}] ${me}: ${text}\n`);
           window.setTimeout(() => setLines((prev) => prev.filter((l) => l.id !== id)), 5000);
-          try {
-            // Captions may be dropped rather than stall the room.
-            void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.caption, text: text.slice(0, 500) })), { reliable: false });
-          } catch {
-            // fine
-          }
+          // Captions may be dropped rather than stall the room.
+          room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.caption, text: text.slice(0, 500) })), { reliable: false }).catch(() => {});
         }
         setInterim(pending);
       };
@@ -865,9 +860,12 @@ function MeetingRoom({
           <button type="button" onClick={() => void toggle("cam")} className={control(false, !isCameraEnabled)} aria-label={isCameraEnabled ? "Turn off camera" : "Turn on camera"} title={isCameraEnabled ? "Turn off camera" : "Turn on camera"}>
             {isCameraEnabled ? <Video className="size-5" /> : <VideoOff className="size-5" />}
           </button>
-          <button type="button" onClick={() => void toggle("screen")} className={control(isScreenShareEnabled, false)} aria-label={isScreenShareEnabled ? "Stop sharing" : "Share screen"} title={isScreenShareEnabled ? "Stop sharing" : "Share screen"}>
-            <MonitorUp className="size-5" />
-          </button>
+          {/* Phone browsers can't share their screen: no button there rather than one that only fails. */}
+          {canShareScreen && (
+            <button type="button" onClick={() => void toggle("screen")} className={control(isScreenShareEnabled, false)} aria-label={isScreenShareEnabled ? "Stop sharing" : "Share screen"} title={isScreenShareEnabled ? "Stop sharing" : "Share screen"}>
+              <MonitorUp className="size-5" />
+            </button>
+          )}
           <button type="button" onClick={() => setShowBoard((v) => !v)} className={control(showBoard, false)} aria-label="Whiteboard" title="Whiteboard" aria-pressed={showBoard}>
             <PenLine className="size-5" />
           </button>
