@@ -6,7 +6,7 @@ import type {
   WeeklyWindow,
 } from "@/lib/types";
 import { CREDIT_PACKS, CREDITS_PER_APPLICATION, PAY_METHOD_LABEL, TUTOR_PLANS, packPrice, planPrice, studyPackAmount, type BookingPolicy } from "@/lib/data/platform";
-import { asCurrency, currencyForCountry, CURRENCIES, formatMoney, fromDollarSetting, isCurrency, rateProblem, trialPriceMax, type Currency } from "@/lib/money";
+import { asCurrency, budgetLimits, currencyForCountry, CURRENCIES, formatMoney, fromDollarSetting, isCurrency, rateProblem, trialPriceMax, type Currency } from "@/lib/money";
 import { SITE } from "@/lib/site";
 import { applyBps, formatDate, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
 import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
@@ -600,8 +600,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (next.travelMiles < 1 || next.travelMiles > 50) return fail("Travel distance must be 1–50 miles.");
       if (!Number.isInteger(next.sessionsPerWeek) || next.sessionsPerWeek < 1 || next.sessionsPerWeek > 7) return fail("Choose 1 to 7 lessons a week.");
       if (![30, 45, 60, 90, 120].includes(next.lessonMinutes)) return fail("Choose a lesson length.");
-      const cents = (n: number) => Number.isInteger(n) && n >= 1000 && n <= 50000;
-      if (!cents(next.budgetMinCents) || !cents(next.budgetMaxCents)) return fail("Your budget must be between $10 and $500 an hour.");
+      // In the student's own currency (from their country), with the same range the form offers (₹100–₹20,000,
+      // $10–$500 …). Checked only when the budget is being changed, so a budget saved before currencies existed
+      // never blocks saving the rest of the profile.
+      if (patch.budgetMinCents !== undefined || patch.budgetMaxCents !== undefined) {
+        const budgetCurrency = currencyForCountry(user.country);
+        const range = budgetLimits(budgetCurrency);
+        const cents = (n: number) => Number.isInteger(n) && n >= range.min * 100 && n <= range.max * 100;
+        if (!cents(next.budgetMinCents) || !cents(next.budgetMaxCents)) {
+          return fail(`Your budget must be between ${formatMoney(range.min * 100, budgetCurrency)} and ${formatMoney(range.max * 100, budgetCurrency)} an hour.`);
+        }
+      }
       if (next.budgetMinCents > next.budgetMaxCents) return fail("The lowest budget can't be more than the highest.");
       const saved: StudentProfile = {
         ...next,
@@ -713,6 +722,12 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (r.data.parentalConsent?.status === "pending") return fail("A parent or guardian needs to approve your account before you can publish a requirement. You can still save it as a draft.");
       const req = get().requirements.find((x) => x.id === id);
       if (!req || req.ownerId !== r.data.id) return fail("Requirement not found.");
+      // The budget is in the poster's currency, within the range the form offers (₹100–₹20,000, $10–$500 …).
+      const reqCurrency = asCurrency(req.currency);
+      const budget = budgetLimits(reqCurrency);
+      if (req.budgetMinCents < budget.min * 100 || req.budgetMaxCents > budget.max * 100) {
+        return fail(`Your budget must be between ${formatMoney(budget.min * 100, reqCurrency)} and ${formatMoney(budget.max * 100, reqCurrency)} an hour.`);
+      }
       const missing = [
         !req.subject && "subject", req.title.trim().length < 8 && "a descriptive title", req.objectives.trim().length < 20 && "learning objectives (20+ characters)",
         !req.modes.length && "teaching mode", req.modes.includes("in_person") && (req.zip || postalRequired(req.country ?? "US")) && !isPostalCode(req.zip, req.country ?? "US") && `a valid ${postalLabel(req.country ?? "US")}`,
