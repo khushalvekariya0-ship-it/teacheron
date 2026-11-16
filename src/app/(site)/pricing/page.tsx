@@ -8,8 +8,8 @@ import { ArrowLink, CtaBand, Section, SectionHeading } from "@/components/market
 import { CreditPacks, PlanCards, PlanComparison } from "@/components/marketing/Pricing";
 import { EarningsCalculator } from "@/components/marketing/EarningsCalculator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
-import { listedTutors, publishedFaqs } from "@/server/public";
-import { CREDITS_PER_APPLICATION, TUTOR_PLANS } from "@/lib/data/platform";
+import { listedTutors, publishedFaqs, sitePricing } from "@/server/public";
+import { CREDITS_PER_APPLICATION, offeredPlans, starterPlan } from "@/lib/data/platform";
 import { applyBps } from "@/lib/format";
 import { CURRENCIES, formatMoney } from "@/lib/money";
 import { ratesByCurrency } from "@/lib/search";
@@ -64,15 +64,15 @@ const PRICING_SECTIONS = [
 ];
 
 export default async function PricingPage() {
-  const tutors = await listedTutors();
+  const [tutors, pricing] = await Promise.all([listedTutors(), sitePricing()]);
   // Listed rates, one group per currency tutors charge in (never mixed or converted).
   const rates = ratesByCurrency(tutors);
-  const starter = TUTOR_PLANS[0];
+  const starter = starterPlan(pricing);
   // Example bill, in US dollars: the median listed dollar rate when there is one, otherwise a round example.
   // (The calculators below switch to the visitor's own currency in the browser.)
   const exampleRate = rates.find((r) => r.currency === "USD")?.median || 5000;
   const usd = (cents: number) => formatMoney(cents, "USD", { exact: true });
-  const commissions = TUTOR_PLANS.map((p) => p.commissionBps / 100);
+  const commissions = offeredPlans(pricing).map((p) => p.commissionBps / 100);
   const lowestCommission = Math.min(...commissions);
   const highestCommission = Math.max(...commissions);
   const pricingFaqs: { q: string; a: string }[] = [
@@ -308,7 +308,7 @@ export default async function PricingPage() {
             <ArrowLink href="#calculator">Estimate your earnings</ArrowLink>
           </Reveal>
         </div>
-        <PlanCards exampleCents={exampleRate} />
+        <PlanCards pricing={pricing} exampleCents={exampleRate} />
         <Reveal>
           <p className="mt-6 text-center text-[13.5px] leading-relaxed text-muted">
             Plan and credit pack prices are in US dollars, or in Indian rupees for tutors who charge in rupees (₹).
@@ -319,14 +319,14 @@ export default async function PricingPage() {
           </p>
         </Reveal>
         <Reveal className="mt-12">
-          <PlanComparison exampleCents={exampleRate} />
+          <PlanComparison pricing={pricing} exampleCents={exampleRate} />
         </Reveal>
         <Reveal className="mt-6">
-          <CreditPacks />
+          <CreditPacks pricing={pricing} />
         </Reveal>
         <div id="calculator" className="mt-14 scroll-mt-40">
           <Reveal>
-            <EarningsCalculator defaultRateCents={exampleRate} />
+            <EarningsCalculator pricing={pricing} defaultRateCents={exampleRate} />
           </Reveal>
         </div>
       </Section>

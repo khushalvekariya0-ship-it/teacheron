@@ -35,6 +35,7 @@ const PUBLIC_CHANGES = new Set<ActionName>([
   "submitOnboarding", "updateTutorProfile", "setAvailability", "setExceptions", "setBookingRules", "setTrial", "deleteMyAccount",
   "publishRequirement", "setRequirementStatus", "deleteRequirement", "saveRequirementDraft", "submitReview", "respondToReview",
   "reviewVerification", "setUserStatus", "moderateReview", "setFlag", "updatePolicy", "setPlatformFee", "setTutorListing", "takeDownRequirement", "deleteAccount",
+  "savePlan", "deletePlan", "movePlan", "saveCreditPack", "deleteCreditPack",
   "saveSubjectArea", "deleteSubjectArea", "saveSubject", "deleteSubject", "moveCatalogItem", "loadStarterCatalog",
   "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",
 ]);

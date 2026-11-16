@@ -2,21 +2,26 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, Coins, Receipt } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Coins, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import type { LeadTransaction, Payment, Subscription } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useFlag, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
-import { CREDIT_PACKS, CREDITS_PER_APPLICATION, TUTOR_PLANS, packPrice, planPrice, type Plan } from "@/lib/data/platform";
+import { useFlag, useNow, usePricing, useTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { CREDITS_PER_APPLICATION, FREE_PLAN_ID, findPlan, packPrice, planFeatureLines, planPrice, starterPlan, type CreditPack, type Plan } from "@/lib/data/platform";
 import { formatDateTime, formatRelative, pluralize } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { PageHeader, PermissionGate } from "@/components/dashboard/Shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/Overlay";
 import { EmptyState } from "@/components/ui/States";
+import { toast } from "@/components/ui/Toast";
 import { ExportButton, MiniStat, PersonCell, StatusPill, TextLink, humanize, useDirectory } from "./kit";
 import { PlatformFeeCard, bpsToPercent } from "./PlatformFeeCard";
 import { platformPrices, settledSums } from "./money";
+import { PackDialog, PlanDialog } from "./PricingEditor";
 
 type SubStatus = Subscription["status"];
 const STATUS_LABEL: Record<SubStatus, string> = { active: "Active", past_due: "Past due", canceled: "Canceled" };
@@ -55,22 +60,43 @@ function MonetizationInner() {
   const dir = useDirectory();
   const tz = useViewerTimezone();
   const now = useNow(60_000);
-
-  const planById = React.useMemo(() => Object.fromEntries(TUTOR_PLANS.map((p) => [p.id, p])) as Record<Plan["id"], Plan>, []);
+  const pricing = usePricing();
+  const movePlan = useApp((s) => s.movePlan);
+  const deletePlan = useApp((s) => s.deletePlan);
+  const deletePack = useApp((s) => s.deleteCreditPack);
+  // Which form is open: a plan or pack to edit, "new" to add one.
+  const [editPlan, setEditPlan] = React.useState<Plan | "new" | null>(null);
+  const [editPack, setEditPack] = React.useState<CreditPack | "new" | null>(null);
+  const [removing, setRemoving] = React.useState<{ kind: "plan"; item: Plan } | { kind: "pack"; item: CreditPack } | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const remove = async () => {
+    if (!removing) return;
+    setBusy(true);
+    const res = removing.kind === "plan" ? await deletePlan(removing.item.id) : await deletePack(removing.item.id);
+    setBusy(false);
+    if (!res.ok) return void toast.error(res.error);
+    toast.success(removing.kind === "plan" ? `${removing.item.name} removed` : "Credit pack removed");
+    setRemoving(null);
+  };
+  const move = async (p: Plan, direction: -1 | 1) => {
+    const res = await movePlan(p.id, direction);
+    if (!res.ok) toast.error(res.error);
+  };
 
   /** Subscriber counts per plan and status. Tutors without a record are on Starter. */
   const planStats = React.useMemo(() => {
-    const counts = Object.fromEntries(TUTOR_PLANS.map((p) => [p.id, { active: 0, past_due: 0, canceled: 0, implicit: 0 }])) as Record<Plan["id"], Record<SubStatus | "implicit", number>>;
+    const empty = () => ({ active: 0, past_due: 0, canceled: 0, implicit: 0 });
+    const counts: Record<string, Record<SubStatus | "implicit", number>> = Object.fromEntries(pricing.plans.map((p) => [p.id, empty()]));
     const ids = new Set([...tutors.map((t) => t.id), ...Object.keys(subs)]);
     for (const id of ids) {
       const sub = subs[id];
       if (!sub) {
         counts.free.active++;
         counts.free.implicit++;
-      } else counts[sub.plan][sub.status]++;
+      } else (counts[sub.plan] ??= empty())[sub.status]++;
     }
     return { counts, total: ids.size };
-  }, [tutors, subs]);
+  }, [tutors, subs, pricing]);
 
   const credit = React.useMemo(() => {
     let purchased = 0;
@@ -90,7 +116,7 @@ function MonetizationInner() {
       const sub = subs[tutorId];
       return {
         tutorId,
-        plan: planById[sub?.plan ?? "free"],
+        plan: findPlan(pricing, sub?.plan ?? FREE_PLAN_ID) ?? starterPlan(pricing),
         subStatus: sub?.status ?? null,
         balance: list.reduce((a, t) => a + t.delta, 0),
         granted: list.filter((t) => t.delta > 0 && !PURCHASE.test(t.reason)).reduce((a, t) => a + t.delta, 0),
@@ -102,21 +128,21 @@ function MonetizationInner() {
     });
     perTutor.sort((a, b) => b.balance - a.balance || b.lastAt.localeCompare(a.lastAt));
     return { purchased, planGrants, otherGrants, spent, outstanding: purchased + planGrants + otherGrants - spent, perTutor };
-  }, [ledger, subs, planById]);
+  }, [ledger, subs, pricing]);
 
   const packs = React.useMemo(
     () =>
-      CREDIT_PACKS.map((p) => {
+      pricing.packs.map((p) => {
         const purchases = ledger.filter((t) => t.reason === `Purchased ${p.credits} credits`).length;
         const revenue = settledSums(payments.filter((x) => x.kind === "lead_credits" && x.description === `${p.credits} lead credits`)).net;
-        const price = platformPrices((c) => packPrice(p.id, c));
+        const price = platformPrices((c) => packPrice(pricing, p.id, c));
         const perCredit = platformPrices((c) => {
-          const x = packPrice(p.id, c);
+          const x = packPrice(pricing, p.id, c);
           return { ...x, amount: Math.round(x.amount / p.credits) };
         }, { exact: true });
         return { ...p, purchases, revenue, price, perCredit };
       }),
-    [ledger, payments],
+    [ledger, payments, pricing],
   );
 
   const revenue = React.useMemo(() => {
@@ -126,7 +152,7 @@ function MonetizationInner() {
     return { sub: settledSums(sub), lead: settledSums(lead), subCount: sub.length, leadCount: lead.length, recent };
   }, [payments]);
 
-  const paidActive = planStats.counts.pro.active + planStats.counts.premium.active;
+  const paidActive = Object.entries(planStats.counts).reduce((n, [id, c]) => (id === FREE_PLAN_ID ? n : n + c.active), 0);
 
   const columns: Column<TutorCredits>[] = [
     {
@@ -142,7 +168,7 @@ function MonetizationInner() {
     {
       key: "plan",
       header: "Plan",
-      sortValue: (r) => r.plan.priceCents,
+      sortValue: (r) => r.plan.prices.USD,
       cell: (r) => (
         <span className="inline-flex flex-wrap items-center gap-1.5">
           <Badge size="sm">{r.plan.name}</Badge>
@@ -187,16 +213,21 @@ function MonetizationInner() {
               Tutor plans
             </h2>
             <p className="mt-0.5 text-[13px] text-muted">
-              Counts come from subscription records. <span className="font-medium text-ink-2">Tutors with no subscription record are on the Starter plan.</span> Professional and Premium commissions are fixed by each plan; Starter uses the editable default platform fee below. Prices are shown in US dollars / rupees: tutors who charge in ₹ pay in rupees, everyone else in US dollars.
+              Counts come from subscription records. <span className="font-medium text-ink-2">Tutors with no subscription record are on the Starter plan.</span> Starter&apos;s commission is the platform fee below. Prices are shown in US dollars / rupees: tutors who charge in ₹ pay in rupees, everyone else in US dollars. Changes apply to new subscriptions and renewals.
             </p>
           </div>
+          <Button size="sm" className="shrink-0" onClick={() => setEditPlan("new")}>
+            <Plus /> Add plan
+          </Button>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
-          {TUTOR_PLANS.map((p) => {
-            const c = planStats.counts[p.id];
+          {pricing.plans.map((p, i) => {
+            const c = planStats.counts[p.id] ?? { active: 0, past_due: 0, canceled: 0, implicit: 0 };
+            const starter = p.id === FREE_PLAN_ID;
+            const subscribers = c.active + c.past_due + c.canceled;
             return (
-              <Card key={p.id} className="flex flex-col">
+              <Card key={p.id} className={cn("flex flex-col", p.hidden && "opacity-80")} data-plan-card={p.id}>
                 <CardHeader
                   title={
                     <span className="inline-flex flex-wrap items-center gap-2">
@@ -206,23 +237,41 @@ function MonetizationInner() {
                           Recommended on pricing page
                         </Badge>
                       )}
+                      {p.hidden && <Badge size="sm">Hidden: not offered to new tutors</Badge>}
                     </span>
                   }
                   description={p.description}
                 />
                 <CardContent className="flex flex-1 flex-col gap-4">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button size="xs" variant="secondary" onClick={() => setEditPlan(p)} aria-label={`Edit ${p.name}`}>
+                      <Pencil /> Edit
+                    </Button>
+                    {!starter && (
+                      <>
+                        <Button size="xs" variant="ghost" disabled={i <= 1} onClick={() => void move(p, -1)} aria-label={`Move ${p.name} earlier`} title="Move earlier">
+                          <ArrowUp />
+                        </Button>
+                        <Button size="xs" variant="ghost" disabled={i >= pricing.plans.length - 1} onClick={() => void move(p, 1)} aria-label={`Move ${p.name} later`} title="Move later">
+                          <ArrowDown />
+                        </Button>
+                        <Button size="xs" variant="ghost" onClick={() => setRemoving({ kind: "plan", item: p })} aria-label={`Remove ${p.name}`} title={subscribers ? "Tutors are on this plan: hide it instead" : "Remove"}>
+                          <Trash2 />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                   <p className="flex flex-wrap items-baseline gap-x-1">
-                    <span className="text-2xl font-semibold tabular-nums tracking-tight text-ink">{p.priceCents ? platformPrices((cur) => planPrice(p.id, cur)) : "Free"}</span>
-                    {p.priceCents > 0 && <span className="text-[13px] text-muted">per month</span>}
+                    <span className="text-2xl font-semibold tabular-nums tracking-tight text-ink">{starter ? "Free" : platformPrices((cur) => planPrice(pricing, p.id, cur))}</span>
+                    {!starter && <span className="text-[13px] text-muted">per month</span>}
                   </p>
                   <dl className="grid grid-cols-2 gap-2.5 text-[13px]">
                     <div className="rounded-lg border border-line px-3 py-2">
                       <dt className="text-muted">Commission</dt>
-                      <dd className="mt-0.5 font-medium tabular-nums text-ink">{bpsToPercent(p.id === "free" ? feeBps : p.commissionBps)}%</dd>
-                      {p.id === "free" && (
+                      <dd className="mt-0.5 font-medium tabular-nums text-ink">{bpsToPercent(starter ? feeBps : p.commissionBps)}%</dd>
+                      {starter && (
                         <dd className="text-[11.5px] text-muted">
-                          <a href="#platform-fee" className="underline-offset-2 hover:underline">Editable default</a>
-                          {feeBps !== p.commissionBps && <span className="text-warning"> · pricing page says {bpsToPercent(p.commissionBps)}%</span>}
+                          <a href="#platform-fee" className="underline-offset-2 hover:underline">The platform fee</a>
                         </dd>
                       )}
                     </div>
@@ -241,12 +290,12 @@ function MonetizationInner() {
                         </li>
                       ))}
                     </ul>
-                    {p.id === "free" && c.implicit > 0 && (
+                    {starter && c.implicit > 0 && (
                       <p className="mt-2 text-[12px] text-muted">{pluralize(c.implicit, "tutor")} counted here because they have no subscription record.</p>
                     )}
                   </div>
                   <ul className="mt-auto space-y-1.5 border-t border-line pt-4 text-[13px] text-ink-2">
-                    {p.features.map((f) => (
+                    {planFeatureLines(p).map((f) => (
                       <li key={f} className="flex gap-2">
                         <Check className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
                         {f}
@@ -277,9 +326,17 @@ function MonetizationInner() {
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <Card>
-            <CardHeader title="Credit packs" description="Prices in US dollars / rupees. Purchases are counted from the credit ledger; revenue from settled payments, per currency." />
+            <CardHeader
+              title="Credit packs"
+              description="Prices in US dollars / rupees. Purchases are counted from the credit ledger; revenue from settled payments, per currency."
+              action={
+                <Button size="sm" variant="secondary" onClick={() => setEditPack("new")}>
+                  <Plus /> Add pack
+                </Button>
+              }
+            />
             <CardContent className="pt-4">
-              <div className="overflow-hidden rounded-lg border border-line">
+              <div className="overflow-x-auto rounded-lg border border-line">
                 <table className="w-full text-[13px]">
                   <caption className="sr-only">Credit packs</caption>
                   <thead className="bg-canvas text-left text-xs text-muted">
@@ -289,21 +346,40 @@ function MonetizationInner() {
                       <th scope="col" className="hidden px-3 py-2 text-right font-medium sm:table-cell">Per credit</th>
                       <th scope="col" className="px-3 py-2 text-right font-medium">Purchases</th>
                       <th scope="col" className="px-3 py-2 text-right font-medium">Revenue</th>
+                      <th scope="col" className="px-3 py-2 text-right font-medium">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line tabular-nums">
                     {packs.map((p) => (
-                      <tr key={p.id}>
-                        <td className="px-3 py-2.5 font-medium text-ink">{p.credits} credits</td>
+                      <tr key={p.id} data-pack-row={p.id}>
+                        <td className="px-3 py-2.5 font-medium text-ink">
+                          {p.credits} credits
+                          {p.hidden && (
+                            <Badge size="sm" className="ml-1.5">
+                              Hidden
+                            </Badge>
+                          )}
+                        </td>
                         <td className="px-3 py-2.5 text-right text-ink-2">{p.price}</td>
                         <td className="hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{p.perCredit}</td>
                         <td className="px-3 py-2.5 text-right text-ink-2">{p.purchases}</td>
                         <td className="px-3 py-2.5 text-right text-ink-2">{p.revenue}</td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right">
+                          <Button size="xs" variant="ghost" onClick={() => setEditPack(p)} aria-label={`Edit the ${p.credits}-credit pack`} title="Edit">
+                            <Pencil />
+                          </Button>
+                          <Button size="xs" variant="ghost" onClick={() => setRemoving({ kind: "pack", item: p })} aria-label={`Remove the ${p.credits}-credit pack`} title="Remove">
+                            <Trash2 />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              {packs.length === 0 && <p className="mt-3 text-[12.5px] text-warning">No credit packs: tutors can&apos;t buy credits until you add one.</p>}
               {packs.every((p) => !p.purchases) && <p className="mt-3 text-[12.5px] text-muted">No credit packs have been bought yet.</p>}
             </CardContent>
           </Card>
@@ -365,6 +441,23 @@ function MonetizationInner() {
       <section className="mt-10" aria-label="Starter plan commission">
         <PlatformFeeCard id="platform-fee" />
       </section>
+
+      <PlanDialog plan={editPlan === "new" ? null : editPlan} open={editPlan !== null} onOpenChange={(o) => !o && setEditPlan(null)} />
+      <PackDialog pack={editPack === "new" ? null : editPack} open={editPack !== null} onOpenChange={(o) => !o && setEditPack(null)} />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={removing?.kind === "plan" ? `Remove ${removing.item.name}?` : `Remove the ${removing?.item.credits ?? ""}-credit pack?`}
+        description={
+          removing?.kind === "plan"
+            ? "It disappears from the pricing page and tutors' plan choices. A plan that tutors are on can't be removed: hide it instead."
+            : "Tutors can no longer buy it. Credits already bought stay in their balances."
+        }
+        confirmLabel="Remove"
+        tone="danger"
+        loading={busy}
+        onConfirm={() => void remove()}
+      />
     </>
   );
 }

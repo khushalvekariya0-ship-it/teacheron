@@ -759,7 +759,8 @@ export interface Coupon {
 }
 
 export interface Subscription {
-  plan: "free" | "pro" | "premium";
+  /** A plan id from Admin → Plans & credits ("free" is Starter). */
+  plan: string;
   status: "active" | "past_due" | "canceled";
   renewsAt?: ISODate;
 }

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { BadgeCheck, CircleDashed, CircleX, Clock3, Eye, EyeOff, ExternalLink, Sparkles, UserRound } from "lucide-react";
 import type { Tutor, VerificationKind, VerificationStatus } from "@/lib/types";
 import { useApp } from "@/lib/store";
-import { useCatalog, useNow, useTutors, useViewerTimezone } from "@/lib/store/hooks";
-import { TUTOR_PLANS } from "@/lib/data/platform";
+import { useCatalog, useNow, usePricing, useTutors, useViewerTimezone } from "@/lib/store/hooks";
+import { FREE_PLAN_ID, findPlan, type Pricing } from "@/lib/data/platform";
 import { MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
 import { formatDate, formatDuration, pluralize } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
@@ -41,7 +41,7 @@ const VER_OPTIONS: { value: VerFilter; label: string }[] = [
 type ModeFilter = "all" | "online" | "in_person";
 
 const formatBps = (bps: number) => `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
-const planName = (id: string) => TUTOR_PLANS.find((p) => p.id === id)?.name ?? id;
+const planName = (pricing: Pricing, id: string) => findPlan(pricing, id)?.name ?? id;
 
 function verMatches(t: Tutor, f: VerFilter): boolean {
   const v = Object.values(t.verification);
@@ -108,6 +108,7 @@ export function TutorsView() {
 function TutorsInner() {
   const catalog = useCatalog();
   const tutors = useTutors();
+  const pricing = usePricing();
   const subscriptions = useApp((s) => s.subscriptions);
   const [q, setQ] = React.useState("");
   const [ver, setVer] = React.useState<VerFilter>("all");
@@ -160,7 +161,7 @@ function TutorsInner() {
     { key: "rating", header: "Rating", sortValue: (t) => t.rating ?? 0, cell: (t) => <StarRating rating={t.rating} count={t.reviewCount} showStars={false} /> },
     { key: "lessons", header: "Lessons", align: "right", sortValue: (t) => t.lessonsCompleted, cell: (t) => t.lessonsCompleted.toLocaleString("en-US") },
     { key: "rate", header: "Rate", align: "right", sortValue: (t) => t.hourlyRateCents, cell: (t) => `${formatMoney(t.hourlyRateCents, t.currency)}/hr` },
-    { key: "plan", header: "Plan", sortValue: (t) => plan(t), cell: (t) => <Badge size="sm" tone={plan(t) === "free" ? "neutral" : "accent"}>{planName(plan(t))}</Badge> },
+    { key: "plan", header: "Plan", sortValue: (t) => plan(t), cell: (t) => <Badge size="sm" tone={plan(t) === "free" ? "neutral" : "accent"}>{planName(pricing, plan(t))}</Badge> },
     { key: "featured", header: "Featured", sortValue: (t) => (t.featured ? 1 : 0), cell: (t) => (t.featured ? <span className="inline-flex items-center gap-1 text-ink-2"><Sparkles className="size-3.5 text-ink" aria-hidden /> Yes</span> : <span className="text-muted">No</span>) },
     { key: "modes", header: "Modes", cell: (t) => t.modes.map((m) => MODE_LABEL[m]).join(" · "), hideOnMobile: true },
   ];
@@ -177,7 +178,7 @@ function TutorsInner() {
             filename="tutorlink-tutors"
             headers={["ID", "Name", "City", "State", "Identity", "Education", "Certification", "Background", "Rating", "Reviews", "Lessons", "Currency", "Hourly rate", "Plan", "Featured", "Modes"]}
             rows={() =>
-              rows.map((t) => [t.id, fullName(t), t.city, t.state, t.verification.identity, t.verification.education, t.verification.certification, t.verification.background, t.rating, t.reviewCount, t.lessonsCompleted, t.currency, centsToDecimal(t.hourlyRateCents), planName(plan(t)), t.featured, t.modes.join(" ")])
+              rows.map((t) => [t.id, fullName(t), t.city, t.state, t.verification.identity, t.verification.education, t.verification.certification, t.verification.background, t.rating, t.reviewCount, t.lessonsCompleted, t.currency, centsToDecimal(t.hourlyRateCents), planName(pricing, plan(t)), t.featured, t.modes.join(" ")])
             }
           />
         }
@@ -265,6 +266,7 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
   const bookings = useApp((s) => s.bookings);
   const ledger = useApp((s) => s.leadTransactions);
   const defaultFeeBps = useApp((s) => s.platformFeeBps);
+  const pricing = usePricing();
   const dir = useDirectory();
   const tz = useViewerTimezone();
   const now = useNow(60_000);
@@ -283,7 +285,7 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
   const sub = subscriptions[tutor.id];
   const account = dir.tutorUser.get(tutor.id);
   // Mirrors the store: Starter tutors pay the configurable default; paid plans use their plan's rate.
-  const commissionBps = !sub || sub.plan === "free" ? defaultFeeBps : (TUTOR_PLANS.find((p) => p.id === sub.plan)?.commissionBps ?? defaultFeeBps);
+  const commissionBps = !sub || sub.plan === FREE_PLAN_ID ? defaultFeeBps : (findPlan(pricing, sub.plan)?.commissionBps ?? defaultFeeBps);
 
   return (
     <div className="divide-y divide-line">
@@ -353,7 +355,7 @@ function TutorDetail({ tutor }: { tutor: Tutor }) {
       <Section title="Business">
         <Facts
           items={[
-            { label: "Plan", value: sub ? `${planName(sub.plan)} · ${humanize(sub.status)}` : "Starter (no subscription record)" },
+            { label: "Plan", value: sub ? `${planName(pricing, sub.plan)} · ${humanize(sub.status)}` : "Starter (no subscription record)" },
             ...(sub?.renewsAt ? [{ label: "Renews", value: formatDate(sub.renewsAt, tz) }] : []),
             { label: "Booking commission", value: <span className="tabular-nums">{formatBps(commissionBps)}</span> },
             { label: "Lead credit balance", value: <span className="tabular-nums">{d.credits}</span> },

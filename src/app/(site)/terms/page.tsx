@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHero } from "@/components/marketing/Section";
 import { LegalDocument, type DocSection } from "@/components/content/LegalDocument";
-import { CREDITS_PER_APPLICATION, DEFAULT_POLICY as P, TUTOR_PLANS } from "@/lib/data/platform";
+import { CREDITS_PER_APPLICATION, DEFAULT_POLICY as P } from "@/lib/data/platform";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -13,7 +13,6 @@ export const metadata: Metadata = {
 
 const UPDATED = "September 30, 2026";
 
-const commissions = TUTOR_PLANS.map((p) => `${p.name} ${p.commissionBps / 100}%`).join(", ");
 
 const SECTIONS: DocSection[] = [
   {
@@ -114,7 +113,7 @@ const SECTIONS: DocSection[] = [
         <ul>
           <li>Payments are processed by Razorpay and are subject to Razorpay&rsquo;s terms. We do not store full card numbers or UPI details. Prices are in the tutor&rsquo;s currency.</li>
           <li>Clients pay the lesson price shown at checkout. There is no subscription for Clients.</li>
-          <li>{SITE.name} earns a commission on each paid lesson, deducted from the Tutor&rsquo;s earnings. The rate depends on the Tutor&rsquo;s plan ({commissions}) and is shown on our <Link href="/pricing">Pricing</Link> page.</li>
+          <li>{SITE.name} earns a commission on each paid lesson, deducted from the Tutor&rsquo;s earnings. The rate depends on the Tutor&rsquo;s plan and is shown on our <Link href="/pricing">Pricing</Link> page.</li>
           <li>Paid Tutor plans are billed monthly in advance and renew automatically until cancelled. Cancellation takes effect at the end of the current billing period.</li>
           <li>Lead credits are used to apply to student requirements ({CREDITS_PER_APPLICATION} credit per application). Credits have no cash value and are non-refundable except where required by law.</li>
           <li>Tutor earnings from a completed lesson become available for payout after the {P.disputeWindowDays}-day dispute window closes.</li>

@@ -7,6 +7,7 @@ import { isFlagOn } from "@/lib/flags";
 import { asCurrency, currencyForCountry, sumByCurrency, type Currency } from "@/lib/money";
 import { guessCountry } from "@/lib/location";
 import { buildCatalog, type Catalog } from "@/lib/data/catalog";
+import type { Pricing } from "@/lib/data/platform";
 
 /*
  * IMPORTANT (zustand v5): a selector passed to `useApp` must return a stable reference — a slice of
@@ -128,6 +129,11 @@ export function useWalletBalances(): { currency: Currency; amount: number }[] {
  * The currency to show the viewer for things that aren't a tutor's price (Study Credits, a job budget, price
  * filters): from their country when signed in, otherwise guessed from the device's time zone.
  */
+/** Tutor plans and lead-credit packs with their prices (Admin → Plans & credits). */
+export function usePricing(): Pricing {
+  return useApp((s) => s.pricing);
+}
+
 export function useViewerCurrency(): Currency {
   const me = useSession();
   const hydrated = useHydrated();

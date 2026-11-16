@@ -14,7 +14,7 @@ import { TUTOR_SIGNUP_HREF } from "@/components/marketing/Pricing";
 import { medianRate } from "@/components/content/insights";
 import { Button } from "@/components/ui/Button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/Disclosure";
-import { listedTutors, publishedFaqs } from "@/server/public";
+import { listedTutors, publishedFaqs, sitePricing } from "@/server/public";
 import { CREDITS_PER_APPLICATION } from "@/lib/data/platform";
 import { cn } from "@/lib/utils";
 
@@ -208,6 +208,7 @@ export default async function BecomeATutorPage() {
   const median = medianRate((await listedTutors()).filter((t) => (t.currency ?? "USD") === "USD"));
   const rate = median || 5000;
   const tutorFaqs = (await publishedFaqs()).filter((f) => f.audience === "tutors");
+  const pricing = await sitePricing();
 
   return (
     <>
@@ -395,7 +396,7 @@ export default async function BecomeATutorPage() {
           </Reveal>
         </div>
         <Reveal>
-          <EarningsSplit initialRateCents={rate} isMedian={!!median} />
+          <EarningsSplit pricing={pricing} initialRateCents={rate} isMedian={!!median} />
         </Reveal>
       </Section>
 

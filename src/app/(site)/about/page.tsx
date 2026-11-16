@@ -5,9 +5,9 @@ import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { ArrowLink, CtaBand, Eyebrow, PageHero, Section, SectionHeading } from "@/components/marketing/Section";
 import { CardGrid } from "@/components/marketing/Split";
 import { indexableMetros } from "@/components/content/insights";
-import { listedTutors } from "@/server/public";
+import { listedTutors, sitePricing } from "@/server/public";
 import { CatalogCount } from "@/components/content/SubjectCatalog";
-import { TUTOR_PLANS } from "@/lib/data/platform";
+import { offeredPlans } from "@/lib/data/platform";
 import { SITE } from "@/lib/site";
 
 /** Figures and content come from the database; the page is rebuilt at most once a minute. */
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AboutPage() {
-  const commissions = TUTOR_PLANS.map((p) => p.commissionBps / 100);
+  const commissions = offeredPlans(await sitePricing()).map((p) => p.commissionBps / 100);
   const metros = indexableMetros(await listedTutors()).length;
   return (
     <>

@@ -4,8 +4,11 @@ import type { Requirement, Subject, SubjectCategory, Tutor } from "@/lib/types";
 import { DEFAULT_CATALOG, buildCatalog } from "@/lib/data/catalog";
 import type { BlogPostItem, FaqItem, TestimonialItem } from "@/lib/domain/data";
 import { BLOG_POSTS, FAQS } from "@/lib/data/content";
+import { readPricing } from "@/lib/data/platform";
+import { SITE } from "@/lib/site";
 import { db } from "./db";
 import { env } from "./env";
+import { loadPricing } from "./pricing";
 import { SPECS, fromRowWith } from "./tables";
 
 /*
@@ -43,6 +46,9 @@ export const listedTutors = cache(() =>
     }));
   }),
 );
+
+/** Tutor plans and lead-credit packs with their prices, as set in Admin → Plans & credits. */
+export const sitePricing = cache(() => safe(readPricing(undefined, SITE.platformFeeBps), loadPricing));
 
 export const tutorBySlug = cache(async (slug: string): Promise<Tutor | undefined> => (await listedTutors()).find((t) => t.slug === slug || t.id === slug));
 

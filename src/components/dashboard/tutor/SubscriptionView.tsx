@@ -6,8 +6,8 @@ import { Check, Coins, Info, Percent, Receipt, Sparkles } from "lucide-react";
 import type { Payment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
-import { useNow, useViewerTimezone } from "@/lib/store/hooks";
-import { TUTOR_PLANS, planPrice, type Plan } from "@/lib/data/platform";
+import { useNow, usePricing, useViewerTimezone } from "@/lib/store/hooks";
+import { planFeatureLines, planPrice, type Plan } from "@/lib/data/platform";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -31,7 +31,6 @@ const PAYMENT_TONE: Record<Payment["status"], "success" | "warning" | "danger" |
 };
 const PAYMENT_LABEL: Record<Payment["status"], string> = { succeeded: "Paid", pending: "Pending", failed: "Failed", refunded: "Refunded", partially_refunded: "Partially refunded" };
 
-const RANK: Record<Plan["id"], number> = { free: 0, pro: 1, premium: 2 };
 /** A paid month can be renewed in its last week (renewing starts a new month from that day). */
 const RENEW_WINDOW_MS = 7 * DAY_MS;
 
@@ -41,6 +40,7 @@ export function SubscriptionView() {
   const now = useNow(60_000);
   const { plan: current, status, renewsAt } = useMyPlan(tutor?.id);
   const payments = useApp((s) => s.payments);
+  const pricing = usePricing();
   const changePlan = useApp((s) => s.changePlan);
   const payOnline = useApp((s) => s.payOnline);
   const paymentsOn = useApp((s) => s.config.paymentsEnabled);
@@ -68,7 +68,10 @@ export function SubscriptionView() {
   ];
 
   // What TutorLink charges this tutor for a plan: in ₹ for tutors who charge in ₹, otherwise in US dollars.
-  const priceOf = (p: Plan) => planPrice(p.id, tutor.currency);
+  const priceOf = (p: Plan) => planPrice(pricing, p.id, tutor.currency);
+  // A dearer plan is an upgrade. Plans no longer offered stay listed only for tutors already on them.
+  const isUpgrade = (p: Plan) => priceOf(p).amount > priceOf(current).amount;
+  const shown = pricing.plans.filter((p) => !p.hidden || p.id === current.id);
   const money = (p: Plan) => formatMoney(priceOf(p).amount, priceOf(p).currency);
   const currentPaid = priceOf(current).amount > 0;
   const paidUntil = renewsAt ? new Date(renewsAt).getTime() : null;
@@ -147,9 +150,9 @@ export function SubscriptionView() {
           </InlineAlert>
         )}
         <div className="grid gap-4 lg:grid-cols-3">
-          {TUTOR_PLANS.map((p, i) => {
+          {shown.map((p, i) => {
             const isCurrent = p.id === current.id;
-            const upgrade = RANK[p.id] > RANK[current.id];
+            const upgrade = isUpgrade(p);
             const paid = priceOf(p).amount > 0;
             const renew = isCurrent && canRenew;
             return (
@@ -184,7 +187,7 @@ export function SubscriptionView() {
                   {p.commissionBps / 100}% commission · {p.monthlyLeadCredits} credits / month
                 </p>
                 <ul className="mt-5 flex-1 space-y-2.5 border-t border-line pt-5">
-                  {p.features.map((f) => (
+                  {planFeatureLines(p).map((f) => (
                     <li key={f} className="flex gap-2.5 text-[13.5px] text-ink-2">
                       <Check className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden /> {f}
                     </li>
@@ -222,7 +225,7 @@ export function SubscriptionView() {
       <ConfirmDialog
         open={!!target}
         onOpenChange={(o) => !o && setTarget(null)}
-        title={target ? (renewing ? `Renew ${target.name}?` : RANK[target.id] > RANK[current.id] ? `Upgrade to ${target.name}?` : `Switch to ${target.name}?`) : ""}
+        title={target ? (renewing ? `Renew ${target.name}?` : isUpgrade(target) ? `Upgrade to ${target.name}?` : `Switch to ${target.name}?`) : ""}
         description={
           target
             ? priceOf(target).amount > 0

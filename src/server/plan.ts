@@ -203,6 +203,14 @@ export const PLANS: Record<ActionName, Plan> = {
   setFlag: self,
   updatePolicy: self,
   setPlatformFee: self,
+  savePlan: self,
+  // A plan tutors are on (any status) can't be removed.
+  deletePlan: async (L, me, [id]) => {
+    await Promise.all([L.self(me), L.load("subscriptions", "plan = $1", [str(id) ?? ""])]);
+  },
+  movePlan: self,
+  saveCreditPack: self,
+  deleteCreditPack: self,
   saveCoupon: async (L, me) => {
     await Promise.all([L.self(me), L.load("coupons", "true")]);
   },

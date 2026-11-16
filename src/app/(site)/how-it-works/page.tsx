@@ -11,7 +11,7 @@ import { MatchingWeights } from "@/components/marketing/MatchingWeights";
 import { PolicyDetails } from "@/components/marketing/Policies";
 import { RefundTimeline } from "@/components/marketing/RefundTimeline";
 import { trialStats } from "@/components/content/insights";
-import { listedTutors } from "@/server/public";
+import { listedTutors, sitePricing } from "@/server/public";
 import { DEFAULT_POLICY } from "@/lib/data/platform";
 
 /** Figures and content come from the database; the page is rebuilt at most once a minute. */
@@ -99,7 +99,7 @@ const JOURNEY: { icon: LucideIcon; title: string; body: string }[] = [
 ];
 
 export default async function HowItWorksPage() {
-  const tutors = await listedTutors();
+  const [tutors, pricing] = await Promise.all([listedTutors(), sitePricing()]);
   const trials = trialStats(tutors);
   return (
     <>
@@ -177,7 +177,7 @@ export default async function HowItWorksPage() {
       <AreaNav areas={JUMP_LINKS} icons={false} label="On this page" />
 
       <Section id="steps" className="scroll-mt-36">
-        <HowItWorksView />
+        <HowItWorksView pricing={pricing} />
       </Section>
 
       <Section id="matching" tone="canvas" className="scroll-mt-36">

@@ -23,10 +23,10 @@ import { LocationFields } from "@/components/domain/LocationFields";
 import { countryName, formatPlace } from "@/lib/location";
 import { uploadFile } from "@/lib/upload";
 import { postalLabel, postalRequired } from "@/lib/postal";
-import { useFlag } from "@/lib/store/hooks";
+import { useFlag, usePricing } from "@/lib/store/hooks";
 import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
 import { timeZoneLabel } from "@/lib/timezones";
-import { TUTOR_PLANS } from "@/lib/data/platform";
+import { FREE_PLAN_ID, offeredPlans, starterPlan } from "@/lib/data/platform";
 import { applyBps, sessionPrice } from "@/lib/format";
 import { CURRENCIES, currencyForCountry, formatMoney, rateLimits, rateProblem, toMinor } from "@/lib/money";
 import { formatPhone, phonePlaceholder, typePhone } from "@/lib/phone";
@@ -411,11 +411,12 @@ export function PricingStep({ formId, defaults, onValid, bindValues, country }: 
   const [rate, trialEnabled, trialPrice, trialDuration] = useWatch({ control, name: ["hourlyRate", "trialEnabled", "trialPrice", "trialDuration"] });
   const currency = currencyForCountry(country ?? defaults.country);
   const limits = rateLimits(currency);
-  const starter = TUTOR_PLANS.find((p) => p.id === "free")!;
+  const pricing = usePricing();
+  const starter = starterPlan(pricing);
   const validRate = Number.isInteger(rate) && !rateProblem(toMinor(rate), currency);
   const gross = validRate ? sessionPrice(toMinor(rate), 60) : 0;
   const fee = applyBps(gross, starter.commissionBps);
-  const others = TUTOR_PLANS.filter((p) => p.id !== "free");
+  const others = offeredPlans(pricing).filter((p) => p.id !== FREE_PLAN_ID);
   const trialCents = Number.isInteger(trialPrice) && trialPrice >= 0 ? toMinor(trialPrice) : 0;
   const where = countryName(country ?? defaults.country);
 

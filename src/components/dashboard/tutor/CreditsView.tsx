@@ -7,8 +7,8 @@ import { ArrowRight, Briefcase, Coins, History, Repeat, Send, Tag } from "lucide
 import type { LeadTransaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
-import { useCreditBalance, useFlag, useViewerTimezone } from "@/lib/store/hooks";
-import { CREDITS_PER_APPLICATION, CREDIT_PACKS, packPrice, planPrice } from "@/lib/data/platform";
+import { useCreditBalance, useFlag, usePricing, useViewerTimezone } from "@/lib/store/hooks";
+import { CREDITS_PER_APPLICATION, offeredPacks, packPrice, planPrice, type CreditPack } from "@/lib/data/platform";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { PageHeader } from "@/components/dashboard/Shell";
@@ -23,7 +23,7 @@ import { EASE } from "@/components/motion";
 import { AnimatedNumber, NeedsTutorProfile } from "./shared";
 import { useMyPlan, useMyTutor } from "./hooks";
 
-type Pack = (typeof CREDIT_PACKS)[number];
+type Pack = CreditPack;
 interface TxRow extends LeadTransaction {
   balance: number;
 }
@@ -35,6 +35,8 @@ export function CreditsView() {
   const balance = useCreditBalance(tutor?.id);
   const { plan } = useMyPlan(tutor?.id);
   const all = useApp((s) => s.leadTransactions);
+  const pricing = usePricing();
+  const packs = offeredPacks(pricing);
   const payOnline = useApp((s) => s.payOnline);
   const paymentsOn = useApp((s) => s.config.paymentsEnabled);
   const [pack, setPack] = React.useState<Pack | null>(null);
@@ -50,9 +52,9 @@ export function CreditsView() {
   if (!tutor) return <NeedsTutorProfile what="lead credits" />;
 
   // What TutorLink charges this tutor: in ₹ for tutors who charge in ₹, otherwise in US dollars.
-  const priceOf = (p: Pack) => packPrice(p.id, tutor.currency);
+  const priceOf = (p: Pack) => packPrice(pricing, p.id, tutor.currency);
   const money = (p: Pack) => formatMoney(priceOf(p).amount, priceOf(p).currency);
-  const basePer = Math.round(priceOf(CREDIT_PACKS[0]).amount / CREDIT_PACKS[0].credits);
+  const basePer = packs.length ? Math.round(priceOf(packs[0]).amount / packs[0].credits) : 0;
   const canBuy = enabled && paymentsOn;
 
   const buy = async (p: Pack) => {
@@ -121,7 +123,7 @@ export function CreditsView() {
             <ol className="space-y-4">
               {[
                 { icon: Send, title: `${CREDITS_PER_APPLICATION} credit per application`, body: "Credits are used only when you send an application. Messaging families who contact you is always free." },
-                { icon: Repeat, title: `${plan.monthlyLeadCredits} credits each month on ${plan.name}`, body: planPrice(plan.id, tutor.currency).amount ? "Monthly credits are added each time you pay for a month of your plan. Unused credits roll over." : "Upgrade to Professional or Premium for more monthly credits." },
+                { icon: Repeat, title: `${plan.monthlyLeadCredits} credits each month on ${plan.name}`, body: planPrice(pricing, plan.id, tutor.currency).amount ? "Monthly credits are added each time you pay for a month of your plan. Unused credits roll over." : "Upgrade to Professional or Premium for more monthly credits." },
                 { icon: Tag, title: "Top up any time", body: "Buy a pack below when you need more. Larger packs cost less per credit." },
               ].map((s, i) => (
                 <li key={s.title} className="flex gap-3">
@@ -149,7 +151,7 @@ export function CreditsView() {
           </InlineAlert>
         )}
         <div className="grid gap-4 sm:grid-cols-3">
-          {CREDIT_PACKS.map((p, i) => {
+          {packs.map((p, i) => {
             const per = Math.round(priceOf(p).amount / p.credits);
             const save = Math.round((1 - per / basePer) * 100);
             return (

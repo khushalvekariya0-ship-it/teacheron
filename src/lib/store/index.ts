@@ -144,7 +144,7 @@ const ACTIONS: (keyof DomainActions)[] = [
   "addProgressNote", "assignHomework", "submitHomework", "reviewHomework", "setTopicStatus", "addGoal", "updateTutorProfile", "setAvailability",
   "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "savePayoutAccount", "recordPayout", "markPayoutFailed", "openDispute",
   "addDisputeNote", "setDisputeStatus", "resolveDispute", "reviewVerification", "setUserStatus", "setReportStatus", "moderateReview", "setFlag",
-  "updatePolicy", "setPlatformFee", "saveCoupon", "saveSubjectArea", "deleteSubjectArea", "saveSubject", "deleteSubject", "moveCatalogItem",
+  "updatePolicy", "setPlatformFee", "savePlan", "deletePlan", "movePlan", "saveCreditPack", "deleteCreditPack", "saveCoupon", "saveSubjectArea", "deleteSubjectArea", "saveSubject", "deleteSubject", "moveCatalogItem",
   "loadStarterCatalog", "logConversationAccess", "contactLearner", "warnChatUser", "restrictChat", "setContactFlagStatus", "requestChatUnlock", "declineChatUnlock", "setStaffAccess", "updateUserDetails", "deleteAccount", "setTutorListing", "takeDownRequirement", "sendAnnouncement", "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",
 ];
 /** Actions the scheduler or a public link run; the browser never calls them. */

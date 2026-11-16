@@ -3,9 +3,9 @@
 import * as React from "react";
 import { ArrowRight, Percent } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useViewerTimezone } from "@/lib/store/hooks";
+import { usePricing, useViewerTimezone } from "@/lib/store/hooks";
 import { SITE } from "@/lib/site";
-import { TUTOR_PLANS } from "@/lib/data/platform";
+import { FREE_PLAN_ID, offeredPlans } from "@/lib/data/platform";
 import { applyBps, formatDateTime } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -38,10 +38,6 @@ export function parsePercentToBps(input: string): { ok: true; bps: number } | { 
   return { ok: true, bps };
 }
 
-const STARTER = TUTOR_PLANS.find((p) => p.id === "free");
-const PAID_RATES = TUTOR_PLANS.filter((p) => p.id !== "free")
-  .map((p) => `${p.name} ${bpsToPercent(p.commissionBps)}%`)
-  .join(" · ");
 
 /**
  * Platform fee editor shared by Plans & credits and Platform settings. The fee (basis points) is the
@@ -51,6 +47,12 @@ const PAID_RATES = TUTOR_PLANS.filter((p) => p.id !== "free")
 export function PlatformFeeCard({ className, id }: { className?: string; id?: string }) {
   const bps = useApp((s) => s.platformFeeBps);
   const setPlatformFee = useApp((s) => s.setPlatformFee);
+  const pricing = usePricing();
+  // Starter's commission is this fee; the other plans' rates are set in Plans & credits.
+  const paidRates = offeredPlans(pricing)
+    .filter((p) => p.id !== FREE_PLAN_ID)
+    .map((p) => `${p.name} ${bpsToPercent(p.commissionBps)}%`)
+    .join(" · ");
   const auditLogs = useApp((s) => s.auditLogs);
   const { me, can } = useStaff();
   const dir = useDirectory();
@@ -103,7 +105,7 @@ export function PlatformFeeCard({ className, id }: { className?: string; id?: st
     <Card id={id} className={cn("scroll-mt-24", className)}>
       <CardHeader
         title="Starter plan commission (default platform fee)"
-        description={`Commission on bookings with Starter-plan tutors, including tutors with no subscription. Paid plans use their own rate (${PAID_RATES}).`}
+        description={`Commission on bookings with Starter-plan tutors, including tutors with no subscription. Paid plans use their own rate${paidRates ? ` (${paidRates})` : ""}, set in Plans & credits.`}
         action={
           <span className="inline-flex items-baseline gap-1 rounded-lg border border-line bg-canvas px-2.5 py-1 text-sm">
             <span className="text-muted">Current</span>
@@ -159,11 +161,6 @@ export function PlatformFeeCard({ className, id }: { className?: string; id?: st
           <p className="text-[13px] leading-relaxed text-muted">
             Applies to <span className="font-medium text-ink-2">new bookings only</span>. Existing bookings keep the fee recorded when they were booked, so earnings already shown to tutors don&apos;t change.
           </p>
-          {STARTER && bps !== STARTER.commissionBps && (
-            <p className="rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-[13px] text-warning">
-              The pricing page and plan features still list Starter at {bpsToPercent(STARTER.commissionBps)}% — that copy comes from the plan catalog and won&apos;t match {bpsToPercent(bps)}% until it&apos;s updated.
-            </p>
-          )}
           {can("settings.manage") && !isAdmin && <PermissionNotice permission="settings.manage">Changing the Starter commission needs an administrator account with</PermissionNotice>}
         </CardContent>
         <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">

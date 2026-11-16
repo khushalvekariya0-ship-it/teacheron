@@ -37,6 +37,10 @@ const TUTOR_CATEGORY = z.enum(["certified_teacher", "subject_expert", "graduate_
 const DAY_NAME = z.enum(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
 const TIME_OF_DAY = z.enum(["morning", "afternoon", "evening"]);
 const PAY_METHOD = z.enum(["card", "upi", "wallet"]);
+/** A tutor plan id: "free", "pro", "premium" or one made from a new plan's name. */
+const PLAN_ID = z.string().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/);
+/** A plan's or pack's price in each platform currency (minor units). */
+const PLATFORM_PRICES = z.object({ USD: int(0, 10_000_000), INR: int(0, 100_000_000) });
 const BOOKING_STATUS = z.enum([
   "pending", "confirmed", "in_progress", "completed", "cancelled_by_student", "cancelled_by_tutor", "rescheduled", "no_show_student", "no_show_tutor",
   "payment_failed", "disputed", "refunded",
@@ -206,7 +210,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   submitOnboarding: none,
   submitVerification: t(z.enum(["identity", "education", "certification", "background"]), z.array(file).max(10)),
   buyCredits: t(text(20)),
-  changePlan: t(z.enum(["free", "pro", "premium"])),
+  changePlan: t(PLAN_ID),
   savePayoutAccount: t(z.object({
     method: z.enum(["upi", "bank", "other"]), accountHolder: text(200), upiId: text(320).optional(), accountNumber: text(40).optional(),
     ifsc: text(20).optional(), bankName: text(200).optional(), details: text(1000).optional(),
@@ -230,6 +234,14 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   setFlag: t(text(60), z.object({ enabled: z.boolean().optional(), rolloutPercent: z.number().optional() })),
   updatePolicy: t(policyPatch),
   setPlatformFee: t(z.number()),
+  savePlan: t(z.object({
+    id: PLAN_ID.optional(), name: text(100), description: text(400), features: z.array(text(200)).max(20), commissionBps: int(0, 10_000),
+    monthlyLeadCredits: int(0, 100_000), prices: PLATFORM_PRICES, highlighted: z.boolean().optional(), hidden: z.boolean().optional(),
+  })),
+  deletePlan: t(PLAN_ID),
+  movePlan: t(PLAN_ID, z.union([z.literal(-1), z.literal(1)])),
+  saveCreditPack: t(z.object({ id: id.optional(), credits: int(0, 100_000), prices: PLATFORM_PRICES, hidden: z.boolean().optional() })),
+  deleteCreditPack: t(id),
   saveCoupon: t(z.object({ id: id.optional(), code: text(20), kind: z.enum(["percent", "fixed"]), value: z.number(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), minPurchaseCents: int(0, 10_000_000), maxRedemptions: int(0, 10_000_000), expiresAt: iso, firstBookingOnly: z.boolean(), active: z.boolean() })),
   saveSubjectArea: t(z.object({ slug: text(80).optional(), name: text(120), description: text(400), hidden: z.boolean().optional() })),
   deleteSubjectArea: t(text(80)),

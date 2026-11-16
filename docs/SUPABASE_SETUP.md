@@ -316,7 +316,10 @@ How it works on the site:
   paid (Study Credits go back to Study Credits). A refund that can't be sent at once is retried by the
   scheduled job, never sent twice.
 - **What tutors pay TutorLink** (plans, lead credits): in ₹ for tutors who charge in ₹, in US dollars for
-  everyone else. Plans are paid a month at a time. The ₹ prices are in `src/lib/data/platform.ts`.
+  everyone else. Plans are paid a month at a time. Edit plans and credit packs in **Admin → Plans &
+  credits**: prices in ₹ and $, commission, monthly credits, what's included; add new plans or packs,
+  reorder, hide (tutors already on a plan keep it) or remove. Starter is always free and its commission
+  is the platform fee. Changes apply to the next purchase or renewal.
 - **Paying tutors** is done by hand (automatic payouts with Razorpay Route / RazorpayX need their own
   approval from Razorpay). Tutors add their UPI ID or bank account (or, outside India, written
   instructions) under **Earnings → How you get paid**. In **Admin → Payments → Payouts**, "Owed to tutors"

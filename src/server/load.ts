@@ -1,7 +1,7 @@
 import "server-only";
 import type { User } from "@/lib/types";
 import { emptyData, type Collection, type Data } from "@/lib/domain/data";
-import { DEFAULT_FLAGS, DEFAULT_POLICY } from "@/lib/data/platform";
+import { DEFAULT_FLAGS, DEFAULT_POLICY, readPricing } from "@/lib/data/platform";
 import { SITE } from "@/lib/site";
 import type { Tx } from "./db";
 import { SPECS, keyOf, type Row, type TableSpec } from "./tables";
@@ -65,7 +65,7 @@ export class Loader {
   async globals() {
     const [flags, settings] = await Promise.all([
       this.select("feature_flags", "true"),
-      this.select("platform_settings", "key = any($1)", [["booking_policy", "platform_fee_bps"]]),
+      this.select("platform_settings", "key = any($1)", [["booking_policy", "platform_fee_bps", "pricing"]]),
       this.load("subject_categories", "true"),
       this.load("subjects", "true"),
     ]);
@@ -76,6 +76,7 @@ export class Loader {
     this.data.policy = { ...DEFAULT_POLICY, ...((setting("booking_policy") as object) ?? {}) };
     const fee = setting("platform_fee_bps");
     this.data.platformFeeBps = typeof fee === "number" ? fee : SITE.platformFeeBps;
+    this.data.pricing = readPricing(setting("pricing"), this.data.platformFeeBps);
   }
 
   async users(userIds: Id[]) {

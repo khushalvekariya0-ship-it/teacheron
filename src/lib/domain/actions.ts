@@ -5,7 +5,10 @@ import type {
   Subscription, TeachingMode, TrialConfig, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WalletTransaction,
   WeeklyWindow,
 } from "@/lib/types";
-import { CREDIT_PACKS, CREDITS_PER_APPLICATION, PAY_METHOD_LABEL, TUTOR_PLANS, packPrice, planPrice, studyPackAmount, type BookingPolicy } from "@/lib/data/platform";
+import {
+  CREDITS_PER_APPLICATION, FREE_PLAN_ID, PAY_METHOD_LABEL, findPlan, packPrice, planPrice, studyPackAmount,
+  type BookingPolicy, type CreditPack, type Plan, type PlatformCurrency,
+} from "@/lib/data/platform";
 import { asCurrency, budgetLimits, currencyForCountry, CURRENCIES, formatMoney, fromDollarSetting, isCurrency, rateProblem, trialPriceMax, type Currency } from "@/lib/money";
 import { SITE } from "@/lib/site";
 import { applyBps, formatDate, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
@@ -232,6 +235,15 @@ export interface DomainActions {
   setFlag(key: string, patch: Partial<Pick<FeatureFlag, "enabled" | "rolloutPercent">>): Result;
   updatePolicy(patch: Partial<BookingPolicy>): Result;
   setPlatformFee(bps: number): Result;
+  // plans & credit packs (admin with settings.manage)
+  /** Creates (no id) or edits a tutor plan. Starter (id "free") stays free and first; its commission is the platform fee. */
+  savePlan(input: { id?: string; name: string; description: string; features: string[]; commissionBps: number; monthlyLeadCredits: number; prices: Record<PlatformCurrency, number>; highlighted?: boolean; hidden?: boolean }): Result<Plan>;
+  /** Removes a plan no tutor is on; while tutors are on it, hide it instead. Starter can't be removed. */
+  deletePlan(id: string): Result;
+  movePlan(id: string, direction: -1 | 1): Result;
+  /** Creates (no id) or edits a lead-credit pack. */
+  saveCreditPack(input: { id?: string; credits: number; prices: Record<PlatformCurrency, number>; hidden?: boolean }): Result<CreditPack>;
+  deleteCreditPack(id: string): Result;
   saveCoupon(input: Omit<Coupon, "id" | "redemptions"> & { id?: string }): Result<Coupon>;
   /** Creates an area (no slug) or edits one (with its slug). The slug is made from the name once and never changes. */
   saveSubjectArea(input: { slug?: string; name: string; description: string; hidden?: boolean }): Result<SubjectCategory>;
@@ -285,8 +297,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   const flag = (key: string) => isFlagOn(get().flags, key, get().sessionUserId);
   /** Commission for a tutor comes from their plan; Starter-plan tutors pay the admin-configurable default. */
   const commissionBps = (tutorId: string) => {
-    const plan = get().subscriptions[tutorId]?.plan ?? "free";
-    return plan === "free" ? get().platformFeeBps : (TUTOR_PLANS.find((p) => p.id === plan)?.commissionBps ?? get().platformFeeBps);
+    const plan = get().subscriptions[tutorId]?.plan ?? FREE_PLAN_ID;
+    return plan === FREE_PLAN_ID ? get().platformFeeBps : (findPlan(get().pricing, plan)?.commissionBps ?? get().platformFeeBps);
   };
   /** Dates in notifications are written in the recipient's time zone. */
   const tzOf = (userId?: string) => get().users.find((u) => u.id === userId)?.timezone ?? me()?.timezone ?? SITE.defaultTimezone;
@@ -1622,10 +1634,11 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const r = requireUser(["tutor"]);
       if (!r.ok || !r.data.tutorId) return r.ok ? fail("Tutor profile not found.") : r;
       if (!flag("lead_credits")) return fail("Lead credits are currently disabled.");
-      const pack = CREDIT_PACKS.find((p) => p.id === packId);
+      const pack = get().pricing.packs.find((p) => p.id === packId && !p.hidden);
       if (!pack) return fail("Choose a credit pack.");
       if (!env.paymentsEnabled) return fail("Buying credits needs card payments, which aren't switched on yet.");
-      const price = packPrice(pack.id, resolveTutor(get(), r.data.tutorId)?.currency);
+      const price = packPrice(get().pricing, pack.id, resolveTutor(get(), r.data.tutorId)?.currency);
+      if (price.amount <= 0) return fail("This pack has no price yet. Choose another pack.");
       const paid = onlinePayment(price.amount, price.currency);
       if (!paid.ok) return paid;
       const p = paid.data!;
@@ -1637,18 +1650,19 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     changePlan(plan) {
       const r = requireUser(["tutor"]);
       if (!r.ok || !r.data.tutorId) return r.ok ? fail("Tutor profile not found.") : r;
-      const p = TUTOR_PLANS.find((x) => x.id === plan);
-      if (!p) return fail("Choose a plan.");
-      if (p.priceCents > 0 && !env.paymentsEnabled) return fail("Paid plans need card payments, which aren't switched on yet.");
-      const price = planPrice(p.id, resolveTutor(get(), r.data.tutorId)?.currency);
+      const tutorId = r.data.tutorId;
+      const current = get().subscriptions[tutorId];
+      const p = findPlan(get().pricing, plan);
+      // A plan that's no longer offered can only be renewed by tutors already on it.
+      if (!p || (p.hidden && current?.plan !== plan)) return fail("Choose a plan.");
+      const price = planPrice(get().pricing, p.id, resolveTutor(get(), tutorId)?.currency);
+      if (price.amount > 0 && !env.paymentsEnabled) return fail("Paid plans need card payments, which aren't switched on yet.");
       const paid = onlinePayment(price.amount, price.currency);
       if (!paid.ok) return paid;
-      const tutorId = r.data.tutorId;
       // A month at a time: renewing the same plan early adds the month after the time already paid for.
-      const current = get().subscriptions[tutorId];
       const paidUntil = current?.plan === plan && current.renewsAt ? Math.max(Date.now(), new Date(current.renewsAt).getTime()) : Date.now();
       set((s) => ({ subscriptions: { ...s.subscriptions, [tutorId]: { plan, status: "active", renewsAt: new Date(paidUntil + 30 * 86_400_000).toISOString() } } }));
-      if (p.priceCents > 0) {
+      if (price.amount > 0) {
         const pay = paid.data!;
         addPayment({ userId: r.data.id, kind: "subscription", amountCents: price.amount, currency: price.currency, status: "succeeded", description: `${p.name} plan — one month`, method: pay.method, provider: "razorpay", providerPaymentId: pay.paymentId, providerOrderId: pay.orderId });
         set((s) => ({ leadTransactions: [{ id: uid("lt"), tutorId, delta: p.monthlyLeadCredits, reason: `${p.name} plan — monthly credits`, createdAt: nowIso() }, ...s.leadTransactions] }));
@@ -1879,8 +1893,108 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change platform settings.");
       if (!r.ok) return r;
       if (!Number.isInteger(bps) || bps < 0 || bps > 3000) return fail("Platform fee must be between 0% and 30%.");
-      set({ platformFeeBps: bps });
+      // The platform fee is Starter's commission: the plan list shows the same number.
+      set((s) => ({ platformFeeBps: bps, pricing: { ...s.pricing, plans: s.pricing.plans.map((p) => (p.id === FREE_PLAN_ID ? { ...p, commissionBps: bps } : p)) } }));
       audit("settings.platform_fee", "settings", "platform_fee", { bps });
+      return ok(undefined);
+    },
+    savePlan(input) {
+      const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change plans and prices.");
+      if (!r.ok) return r;
+      const pricing = get().pricing;
+      const existing = input.id ? findPlan(pricing, input.id) : undefined;
+      if (input.id && !existing) return fail("Plan not found.");
+      const starter = existing?.id === FREE_PLAN_ID;
+      const name = input.name.trim().replace(/\s+/g, " ");
+      if (name.length < 2 || name.length > 40) return fail("Give the plan a name (2–40 characters).");
+      if (pricing.plans.some((p) => p.id !== existing?.id && p.name.toLowerCase() === name.toLowerCase())) return fail("Another plan already has that name.");
+      const description = input.description.trim();
+      if (description.length > 200) return fail("Keep the description under 200 characters.");
+      const features = input.features.map((f) => f.trim()).filter(Boolean);
+      if (features.length > 8 || features.some((f) => f.length > 80)) return fail("Up to 8 features, each under 80 characters.");
+      if (!Number.isInteger(input.commissionBps) || input.commissionBps < 0 || input.commissionBps > 3000) return fail("Commission must be between 0% and 30%.");
+      if (!Number.isInteger(input.monthlyLeadCredits) || input.monthlyLeadCredits < 0 || input.monthlyLeadCredits > 1000) return fail("Monthly credits must be between 0 and 1,000.");
+      const prices = { USD: input.prices?.USD, INR: input.prices?.INR };
+      if (!starter) {
+        if (!Number.isInteger(prices.USD) || prices.USD < 100 || prices.USD > 1_000_000) return fail("Set the US dollar price: $1 to $10,000 a month.");
+        if (!Number.isInteger(prices.INR) || prices.INR < 100 || prices.INR > 10_000_000) return fail("Set the rupee price: ₹1 to ₹1,00,000 a month.");
+      }
+      if (starter && input.hidden) return fail("Starter is always offered: it's the plan every tutor starts on.");
+      const id = existing?.id ?? uniqueSlug(slugify(name).slice(0, 36) || "plan", [...pricing.plans.map((p) => p.id), FREE_PLAN_ID]);
+      const plan: Plan = {
+        id, name, description, features, commissionBps: input.commissionBps, monthlyLeadCredits: input.monthlyLeadCredits,
+        prices: starter ? { USD: 0, INR: 0 } : { USD: prices.USD, INR: prices.INR },
+        ...(input.highlighted ? { highlighted: true } : {}),
+        ...(input.hidden && !starter ? { hidden: true } : {}),
+      };
+      // One plan at most is shown as recommended.
+      const unhighlight = (p: Plan): Plan => {
+        if (!input.highlighted || p.id === id || !p.highlighted) return p;
+        const { highlighted: _h, ...rest } = p;
+        void _h;
+        return rest;
+      };
+      set((s) => {
+        const others = s.pricing.plans.map(unhighlight);
+        const plans = existing ? others.map((p) => (p.id === id ? plan : p)) : [...others, plan];
+        return { pricing: { ...s.pricing, plans }, ...(starter ? { platformFeeBps: plan.commissionBps } : {}) };
+      });
+      audit(existing ? "pricing.plan_update" : "pricing.plan_create", "plan", id, { name, commissionBps: plan.commissionBps, usd: plan.prices.USD, inr: plan.prices.INR, hidden: !!plan.hidden });
+      return ok(plan);
+    },
+    deletePlan(id) {
+      const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change plans and prices.");
+      if (!r.ok) return r;
+      if (id === FREE_PLAN_ID) return fail("Starter can't be removed: it's the plan every tutor starts on.");
+      const plan = findPlan(get().pricing, id);
+      if (!plan) return fail("Plan not found.");
+      const on = Object.values(get().subscriptions).filter((s) => s.plan === id).length;
+      if (on > 0) return fail(`${on} tutor${on === 1 ? " is" : "s are"} on ${plan.name}. Hide it instead: they keep it, and new tutors can't choose it.`);
+      set((s) => ({ pricing: { ...s.pricing, plans: s.pricing.plans.filter((p) => p.id !== id) } }));
+      audit("pricing.plan_delete", "plan", id, { name: plan.name });
+      return ok(undefined);
+    },
+    movePlan(id, direction) {
+      const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change plans and prices.");
+      if (!r.ok) return r;
+      const plans = [...get().pricing.plans];
+      const i = plans.findIndex((p) => p.id === id);
+      if (i < 0) return fail("Plan not found.");
+      const j = i + direction;
+      // Starter stays first.
+      if (id === FREE_PLAN_ID || j < 1 || j >= plans.length) return ok(undefined);
+      [plans[i], plans[j]] = [plans[j], plans[i]];
+      set((s) => ({ pricing: { ...s.pricing, plans } }));
+      audit("pricing.plan_move", "plan", id, { to: j });
+      return ok(undefined);
+    },
+    saveCreditPack(input) {
+      const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change plans and prices.");
+      if (!r.ok) return r;
+      const packs = get().pricing.packs;
+      const existing = input.id ? packs.find((p) => p.id === input.id) : undefined;
+      if (input.id && !existing) return fail("Credit pack not found.");
+      if (!Number.isInteger(input.credits) || input.credits < 1 || input.credits > 1000) return fail("A pack has 1 to 1,000 credits.");
+      const usd = input.prices?.USD, inr = input.prices?.INR;
+      if (!Number.isInteger(usd) || usd < 100 || usd > 1_000_000) return fail("Set the US dollar price: $1 to $10,000.");
+      if (!Number.isInteger(inr) || inr < 100 || inr > 10_000_000) return fail("Set the rupee price: ₹1 to ₹1,00,000.");
+      const id = existing?.id ?? uniqueSlug(`pack_${input.credits}`, packs.map((p) => p.id));
+      const pack: CreditPack = { id, credits: input.credits, prices: { USD: usd, INR: inr }, ...(input.hidden ? { hidden: true } : {}) };
+      set((s) => {
+        const list = existing ? s.pricing.packs.map((p) => (p.id === id ? pack : p)) : [...s.pricing.packs, pack];
+        return { pricing: { ...s.pricing, packs: [...list].sort((a, b) => a.credits - b.credits) } };
+      });
+      audit(existing ? "pricing.pack_update" : "pricing.pack_create", "credit_pack", id, { credits: pack.credits, usd, inr, hidden: !!pack.hidden });
+      return ok(pack);
+    },
+    deleteCreditPack(id) {
+      const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change plans and prices.");
+      if (!r.ok) return r;
+      const pack = get().pricing.packs.find((p) => p.id === id);
+      if (!pack) return fail("Credit pack not found.");
+      // Credits already bought stay in tutors' balances; this only stops new purchases of the pack.
+      set((s) => ({ pricing: { ...s.pricing, packs: s.pricing.packs.filter((p) => p.id !== id) } }));
+      audit("pricing.pack_delete", "credit_pack", id, { credits: pack.credits });
       return ok(undefined);
     },
     saveSubjectArea(input) {

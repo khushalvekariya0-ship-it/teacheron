@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { EASE, Reveal } from "@/components/motion";
 import { Segmented } from "@/components/ui/Controls";
-import { TUTOR_PLANS } from "@/lib/data/platform";
+import { offeredPlans, type Pricing } from "@/lib/data/platform";
 import {
   CalendarVignette, CheckoutVignette, GetPaidVignette, JobVignette, MessageVignette, ProfileBuilderVignette, ProgressVignette, SearchVignette,
   SlotVignette, VerificationVignette,
@@ -22,8 +22,8 @@ interface Step {
   link?: { href: string; label: string };
 }
 
-function buildSteps(): Record<Audience, Step[]> {
-  const commissions = TUTOR_PLANS.map((p) => p.commissionBps / 100);
+function buildSteps(pricing: Pricing): Record<Audience, Step[]> {
+  const commissions = offeredPlans(pricing).map((p) => p.commissionBps / 100);
   const maxCommission = Math.max(...commissions);
   const minCommission = Math.min(...commissions);
   return {
@@ -99,9 +99,9 @@ function buildSteps(): Record<Audience, Step[]> {
   };
 }
 
-export function HowItWorksView() {
+export function HowItWorksView({ pricing }: { pricing: Pricing }) {
   const [audience, setAudience] = React.useState<Audience>("families");
-  const steps = buildSteps()[audience];
+  const steps = buildSteps(pricing)[audience];
   return (
     <div>
       <Reveal className="mb-12 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between lg:mb-16">

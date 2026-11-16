@@ -354,6 +354,10 @@ export const SPECS: TableSpec[] = [
     collection: "platformFeeBps", table: "platform_settings", key: ["key"], cols: {}, order: "key",
     rowsOf: (d) => [{ key: "platform_fee_bps", value: d.platformFeeBps }],
   },
+  {
+    collection: "pricing", table: "platform_settings", key: ["key"], cols: {}, order: "key",
+    rowsOf: (d) => [{ key: "pricing", value: d.pricing }],
+  },
   arraySpec("blogPosts", "blog_posts", BLOG, "published_on desc", { key: ["slug"] }),
   arraySpec("faqs", "faqs", FAQ, "position", { extraCols: (_x, _d, i) => ({ position: i }) }),
   {
@@ -371,7 +375,7 @@ export const SPECS: TableSpec[] = [
 ];
 
 /** Tables whose collection holds one value in the settings table (not a list of rows). */
-export const SETTING_COLLECTIONS = new Set<Collection>(["policy", "platformFeeBps"]);
+export const SETTING_COLLECTIONS = new Set<Collection>(["policy", "platformFeeBps", "pricing"]);
 
 /** jsonb columns per table — their values are sent with sql.json(). */
 export const JSON_COLUMNS: Record<string, Set<string>> = Object.fromEntries(

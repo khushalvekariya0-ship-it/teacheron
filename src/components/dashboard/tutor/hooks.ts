@@ -6,7 +6,7 @@ import type { Booking, Child, Tutor, User, WeeklyWindow } from "@/lib/types";
 import { useApp } from "@/lib/store";
 import { useSession, useTutors } from "@/lib/store/hooks";
 import { zonedParts, zonedToUtc } from "@/lib/time";
-import { TUTOR_PLANS, type Plan } from "@/lib/data/platform";
+import { FREE_PLAN_ID, findPlan, starterPlan, type Plan } from "@/lib/data/platform";
 import { DAY_MS, isEarned, netCents } from "@/lib/earnings";
 import { asCurrency, currencySymbol, sumByCurrency, type Currency } from "@/lib/money";
 import { toast } from "@/components/ui/Toast";
@@ -30,11 +30,13 @@ export function useMyBookings(tutorId: string | undefined): Booking[] {
 
 export function useMyPlan(tutorId: string | undefined): { plan: Plan; status: string; renewsAt?: string } {
   const subs = useApp((s) => s.subscriptions);
+  const pricing = useApp((s) => s.pricing);
   return React.useMemo(() => {
     const sub = tutorId ? subs[tutorId] : undefined;
-    const plan = TUTOR_PLANS.find((p) => p.id === (sub?.plan ?? "free")) ?? TUTOR_PLANS[0];
+    // A plan an administrator removed reads as Starter (the commission charged falls back to it too).
+    const plan = findPlan(pricing, sub?.plan ?? FREE_PLAN_ID) ?? starterPlan(pricing);
     return { plan, status: sub?.status ?? "active", renewsAt: sub?.renewsAt };
-  }, [subs, tutorId]);
+  }, [subs, tutorId, pricing]);
 }
 
 /* ─── Money (integer minor units, in each booking's own currency) ───────────── */

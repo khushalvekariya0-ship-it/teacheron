@@ -1,11 +1,12 @@
 import "server-only";
-import { CREDIT_PACKS, packPrice, planPrice, studyPackAmount, TUTOR_PLANS } from "@/lib/data/platform";
+import { findPlan, packPrice, planPrice, studyPackAmount } from "@/lib/data/platform";
 import { fail, ok, type CreateBookingInput, type Result } from "@/lib/domain/data";
 import type { VerifiedPayment } from "@/lib/domain/actions";
 import { asCurrency, currencyForCountry, type Currency } from "@/lib/money";
 import type { AppNotification, User } from "@/lib/types";
 import { db } from "./db";
 import { runAction } from "./engine";
+import { loadPricing } from "./pricing";
 import { checkoutScriptUrl, createOrder, fetchPayment, methodLabel, razorpayKeyId, razorpayReady, refundPayment, validPaymentSignature } from "./razorpay";
 
 /*
@@ -63,16 +64,22 @@ async function planFor(me: User, kind: CheckoutKind, payload: Record<string, unk
     return ok({ amount, currency, hold: false, description: "Study Credits", payload: { packId: String(payload.packId), method } });
   }
   if (!me.tutorId) return fail("Tutor profile not found.");
-  const [t] = await db()`select currency from public.tutors where id = ${me.tutorId}`;
+  const [[t], [sub], pricing] = await Promise.all([
+    db()`select currency from public.tutors where id = ${me.tutorId}`,
+    db()`select plan from public.subscriptions where tutor_id = ${me.tutorId}`,
+    loadPricing(),
+  ]);
   if (kind === "lead_credits") {
-    const pack = CREDIT_PACKS.find((p) => p.id === payload.packId);
+    const pack = pricing.packs.find((p) => p.id === payload.packId && !p.hidden);
     if (!pack) return fail("Choose a credit pack.");
-    const price = packPrice(pack.id, t?.currency as string);
+    const price = packPrice(pricing, pack.id, t?.currency as string);
+    if (price.amount <= 0) return fail("This pack has no price yet. Choose another pack.");
     return ok({ amount: price.amount, currency: price.currency, hold: false, description: `${pack.credits} lead credits`, payload: { packId: pack.id } });
   }
-  const plan = TUTOR_PLANS.find((p) => p.id === payload.plan);
-  if (!plan) return fail("Choose a plan.");
-  const price = planPrice(plan.id, t?.currency as string);
+  const plan = findPlan(pricing, String(payload.plan ?? ""));
+  // A plan that's no longer offered can only be renewed by tutors already on it (the same rule as changePlan).
+  if (!plan || (plan.hidden && sub?.plan !== plan.id)) return fail("Choose a plan.");
+  const price = planPrice(pricing, plan.id, t?.currency as string);
   if (price.amount <= 0) return ok(null);
   return ok({ amount: price.amount, currency: price.currency, hold: false, description: `${plan.name} plan, one month`, payload: { plan: plan.id } });
 }

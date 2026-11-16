@@ -6,7 +6,7 @@ import { Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EASE } from "@/components/motion";
 import { Badge } from "@/components/ui/Badge";
-import { planPrice, platformCurrency, TUTOR_PLANS, type PlatformCurrency } from "@/lib/data/platform";
+import { offeredPlans, planPrice, platformCurrency, type PlatformCurrency, type Pricing } from "@/lib/data/platform";
 import { applyBps } from "@/lib/format";
 import { formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
 import { useViewerCurrency } from "@/lib/store/hooks";
@@ -82,7 +82,8 @@ function Range({
  * rupees for visitors who charge in ₹ and in US dollars for everyone else (the currencies plans are
  * billed in). `defaultRateCents` (in `currency`, US dollars by default) is the starting rate.
  */
-export function EarningsCalculator({ defaultRateCents, currency: given = "USD" }: { defaultRateCents: number; currency?: Currency }) {
+export function EarningsCalculator({ pricing, defaultRateCents, currency: given = "USD" }: { pricing: Pricing; defaultRateCents: number; currency?: Currency }) {
+  const plans = offeredPlans(pricing);
   const viewer = useViewerCurrency();
   const currency = platformCurrency(viewer);
   const startCents = currency === given ? defaultRateCents : fromDollarSetting(5000, currency);
@@ -96,12 +97,12 @@ export function EarningsCalculator({ defaultRateCents, currency: given = "USD" }
   const [lessons, setLessons] = React.useState(8);
   const scale = rateScale(currency);
   const money = (cents: number) => formatMoney(cents, currency);
-  const fee = (planId: string) => planPrice(planId, currency).amount;
+  const fee = (planId: string) => planPrice(pricing, planId, currency).amount;
   const rateCents = rate * 100;
   const count = lessons * WEEKS;
   const gross = rateCents * count;
 
-  const rows = TUTOR_PLANS.map((p) => {
+  const rows = plans.map((p) => {
     const commission = applyBps(rateCents, p.commissionBps) * count;
     return { plan: p, commission, net: gross - commission - fee(p.id) };
   });
@@ -109,11 +110,12 @@ export function EarningsCalculator({ defaultRateCents, currency: given = "USD" }
   const maxNet = Math.max(...rows.map((r) => r.net), 1);
 
   // Where each paid plan starts to pay for itself versus the plan below it (monthly lesson revenue).
-  const breakEvens = TUTOR_PLANS.slice(1).map((p, i) => {
-    const prev = TUTOR_PLANS[i];
-    const cents = Math.ceil(((fee(p.id) - fee(prev.id)) * 10_000) / (prev.commissionBps - p.commissionBps));
-    return { from: prev.name, to: p.name, cents };
-  });
+  // Only where the dearer plan has a lower commission (otherwise it never pays for itself on commission).
+  const breakEvens = plans
+    .slice(1)
+    .map((p, i) => ({ p, prev: plans[i] }))
+    .filter(({ p, prev }) => prev.commissionBps > p.commissionBps && fee(p.id) > fee(prev.id))
+    .map(({ p, prev }) => ({ from: prev.name, to: p.name, cents: Math.ceil(((fee(p.id) - fee(prev.id)) * 10_000) / (prev.commissionBps - p.commissionBps)) }));
 
   return (
     <div className="grid overflow-hidden rounded-2xl border border-line bg-surface lg:grid-cols-[1fr_1.2fr]">

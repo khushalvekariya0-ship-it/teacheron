@@ -4,7 +4,7 @@ import * as React from "react";
 import { BadgeCheck, CalendarClock, Landmark, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "@/components/motion";
-import { DEFAULT_POLICY, planPrice, platformCurrency, TUTOR_PLANS, type PlatformCurrency } from "@/lib/data/platform";
+import { DEFAULT_POLICY, offeredPlans, planPrice, platformCurrency, type PlatformCurrency, type Pricing } from "@/lib/data/platform";
 import { applyBps } from "@/lib/format";
 import { formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
 import { useViewerCurrency } from "@/lib/store/hooks";
@@ -26,7 +26,8 @@ function startRate(currency: PlatformCurrency, cents: number): number {
  * charge in ₹, US dollars for everyone else (the currencies plans are billed in). `initialRateCents`
  * is in `currency` (US dollars by default); in any other currency the slider starts at a round example.
  */
-export function EarningsSplit({ initialRateCents, isMedian, currency: given = "USD" }: { initialRateCents: number; isMedian: boolean; currency?: Currency }) {
+export function EarningsSplit({ pricing, initialRateCents, isMedian, currency: given = "USD" }: { pricing: Pricing; initialRateCents: number; isMedian: boolean; currency?: Currency }) {
+  const plans = offeredPlans(pricing);
   const viewer = useViewerCurrency();
   const currency = platformCurrency(viewer);
   const ownRate = currency === given;
@@ -40,10 +41,10 @@ export function EarningsSplit({ initialRateCents, isMedian, currency: given = "U
   }
   const scale = rateScale(currency);
   const money = (cents: number, opts?: { exact?: boolean }) => formatMoney(cents, currency, opts);
-  const [planId, setPlanId] = React.useState(TUTOR_PLANS.find((p) => p.highlighted)?.id ?? TUTOR_PLANS[0].id);
-  const plan = TUTOR_PLANS.find((p) => p.id === planId) ?? TUTOR_PLANS[0];
-  const base = TUTOR_PLANS[0];
-  const fee = (planId: string) => planPrice(planId, currency).amount;
+  const [planId, setPlanId] = React.useState(plans.find((p) => p.highlighted)?.id ?? plans[0].id);
+  const plan = plans.find((p) => p.id === planId) ?? plans[0];
+  const base = plans[0];
+  const fee = (planId: string) => planPrice(pricing, planId, currency).amount;
 
   const commission = applyBps(rate, plan.commissionBps);
   const keep = rate - commission;
@@ -87,8 +88,8 @@ export function EarningsSplit({ initialRateCents, isMedian, currency: given = "U
 
         <div className="mt-6" role="radiogroup" aria-label="Plan">
           <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">Plan</p>
-          <div className="mt-2 grid grid-cols-3 gap-1.5 rounded-xl bg-canvas p-1.5">
-            {TUTOR_PLANS.map((p) => {
+          <div className={cn("mt-2 grid gap-1.5 rounded-xl bg-canvas p-1.5", plans.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+            {plans.map((p) => {
               const on = p.id === planId;
               return (
                 <button

@@ -4,7 +4,7 @@ import type {
   SavedSearch, StudentProfile, Subject, SubjectCategory, Subscription, TeachingMode, Tutor, User, VerificationRequest, WalletTransaction,
   ContactFlag,
 } from "@/lib/types";
-import type { BookingPolicy } from "@/lib/data/platform";
+import { readPricing, type BookingPolicy, type Pricing } from "@/lib/data/platform";
 import { maskMatches, scanContact } from "./contact";
 
 /*
@@ -129,6 +129,8 @@ export interface Data {
   coupons: Coupon[];
   policy: BookingPolicy;
   platformFeeBps: number;
+  /** Tutor plans and lead-credit packs with their prices (Admin → Plans & credits). Starter's commission is the platform fee. */
+  pricing: Pricing;
   /** Main subjects and their sub-categories, as edited in Admin → Subjects. Every page reads this (see useCatalog). */
   catalog: { categories: SubjectCategory[]; subjects: Subject[] };
   loginHistory: LoginEvent[];
@@ -165,6 +167,7 @@ export function emptyData(defaults: Pick<Data, "flags" | "policy" | "platformFee
     notificationPrefs: {}, goals: [], progressNotes: [], homework: [], payments: [], payouts: [], payoutAccounts: [], leadTransactions: [], walletTransactions: [],
     subscriptions: {}, reports: [], contactFlags: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [], tutorBusy: [],
     blogPosts: [], faqs: [], testimonials: [],
+    pricing: readPricing(undefined, defaults.platformFeeBps),
     ...defaults,
   };
 }
