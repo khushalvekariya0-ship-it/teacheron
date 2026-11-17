@@ -46,6 +46,8 @@ export const env = {
   livekitHostUrl: (process.env.LIVEKIT_HOST_URL ?? "").replace(/\/$/, ""),
   /** Optional: an AI recap of the lesson transcript (Google Gemini). Without it the transcript is kept, unsummarised. */
   geminiKey: process.env.GEMINI_API_KEY ?? "",
+  /** Where Gemini is called (tests point it at a local stand-in). */
+  geminiUrl: (process.env.GEMINI_API_URL ?? "https://generativelanguage.googleapis.com").replace(/\/$/, ""),
 };
 
 /** Whether live video for lessons is connected (all three LiveKit settings present). */

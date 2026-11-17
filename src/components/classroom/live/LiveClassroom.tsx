@@ -10,11 +10,11 @@ import {
   RefreshCw, User as UserIcon, Users, Video, VideoOff,
 } from "lucide-react";
 import { LIVE_STRIKE_LIMIT, readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
-import { maskMatches, scanContact } from "@/lib/domain/contact";
+import { maskMatches, scanContact, speechContact, speechSplitContact } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
 import { ChatPanel, type ChatLine } from "../ChatPanel";
 import { MeetingWhiteboard } from "./MeetingWhiteboard";
-import { ReportDialog, SafetyAlert, SafetyBanner, sendSafety, speechContact, useSafetyAlerts, useScreenShareCheck } from "./LessonSafety";
+import { ReportDialog, SafetyAlert, SafetyBanner, sendSafety, useSafetyAlerts, useVideoCheck } from "./LessonSafety";
 import { downloadTranscriptPdf, type Snapshot } from "./transcriptPdf";
 
 /*
@@ -102,10 +102,11 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
   const [ended, setEnded] = React.useState<{ title: string; message: string; rejoin: boolean } | null>(null);
   const leavingRef = React.useRef(false);
   const connectedRef = React.useRef(false);
-  // Set when contact details were caught LIVE_STRIKE_LIMIT times: the class ends with the reason.
-  const safetyRemovedRef = React.useRef(false);
-  const onSafetyRemoved = React.useCallback(() => {
-    safetyRemovedRef.current = true;
+  // Set when contact details were caught LIVE_STRIKE_LIMIT times: the class ends with the reason (and says
+  // so when it was the second lesson, which pauses the account).
+  const safetyRemovedRef = React.useRef<{ suspended: boolean } | null>(null);
+  const onSafetyRemoved = React.useCallback((suspended: boolean) => {
+    safetyRemovedRef.current = { suspended: suspended || !!safetyRemovedRef.current?.suspended };
   }, []);
 
   React.useEffect(() => {
@@ -227,7 +228,9 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
           if (safetyRemovedRef.current) {
             setEnded({
               title: "You were removed",
-              message: `Contact details were shared ${LIVE_STRIKE_LIMIT} times in this class, so you were removed and your messaging is paused for 24 hours. TutorLink's team will review it.`,
+              message: safetyRemovedRef.current.suspended
+                ? `Contact details were shared ${LIVE_STRIKE_LIMIT} times in this class. This is the second lesson you were removed from, so your account is paused until TutorLink's team reviews it. We've emailed you.`
+                : `Contact details were shared ${LIVE_STRIKE_LIMIT} times in this class, so you were removed and your messaging is paused for 24 hours. TutorLink's team will review it.`,
               rejoin: false,
             });
             return;
@@ -261,7 +264,7 @@ function MeetingRoom({
   onRefresh?: () => void;
   leavingRef: React.RefObject<boolean>;
   onLeave: () => void;
-  onSafetyRemoved: () => void;
+  onSafetyRemoved: (suspended: boolean) => void;
 }) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -311,12 +314,20 @@ function MeetingRoom({
   const canReport = !guest && ticket.me.role !== "Staff";
   const listenRef = React.useRef(false);
   const lastSafetyAt = React.useRef(0);
+  // This person's finished sentences from the last minute (a number said in pieces is caught too).
+  const recentSaid = React.useRef<{ at: number; text: string }[]>([]);
   const [reportOpen, setReportOpen] = React.useState(false);
   // The LIVE_STRIKE_LIMIT-th time: this page leaves the class (the server removes the person too).
-  const removedForSafety = React.useCallback(() => {
-    onSafetyRemoved();
-    window.setTimeout(() => void room.disconnect(), 1500);
-  }, [onSafetyRemoved, room]);
+  const leavingForSafety = React.useRef(false);
+  const removedForSafety = React.useCallback(
+    (suspended: boolean) => {
+      onSafetyRemoved(suspended);
+      if (leavingForSafety.current) return;
+      leavingForSafety.current = true;
+      window.setTimeout(() => void room.disconnect(), 1500);
+    },
+    [onSafetyRemoved, room],
+  );
   // Who this page is in the room: the identity the server put in the join ticket. (The local participant's
   // own identity can still be empty when this first renders, and a warning must know it's about you.)
   const me = React.useMemo(() => ({ identity: ticket.identity, name: ticket.me.name }), [ticket.identity, ticket.me.name]);
@@ -325,13 +336,27 @@ function MeetingRoom({
   React.useEffect(() => {
     caughtRef.current = caught;
   }, [caught]);
-  useScreenShareCheck({
+  useVideoCheck({
     room,
     bookingId,
-    sharing: isScreenShareEnabled && !guest,
+    source: "screen",
+    on: isScreenShareEnabled && !guest,
+    everyMs: 12_000,
     onFound: (res) => {
       void localParticipant.setScreenShareEnabled(false).catch(() => {});
       caught("screen", res);
+    },
+  });
+  // Paper held up to the camera: a frame is read every 20 seconds when the picture changed.
+  useVideoCheck({
+    room,
+    bookingId,
+    source: "camera",
+    on: isCameraEnabled && !guest,
+    everyMs: 20_000,
+    onFound: (res) => {
+      void localParticipant.setCameraEnabled(false).catch(() => {});
+      caught("camera", res);
     },
   });
 
@@ -387,7 +412,7 @@ function MeetingRoom({
 
   React.useEffect(() => {
     const handler = (payload: Uint8Array, participant?: Participant) => {
-      let msg: { type?: string; speaker?: string; text?: string };
+      let msg: { type?: string; speaker?: string; text?: string; lang?: string };
       try {
         msg = JSON.parse(new TextDecoder().decode(payload)) as typeof msg;
       } catch {
@@ -395,6 +420,12 @@ function MeetingRoom({
       }
       if (msg.type === TOPIC.chat) {
         onRefresh?.();
+        return;
+      }
+      // The class language comes from the host only (host-ness is in the server-signed metadata).
+      if (msg.type === TOPIC.lang) {
+        const code = msg.lang;
+        if (readMeta(participant?.metadata)?.isHost && LANGUAGES.some(([c]) => c === code)) setLang(code!);
         return;
       }
       if (msg.type !== TOPIC.caption || typeof msg.text !== "string") return;
@@ -466,11 +497,15 @@ function MeetingRoom({
             pending += said;
             continue;
           }
-          // Safety: contact details said out loud are reported (masked), at most every 5 seconds.
+          // Safety: contact details said out loud are reported (masked), at most every 5 seconds: in one
+          // sentence, or said a piece at a time over the last minute.
           if (listenRef.current) {
-            const hit = speechContact(said);
-            if (hit && Date.now() - lastSafetyAt.current > 5000) {
-              lastSafetyAt.current = Date.now();
+            const now = Date.now();
+            const recent = recentSaid.current.filter((r) => now - r.at < 60_000);
+            const hit = speechContact(said) ?? speechSplitContact(recent.map((r) => r.text), said);
+            recentSaid.current = hit ? [] : [...recent, { at: now, text: said }].slice(-8);
+            if (hit && now - lastSafetyAt.current > 5000) {
+              lastSafetyAt.current = now;
               void sendSafety(bookingId, { source: "speech", kinds: hit.kinds, excerpt: hit.masked }).then((res) => caughtRef.current("speech", res));
             }
           }
@@ -561,12 +596,37 @@ function MeetingRoom({
     }
   };
 
+  /* ── the class language: the host sets it for everyone (speech is checked and captioned in it) ── */
+
+  // A new language restarts the recogniser in it.
+  React.useEffect(() => {
+    if (langRef.current === lang) return;
+    langRef.current = lang;
+    if (!recRef.current) return;
+    const t = window.setTimeout(startRecognition, 200);
+    return () => window.clearTimeout(t);
+  }, [lang, startRecognition]);
+  const announceLang = React.useCallback(() => {
+    room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.lang, lang: langRef.current })), { reliable: true }).catch(() => {});
+  }, [room]);
+  // The host tells everyone when they join (and once on arriving, for those already in).
+  React.useEffect(() => {
+    if (!isHost) return;
+    const later = window.setTimeout(announceLang, 1500);
+    room.on(RoomEvent.ParticipantConnected, announceLang);
+    room.on(RoomEvent.Reconnected, announceLang);
+    return () => {
+      window.clearTimeout(later);
+      room.off(RoomEvent.ParticipantConnected, announceLang);
+      room.off(RoomEvent.Reconnected, announceLang);
+    };
+  }, [isHost, room, announceLang]);
   const pickLang = (code: string) => {
-    setLang(code);
-    langRef.current = code;
     setLangOpen(false);
     setLangSearch("");
-    if (recRef.current) window.setTimeout(startRecognition, 200);
+    if (!isHost || code === lang) return;
+    setLang(code);
+    room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.lang, lang: code })), { reliable: true }).catch(() => {});
   };
 
   /* ── devices ── */
@@ -977,10 +1037,18 @@ function MeetingRoom({
             CC
             {captionsOn && <span className={cn("absolute -right-1 -top-1 size-3 rounded-full border-2 border-page", captionStatus === "listening" ? "animate-pulse bg-live" : captionStatus === "error" ? "bg-danger" : "bg-warning")} />}
           </button>
-          {captionsOn && (
+          {(captionsOn || (isHost && speechCheck)) && (
             <div className="relative">
-              <button type="button" onClick={() => setLangOpen((v) => !v)} className="flex h-10 max-w-[9rem] items-center gap-1 border border-line bg-sunken px-3 text-xs hover:bg-line" aria-label="Caption language">
-                <span className="truncate">{LANGUAGES.find(([c]) => c === lang)?.[1]}</span> ▾
+              <button
+                type="button"
+                onClick={() => isHost && setLangOpen((v) => !v)}
+                disabled={!isHost}
+                className="flex h-10 max-w-[9rem] items-center gap-1 border border-line bg-sunken px-3 text-xs hover:bg-line disabled:cursor-default disabled:hover:bg-sunken"
+                aria-label="Class language"
+                title={isHost ? "The language this class speaks: speech is checked and captioned in it" : "The class language (the tutor sets it)"}
+              >
+                <span className="truncate">{LANGUAGES.find(([c]) => c === lang)?.[1]}</span>
+                {isHost && " ▾"}
               </button>
               {langOpen && (
                 <div className="absolute bottom-12 right-0 z-50 w-56 border border-line bg-surface shadow-2xl">

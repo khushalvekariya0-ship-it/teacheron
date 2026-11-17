@@ -604,7 +604,7 @@ export function RegisterView() {
                     <Link href="/privacy" target="_blank" className="font-semibold text-ink underline underline-offset-2">
                       Privacy Policy
                     </Link>
-                    .
+                    , and to keep contact and payments on TutorLink: no phone numbers, emails or social media in messages or lessons. Breaking this can get my account suspended.
                   </>
                 }
               />

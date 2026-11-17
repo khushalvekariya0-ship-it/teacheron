@@ -91,20 +91,31 @@ addresses must be this project's signed classroom files; text with contact detai
 messages themselves go through the normal moderated inbox. Blocked images are recorded in
 `contact_flags` (channel `lesson`). The scheduler closes rooms whose window is over.
 
-### Contact details in class (speech, whiteboard, shared screen)
+### Contact details in class (speech, whiteboard, shared screen, camera)
 
 Phone numbers, emails and social media are checked in class as well as in chat (`src/components/classroom/live/LessonSafety.tsx`,
-`caughtInClass` in `src/server/classroom.ts`; migration `20261117000000_live_class_safety.sql` adds the
-`speech`, `board` and `screen` sources to `contact_flags`):
+`caughtInClass` in `src/server/classroom.ts`; migrations `20261117000000_live_class_safety.sql` and
+`20261117000100_class_camera_check.sql` add the `speech`, `board`, `screen` and `camera` sources to `contact_flags`):
 
 - **Speech** (computers only; on phones the recogniser beeps and can take the call's microphone): while
   someone's microphone is on, their own browser's speech recognition (Chrome / Edge; audio goes to the
   browser maker's speech service) listens; a finished sentence with a phone number (10+ digits, or "WhatsApp / call me / my number"), an
   email or a social handle is sent as `POST safety` with the words masked. Other browsers don't check speech.
+  `speechContact` / `speechSplitContact` (`src/lib/domain/contact.ts`) also join the person's sentences from
+  the last minute when one says it's a way to reach them, so a number said in pieces is caught; digits
+  and number words count in any script (Gujarati, Hindi). The **class language** (English, Hindi, Gujarati …)
+  is set by the host only (data topic `class-lang`, accepted from the host's signed metadata, re-sent when
+  someone joins); everyone's speech is recognised (and captioned) in it.
 - **Whiteboard**: every 15 s each person's own new strokes are drawn black on white and read with OCR;
   if contact details are found, those strokes are removed for everyone.
 - **Shared screen**: every 12 s, when the picture changed, a frame (≤ 1600 px wide) is read; if contact
   details are found, the share stops.
+- **Camera**: every 20 s, when the picture changed by 4% or more (`useVideoCheck`), a frame (≤ 1280 px) is
+  read; if contact details are found (paper held up, a poster), the camera is turned off.
+- **Reading pictures**: the built-in OCR (`checkImageBytes`) always runs; with `GEMINI_API_KEY` set,
+  Gemini (`src/server/ai-read.ts`, `gemini-2.5-flash`, `GEMINI_API_URL` for tests) also copies out the
+  text (handwriting, any script) and TutorLink's own rules (`scanContact`, mode `file`) decide. Either one
+  finding contact details counts; Gemini failing just leaves the OCR. Pictures aren't stored.
 - Each catch is a `contact_flags` row (channel `lesson`, context the booking) shown in Admin → Chat
   safety. The person's browser shows the warning from the answer and tells the room itself (a data
   packet about itself; receivers accept one only from the person it names). The server also tells the
@@ -113,8 +124,13 @@ Phone numbers, emails and social media are checked in class as well as in chat (
 - The 3rd time (`LIVE_STRIKE_LIMIT`) the person is removed (their page leaves, and the server removes
   them), can't rejoin this lesson, their messaging is paused for 24 hours, they're notified and
   moderators (`reports.moderate`) are alerted. Staff aren't counted; guests aren't checked.
+- Removed from a 2nd lesson within 90 days (`LIVE_REMOVALS_TO_SUSPEND`, `LIVE_REMOVAL_DAYS`): the account is
+  suspended (audit `user.suspend`, "Automatic"), the person is emailed first, and moderators are alerted
+  with a link to Admin → Users, where it can be reactivated. Sign-up's terms box now includes the rule.
 - A banner in class says what's checked; **Report** (flag button) sends the other side to Admin → Reports.
-- Not checked: what's held up to the camera, and handwriting OCR can't read well. Recording isn't on.
+- Not checked: speech on phones, small or unclear writing on camera, and anything said in code words.
+  Lessons aren't recorded. A server that listens to every lesson (phones, any language) needs a paid
+  speech service and an always-on worker; recording needs the owner's legal decision.
 
 ## Zoom / Google Meet on online lessons
 

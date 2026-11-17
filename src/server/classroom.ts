@@ -1,9 +1,10 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { after } from "next/server";
-import { classWindow, LIVE_STRIKE_LIMIT, roomFor, TOPIC, type ClassWindow, type JoinTicket, type ParticipantMeta, type SafetyMessage } from "@/lib/classroom";
+import { classWindow, LIVE_REMOVAL_DAYS, LIVE_REMOVALS_TO_SUSPEND, LIVE_STRIKE_LIMIT, roomFor, TOPIC, type ClassWindow, type JoinTicket, type ParticipantMeta, type SafetyMessage } from "@/lib/classroom";
 import { blockedMessage, maskMatches, NAME_RULE, scanContact, type ContactKind } from "@/lib/domain/contact";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, isStaff } from "@/lib/permissions";
+import { SITE } from "@/lib/site";
 import type { Booking, User } from "@/lib/types";
 import { auditDirect, notifyDirect } from "./auth";
 import { db } from "./db";
@@ -11,6 +12,8 @@ import { env, liveVideoReady } from "./env";
 import { broadcastToRoom, closeRoom, mintToken, removeFromRoom } from "./livekit";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
 import { checkImageBytes } from "./scan";
+import { readTextWithAI } from "./ai-read";
+import { emailReady, escapeHtml, sendEmail } from "./email";
 import { alertStaff, shortName } from "./staff-alerts";
 
 /*
@@ -277,12 +280,12 @@ async function checkImage(userId: string | null, lesson: Lesson, bytes: Buffer, 
  * messaging is paused for a day while the moderators are alerted.
  */
 
-type LiveSource = "speech" | "board" | "screen";
-const LIVE_WHERE: Record<LiveSource, string> = { speech: "Said out loud in class", board: "Written on the class whiteboard", screen: "Shown on a shared screen in class" };
+type LiveSource = "speech" | "board" | "screen" | "camera";
+const LIVE_WHERE: Record<LiveSource, string> = { speech: "Said out loud in class", board: "Written on the class whiteboard", screen: "Shown on a shared screen in class", camera: "Shown on camera in class" };
 
 /** How many times this person's contact details were caught in this lesson's class. */
 export async function liveStrikes(userId: string, bookingId: string): Promise<number> {
-  const [{ n }] = await db()`select count(*)::int n from public.contact_flags where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source in ('speech', 'board', 'screen')`;
+  const [{ n }] = await db()`select count(*)::int n from public.contact_flags where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source in ('speech', 'board', 'screen', 'camera')`;
   return Number(n);
 }
 
@@ -298,6 +301,8 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
     values (${`cfl_${randomBytes(6).toString("hex")}`}, ${user.id}, 'lesson', ${source}, ${lesson.booking.id}, ${recipient}, ${kinds}, ${excerpt.slice(0, 300)})`;
   const strikes = await liveStrikes(user.id, lesson.booking.id);
   const removed = strikes >= LIVE_STRIKE_LIMIT;
+  // For the server log (no names or words): which check caught what, and the count in this lesson.
+  console.info(`[class-safety] ${source} caught ${kinds.join("+")} · ${strikes} of ${LIVE_STRIKE_LIMIT} · ${lesson.booking.id}`);
   const role = roleOf(user, lesson);
   const name = role ? metaFor(user, lesson, role).name : user.firstName;
   const identity = `u-${user.id}`;
@@ -308,7 +313,12 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
   // tells the others itself straight away. The message goes first, so the person removed sees why.
   after(async () => {
     await broadcastToRoom(room, message);
-    if (removed) await removeFromRoom(room, identity);
+    if (!removed) return;
+    // The person's own page leaves by itself 1.5 s after the answer and shows why; removing them here is
+    // for a page that doesn't. Waiting first keeps the server's removal from arriving before the page has
+    // read the answer (it would then say "the tutor removed you").
+    await new Promise((done) => setTimeout(done, 3000));
+    await removeFromRoom(room, identity);
   });
   await alertStaff("reports.moderate", {
     title: removed ? `Removed from a lesson: ${shortName(user.firstName, user.lastName)}` : `Contact details blocked: ${shortName(user.firstName, user.lastName)}`,
@@ -325,7 +335,30 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
     );
     await alertModerators({ title: "Contact details shared in a lesson", body: `${name} was removed from a lesson after contact details were caught ${strikes} times (${LIVE_WHERE[source].toLowerCase()}). Review it in Chat safety.`, href: "/admin/chat-safety" }, origin);
   }
-  return { strikes, removed };
+  const suspended = removed && !isStaff(user) ? await pauseRepeatOffender(user, name, origin) : false;
+  return { strikes, removed, suspended };
+}
+
+/**
+ * Removed from LIVE_REMOVALS_TO_SUSPEND lessons within LIVE_REMOVAL_DAYS: the account is paused (suspended)
+ * until staff review it in Admin → Users. The person is emailed first (a paused account gets no more email).
+ */
+async function pauseRepeatOffender(user: User, name: string, origin: string): Promise<boolean> {
+  const [{ n }] = await db()`select count(*)::int n from (
+      select context_id from public.contact_flags
+       where user_id = ${user.id} and channel = 'lesson' and source in ('speech', 'board', 'screen', 'camera')
+         and created_at > now() - make_interval(days => ${LIVE_REMOVAL_DAYS})
+       group by context_id having count(*) >= ${LIVE_STRIKE_LIMIT}) removals`;
+  const lessons = Number(n);
+  if (lessons < LIVE_REMOVALS_TO_SUSPEND) return false;
+  if (emailReady() && user.email) {
+    const text = `Hi ${user.firstName},\n\nYou were removed from ${lessons} lessons for sharing contact details, so your ${SITE.name} account is paused until our team reviews it. We'll email you when it's done. Phone numbers, emails, social media and payments outside ${SITE.name} aren't allowed in lessons or messages.\n\n— ${SITE.name}`;
+    await sendEmail({ to: user.email, subject: `Your ${SITE.name} account is paused for review`, text, html: text.split("\n\n").map((p) => `<p>${escapeHtml(p)}</p>`).join("") }).catch(() => {});
+  }
+  await db()`update public.users set status = 'suspended' where id = ${user.id} and status = 'active'`;
+  await auditDirect(user.id, "user.suspend", "user", user.id, { reason: `Automatic: removed from ${lessons} lessons for sharing contact details` });
+  await alertModerators({ title: "Account paused for review", body: `${name} was removed from ${lessons} lessons for sharing contact details, so their account was paused. Reactivate it or keep it suspended in Admin → Users.`, href: `/admin/users?id=${user.id}` }, origin);
+  return true;
 }
 
 /** The person's own browser heard contact details in what they said. Only the masked text is sent. */
@@ -338,15 +371,26 @@ export async function reportSpeech(user: User, lesson: Lesson, kinds: ContactKin
   return { found: true, kinds, ...(await caughtInClass(user, lesson, "speech", kinds, `${LIVE_WHERE.speech}: "${clean}"`, origin)) };
 }
 
-/** A picture of what the person drew on the whiteboard, or a frame of their shared screen, read with OCR. */
-export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen", dataUrl: string, origin: string) {
+/**
+ * Contact details in a picture from the class: read by the built-in OCR and, when GEMINI_API_KEY is set,
+ * by Gemini too (handwriting, Gujarati / Hindi digits); TutorLink's own rules decide on what was read.
+ * An unreadable picture is let through: the check must never block the lesson itself.
+ */
+async function readClassPicture(bytes: Buffer, mimeType: string): Promise<ContactKind[]> {
+  const [ocr, ai] = await Promise.all([checkImageBytes(bytes), readTextWithAI(bytes, mimeType)]);
+  const kinds = new Set<ContactKind>(!ocr.ok && ocr.reason === "contact" ? ocr.kinds : []);
+  if (ai) for (const k of scanContact(ai, "file").kinds) kinds.add(k);
+  return [...kinds];
+}
+
+/** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
+export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string) {
   requireRole(user, lesson);
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
   const img = decodeImage(dataUrl, 3 * 1024 * 1024);
-  const check = await checkImageBytes(img.bytes);
-  // An unreadable picture is let through: the check must never block the lesson itself.
-  if (check.ok || check.reason !== "contact") return { found: false as const };
-  return { found: true as const, kinds: check.kinds, ...(await caughtInClass(user, lesson, source, check.kinds, `[${LIVE_WHERE[source]}]`, origin)) };
+  const kinds = await readClassPicture(img.bytes, img.type);
+  if (!kinds.length) return { found: false as const };
+  return { found: true as const, kinds, ...(await caughtInClass(user, lesson, source, kinds, `[${LIVE_WHERE[source]}]`, origin)) };
 }
 
 export const CLASS_REPORT_REASONS = {
@@ -531,7 +575,7 @@ Do not include phone numbers, email addresses or social media handles.
 Transcript:
 ${transcript.slice(0, 15_000)}`;
   try {
-    const res = await fetch("https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent", {
+    const res = await fetch(`${env.geminiUrl}/v1/models/gemini-2.5-flash:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": env.geminiKey },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 1024 } }),

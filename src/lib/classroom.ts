@@ -95,7 +95,8 @@ export const TOPIC = {
   remove: "wb-delete", // one stroke removed
   chat: "chat-ping", // "a new message is saved, refresh" (the message itself goes through the moderated inbox)
   caption: "caption", // one finished caption line
-  safety: "safety", // from the server: contact details were caught (and maybe someone was removed)
+  safety: "safety", // contact details were caught (from the server, or the person's own browser about itself)
+  lang: "class-lang", // the host sets the language speech is checked (and captioned) in
 } as const;
 
 /** What the server tells everyone in the room when contact details are caught in class. */
@@ -104,7 +105,7 @@ export interface SafetyMessage {
   /** The person's name and room identity. */
   name: string;
   identity: string;
-  source: "speech" | "board" | "screen";
+  source: "speech" | "board" | "screen" | "camera";
   kinds: ("phone" | "email" | "social" | "link")[];
   /** How many times in this lesson; at LIVE_STRIKE_LIMIT the person is removed from the class. */
   strikes: number;
@@ -113,3 +114,7 @@ export interface SafetyMessage {
 
 /** Times contact details may be caught in one lesson before the person is removed from the class. */
 export const LIVE_STRIKE_LIMIT = 3;
+
+/** Lessons someone may be removed from (within LIVE_REMOVAL_DAYS) before their account is paused for review. */
+export const LIVE_REMOVALS_TO_SUSPEND = 2;
+export const LIVE_REMOVAL_DAYS = 90;

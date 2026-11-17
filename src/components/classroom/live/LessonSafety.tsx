@@ -4,7 +4,7 @@ import * as React from "react";
 import { Flag, Loader2, ShieldCheck, X } from "lucide-react";
 import { RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import { LIVE_STRIKE_LIMIT, TOPIC, type SafetyMessage } from "@/lib/classroom";
-import { maskMatches, scanContact, type ContactKind } from "@/lib/domain/contact";
+import { type ContactKind } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
 
 /*
@@ -12,17 +12,19 @@ import { cn } from "@/lib/utils";
  *  - speech (computers): while someone's microphone is on, their own browser's speech recognition listens; a phone
  *    number, email or social media handle in what they say is reported (only the masked words);
  *  - whiteboard: what each person draws is read on the server every few seconds (see MeetingWhiteboard);
- *  - shared screen: a frame of the shared screen is read on the server every few seconds;
+ *  - shared screen and camera: a frame is read on the server every few seconds (when it changed);
+ *  - speech is checked one sentence at a time and over the last minute (a number said in pieces), in
+ *    the class language the host sets (speechContact / speechSplitContact in src/lib/domain/contact.ts);
  *  - the person's own browser shows the warning from the server's answer and tells the others at once;
  *    the server tells the room too (a few seconds later) and removes a person the LIVE_STRIKE_LIMIT-th
  *    time, when their own browser also leaves;
  *  - a banner says so, and Report sends the other side of the lesson to Admin → Reports.
  */
 
-export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean };
+export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean; suspended?: boolean };
 
 /** Sends one safety check to the server. Guests (no account) and network trouble return null. */
-export async function sendSafety(bookingId: string, body: { source: "speech" | "board" | "screen"; kinds?: ContactKind[]; excerpt?: string; image?: string }): Promise<SafetyResult | null> {
+export async function sendSafety(bookingId: string, body: { source: SafetyMessage["source"]; kinds?: ContactKind[]; excerpt?: string; image?: string }): Promise<SafetyResult | null> {
   try {
     const res = await fetch("/api/classroom/safety", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, ...body }) });
     if (!res.ok) return null;
@@ -32,19 +34,7 @@ export async function sendSafety(bookingId: string, body: { source: "speech" | "
   }
 }
 
-/**
- * Checks one finished sentence the person said. A bare number needs 10 or more digits to count as a
- * phone number in speech (lessons are full of numbers: answers, years, prices).
- */
-export function speechContact(said: string): { kinds: ContactKind[]; masked: string } | null {
-  const found = scanContact(said, "chat");
-  if (!found.found) return null;
-  const kinds = found.kinds.filter((k) => k !== "phone" || (said.match(/\d/g) ?? []).length >= 10 || /whats ?app|call me|my (number|phone|mobile)/i.test(said));
-  if (!kinds.length) return null;
-  return { kinds, masked: maskMatches(said, found.matches) };
-}
-
-const WHERE: Record<SafetyMessage["source"], string> = { speech: "said out loud", board: "written on the whiteboard", screen: "shown on a shared screen" };
+const WHERE: Record<SafetyMessage["source"], string> = { speech: "said out loud", board: "written on the whiteboard", screen: "shown on a shared screen", camera: "shown on camera" };
 const WHAT: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or messaging app", link: "an outside link" };
 
 /**
@@ -53,7 +43,7 @@ const WHAT: Record<ContactKind, string> = { phone: "a phone number", email: "an 
  * `caught` is what this person's own checks call with the server's answer; at the LIVE_STRIKE_LIMIT-th
  * time `onRemoved` runs (the page leaves the class).
  */
-export function useSafetyAlerts(room: Room, me: { identity: string; name: string }, onRemoved: () => void) {
+export function useSafetyAlerts(room: Room, me: { identity: string; name: string }, onRemoved: (suspended: boolean) => void) {
   const [alert, setAlert] = React.useState<{ id: number; text: string; mine: boolean } | null>(null);
   const seq = React.useRef(0);
   const seen = React.useRef(new Set<string>());
@@ -79,7 +69,7 @@ export function useSafetyAlerts(room: Room, me: { identity: string; name: string
       const id = ++seq.current;
       setAlert({ id, text, mine });
       if (!mine) window.setTimeout(() => setAlert((a) => (a?.id === id ? null : a)), 9000);
-      if (mine && msg.removed) onRemovedRef.current();
+      if (mine && msg.removed) onRemovedRef.current(false);
     },
     [me.identity],
   );
@@ -119,6 +109,8 @@ export function useSafetyAlerts(room: Room, me: { identity: string; name: string
       // The others hear it from this browser now; the server's own message follows and isn't shown twice.
       room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(msg)), { reliable: true, topic: TOPIC.safety }).catch(() => {});
       show(msg);
+      // A second removal pauses the account (only the server's answer says so).
+      if (res.removed && res.suspended) onRemovedRef.current(true);
     },
     [room, me.name, me.identity, show],
   );
@@ -149,7 +141,8 @@ export function SafetyBanner({ onReport }: { onReport?: () => void }) {
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-live" aria-hidden />
       <p className="flex-1">
         <span className="font-semibold text-ink">Keep it on TutorLink.</span> Phone numbers, emails and social media aren&apos;t allowed in class. They&apos;re checked automatically in what you say (on a computer
-        while your microphone is on, by your browser&apos;s speech recognition), on the whiteboard and on shared screens. 3 times and you&apos;re removed from the class.
+        while your microphone is on, by your browser&apos;s speech recognition), on the whiteboard, on shared screens and on camera. 3 times and you&apos;re removed from the class; removed from
+        2 lessons and your account is paused for review.
         {onReport && (
           <>
             {" "}
@@ -236,28 +229,29 @@ export function ReportDialog({ bookingId, open, onClose, onSent }: { bookingId: 
 }
 
 /**
- * While this person shares their screen, a frame is read on the server every 12 seconds (only when it
- * changed). Contact details on it stop the share.
+ * While this person shares their screen (or has their camera on), a frame is read on the server every few
+ * seconds, only when the picture changed enough (a camera always changes a little). Contact details on it
+ * stop the share / turn the camera off (`onFound`).
  */
-export function useScreenShareCheck({ room, bookingId, sharing, onFound }: { room: Room; bookingId: string; sharing: boolean; onFound: (res: SafetyResult) => void }) {
+export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }: { room: Room; bookingId: string; source: "screen" | "camera"; on: boolean; everyMs: number; onFound: (res: SafetyResult) => void }) {
   const onFoundRef = React.useRef(onFound);
   React.useEffect(() => {
     onFoundRef.current = onFound;
   }, [onFound]);
   React.useEffect(() => {
-    if (!sharing) return;
-    const track = room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track?.mediaStreamTrack;
+    if (!on) return;
+    const track = room.localParticipant.getTrackPublication(source === "screen" ? Track.Source.ScreenShare : Track.Source.Camera)?.track?.mediaStreamTrack;
     if (!track) return;
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
     video.srcObject = new MediaStream([track]);
     void video.play().catch(() => {});
-    let last = "";
+    let last: number[] | null = null;
     let busy = false;
     const tick = async () => {
       if (busy || !video.videoWidth) return;
-      // A tiny grey thumbnail tells whether anything changed since the last frame that was read.
+      // A tiny grey thumbnail tells whether the picture changed enough since the last frame that was read.
       const thumb = document.createElement("canvas");
       thumb.width = 48;
       thumb.height = 27;
@@ -265,26 +259,27 @@ export function useScreenShareCheck({ room, bookingId, sharing, onFound }: { roo
       if (!t) return;
       t.drawImage(video, 0, 0, 48, 27);
       const px = t.getImageData(0, 0, 48, 27).data;
-      let sig = "";
-      for (let i = 0; i < px.length; i += 16) sig += String.fromCharCode(48 + (((px[i] + px[i + 1] + px[i + 2]) / 3) >> 5));
-      if (sig === last) return;
-      last = sig;
-      const scale = Math.min(1, 1600 / video.videoWidth);
+      const grey: number[] = [];
+      for (let i = 0; i < px.length; i += 4) grey.push(((px[i] + px[i + 1] + px[i + 2]) / 3) >> 4);
+      const changed = last ? grey.filter((g, i) => Math.abs(g - last![i]) >= 2).length / grey.length : 1;
+      if (changed < 0.04) return;
+      last = grey;
+      const scale = Math.min(1, (source === "screen" ? 1600 : 1280) / video.videoWidth);
       const c = document.createElement("canvas");
       c.width = Math.round(video.videoWidth * scale);
       c.height = Math.round(video.videoHeight * scale);
       c.getContext("2d")?.drawImage(video, 0, 0, c.width, c.height);
       busy = true;
-      const res = await sendSafety(bookingId, { source: "screen", image: c.toDataURL("image/jpeg", 0.8) });
+      const res = await sendSafety(bookingId, { source, image: c.toDataURL("image/jpeg", source === "screen" ? 0.8 : 0.85) });
       busy = false;
       if (res?.found) onFoundRef.current(res);
     };
     const first = window.setTimeout(() => void tick(), 2500);
-    const every = window.setInterval(() => void tick(), 12_000);
+    const every = window.setInterval(() => void tick(), everyMs);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(every);
       video.srcObject = null;
     };
-  }, [room, bookingId, sharing]);
+  }, [room, bookingId, source, on, everyMs]);
 }

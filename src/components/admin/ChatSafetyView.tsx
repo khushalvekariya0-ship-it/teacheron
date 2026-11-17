@@ -54,6 +54,7 @@ function whereLabel(f: ContactFlag): string {
     if (f.source === "speech") return "Said in a live class";
     if (f.source === "board") return "Written on a class whiteboard";
     if (f.source === "screen") return "Shown on a shared screen in class";
+    if (f.source === "camera") return "Shown on camera in class";
     return f.source === "file" ? "Lesson file or whiteboard image" : "Lesson note or goal";
   }
   const what = f.channel === "homework" ? "Homework" : "Chat";

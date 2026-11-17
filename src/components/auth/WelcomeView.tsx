@@ -290,7 +290,8 @@ function ChooseRole({ email, firstName }: { email: string; firstName: string }) 
                   <>
                     I agree to the{" "}
                     <Link href="/terms" target="_blank" className="font-semibold text-ink underline underline-offset-2">Terms of Service</Link> and{" "}
-                    <Link href="/privacy" target="_blank" className="font-semibold text-ink underline underline-offset-2">Privacy Policy</Link>.
+                    <Link href="/privacy" target="_blank" className="font-semibold text-ink underline underline-offset-2">Privacy Policy</Link>, and to keep contact and payments on TutorLink: no phone
+                    numbers, emails or social media in messages or lessons. Breaking this can get my account suspended.
                   </>
                 }
               />

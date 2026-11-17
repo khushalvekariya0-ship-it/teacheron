@@ -978,3 +978,49 @@ export function isShortPiece(text: string): boolean {
   const words = t.split(/\s+/);
   return words.length <= 3 || words.every((w) => w.length === 1);
 }
+
+/* ─── 8. Speech in the live class ──────────────────────────────────────────────── */
+
+/** Words that show someone is giving a way to reach them (lessons are full of plain numbers). */
+const SPEECH_CUE = /whats ?app|call me|text me|message me|dm me|ping me|my (?:number|phone|mobile|cell|contact|mail|email|gmail|id|insta|handle)|phone|mobile|contact|insta|telegram|snapchat|signal app|gmail|e ?mail|mail id|dial|\+ ?91|ફોન|નંબર|વોટ્સ|फोन|नंबर|मोबाइल|व्हाट्स/i;
+
+/** Digits a sentence holds, in any script or as words ("nine", "નવ", "नौ"). */
+function spokenDigits(said: string): number {
+  let n = 0;
+  for (const w of said.split(/[\s,.;:!?]+/)) n += numberPiece(w)?.digits ?? 0;
+  return n;
+}
+
+/**
+ * Contact details in one finished sentence someone said in class. A number counts as a phone number only
+ * with 10 or more digits, or when the sentence says it's a way to reach them ("WhatsApp me", "my number"),
+ * because lessons are full of numbers (answers, years, prices).
+ */
+export function speechContact(said: string): { kinds: ContactKind[]; masked: string } | null {
+  const found = scanContact(said, "chat");
+  if (!found.found) return null;
+  const kinds = found.kinds.filter((k) => k !== "phone" || spokenDigits(said) >= 10 || SPEECH_CUE.test(said));
+  if (!kinds.length) return null;
+  return { kinds, masked: maskMatches(said, found.matches) };
+}
+
+/**
+ * Contact details said a piece at a time: "my WhatsApp is 98765" … "43210", or an email spelled over a
+ * few sentences. `recent` are the same person's previous sentences from the last minute, oldest first.
+ * Only checked when something in them says it's a way to reach them, so a run of answers isn't a number.
+ */
+export function speechSplitContact(recent: string[], said: string): { kinds: ContactKind[]; masked: string } | null {
+  if (!recent.length) return null;
+  const all = [...recent.slice(-6), said];
+  const joined = all.join(" ");
+  if (!SPEECH_CUE.test(joined)) return null;
+  const found = scanContact(joined, "chat");
+  if (!found.found) return null;
+  // It must include what was just said (anything earlier was already checked on its own).
+  const lastStart = joined.length - said.length;
+  const hits = found.matches.filter((m) => m.end > lastStart);
+  if (!hits.length) return null;
+  const kinds = [...new Set(hits.map((m) => m.kind))].filter((k) => k !== "phone" || spokenDigits(joined) >= 10);
+  if (!kinds.length) return null;
+  return { kinds, masked: maskMatches(joined, found.matches) };
+}

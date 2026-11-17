@@ -254,10 +254,13 @@ through your HTTPS proxy, 7881 TCP and 50000–60000 UDP for media), and set the
 If browsers reach it through a path such as `wss://your-domain.com/livekit`, also set
 `LIVEKIT_HOST_URL=http://127.0.0.1:7880` (admin calls need a bare address).
 
-**Optional AI recap.** With `GEMINI_API_KEY` (from <https://aistudio.google.com/apikey>), the tutor's
-caption transcript gets a short recap (summary, what was taught, homework) on the lesson page. The
-transcript is sent to Google with contact details already hidden. Without the key nothing is sent and
-the transcript is kept as it is.
+**Optional Gemini key (AI recap and better reading of class pictures).** With `GEMINI_API_KEY` (from
+<https://aistudio.google.com/apikey>; there's a free tier), the tutor's caption transcript gets a short
+recap (summary, what was taught, homework) on the lesson page, sent to Google with contact details
+already hidden. The same key lets Gemini read the class pictures that are checked for contact details
+(whiteboard, shared screen, camera), which catches handwriting and Gujarati / Hindi digits far better than
+the built-in reader; the pictures go to Google only for that reading and aren't stored. Without the key
+nothing is sent and the built-in reader does it alone. Your privacy policy should mention both.
 
 How it behaves:
 
@@ -272,10 +275,12 @@ How it behaves:
   everywhere else. Images put on the whiteboard and boards saved to the lesson page are read for
   contact details first; captions and transcripts have contact details hidden.
 - **Contact details in class**: phone numbers, emails and social media are also checked in what people
-  say (on computers, while their microphone is on, in Chrome or Edge), on the whiteboard and on shared screens. Each
-  time, both people see a warning and it's listed in Admin → Chat safety; the 3rd time the person is
-  removed from the class, can't rejoin it, and their messaging is paused for 24 hours. **Report** in
-  class sends a report to Admin → Reports. The camera picture isn't checked.
+  say (on computers, while their microphone is on, in Chrome or Edge, also when said in pieces), on the
+  whiteboard, on shared screens and on camera (paper held up). The tutor sets the class language (English,
+  Hindi, Gujarati …) so speech is understood. Each time, both people see a warning and it's listed in
+  Admin → Chat safety; the 3rd time the person is removed from the class, can't rejoin it, and their
+  messaging is paused for 24 hours. Removed from a 2nd lesson, their account is paused until you review
+  it in Admin → Users. **Report** in class sends a report to Admin → Reports.
 - Zoom and Google Meet links are **off** (Admin → Feature flags → "Zoom / Google Meet links"), so every
   lesson uses the TutorLink classroom where these checks run. If you turn them on, lessons with a Zoom
   or Meet link use that meeting instead, and nothing said or shown there is checked.
