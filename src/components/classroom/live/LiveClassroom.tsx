@@ -12,6 +12,7 @@ import {
 import { readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
 import { maskMatches, scanContact, speechContact, speechSplitContact } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
+import { currentZoneName } from "@/lib/timezones";
 import { ChatPanel, type ChatLine } from "../ChatPanel";
 import { MeetingWhiteboard } from "./MeetingWhiteboard";
 import { AudioPausedBar, ReportDialog, SafetyAlert, SafetyBanner, SafetyStatus, sendSafety, useSafetyAlerts, useVideoCheck, type SpeechState } from "./LessonSafety";
@@ -297,7 +298,7 @@ function MeetingRoom({
   const [interim, setInterim] = React.useState("");
   const [lines, setLines] = React.useState<{ id: number; speaker: string; text: string }[]>([]);
   // Speech is recognised in English (India) for people in India, else English (US); the CC menu changes it.
-  const [lang, setLang] = React.useState(() => (Intl.DateTimeFormat().resolvedOptions().timeZone === "Asia/Kolkata" ? "en-IN" : "en-US"));
+  const [lang, setLang] = React.useState(() => (currentZoneName(Intl.DateTimeFormat().resolvedOptions().timeZone) === "Asia/Kolkata" ? "en-IN" : "en-US"));
   const [langOpen, setLangOpen] = React.useState(false);
   const [langSearch, setLangSearch] = React.useState("");
   const captionsOnRef = React.useRef(false);

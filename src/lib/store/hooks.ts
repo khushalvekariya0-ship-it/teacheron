@@ -6,6 +6,7 @@ import { useApp, resolveTutor } from "./index";
 import { isFlagOn } from "@/lib/flags";
 import { asCurrency, currencyForCountry, sumByCurrency, type Currency } from "@/lib/money";
 import { guessCountry } from "@/lib/location";
+import { currentZoneName } from "@/lib/timezones";
 import { buildCatalog, type Catalog } from "@/lib/data/catalog";
 import type { Pricing } from "@/lib/data/platform";
 
@@ -176,10 +177,17 @@ const noopSubscribe = () => () => {};
  * US-first: signed-out visitors see times in their browser's zone when it's a US zone, otherwise Eastern Time.
  * Signed-in users always get the zone saved on their account (editable in Settings).
  */
+/**
+ * The visitor's own time zone (any country), by its current name: Chrome in India says "Asia/Calcutta",
+ * which is shown as Asia/Kolkata. Only a browser that gives none (or an unknown one) falls back to New York.
+ */
 function readBrowserTz(): string {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz && (tz.startsWith("America/") || tz === "Pacific/Honolulu") ? tz : "America/New_York";
+    if (!tz || tz === "UTC" || tz === "Etc/UTC") return tz || "America/New_York";
+    const name = currentZoneName(tz);
+    new Intl.DateTimeFormat("en-US", { timeZone: name });
+    return name;
   } catch {
     return "America/New_York";
   }
