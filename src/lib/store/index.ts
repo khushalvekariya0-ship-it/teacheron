@@ -9,6 +9,8 @@ import { emptyData, fail, ok, type ClientConfig, type Data, type Result } from "
 import { DEFAULT_FLAGS, DEFAULT_POLICY } from "@/lib/data/platform";
 import { DEFAULT_SUBJECTS, DEFAULT_SUBJECT_CATEGORIES, buildCatalog, setLiveCatalog } from "@/lib/data/catalog";
 import { SITE } from "@/lib/site";
+import { setContactRules } from "@/lib/domain/contact";
+import { readContactSafety, rulesOf } from "@/lib/safety-settings";
 
 /*
  * The browser's copy of what the signed-in viewer may see, filled from the server (GET /api/state).
@@ -145,7 +147,7 @@ const ACTIONS: (keyof DomainActions)[] = [
   "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "savePayoutAccount", "recordPayout", "markPayoutFailed", "openDispute",
   "addDisputeNote", "setDisputeStatus", "resolveDispute", "reviewVerification", "setUserStatus", "setReportStatus", "moderateReview", "setFlag",
   "updatePolicy", "setPlatformFee", "savePlan", "deletePlan", "movePlan", "saveCreditPack", "deleteCreditPack", "saveCoupon", "saveSubjectArea", "deleteSubjectArea", "saveSubject", "deleteSubject", "moveCatalogItem",
-  "loadStarterCatalog", "logConversationAccess", "contactLearner", "warnChatUser", "restrictChat", "setContactFlagStatus", "requestChatUnlock", "declineChatUnlock", "setStaffAccess", "updateUserDetails", "deleteAccount", "setTutorListing", "takeDownRequirement", "sendAnnouncement", "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",
+  "loadStarterCatalog", "logConversationAccess", "contactLearner", "warnChatUser", "restrictChat", "setContactFlagStatus", "requestChatUnlock", "declineChatUnlock", "setStaffAccess", "saveContactSafety", "appealContactFlag", "decideAppeal", "updateUserDetails", "deleteAccount", "setTutorListing", "takeDownRequirement", "sendAnnouncement", "saveBlogPost", "deleteBlogPost", "saveFaq", "deleteFaq", "moveFaq", "saveTestimonial", "deleteTestimonial",
 ];
 /** Actions the scheduler or a public link run; the browser never calls them. */
 const SERVER_ONLY = new Set<keyof DomainActions>(["confirmParentalConsent", "runScheduledJobs", "recordContactFlag"]);
@@ -190,7 +192,10 @@ export const useApp = create<AppState>()(
           if (saving > 0 || seq < applied) return;
           applied = seq;
         }
-        set({ ...(body.state as Data), hydrated: true });
+        const state = body.state as Data;
+        // The page checks messages and speech with the same rules as the server.
+        if (state.contactSafety) setContactRules(rulesOf(readContactSafety(state.contactSafety)));
+        set({ ...state, hydrated: true });
       };
       const inflight = new Map<string, Promise<unknown>>();
 

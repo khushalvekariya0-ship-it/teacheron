@@ -1,15 +1,16 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { after } from "next/server";
-import { classWindow, LIVE_REMOVAL_DAYS, LIVE_REMOVALS_TO_SUSPEND, LIVE_STRIKE_LIMIT, roomFor, TOPIC, type ClassWindow, type JoinTicket, type ParticipantMeta, type SafetyMessage } from "@/lib/classroom";
-import { blockedMessage, maskMatches, NAME_RULE, scanContact, type ContactKind } from "@/lib/domain/contact";
+import { classWindow, LIVE_REMOVAL_DAYS, roomFor, TOPIC, type ClassWindow, type JoinTicket, type ParticipantMeta, type SafetyMessage } from "@/lib/classroom";
+import { blockedMessage, maskMatches, NAME_RULE, scanContact, speechContact, type ContactKind } from "@/lib/domain/contact";
 import { hasPermission, isStaff } from "@/lib/permissions";
 import { SITE } from "@/lib/site";
 import type { Booking, User } from "@/lib/types";
 import { auditDirect, notifyDirect } from "./auth";
 import { db } from "./db";
 import { env, liveVideoReady } from "./env";
-import { broadcastToRoom, closeRoom, mintToken, removeFromRoom } from "./livekit";
+import { broadcastToRoom, closeRoom, mintToken, removeFromRoom, setAudioAllowed } from "./livekit";
+import { contactSafety } from "./safety-settings";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
 import { checkImageBytes } from "./scan";
 import { readTextWithAI } from "./ai-read";
@@ -114,9 +115,12 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   const role = requireRole(user, lesson);
   const w = windowOf(lesson);
   if (!w.canJoin) windowError(w);
-  if (role !== "staff" && (await liveStrikes(user.id, lesson.booking.id)) >= LIVE_STRIKE_LIMIT) {
+  const safety = await contactSafety();
+  if (role !== "staff" && safety.removeAt > 0 && (await liveStrikes(user.id, lesson.booking.id)) >= safety.removeAt) {
     throw new ClassError("You were removed from this class because contact details were shared in it. Our team will review it.", 403);
   }
+  // A paused person who rejoins gets a pass without the microphone, so leaving doesn't undo the pause.
+  const paused = role !== "staff" ? await activeRestriction(user.id, lesson.booking.id) : null;
   const meta = metaFor(user, lesson, role);
   const room = roomFor(lesson.booking.id);
   if (meta.isHost) {
@@ -127,7 +131,10 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   if (role === "staff") await auditDirect(user.id, "classroom.staff_join", "booking", lesson.booking.id);
   const ttl = Math.ceil((w.closesAt - Date.now()) / 1000) + 600;
   const identity = `u-${user.id}`;
-  return { token: await mintToken({ room, identity, meta, ttlSeconds: ttl }), wsUrl: env.livekitWsUrl, room, identity, me: meta, startMuted: false, closesAt: w.closesAt };
+  return {
+    token: await mintToken({ room, identity, meta, ttlSeconds: ttl, noMicrophone: !!paused }), wsUrl: env.livekitWsUrl, room, identity, me: meta, startMuted: false, closesAt: w.closesAt,
+    ...(paused ? { audioPausedUntil: Date.parse(paused.endsAt) } : {}),
+  };
 }
 
 /** The host pressed "End class": nobody can join again, and everyone is disconnected. */
@@ -276,17 +283,25 @@ async function checkImage(userId: string | null, lesson: Lesson, bytes: Buffer, 
  * Each person's own browser checks what they say (speech recognition, while their microphone is on),
  * what they draw on the whiteboard and what they share on screen (pictures read here with OCR). When
  * contact details are found, it's recorded like a blocked message (Admin → Chat safety), everyone in
- * the room is told, and at LIVE_STRIKE_LIMIT the person is removed, can't rejoin this lesson, and their
- * messaging is paused for a day while the moderators are alerted.
+ * the room is told, and the ladder in caughtInClass applies (warning, stronger warning, audio pause; removal
+ * and pausing the account only when switched on in Admin → Chat safety → Settings).
  */
 
 type LiveSource = "speech" | "board" | "screen" | "camera";
 const LIVE_WHERE: Record<LiveSource, string> = { speech: "Said out loud in class", board: "Written on the class whiteboard", screen: "Shown on a shared screen in class", camera: "Shown on camera in class" };
 
-/** How many times this person's contact details were caught in this lesson's class. */
+/** How many times this person's contact details were caught in this lesson's class (dismissed ones don't count). */
 export async function liveStrikes(userId: string, bookingId: string): Promise<number> {
-  const [{ n }] = await db()`select count(*)::int n from public.contact_flags where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source in ('speech', 'board', 'screen', 'camera')`;
+  const [{ n }] = await db()`select count(*)::int n from public.contact_flags
+    where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source in ('speech', 'board', 'screen', 'camera') and status <> 'dismissed'`;
   return Number(n);
+}
+
+/** This person's current audio pause in this lesson, if any. */
+export async function activeRestriction(userId: string, bookingId: string): Promise<{ id: string; endsAt: string } | null> {
+  const [r] = await db()`select id, ends_at from public.class_restrictions
+    where booking_id = ${bookingId} and user_id = ${userId} and lifted_at is null and ends_at > now() order by ends_at desc limit 1`;
+  return r ? { id: String(r.id), endsAt: new Date(r.ends_at as string).toISOString() } : null;
 }
 
 /** In-app and email alert to everyone who moderates chat safety. */
@@ -295,62 +310,98 @@ async function alertModerators(n: { title: string; body: string; href: string },
   for (const m of mods) await notifyDirect(String(m.id), n, origin).catch(() => {});
 }
 
-async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kinds: ContactKind[], excerpt: string, origin: string) {
+const clockUtc = (iso: string) => new Date(iso).toISOString().slice(11, 16) + " UTC";
+
+/**
+ * Contact details caught in class. The ladder (Admin → Chat safety → Settings): a warning; from
+ * strongWarningAt a stronger one and moderators are told; from muteAt the person's audio doesn't reach the
+ * others for muteMinutes (LiveKit enforces it, and a rejoin gets a pass without the microphone); removal
+ * (removeAt) and pausing the account (pauseAccountAfterRemovals) only when switched on.
+ */
+async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kinds: ContactKind[], excerpt: string, origin: string, detector: "speech" | "ocr" | "qr" | "ai") {
+  const s = await contactSafety();
   const recipient = user.id === lesson.booking.bookerId ? lesson.tutorUserId : lesson.booking.bookerId;
-  await db()`insert into public.contact_flags (id, user_id, channel, source, context_id, recipient_id, kinds, excerpt)
-    values (${`cfl_${randomBytes(6).toString("hex")}`}, ${user.id}, 'lesson', ${source}, ${lesson.booking.id}, ${recipient}, ${kinds}, ${excerpt.slice(0, 300)})`;
+  await db()`insert into public.contact_flags (id, user_id, channel, source, context_id, recipient_id, kinds, excerpt, detector)
+    values (${`cfl_${randomBytes(6).toString("hex")}`}, ${user.id}, 'lesson', ${source}, ${lesson.booking.id}, ${recipient}, ${kinds}, ${excerpt.slice(0, 300)}, ${detector})`;
   const strikes = await liveStrikes(user.id, lesson.booking.id);
-  const removed = strikes >= LIVE_STRIKE_LIMIT;
-  // For the server log (no names or words): which check caught what, and the count in this lesson.
-  console.info(`[class-safety] ${source} caught ${kinds.join("+")} · ${strikes} of ${LIVE_STRIKE_LIMIT} · ${lesson.booking.id}`);
+  const level: SafetyMessage["level"] =
+    s.removeAt > 0 && strikes >= s.removeAt ? "removed" : s.muteAt > 0 && strikes >= s.muteAt ? "muted" : strikes >= s.strongWarningAt ? "strong" : "warning";
+  const removed = level === "removed";
+  // For the server log (no names or words): which check caught what, and where the ladder is.
+  console.info(`[class-safety] ${source} caught ${kinds.join("+")} · ${strikes} (${level}) · ${lesson.booking.id}`);
   const role = roleOf(user, lesson);
   const name = role ? metaFor(user, lesson, role).name : user.firstName;
   const identity = `u-${user.id}`;
   const room = roomFor(lesson.booking.id);
-  const message: SafetyMessage = { type: TOPIC.safety, name, identity, source, kinds, strikes, removed };
-  // LiveKit Cloud can take several seconds for a room people are in, so the room is told (and the person
-  // removed) after this answer goes back; the person's own browser shows the warning from the answer and
-  // tells the others itself straight away. The message goes first, so the person removed sees why.
+  let mutedUntil: string | undefined;
+  if (level === "muted") {
+    const until = new Date(Date.now() + s.muteMinutes * 60_000);
+    const current = await activeRestriction(user.id, lesson.booking.id);
+    if (current && new Date(current.endsAt) >= until) mutedUntil = current.endsAt;
+    else if (current) {
+      await db()`update public.class_restrictions set ends_at = ${until} where id = ${current.id}`;
+      mutedUntil = until.toISOString();
+    } else {
+      await db()`insert into public.class_restrictions (id, booking_id, user_id, kind, reason, ends_at)
+        values (${`crs_${randomBytes(6).toString("hex")}`}, ${lesson.booking.id}, ${user.id}, 'audio', ${`Contact details caught ${strikes} times (${LIVE_WHERE[source].toLowerCase()})`}, ${until})`;
+      mutedUntil = until.toISOString();
+    }
+  }
+  const message: SafetyMessage = { type: TOPIC.safety, name, identity, source, kinds, strikes, removed, level, mutedUntil, muteAt: s.muteAt, muteMinutes: s.muteMinutes };
+  // LiveKit Cloud can take several seconds for a room people are in, so the room is told (and the audio
+  // paused, or the person removed) after this answer goes back; the person's own page shows the warning
+  // from the answer and tells the others itself straight away.
   after(async () => {
     await broadcastToRoom(room, message);
+    if (level === "muted") await setAudioAllowed(room, identity, false);
     if (!removed) return;
-    // The person's own page leaves by itself 1.5 s after the answer and shows why; removing them here is
-    // for a page that doesn't. Waiting first keeps the server's removal from arriving before the page has
-    // read the answer (it would then say "the tutor removed you").
+    // Their own page leaves by itself 1.5 s after the answer and shows why; this is for a page that doesn't.
     await new Promise((done) => setTimeout(done, 3000));
     await removeFromRoom(room, identity);
   });
+  const who = shortName(user.firstName, user.lastName);
   await alertStaff("reports.moderate", {
-    title: removed ? `Removed from a lesson: ${shortName(user.firstName, user.lastName)}` : `Contact details blocked: ${shortName(user.firstName, user.lastName)}`,
-    body: `${LIVE_WHERE[source]} (${kinds.join(", ")}). ${strikes} of ${LIVE_STRIKE_LIMIT} in this lesson.`,
+    title: removed ? `Removed from a lesson: ${who}` : level === "muted" ? `Audio paused in a lesson: ${who}` : `Contact details blocked: ${who}`,
+    body: `${LIVE_WHERE[source]} (${kinds.join(", ")}). ${strikes} in this lesson${mutedUntil ? `; audio paused until ${clockUtc(mutedUntil)}` : ""}.`,
     href: `/admin/chat-safety?user=${user.id}`,
   });
+  if (level === "strong" && strikes === s.strongWarningAt) {
+    await alertModerators({ title: "Contact details shared again in a lesson", body: `${name} tried to share contact details ${strikes} times in a lesson (${LIVE_WHERE[source].toLowerCase()}). Review it in Chat safety.`, href: `/admin/chat-safety?user=${user.id}` }, origin);
+  }
+  if (level === "muted") {
+    await notifyDirect(
+      user.id,
+      { title: "Your audio was paused in a lesson", body: `Contact details were caught ${strikes} times, so the others can't hear you until ${clockUtc(mutedUntil!)}. If this was a mistake, use "Ask for a review" in the class.`, href: `/dashboard/bookings/${lesson.booking.id}` },
+      origin,
+    );
+    await alertModerators({ title: "Audio paused in a lesson", body: `${name}'s audio was paused for ${s.muteMinutes} minutes after contact details were caught ${strikes} times (${LIVE_WHERE[source].toLowerCase()}). You can lift it in Chat safety.`, href: `/admin/chat-safety?user=${user.id}` }, origin);
+  }
   if (removed) {
     const until = new Date(Date.now() + 24 * 3_600_000).toISOString();
     await db()`update public.users set chat_moderation = coalesce(chat_moderation, '{}'::jsonb) || ${db().json({ restrictedUntil: until, restrictionReason: "Shared contact details in a lesson", restrictedBy: "system" })} where id = ${user.id}`;
     await notifyDirect(
       user.id,
-      { title: "Removed from a lesson", body: `Contact details were caught ${LIVE_STRIKE_LIMIT} times in your lesson, so you were removed from the class and your messaging is paused for 24 hours. Keep lessons, contact and payments on TutorLink.`, href: "/dashboard/messages" },
+      { title: "Removed from a lesson", body: `Contact details were caught ${strikes} times in your lesson, so you were removed from the class and your messaging is paused for 24 hours. Keep lessons, contact and payments on TutorLink.`, href: "/dashboard/messages" },
       origin,
     );
     await alertModerators({ title: "Contact details shared in a lesson", body: `${name} was removed from a lesson after contact details were caught ${strikes} times (${LIVE_WHERE[source].toLowerCase()}). Review it in Chat safety.`, href: "/admin/chat-safety" }, origin);
   }
-  const suspended = removed && !isStaff(user) ? await pauseRepeatOffender(user, name, origin) : false;
-  return { strikes, removed, suspended };
+  const suspended = removed && s.pauseAccountAfterRemovals > 0 && !isStaff(user) ? await pauseRepeatOffender(user, name, origin, s.pauseAccountAfterRemovals, s.removeAt) : false;
+  return { strikes, level, removed, suspended, mutedUntil };
 }
 
 /**
- * Removed from LIVE_REMOVALS_TO_SUSPEND lessons within LIVE_REMOVAL_DAYS: the account is paused (suspended)
- * until staff review it in Admin → Users. The person is emailed first (a paused account gets no more email).
+ * Removed from `limit` lessons within LIVE_REMOVAL_DAYS (only when switched on in the settings): the account
+ * is paused (suspended) until staff review it in Admin → Users. The person is emailed first.
  */
-async function pauseRepeatOffender(user: User, name: string, origin: string): Promise<boolean> {
+async function pauseRepeatOffender(user: User, name: string, origin: string, limit: number, removeAt: number): Promise<boolean> {
   const [{ n }] = await db()`select count(*)::int n from (
       select context_id from public.contact_flags
-       where user_id = ${user.id} and channel = 'lesson' and source in ('speech', 'board', 'screen', 'camera')
+       where user_id = ${user.id} and channel = 'lesson' and source in ('speech', 'board', 'screen', 'camera') and status <> 'dismissed'
          and created_at > now() - make_interval(days => ${LIVE_REMOVAL_DAYS})
-       group by context_id having count(*) >= ${LIVE_STRIKE_LIMIT}) removals`;
+       group by context_id having count(*) >= ${removeAt}) removals`;
   const lessons = Number(n);
-  if (lessons < LIVE_REMOVALS_TO_SUSPEND) return false;
+  if (lessons < limit) return false;
   if (emailReady() && user.email) {
     const text = `Hi ${user.firstName},\n\nYou were removed from ${lessons} lessons for sharing contact details, so your ${SITE.name} account is paused until our team reviews it. We'll email you when it's done. Phone numbers, emails, social media and payments outside ${SITE.name} aren't allowed in lessons or messages.\n\n— ${SITE.name}`;
     await sendEmail({ to: user.email, subject: `Your ${SITE.name} account is paused for review`, text, html: text.split("\n\n").map((p) => `<p>${escapeHtml(p)}</p>`).join("") }).catch(() => {});
@@ -366,9 +417,65 @@ export async function reportSpeech(user: User, lesson: Lesson, kinds: ContactKin
   requireRole(user, lesson);
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
   if (!kinds.length) throw new ClassError("Nothing to record.");
-  const found = scanContact(excerpt, "chat");
-  const clean = (found.found ? maskMatches(excerpt, found.matches) : excerpt).trim().slice(0, 200);
-  return { found: true, kinds, ...(await caughtInClass(user, lesson, "speech", kinds, `${LIVE_WHERE.speech}: "${clean}"`, origin)) };
+  const s = await contactSafety();
+  if (!s.voice) return { found: false as const };
+  // While their audio is paused nobody hears them, so nothing was shared.
+  if (await activeRestriction(user.id, lesson.booking.id)) return { found: false as const, paused: true };
+  const clean = (speechContact(excerpt)?.masked ?? excerpt).trim().slice(0, 200);
+  return { found: true as const, kinds, ...(await caughtInClass(user, lesson, "speech", kinds, `${LIVE_WHERE.speech}: "${clean}"`, origin, "speech")) };
+}
+
+/** The person's own page when their pause is over: their audio may reach the others again. */
+export async function endOwnPause(user: User, lesson: Lesson) {
+  requireRole(user, lesson);
+  const [r] = await db()`select id, ends_at from public.class_restrictions where booking_id = ${lesson.booking.id} and user_id = ${user.id} and lifted_at is null order by ends_at desc limit 1`;
+  if (r && new Date(r.ends_at as string).getTime() > Date.now()) return { paused: true as const, until: new Date(r.ends_at as string).toISOString() };
+  if (r) await db()`update public.class_restrictions set lifted_at = now(), lifted_by = 'system' where id = ${r.id} and lifted_at is null`;
+  const room = roomFor(lesson.booking.id);
+  after(() => setAudioAllowed(room, `u-${user.id}`, true));
+  return { paused: false as const };
+}
+
+/** Staff end a pause early (Admin → Chat safety); an open appeal about it is answered. */
+export async function liftRestriction(staff: User, restrictionId: string, note: string, origin: string) {
+  if (!hasPermission(staff, "reports.moderate")) throw new ClassError("You don't have permission to lift class restrictions.", 403);
+  const [r] = await db()`update public.class_restrictions set lifted_at = now(), lifted_by = ${staff.id} where id = ${restrictionId} and lifted_at is null returning booking_id, user_id`;
+  if (!r) throw new ClassError("That restriction has already ended.", 404);
+  const bookingId = String(r.booking_id), userId = String(r.user_id);
+  after(() => setAudioAllowed(roomFor(bookingId), `u-${userId}`, true));
+  const clean = maskText(note.trim()).slice(0, 500);
+  await db()`update public.safety_appeals set status = 'accepted', decided_by = ${staff.id}, decided_at = now(), decision_note = ${clean || null} where restriction_id = ${restrictionId} and status = 'open'`;
+  await auditDirect(staff.id, "classroom.restriction_lift", "user", userId, { restrictionId, ...(clean ? { note: clean } : {}) });
+  await notifyDirect(userId, { title: "Your audio is back in the lesson", body: "TutorLink's team reviewed it and lifted the pause.", href: `/dashboard/bookings/${bookingId}` }, origin);
+}
+
+/** Pauses whose time is up (the scheduler; the person's own page normally lifts its pause first). */
+export async function liftExpiredRestrictions(): Promise<number> {
+  const rows = await db()`update public.class_restrictions set lifted_at = now(), lifted_by = 'system' where lifted_at is null and ends_at <= now() returning booking_id, user_id`;
+  for (const r of rows) await setAudioAllowed(roomFor(String(r.booking_id)), `u-${r.user_id}`, true);
+  return rows.length;
+}
+
+/** "Ask for a review" in the class: an appeal against this lesson's audio pause (moderators are told). */
+export async function appealFromClass(user: User, lesson: Lesson, note: string, origin: string) {
+  requireRole(user, lesson);
+  const [r] = await db()`select id from public.class_restrictions where booking_id = ${lesson.booking.id} and user_id = ${user.id} order by created_at desc limit 1`;
+  if (!r) throw new ClassError("There's nothing to review in this class.");
+  const [open] = await db()`select id from public.safety_appeals where restriction_id = ${r.id} and status = 'open'`;
+  if (open) throw new ClassError("You've already asked for a review. Our team will look at it.");
+  const clean = maskText(note.trim()).slice(0, 1000);
+  await db()`insert into public.safety_appeals (id, user_id, restriction_id, note) values (${`apl_${randomBytes(6).toString("hex")}`}, ${user.id}, ${r.id}, ${clean})`;
+  await alertModerators({ title: "Review asked: audio pause in a lesson", body: `${shortName(user.firstName, user.lastName)} says the pause was a mistake${clean ? `: "${clean.slice(0, 160)}"` : "."} Review it in Chat safety.`, href: `/admin/chat-safety?user=${user.id}` }, origin);
+}
+
+/** Deletes protection records older than the retention period (Admin → Chat safety → Settings). */
+export async function forgetOldSafetyRecords(): Promise<number> {
+  const s = await contactSafety();
+  const days = s.retentionDays;
+  const appeals = await db()`delete from public.safety_appeals where status <> 'open' and created_at < now() - make_interval(days => ${days}) returning id`;
+  const restrictions = await db()`delete from public.class_restrictions where lifted_at is not null and created_at < now() - make_interval(days => ${days}) returning id`;
+  const flags = await db()`delete from public.contact_flags where status <> 'open' and created_at < now() - make_interval(days => ${days}) returning id`;
+  return appeals.length + restrictions.length + flags.length;
 }
 
 /**
@@ -376,21 +483,28 @@ export async function reportSpeech(user: User, lesson: Lesson, kinds: ContactKin
  * by Gemini too (handwriting, Gujarati / Hindi digits); TutorLink's own rules decide on what was read.
  * An unreadable picture is let through: the check must never block the lesson itself.
  */
-async function readClassPicture(bytes: Buffer, mimeType: string): Promise<ContactKind[]> {
-  const [ocr, ai] = await Promise.all([checkImageBytes(bytes), readTextWithAI(bytes, mimeType)]);
+async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: boolean): Promise<{ kinds: ContactKind[]; detector: "ocr" | "qr" | "ai" }> {
+  const [ocr, ai] = await Promise.all([checkImageBytes(bytes), aiReading ? readTextWithAI(bytes, mimeType) : Promise.resolve(null)]);
   const kinds = new Set<ContactKind>(!ocr.ok && ocr.reason === "contact" ? ocr.kinds : []);
-  if (ai) for (const k of scanContact(ai, "file").kinds) kinds.add(k);
-  return [...kinds];
+  let detector: "ocr" | "qr" | "ai" = !ocr.ok && ocr.reason === "contact" && ocr.via === "qr" ? "qr" : "ocr";
+  if (ai) {
+    const fromAi = scanContact(ai, "file").kinds;
+    if (fromAi.length && !kinds.size) detector = "ai";
+    for (const k of fromAi) kinds.add(k);
+  }
+  return { kinds: [...kinds], detector };
 }
 
 /** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
 export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string) {
   requireRole(user, lesson);
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  const s = await contactSafety();
+  if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
   const img = decodeImage(dataUrl, 3 * 1024 * 1024);
-  const kinds = await readClassPicture(img.bytes, img.type);
-  if (!kinds.length) return { found: false as const };
-  return { found: true as const, kinds, ...(await caughtInClass(user, lesson, source, kinds, `[${LIVE_WHERE[source]}]`, origin)) };
+  const read = await readClassPicture(img.bytes, img.type, s.aiReading);
+  if (!read.kinds.length) return { found: false as const };
+  return { found: true as const, kinds: read.kinds, ...(await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector)) };
 }
 
 export const CLASS_REPORT_REASONS = {

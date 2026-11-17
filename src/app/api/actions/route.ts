@@ -15,6 +15,7 @@ import { buildState } from "@/server/snapshot";
 import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
 import { db } from "@/server/db";
 import { emailNotifications } from "@/server/notify-email";
+import { forgetContactSafety } from "@/server/safety-settings";
 import { placeTutor } from "@/server/geocode";
 
 /*
@@ -81,6 +82,8 @@ export async function POST(request: Request) {
     // Email copies go out after the response, so a slow mail service never delays the page.
     const result = await runAction(action, prepared.args, { userId: me.id }, (created) => after(() => emailNotifications(created, origin)));
     if (result.ok && PUBLIC_CHANGES.has(action)) refreshPublicPages();
+    // New protection settings apply to the class and file checks on this server at once (others within 30 s).
+    if (result.ok && action === "saveContactSafety") forgetContactSafety();
 
     if (result.ok && action === "deleteMyAccount") {
       const { error } = await supabaseAdmin().auth.admin.deleteUser(session.authUser.id);

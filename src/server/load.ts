@@ -2,6 +2,8 @@ import "server-only";
 import type { User } from "@/lib/types";
 import { emptyData, type Collection, type Data } from "@/lib/domain/data";
 import { DEFAULT_FLAGS, DEFAULT_POLICY, readPricing } from "@/lib/data/platform";
+import { setContactRules } from "@/lib/domain/contact";
+import { readContactSafety, rulesOf } from "@/lib/safety-settings";
 import { SITE } from "@/lib/site";
 import type { Tx } from "./db";
 import { SPECS, keyOf, type Row, type TableSpec } from "./tables";
@@ -65,7 +67,7 @@ export class Loader {
   async globals() {
     const [flags, settings] = await Promise.all([
       this.select("feature_flags", "true"),
-      this.select("platform_settings", "key = any($1)", [["booking_policy", "platform_fee_bps", "pricing"]]),
+      this.select("platform_settings", "key = any($1)", [["booking_policy", "platform_fee_bps", "pricing", "contact_safety"]]),
       this.load("subject_categories", "true"),
       this.load("subjects", "true"),
     ]);
@@ -77,6 +79,9 @@ export class Loader {
     const fee = setting("platform_fee_bps");
     this.data.platformFeeBps = typeof fee === "number" ? fee : SITE.platformFeeBps;
     this.data.pricing = readPricing(setting("pricing"), this.data.platformFeeBps);
+    this.data.contactSafety = readContactSafety(setting("contact_safety"));
+    // The contact-detail rules are the same for everyone: every check on this server uses these.
+    setContactRules(rulesOf(this.data.contactSafety));
   }
 
   async users(userIds: Id[]) {

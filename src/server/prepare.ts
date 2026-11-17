@@ -17,7 +17,7 @@ import { checkImageBytes, checkStoredFile, removePrivateFile } from "./scan";
  *  • videos that only ever lived in one browser ("device-video:" from before uploads existed) are refused.
  */
 
-export type FlagInput = { channel: ContactFlag["channel"]; contextId?: string; kinds: ContactKind[]; fileName?: string };
+export type FlagInput = { channel: ContactFlag["channel"]; contextId?: string; kinds: ContactKind[]; fileName?: string; detector?: "ocr" | "qr" | "rules"; fileHash?: string };
 type Prepared = { ok: true; args: unknown[] } | { ok: false; error: string; flag?: FlagInput };
 
 const DEVICE_VIDEO = "That video was only saved in your browser. Upload it again so students can watch it.";
@@ -38,7 +38,7 @@ async function screenFile(path: string, fileName: string, channel: FlagInput["ch
   if (verdict.ok) return null;
   if (verdict.reason === "unchecked") return { ok: false, error: verdict.error };
   await removePrivateFile(path);
-  return { ok: false, error: blockedMessage(verdict.kinds, "file"), flag: { channel, contextId, kinds: verdict.kinds, fileName } };
+  return { ok: false, error: blockedMessage(verdict.kinds, "file"), flag: { channel, contextId, kinds: verdict.kinds, fileName, detector: verdict.via, fileHash: verdict.hash } };
 }
 
 const PHOTO = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
@@ -53,7 +53,7 @@ async function screenPhoto(value: unknown, me: User): Promise<Prepared | null> {
   return {
     ok: false,
     error: `This photo wasn't saved because it looks like it shows ${verdict.kinds.includes("email") ? "an email address" : verdict.kinds.includes("phone") ? "a phone number" : "a social media or messaging app contact"}. Choose a photo without contact details.`,
-    flag: { channel: "profile", contextId: me.tutorId, kinds: verdict.kinds, fileName: "Profile photo" },
+    flag: { channel: "profile", contextId: me.tutorId, kinds: verdict.kinds, fileName: "Profile photo", detector: verdict.via },
   };
 }
 

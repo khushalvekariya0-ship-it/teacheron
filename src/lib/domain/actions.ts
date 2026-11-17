@@ -1,7 +1,7 @@
 import type {
   AlertFrequency, Application, ApplicationStatus, AppNotification, AuditLog, AvailabilityException, Booking, BookingRules, BookingStatus, Child,
   ContactFlag, Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod,
-  Payment, Payout, PayoutAccount, PayoutMethod, Permission, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch, StudentProfile, Subject, SubjectCategory,
+  Payment, Payout, PayoutAccount, PayoutMethod, Permission, SafetyAppeal, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch, StudentProfile, Subject, SubjectCategory,
   Subscription, TeachingMode, TrialConfig, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WalletTransaction,
   WeeklyWindow,
 } from "@/lib/types";
@@ -15,6 +15,7 @@ import { applyBps, formatDate, formatDateTime, percentOf, sessionPrice } from "@
 import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
 import { isFlagOn } from "@/lib/flags";
 import { inSection, notePath } from "@/lib/nav-sections";
+import { readContactSafety, rulesOf, type ContactSafety } from "@/lib/safety-settings";
 import { resolveLocation } from "@/lib/data/geo";
 import { canTransition, cancellationRefund, endMs, startMs, STATUS_META } from "@/lib/booking";
 import { checkPasscode, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL } from "@/lib/video-link";
@@ -25,7 +26,7 @@ import { parseIntroVideo } from "@/lib/video";
 import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/postal";
 import { isCountryCode } from "@/lib/location";
 import { DAY_MS, payoutBalances } from "@/lib/earnings";
-import { blockedMessage, contactIn, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, type ContactKind } from "./contact";
+import { setContactRules, blockedMessage, contactIn, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, type ContactKind } from "./contact";
 import {
   DEFAULT_NOTIFICATION_PREFS, emptyStudentProfile, fail, maskContactInfo, ok, resolveTutor,
   type BlogPostItem, type CreateBookingInput, type Data, type FaqItem, type Result, type TestimonialItem,
@@ -170,7 +171,7 @@ export interface DomainActions {
    * Server only (never callable from the browser): records a file or photo that the server's file
    * check stopped for containing contact details. Returns whether messaging is now paused.
    */
-  recordContactFlag(input: { channel: ContactFlag["channel"]; contextId?: string; kinds: ContactKind[]; fileName?: string }): Result<{ paused: boolean }>;
+  recordContactFlag(input: { channel: ContactFlag["channel"]; contextId?: string; kinds: ContactKind[]; fileName?: string; detector?: "ocr" | "qr" | "rules"; fileHash?: string }): Result<{ paused: boolean }>;
   /**
    * Server only: a held card / UPI payment couldn't be taken (the hold ran out before the tutor accepted, or the
    * bank declined it). The lesson waits for the family to pay again; both sides are told.
@@ -259,6 +260,12 @@ export interface DomainActions {
   loadStarterCatalog(): Result<{ areas: number; subjects: number }>;
   /** Makes an account staff ("admin" / "support") with these permissions, or removes staff access ("none"). */
   setStaffAccess(userId: string, role: "admin" | "support" | "none", permissions: Permission[]): Result;
+  /** Admin → Chat safety → Settings (settings.manage): switches, limits and phrases for the protection. */
+  saveContactSafety(input: Partial<ContactSafety>): Result<ContactSafety>;
+  /** "This wasn't contact details": asks staff to review the person's latest blocked message or file. */
+  appealContactFlag(note: string): Result<SafetyAppeal>;
+  /** Staff (reports.moderate) accept or reject an appeal; accepting means it no longer counts (a file can be sent again). */
+  decideAppeal(id: string, accept: boolean, note: string): Result;
   /** Staff correct an account's name, phone or location. */
   updateUserDetails(userId: string, patch: Partial<Pick<User, "firstName" | "lastName" | "phone" | "country" | "city" | "state" | "zip">>): Result;
   /** An administrator deletes an account (same rules as deleting your own). */
@@ -397,10 +404,10 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   };
   /** Five stopped attempts within an hour pause messaging for an hour (it stops people probing the filter). */
   const AUTO_PAUSE_ATTEMPTS = 5;
-  const CONTACT_KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or app contact", link: "an outside link" };
+  const CONTACT_KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or app contact", link: "an outside link", request: "a request to talk or pay outside TutorLink" };
   const FLAG_PLACE: Record<ContactFlag["channel"], string> = { chat: "chat", homework: "homework", lesson: "lesson notes", profile: "their profile" };
   const flagContact = (u: User, f: Omit<ContactFlag, "id" | "userId" | "status" | "createdAt">): boolean => {
-    const flag: ContactFlag = { ...f, id: uid("cfl"), userId: u.id, status: "open", createdAt: nowIso() };
+    const flag: ContactFlag = { detector: f.source === "text" ? "rules" : undefined, ...f, id: uid("cfl"), userId: u.id, status: "open", createdAt: nowIso() };
     set((s) => ({ contactFlags: [flag, ...s.contactFlags] }));
     const hourAgo = Date.now() - 3_600_000;
     const recent = get().contactFlags.filter((x) => x.userId === u.id && new Date(x.createdAt).getTime() > hourAgo).length;
@@ -1323,7 +1330,8 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         }
       } else if (r.data.tutorId) contextId = r.data.tutorId;
       const fileName = input.fileName?.slice(0, 200);
-      const paused = flagContact(r.data, { channel: input.channel, source: "file", contextId, recipientId, kinds: input.kinds, excerpt: fileName ? `File: ${fileName}` : "Profile photo", fileName });
+      const fileHash = input.fileHash && /^[0-9a-f]{64}$/.test(input.fileHash) ? input.fileHash : undefined;
+      const paused = flagContact(r.data, { channel: input.channel, source: "file", contextId, recipientId, kinds: input.kinds, excerpt: fileName ? `File: ${fileName}` : "Profile photo", fileName, detector: input.detector, fileHash });
       return ok({ paused });
     },
     requestChatUnlock(note) {
@@ -2248,6 +2256,63 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     },
 
     /* ─── Accounts & moderation (staff) ────────────────────── */
+    appealContactFlag(note) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      const weekAgo = Date.now() - 7 * 86_400_000;
+      const flag = get().contactFlags
+        .filter((f) => f.userId === r.data.id && f.status === "open" && f.channel !== "lesson" && new Date(f.createdAt).getTime() > weekAgo)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      if (!flag) return fail("There's nothing recent to review.");
+      if (get().safetyAppeals.some((a) => a.flagId === flag.id && a.status === "open")) return fail("You've already asked for a review of this. Our team will look at it.");
+      const appeal: SafetyAppeal = { id: uid("apl"), userId: r.data.id, flagId: flag.id, note: maskContactInfo(note.trim()).text.slice(0, 1000), status: "open", createdAt: nowIso() };
+      set((s) => ({ safetyAppeals: [appeal, ...s.safetyAppeals] }));
+      notifyStaff("reports.moderate", {
+        title: `Review asked: ${flag.source === "file" ? "a blocked file" : "a blocked message"}`,
+        body: `${r.data.firstName} ${r.data.lastName.charAt(0)}. says it wasn't contact details${appeal.note ? `: "${appeal.note.slice(0, 120)}"` : "."}`,
+        href: `/admin/chat-safety?user=${r.data.id}`,
+      });
+      return ok(appeal);
+    },
+    decideAppeal(id, accept, note) {
+      const r = requireStaff(["admin", "support"], "reports.moderate", "You don't have permission to review appeals.");
+      if (!r.ok) return r;
+      const appeal = get().safetyAppeals.find((a) => a.id === id);
+      if (!appeal) return fail("Appeal not found.");
+      if (appeal.status !== "open") return fail("This appeal was already decided.");
+      if (appeal.userId === r.data.id) return fail("You can't decide your own appeal.");
+      const decisionNote = maskContactInfo(note.trim()).text.slice(0, 500) || undefined;
+      const at = nowIso();
+      set((s) => ({
+        safetyAppeals: s.safetyAppeals.map((a) => (a.id === id ? { ...a, status: accept ? "accepted" : "rejected", decidedBy: r.data.id, decidedAt: at, decisionNote } : a)),
+        // Accepted: not contact details after all, so it no longer counts (and the same file can be sent).
+        contactFlags: accept && appeal.flagId ? s.contactFlags.map((f) => (f.id === appeal.flagId ? { ...f, status: "dismissed", reviewedBy: r.data.id, reviewedAt: at } : f)) : s.contactFlags,
+      }));
+      const flag = get().contactFlags.find((f) => f.id === appeal.flagId);
+      notify(appeal.userId, {
+        type: "security",
+        title: accept ? "Your review request was accepted" : "Your review request was looked at",
+        body: accept
+          ? `Our team agreed it wasn't contact details${flag?.source === "file" ? ": you can attach that file again" : ""}.${decisionNote ? ` ${decisionNote}` : ""}`
+          : `Our team checked it and it stays blocked.${decisionNote ? ` ${decisionNote}` : ""}`,
+        href: "/dashboard/messages",
+      });
+      audit(accept ? "safety.appeal_accept" : "safety.appeal_reject", "user", appeal.userId, { appeal: id });
+      return ok(undefined);
+    },
+    saveContactSafety(input) {
+      const r = requireStaff(["admin"], "settings.manage", "You don't have permission to change the protection settings.");
+      if (!r.ok) return r;
+      const before = get().contactSafety;
+      const next = readContactSafety({ ...before, ...input });
+      if (next.muteAt > 0 && next.muteAt < next.strongWarningAt) return fail("Pausing someone's audio should come at or after the stronger warning.");
+      if (next.removeAt > 0 && next.muteAt > 0 && next.removeAt <= next.muteAt) return fail("Removing someone from the class should come after their audio is paused.");
+      set({ contactSafety: next });
+      setContactRules(rulesOf(next));
+      const changed = (Object.keys(next) as (keyof ContactSafety)[]).filter((k) => JSON.stringify(next[k]) !== JSON.stringify(before[k]));
+      audit("settings.contact_safety", "settings", "contact_safety", { changed: changed.join(", ") });
+      return ok(next);
+    },
     setStaffAccess(userId, role, permissions) {
       const r = requireStaff(["admin"], "users.write", "Only an administrator with users.write can change staff access.");
       if (!r.ok) return r;

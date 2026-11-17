@@ -8,6 +8,7 @@ import { AnimatePresence, EASE, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { uploadFile } from "@/lib/upload";
 import { formatSize } from "./shared";
+import { ContactHint } from "@/components/domain/ContactHint";
 
 const MAX_HEIGHT = 168;
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.docx,.txt";
@@ -19,6 +20,8 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
   const [text, setText] = React.useState("");
   const [file, setFile] = React.useState<Picked | null>(null);
   const [error, setError] = React.useState<{ message: string; blocked: boolean } | null>(null);
+  const appeal = useApp((s) => s.appealContactFlag);
+  const [review, setReview] = React.useState<{ open: boolean; note: string; sent?: string; error?: string }>({ open: false, note: "" });
   const [step, setStep] = React.useState<"idle" | "uploading" | "checking" | "sending">("idle");
   const taRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -83,8 +86,31 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-danger">Not sent</p>
                 <p className="mt-0.5 text-ink-2">{error.message}</p>
+                {review.sent ? (
+                  <p className="mt-1 font-medium text-ink">{review.sent}</p>
+                ) : !review.open ? (
+                  <button type="button" onClick={() => setReview({ open: true, note: "" })} className="mt-1 font-semibold text-ink underline underline-offset-2">
+                    Not contact details? Ask for a review
+                  </button>
+                ) : (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <label htmlFor={`${hintId}-review`} className="sr-only">Why isn&apos;t it contact details?</label>
+                    <input id={`${hintId}-review`} value={review.note} onChange={(e) => setReview((v) => ({ ...v, note: e.target.value }))} maxLength={1000} placeholder="Why isn't it? (optional)" className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-ink" />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await appeal(review.note);
+                        setReview((v) => (res.ok ? { ...v, open: false, sent: "Review asked: our team will look at it." } : { ...v, error: res.error }));
+                      }}
+                      className="rounded-md bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-on-ink"
+                    >
+                      Send
+                    </button>
+                    {review.error && <span className="text-danger">{review.error}</span>}
+                  </div>
+                )}
               </div>
-              <button type="button" onClick={() => setError(null)} className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-danger-200/60" aria-label="Dismiss warning">
+              <button type="button" onClick={() => { setError(null); setReview({ open: false, note: "" }); }} className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-danger-200/60" aria-label="Dismiss warning">
                 <X className="size-3.5" />
               </button>
             </div>
@@ -103,6 +129,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
           </motion.div>
         )}
       </AnimatePresence>
+      {!error?.blocked && <ContactHint text={text} />}
 
       <form
         onSubmit={(e) => {

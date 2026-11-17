@@ -277,10 +277,13 @@ How it behaves:
 - **Contact details in class**: phone numbers, emails and social media are also checked in what people
   say (on computers, while their microphone is on, in Chrome or Edge, also when said in pieces), on the
   whiteboard, on shared screens and on camera (paper held up). The tutor sets the class language (English,
-  Hindi, Gujarati …) so speech is understood. Each time, both people see a warning and it's listed in
-  Admin → Chat safety; the 3rd time the person is removed from the class, can't rejoin it, and their
-  messaging is paused for 24 hours. Removed from a 2nd lesson, their account is paused until you review
-  it in Admin → Users. **Report** in class sends a report to Admin → Reports.
+  Hindi, Gujarati …) so speech is understood. Asking to talk, meet or pay outside TutorLink ("send me your
+  number", "બહાર વાત કરીએ") counts too, in messages and in class. Each time, both people see a warning and it's
+  listed in Admin → Chat safety; the 2nd time it's a stronger warning and you're told; the 3rd time the
+  person's audio stops reaching the others for 10 minutes (they can ask for a review; you can restore it
+  early). Removing people from the class or pausing accounts is off unless you switch it on.
+  **Admin → Chat safety → Settings** has every switch and limit, your own phrases to block or allow, and
+  how long records are kept. **Report** in class sends a report to Admin → Reports.
 - Zoom and Google Meet links are **off** (Admin → Feature flags → "Zoom / Google Meet links"), so every
   lesson uses the TutorLink classroom where these checks run. If you turn them on, lessons with a Zoom
   or Meet link use that meeting instead, and nothing said or shown there is checked.

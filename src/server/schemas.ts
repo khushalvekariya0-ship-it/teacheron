@@ -251,6 +251,17 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   moveCatalogItem: t(z.enum(["area", "subject"]), text(80), z.union([z.literal(-1), z.literal(1)])),
   loadStarterCatalog: none,
   logConversationAccess: t(id, text(500)),
+  appealContactFlag: t(text(1000)),
+  decideAppeal: t(id, z.boolean(), text(500)),
+  saveContactSafety: t(
+    z
+      .object({
+        chat: z.boolean(), requests: z.boolean(), sensitivity: z.enum(["normal", "strict"]), voice: z.boolean(), voiceOnPhones: z.boolean(), images: z.boolean(),
+        camera: z.boolean(), documents: z.boolean(), qr: z.boolean(), aiReading: z.boolean(), strongWarningAt: int(1, 20), muteAt: int(0, 20), muteMinutes: int(1, 120),
+        removeAt: int(0, 20), pauseAccountAfterRemovals: int(0, 10), block: z.array(text(120)).max(200), allow: z.array(text(120)).max(200), retentionDays: int(30, 3650),
+      })
+      .partial(),
+  ),
   setStaffAccess: t(id, z.enum(["admin", "support", "none"]), z.array(z.enum(ALL_PERMISSIONS as [string, ...string[]])).max(20)),
   updateUserDetails: t(id, z.object({ firstName: text(60).optional(), lastName: text(60).optional(), phone: text(30).optional(), country: COUNTRY.optional(), city: text(60).optional(), state: text(60).optional(), zip: text(10).optional() })),
   deleteAccount: t(id, text(500)),

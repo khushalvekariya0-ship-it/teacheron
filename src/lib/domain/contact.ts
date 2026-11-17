@@ -15,8 +15,37 @@
  * The server runs this on every message and file before anything is saved; the browser never decides.
  */
 
-export type ContactKind = "phone" | "email" | "social" | "link";
+/** `request`: asking to talk, meet or pay outside TutorLink ("send me your number", "બહાર વાત કરીએ"). */
+export type ContactKind = "phone" | "email" | "social" | "link" | "request";
 export type ScanMode = "chat" | "file";
+
+/**
+ * Rules staff can change (Admin → Chat safety → Settings). They're the same for everyone, so they're kept
+ * here once (the server sets them from the database, the browser from the page data).
+ */
+export interface ContactRules {
+  /** Typed text is checked (messages, homework, notes, names). Speech has its own switch (in the class). */
+  chat: boolean;
+  /** "strict": any mention of WhatsApp, Instagram … in a message counts. "normal": only next to a handle or number, or in a request. */
+  sensitivity: "normal" | "strict";
+  /** Catch requests to talk, meet or pay outside TutorLink in messages and speech. */
+  requests: boolean;
+  /** Extra phrases that count as such a request (any language), and phrases that never count. */
+  block: string[];
+  allow: string[];
+}
+const cleanPhrase = (p: string) => p.toLowerCase().replace(/\s+/g, " ").trim();
+let RULES: ContactRules = { chat: true, sensitivity: "normal", requests: true, block: [], allow: [] };
+export function setContactRules(rules: Partial<ContactRules>) {
+  RULES = {
+    chat: rules.chat ?? RULES.chat,
+    sensitivity: rules.sensitivity === "strict" ? "strict" : rules.sensitivity === "normal" ? "normal" : RULES.sensitivity,
+    requests: rules.requests ?? RULES.requests,
+    block: (rules.block ?? RULES.block).map(cleanPhrase).filter((p) => p.length >= 3),
+    allow: (rules.allow ?? RULES.allow).map(cleanPhrase).filter((p) => p.length >= 3),
+  };
+}
+export const contactRules = (): ContactRules => RULES;
 
 /** Where contact details were found, as positions in the original text. */
 export interface ContactMatch {
@@ -727,16 +756,97 @@ function findSocial(views: View[], mode: ScanMode): [number, number][] {
     // "snap jordan_99": an app name right before a handle with a digit or underscore
     spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b\\s+@?(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_])[a-z0-9_.]{4,}`, "g")));
     spans.push(...rangesOf(w, new RegExp(`\\b(?:add|follow|text|msg|message|dm|ping|find|reach|contact|hmu|hit)\\s+(?:me|us)\\s+(?:up\\s+)?(?:on|at|via|in)\\s+${SHORT_APPS}\\b`, "g")));
-    if (mode === "chat") {
-      spans.push(...rangesOf(w, new RegExp(`\\b(?:my|on|via)\\s+${MY_APPS}\\b(?!\\s+(?:of|to|the)\\b)`, "g")));
+    if (mode === "chat") spans.push(...rangesOf(w, new RegExp(`\\b(?:my|on|via)\\s+${MY_APPS}\\b(?!\\s+(?:of|to|the)\\b)`, "g")));
+    if (mode === "chat" && RULES.sensitivity === "strict") {
       for (const re of APP_NAMES) spans.push(...rangesOf(w, re));
     } else {
-      // In a file, an app name only counts next to a handle or a number.
+      // An app name only counts next to a handle or a number ("WhatsApp was bought by Facebook" is a
+      // lesson); asking to talk there is caught as a request (findRequests).
       for (const re of APP_NAMES) {
         spans.push(...rangesOf(w, re, (m) => /^\s*(?:(?:id|is|[:@=-])\s*)*[@+(]?[a-z0-9_.]*\d|^\s*[:@-]\s*@?[a-z0-9_.]{3,}/.test(w.s.slice(m.index + m[0].length, m.index + m[0].length + 40))));
       }
     }
   }
+  return spans;
+}
+
+/* ─── 5b. Asking to talk, meet or pay outside TutorLink ────────────────────────── */
+
+// English (and Gujarati / Hindi typed in English letters), read on the normalised text.
+const REACH = "(?:whats ?app|wa|insta(?:gram)?|ig|snap(?:chat)?|telegram|tg|signal|facebook|fb|messenger|discord|skype|imo|zoom|google meet|g ?meet)";
+const ASK_FOR = "(?:number|no|num|phone(?: number)?|mobile(?: number)?|cell|contact(?: number| details)?|contacts|email(?: id| address)?|e-mail|mail id|gmail|id|handle|whats ?app(?: number)?|wa|insta(?:gram)?|ig|snap(?:chat)?|telegram|tg|upi(?: id)?)";
+const REQUEST_LATIN: RegExp[] = [
+  // "send me your number", "give me ur whatsapp", "can I get your email"
+  new RegExp(`\\b(?:send|give|share|tell|text|dm|drop|pass|forward|get|need|want)\\s+(?:me\\s+|us\\s+)?(?:your|ur|yr|ya|ure)\\s+(?:personal\\s+|private\\s+|real\\s+|own\\s+)?${ASK_FOR}\\b`, "g"),
+  new RegExp(`\\bwhat(?:s|\\s+is)\\s+(?:your|ur)\\s+(?:personal\\s+|private\\s+)?${ASK_FOR}\\b`, "g"),
+  new RegExp(`\\b(?:do|are)\\s+(?:you|u)\\s+(?:have|use|on)\\s+${REACH}\\b`, "g"),
+  // "call me after class", "email me directly", "contact me personally"
+  /\b(?:call|ring|phone|text|whats ?app|wa|dm|message|msg|ping|email|e-mail|mail|contact|reach|meet)\s+(?:me|us)\s+(?:directly|personally|privately|outside|offline|on\s+(?:my\s+)?(?:personal\s+)?(?:number|phone|mobile|cell|email|gmail))\b/g,
+  // "call me after class" (a message after class can be here on TutorLink, so not "message me after class")
+  /\b(?:call|ring|phone|whats ?app|wa|email|e-mail|meet|contact)\s+(?:me|us)\s+(?:later\s+)?after\s+(?:the\s+)?(?:class|lesson|session|tuition)\b/g,
+  // "let's talk on WhatsApp", "we can chat over Telegram", "continue on insta"
+  new RegExp(`\\b(?:talk|chat|connect|speak|call|text|message|msg|continue|meet|contact)\\b[^.!?\\n]{0,15}\\b(?:on|over|via)\\s+(?:the\\s+)?${REACH}\\b`, "g"),
+  new RegExp(`\\b(?:send|share|forward)\\s+(?:you|it|them)\\b[^.!?\\n]{0,25}\\b(?:on|over|via)\\s+(?:whats ?app|wa|insta(?:gram)?|telegram|snap(?:chat)?|email|gmail)\\b`, "g"),
+  // "follow me on Instagram", "find me on snap", "join my personal telegram"
+  new RegExp(`\\b(?:follow|add|find|dm|join|subscribe(?:\\s+to)?)\\s+(?:me|us|my)\\b[^.!?\\n]{0,20}\\b${REACH}\\b`, "g"),
+  // "outside TutorLink", "off the app"
+  /\b(?:outside|off)\s+(?:of\s+)?(?:tutor ?link|this\s+(?:app|site|platform|website)|the\s+(?:app|site|platform|website))\b/g,
+  // "pay me directly", "pay on gpay", "my upi id"
+  /\bpay\s+(?:me\s+|us\s+)?(?:directly|outside|in\s+cash|by\s+cash|cash|on\s+(?:g ?pay|google\s+pay|paytm|phone ?pe|upi|bhim)|via\s+(?:g ?pay|google\s+pay|paytm|phone ?pe|upi|bhim))\b/g,
+  /\b(?:my|mera|maro)\s+(?:upi|gpay|g pay|paytm|phone ?pe)(?:\s+(?:id|number|no))?\b/g,
+  // Gujarati / Hindi in English letters: "maro number lai lo", "tamaro number aapo", "whatsapp karjo", "bahar vaat kariye"
+  /\b(?:maro|maru|mero|mera|mere|meri)\s+(?:number|no|num|phone number|mobile number|whats ?app|wa|insta|id|email)\s+(?:lai lo|lai le|lelo|le lo|lo|lakhi lo|likh lo|save (?:karo|kari lo|kar lo)|note (?:karo|kari lo|kar lo))\b/g,
+  /\b(?:tamaro|taro|tamaru|taru|apna|aapka|apka|tumhara|tera)\s+(?:number|no|num|whats ?app|wa|insta|id|email)\s+(?:aapo|apo|aapjo|apjo|moklo|mokaljo|do|dena|dijiye|bhejo|bhej do|de do|batao|kaho)\b/g,
+  /\b(?:whats ?app|wa|call|phone|miss ?call)\s+(?:karjo|karje|kar dena|kar do|karna|kariye|kijiye|krjo|krna)\b/g,
+  /\b(?:class|lesson|tuition|lecture)\s+(?:pachi|pachhi|baad|ke baad|bad)\b[^.!?\n]{0,25}\b(?:call|phone|whats ?app|wa|maliye|malie|milte|milo|malo|baat|vaat)\b/g,
+  /\bbahar\s+(?:vaat|vat|baat|maliye|malie|milte|milo|malo|class|tuition)\b/g,
+];
+// Gujarati and Hindi script, read on the text as typed (normalising drops their vowel signs).
+const APP_GU = "(?:વોટ્સએપ|વોટસએપ|વૉટ્સઍપ|વૉટ્સએપ|વોટ્સ એપ|व्हाट्सएप|व्हाट्सऐप|वॉट्सऐप|whats ?app)";
+const REQUEST_SCRIPT: RegExp[] = [
+  /મારો\s*(?:નંબર|નમ્બર|ફોન\s*નંબર|મોબાઇલ\s*નંબર|વોટ્સએપ|whats ?app)\s*(?:લઈ\s*લો|લઇ\s*લો|લખી\s*લો|નોંધી\s*લો|સેવ\s*કરી\s*લો|લો|લેજો|આપું)/gu,
+  /(?:તમારો|તારો|તમારું|તારું|તમારા|તારા)\s*(?:નંબર|નમ્બર|ફોન\s*નંબર|મોબાઇલ\s*નંબર|વોટ્સએપ|whats ?app|ઈમેલ|ઇમેલ|ઇન્સ્ટા|insta)\s*(?:આપો|આપજો|આપ|મોકલો|મોકલજો|મોકલ|આપશો|કહો|શું\s*છે)/gu,
+  new RegExp(`${APP_GU}\\s*(?:પર|પે|પણ)?\\s*(?:મેસેજ|વાત|કૉલ|કોલ|ફોન)?\\s*(?:કરજો|કરો|કર|કરીએ|કરશો|કરીશ)`, "gu"),
+  /(?:ફોન|કૉલ|કોલ|મિસ\s*કૉલ|મિસ\s*કોલ)\s*(?:કરજો|કરો|કર|કરીશ|કરીશું|કરશો|કરજે)/gu,
+  /(?:ક્લાસ|ટ્યુશન|લેક્ચર)\S*\s*(?:પછી|બાદ)[^.!?\n]{0,30}(?:ફોન|કૉલ|કોલ|વોટ્સએપ|whats ?app|મળીએ|મળજો|વાત)/gu,
+  /બહાર\s*(?:વાત|મળીએ|મળો|મળજો|મળીશું|ભણાવીશ|ક્લાસ|ટ્યુશન)/gu,
+  /(?:ઇન્સ્ટા|ઇન્સ્ટાગ્રામ|insta(?:gram)?)\s*(?:પર)?\s*(?:ફોલો|ફૉલો|follow)/gu,
+  /(?:ઈમેલ|ઇમેલ|ઈ-મેલ|ઇ-મેલ|e-?mail|gmail)\s*(?:કરજો|કરો|આપો|મોકલો|આપજો)/gu,
+  /(?:જીપે|ગૂગલ\s*પે|પેટીએમ|ફોનપે|g ?pay|paytm|phone ?pe|upi)\s*(?:પર|થી|માં)?\s*(?:પૈસા|ફી|પેમેન્ટ)?\s*(?:આપો|આપજો|મોકલો|મોકલજો|કરો|કરજો)/gu,
+  /(?:મેરા|मेरा|मेरे)\s*(?:नंबर|नम्बर|व्हाट्सएप|whats ?app)\s*(?:ले\s*लो|लेलो|लो|लिख\s*लो|सेव\s*कर\s*लो)/gu,
+  /(?:अपना|आपका|तुम्हारा|तेरा)\s*(?:नंबर|नम्बर|व्हाट्सएप|whats ?app|ईमेल|इंस्टा)\s*(?:दो|दीजिए|भेजो|भेजिए|बताओ|बताइए)/gu,
+  new RegExp(`${APP_GU}\\s*(?:पर|पे)?\\s*(?:मैसेज|बात|कॉल)?\\s*(?:करना|करो|करें|कीजिए|कर\\s*देना)`, "gu"),
+  /(?:फोन|फ़ोन|कॉल)\s*(?:करना|करो|करें|कर\s*देना)/gu,
+  /बाहर\s*(?:बात|मिलते|मिलो|मिलें)/gu,
+];
+
+/** The text as typed (lower case), for patterns in scripts the normaliser would strip. */
+function typedView(text: string): View {
+  const lower = text.toLowerCase();
+  const s = lower.length === text.length ? lower : text;
+  const from: number[] = [];
+  const to: number[] = [];
+  for (let i = 0; i < s.length; i++) {
+    from.push(i);
+    to.push(i + 1);
+  }
+  return { s, from, to };
+}
+
+/** Spans of `phrases` in the text as typed (staff-added phrases, any language). */
+function phraseSpans(typed: string, phrases: string[]): [number, number][] {
+  const out: [number, number][] = [];
+  const flat = typed.replace(/\s/g, " ");
+  for (const p of phrases) for (let at = flat.indexOf(p); at >= 0; at = flat.indexOf(p, at + 1)) out.push([at, at + p.length]);
+  return out;
+}
+
+function findRequests(v: View, text: string): [number, number][] {
+  const typed = typedView(text);
+  const spans: [number, number][] = [];
+  for (const re of REQUEST_LATIN) spans.push(...rangesOf(v, re));
+  for (const re of REQUEST_SCRIPT) spans.push(...rangesOf(typed, re));
+  spans.push(...phraseSpans(typed.s, RULES.block));
   return spans;
 }
 
@@ -776,6 +886,16 @@ function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
   add("phone", phonesIn(v));
   add("social", findSocial([v, rebuilt[2], unmaskLinks(unmasked)], mode));
   for (const w of [v, unmaskLinks(unmasked)]) add("link", rangesOf(w, OUTSIDE_LINK));
+  if (mode === "chat" && RULES.requests && depth === 0) add("request", findRequests(v, text));
+  // Phrases staff marked as fine ("WhatsApp Business case study") don't count as a request or an app
+  // mention; real numbers, emails and handles inside them still do.
+  if (RULES.allow.length) {
+    const allowed = phraseSpans(typedView(text).s, RULES.allow);
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const m = matches[i];
+      if ((m.kind === "request" || m.kind === "social") && allowed.some(([a, b]) => m.start >= a && m.end <= b)) matches.splice(i, 1);
+    }
+  }
   if (mode === "chat") {
     // Number words typed one letter at a time: "n i n e o n e s e v e n …"
     add("phone", phonesIn(replaceIn(v, /(?<!\S)\p{L}(?:[ \t]+\p{L}(?!\S)){3,}/gu, (m) => m[0].replace(/[ \t]+/g, ""))));
@@ -800,10 +920,11 @@ function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
 
 /** Looks for phone numbers, email addresses and other-app contact details in `text`. */
 export function scanContact(text: string, mode: ScanMode = "chat"): ContactScan {
+  if (mode === "chat" && !RULES.chat) return { found: false, kinds: [], matches: [] };
   return scanCore(text, mode, 0);
 }
 
-const MASK: Record<ContactKind, string> = { phone: "[phone number hidden]", email: "[email hidden]", social: "[contact details hidden]", link: "[link hidden]" };
+const MASK: Record<ContactKind, string> = { phone: "[phone number hidden]", email: "[email hidden]", social: "[contact details hidden]", link: "[link hidden]", request: "[request to talk outside TutorLink hidden]" };
 
 /** The text with every match replaced by a label (overlapping matches are merged). */
 export function maskMatches(text: string, matches: ContactMatch[], label?: string): string {
@@ -822,7 +943,7 @@ export function maskMatches(text: string, matches: ContactMatch[], label?: strin
   return out + text.slice(at);
 }
 
-const KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media, messaging or payment app contact", link: "a link to an outside document, form or file-sharing page" };
+const KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media, messaging or payment app contact", link: "a link to an outside document, form or file-sharing page", request: "a request to talk, meet or pay outside TutorLink" };
 
 /** "a phone number and an email address" */
 export function describeKinds(kinds: ContactKind[]): string {
@@ -843,6 +964,9 @@ export function blockedMessage(kinds: ContactKind[], where: "message" | "file" |
   }
   const what = where === "file" ? "This file" : where === "note" ? "This note" : "Your message";
   const fix = where === "file" ? "Remove or cover those details and attach it again." : "Edit it and send again.";
+  if (kinds.length > 0 && kinds.every((k) => k === "request")) {
+    return `${what} wasn't sent: asking to talk, meet or pay outside TutorLink isn't allowed (WhatsApp, calls, personal email, social media, direct payments). Keep lessons, messages and payments on TutorLink, where both of you are protected. ${fix}`;
+  }
   const onlyLink = kinds.length > 0 && kinds.every((k) => k === "link");
   if (onlyLink) {
     return `${what} wasn't sent because it includes ${describeKinds(kinds)}. Those pages can hide contact details, so they can't be shared on TutorLink. ${where === "file" ? fix : "To share a document, attach the file instead: attachments are checked before the other person can open them."}`;
@@ -997,7 +1121,7 @@ function spokenDigits(said: string): number {
  * because lessons are full of numbers (answers, years, prices).
  */
 export function speechContact(said: string): { kinds: ContactKind[]; masked: string } | null {
-  const found = scanContact(said, "chat");
+  const found = scanCore(said, "chat", 0);
   if (!found.found) return null;
   const kinds = found.kinds.filter((k) => k !== "phone" || spokenDigits(said) >= 10 || SPEECH_CUE.test(said));
   if (!kinds.length) return null;
@@ -1014,7 +1138,7 @@ export function speechSplitContact(recent: string[], said: string): { kinds: Con
   const all = [...recent.slice(-6), said];
   const joined = all.join(" ");
   if (!SPEECH_CUE.test(joined)) return null;
-  const found = scanContact(joined, "chat");
+  const found = scanCore(joined, "chat", 0);
   if (!found.found) return null;
   // It must include what was just said (anything earlier was already checked on its own).
   const lastStart = joined.length - said.length;

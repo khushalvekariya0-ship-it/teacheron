@@ -665,6 +665,35 @@ export interface Report {
  * A message, note or file that was stopped because it contained contact details (Admin → Chat safety).
  * Only a masked excerpt is kept: the phone number, email or handle itself is never stored.
  */
+/** A temporary restriction in a live class: the person's audio doesn't reach the others until endsAt. */
+export interface ClassRestriction {
+  id: ID;
+  bookingId: ID;
+  userId: ID;
+  kind: "audio";
+  reason: string;
+  startsAt: ISODate;
+  endsAt: ISODate;
+  /** Lifted early by staff, or ended ("system"). */
+  liftedAt?: ISODate;
+  liftedBy?: string;
+  createdAt: ISODate;
+}
+
+/** "This wasn't contact details": asking staff to review a catch or a class restriction. */
+export interface SafetyAppeal {
+  id: ID;
+  userId: ID;
+  flagId?: ID;
+  restrictionId?: ID;
+  note: string;
+  status: "open" | "accepted" | "rejected";
+  decidedBy?: ID;
+  decidedAt?: ISODate;
+  decisionNote?: string;
+  createdAt: ISODate;
+}
+
 export interface ContactFlag {
   id: ID;
   /** Who tried to send it. */
@@ -676,9 +705,14 @@ export interface ContactFlag {
   contextId?: ID;
   /** The person who would have received it (user id, or tutor id for a tutor). */
   recipientId?: ID;
-  kinds: ("phone" | "email" | "social" | "link")[];
+  kinds: ("phone" | "email" | "social" | "link" | "request")[];
   excerpt: string;
   fileName?: string;
+  /** How it was found: the built-in rules (text), OCR, a QR code, Gemini, or speech recognition. */
+  detector?: "rules" | "ocr" | "qr" | "ai" | "speech";
+  /** A blocked file's SHA-256: once staff accept an appeal (status dismissed), the same file can be sent. */
+  fileHash?: string;
+  /** dismissed = not contact details after all (a false positive); it no longer counts. */
   status: "open" | "actioned" | "dismissed";
   reviewedBy?: ID;
   reviewedAt?: ISODate;

@@ -91,46 +91,77 @@ addresses must be this project's signed classroom files; text with contact detai
 messages themselves go through the normal moderated inbox. Blocked images are recorded in
 `contact_flags` (channel `lesson`). The scheduler closes rooms whose window is over.
 
-### Contact details in class (speech, whiteboard, shared screen, camera)
+### Personal information protection (messages, files and the live class)
 
-Phone numbers, emails and social media are checked in class as well as in chat (`src/components/classroom/live/LessonSafety.tsx`,
-`caughtInClass` in `src/server/classroom.ts`; migrations `20261117000000_live_class_safety.sql` and
-`20261117000100_class_camera_check.sql` add the `speech`, `board`, `screen` and `camera` sources to `contact_flags`):
+Phone numbers, emails, social media / messaging / payment handles, and **requests to talk, meet or pay
+outside TutorLink** are kept out of messages, files and lessons. One set of rules (`src/lib/domain/contact.ts`)
+runs on the server for every message and file, in the browser for the typing warning and speech, and is
+configured in **Admin → Chat safety → Settings** (`platform_settings` key `contact_safety`,
+`src/lib/safety-settings.ts`; the server applies them in `Loader.globals()` and, for the class and file
+checks, through `src/server/safety-settings.ts`, at most 30 s old; saving clears it on that server).
+Migrations: `20261117000000_live_class_safety.sql`, `20261117000100_class_camera_check.sql`,
+`20261117000200_personal_info_protection.sql` (kind `request`, `contact_flags.detector` and `file_hash`,
+tables `class_restrictions` and `safety_appeals`, RLS on with no policies).
 
-- **Speech** (computers only; on phones the recogniser beeps and can take the call's microphone): while
-  someone's microphone is on, their own browser's speech recognition (Chrome / Edge; audio goes to the
-  browser maker's speech service) listens; a finished sentence with a phone number (10+ digits, or "WhatsApp / call me / my number"), an
-  email or a social handle is sent as `POST safety` with the words masked. Other browsers don't check speech.
-  `speechContact` / `speechSplitContact` (`src/lib/domain/contact.ts`) also join the person's sentences from
-  the last minute when one says it's a way to reach them, so a number said in pieces is caught; digits
-  and number words count in any script (Gujarati, Hindi). The **class language** (English, Hindi, Gujarati …)
-  is set by the host only (data topic `class-lang`, accepted from the host's signed metadata, re-sent when
-  someone joins); everyone's speech is recognised (and captioned) in it.
-- **Whiteboard**: every 15 s each person's own new strokes are drawn black on white and read with OCR;
-  if contact details are found, those strokes are removed for everyone.
-- **Shared screen**: every 12 s, when the picture changed, a frame (≤ 1600 px wide) is read; if contact
-  details are found, the share stops.
-- **Camera**: every 20 s, when the picture changed by 4% or more (`useVideoCheck`), a frame (≤ 1280 px) is
-  read; if contact details are found (paper held up, a poster), the camera is turned off.
-- **Reading pictures**: the built-in OCR (`checkImageBytes`) always runs; with `GEMINI_API_KEY` set,
-  Gemini (`src/server/ai-read.ts`, `gemini-2.5-flash`, `GEMINI_API_URL` for tests) also copies out the
-  text (handwriting, any script) and TutorLink's own rules (`scanContact`, mode `file`) decide. Either one
-  finding contact details counts; Gemini failing just leaves the OCR. Pictures aren't stored.
-- Each catch is a `contact_flags` row (channel `lesson`, context the booking) shown in Admin → Chat
-  safety. The person's browser shows the warning from the answer and tells the room itself (a data
-  packet about itself; receivers accept one only from the person it names). The server also tells the
-  room through LiveKit after answering (`after()`; LiveKit Cloud can take several seconds for a room in
-  use, so `src/server/livekit.ts` gives room calls 20 s and a second try).
-- The 3rd time (`LIVE_STRIKE_LIMIT`) the person is removed (their page leaves, and the server removes
-  them), can't rejoin this lesson, their messaging is paused for 24 hours, they're notified and
-  moderators (`reports.moderate`) are alerted. Staff aren't counted; guests aren't checked.
-- Removed from a 2nd lesson within 90 days (`LIVE_REMOVALS_TO_SUSPEND`, `LIVE_REMOVAL_DAYS`): the account is
-  suspended (audit `user.suspend`, "Automatic"), the person is emailed first, and moderators are alerted
-  with a link to Admin → Users, where it can be reactivated. Sign-up's terms box now includes the rule.
-- A banner in class says what's checked; **Report** (flag button) sends the other side to Admin → Reports.
-- Not checked: speech on phones, small or unclear writing on camera, and anything said in code words.
-  Lessons aren't recorded. A server that listens to every lesson (phones, any language) needs a paid
-  speech service and an always-on worker; recording needs the owner's legal decision.
+**Rules** (`scanContact`, chat and file modes; tests in the harness `contact-cases.mjs`):
+- Numbers in any format (spaces, hyphens, country codes, words, other scripts' digits), disguised emails,
+  handles and app links; numbers or emails sent a piece at a time (`scanSplitMessages`).
+- Requests (`findRequests`, kind `request`, chat mode only): English, Gujarati and Hindi script, and
+  Gujarati / Hindi typed in English letters ("send me your number", "call me after class", "let's talk on
+  WhatsApp", "મારો નંબર લઈ લો", "બહાર વાત કરીએ", "whatsapp karjo"), paying outside ("pay me on GPay"),
+  plus the admin's own phrases. Phrases the admin marks as fine are never a request or an app mention.
+- App names alone ("WhatsApp was bought by Facebook") count only with sensitivity **strict**; normally they
+  need a handle or number next to them, or a request.
+- Messages show the warning while typing (`ContactHint`, a hint only); the server blocks on Send and
+  records the attempt (5 in an hour pause messaging for an hour, as before). The "Not sent" box has
+  **Ask for a review** (`appealContactFlag`).
+
+**Files** (`src/server/scan.ts`): images (OCR), **QR codes** (jsQR: phone, email, WhatsApp / Telegram /
+social links, contact cards, UPI payment codes; `detector = 'qr'`), PDF (text, links, form fields, scanned
+pages by OCR), Word (.docx, with pictures), text. A blocked file's SHA-256 is kept (never the file); when
+staff accept its appeal (`decideAppeal`: the catch becomes `dismissed`), the same file can be sent again.
+Switches: pictures, documents, QR.
+
+**Live class** (`src/components/classroom/live/LessonSafety.tsx`, `caughtInClass` in `src/server/classroom.ts`):
+- **Speech**: each person's own browser recognition (Chrome / Edge send the audio to Google / Microsoft to
+  turn it into text; nothing is recorded by TutorLink), while the microphone is on, on computers (phones
+  only when switched on: the recogniser beeps and can take the call's microphone). One sentence, or the
+  last minute's sentences when one of them says it's a way to reach someone (`speechContact`,
+  `speechSplitContact`); digits and number words in any script. The host sets the **class language**
+  (data topic `class-lang`, accepted only from the host's signed metadata). Only masked words are sent.
+- **Whiteboard** (own new strokes every 15 s; removed for everyone), **shared screen** (every 12 s when it
+  changed; the share stops), **camera** (every 20 s when the picture changed by 4%; the camera is turned
+  off). Pictures go through the same reader (OCR + QR, and Gemini when switched on and `GEMINI_API_KEY` is
+  set: it only copies out the text; TutorLink's rules decide; either reader counts).
+- A **"Protected"** status in the class top bar says what is checked for this person and why speech
+  isn't (`data-safety-status`: on, mic-off, phone, unsupported, blocked, off, guest).
+- **The ladder** (settings, per lesson; dismissed catches don't count): a warning; from `strongWarningAt`
+  (2) a stronger one and moderators are told; from `muteAt` (3) the person's **audio is paused** for the
+  others for `muteMinutes` (10): a `class_restrictions` row, LiveKit `updateParticipant` without the
+  microphone (`setAudioAllowed`; the capture itself isn't touched), and a rejoin gets a pass without it
+  (`audioPausedUntil` in the ticket). Speech isn't counted while paused. The person's page ends the pause
+  when the time is up (`POST /api/classroom/unpause`, checked against the time), the scheduler as a
+  fallback (`liftExpiredRestrictions`); staff **Restore audio now** (`POST /api/classroom/lift`,
+  reports.moderate, audited). **Ask for a review** in the class (`POST /api/classroom/appeal`).
+  Removal (`removeAt`) and pausing the account (`pauseAccountAfterRemovals`) are **off by default**.
+- The person's own page shows the warning from the server's answer and tells the room about itself (a
+  data packet receivers accept only from the person it names, using the identity from the join ticket);
+  the server also tells the room through LiveKit after answering (`after()`, 20 s and one retry).
+
+**Admin → Chat safety**: Overview (totals for students/parents and tutors, chat, voice, pictures, documents,
+class pictures, QR codes, requests, audio pauses; day by day; lessons with the most catches; repeated
+offenders; by period), People, All attempts, Class restrictions (restore audio now), Appeals (accept /
+reject), Reported messages, Settings (switches, ladder, phrases, retention; settings.manage). Only
+masked notes are shown or stored; never the number, the email, the audio or the file.
+
+**Retention**: the scheduler deletes reviewed catches, ended restrictions and decided appeals older than
+`retentionDays` (180) (`forgetOldSafetyRecords`).
+
+**Not covered**: speech in other browsers (Firefox, Safari) and on phones unless switched on; small or
+unclear writing; code words; anything when two people agree to swap details outside. Server-side
+listening (every lesson's audio through our own speech service) would cover phones and stop words before
+the other person hears them, but delays everyone's audio, needs an always-on server and a strong machine
+for free speech models, and sends all lesson audio through TutorLink; it isn't built.
 
 ## Zoom / Google Meet on online lessons
 

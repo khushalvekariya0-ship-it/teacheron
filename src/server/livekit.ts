@@ -1,5 +1,5 @@
 import "server-only";
-import { AccessToken, DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
+import { AccessToken, DataPacket_Kind, RoomServiceClient, TrackSource } from "livekit-server-sdk";
 import type { ParticipantMeta } from "@/lib/classroom";
 import { env, liveVideoReady } from "./env";
 
@@ -59,15 +59,28 @@ async function roomCall(what: string, room: string, call: (svc: RoomServiceClien
 }
 
 /** A join token for one room. Host-ness and role go into server-signed metadata the browsers can trust. */
-export async function mintToken(opts: { room: string; identity: string; meta: ParticipantMeta; ttlSeconds: number }): Promise<string> {
+export async function mintToken(opts: { room: string; identity: string; meta: ParticipantMeta; ttlSeconds: number; noMicrophone?: boolean }): Promise<string> {
   const at = new AccessToken(env.livekitKey, env.livekitSecret, {
     identity: opts.identity,
     name: opts.meta.name,
     ttl: Math.max(60, Math.min(opts.ttlSeconds, 6 * 3600)),
     metadata: JSON.stringify(opts.meta),
   });
-  at.addGrant({ roomJoin: true, room: opts.room, canPublish: true, canSubscribe: true, canPublishData: true, roomAdmin: opts.meta.isHost });
+  at.addGrant({ roomJoin: true, room: opts.room, canPublish: true, canSubscribe: true, canPublishData: true, roomAdmin: opts.meta.isHost, ...(opts.noMicrophone ? { canPublishSources: WITHOUT_MICROPHONE } : {}) });
   return at.toJwt();
+}
+
+/** Everything but the microphone (an audio pause in class). */
+const WITHOUT_MICROPHONE = [TrackSource.CAMERA, TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO];
+
+/**
+ * Pauses or restores one person's microphone for the others: LiveKit stops (or allows) publishing it, so
+ * a changed page can't get around it. Camera, screen share, chat and hearing the others stay. Never throws.
+ */
+export function setAudioAllowed(room: string, identity: string, allowed: boolean): Promise<boolean> {
+  return roomCall(allowed ? "restore audio in" : "pause audio in", room, (svc) =>
+    svc.updateParticipant(room, identity, undefined, { canSubscribe: true, canPublish: true, canPublishData: true, canPublishSources: allowed ? [] : WITHOUT_MICROPHONE }),
+  );
 }
 
 /** Disconnects everyone. Never throws: ending a class must not fail because the media server hiccuped. */

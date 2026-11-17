@@ -135,6 +135,7 @@ export function MeetingWhiteboard({
   participants,
   onCanDrawChange,
   onCaught,
+  checkDrawings = true,
 }: {
   isHost: boolean;
   bookingId: string;
@@ -144,6 +145,8 @@ export function MeetingWhiteboard({
   onCanDrawChange?: (canDraw: boolean) => void;
   /** The server found contact details in this person's drawing (the class warning is shown from it). */
   onCaught?: (res: SafetyResult) => void;
+  /** Read this person's drawings for contact details (Admin → Chat safety → Settings: pictures). */
+  checkDrawings?: boolean;
 }) {
   const room = useRoomContext();
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -492,7 +495,7 @@ export function MeetingWhiteboard({
   // removed for everyone (see LessonSafety). Typed text and pictures are already checked when they're added.
   const checkedRef = React.useRef(new Set<string>());
   React.useEffect(() => {
-    if (myId.startsWith("guest-")) return;
+    if (myId.startsWith("guest-") || !checkDrawings) return;
     let busy = false;
     const tick = async () => {
       if (busy || room.state !== ConnectionState.Connected) return;
@@ -526,7 +529,7 @@ export function MeetingWhiteboard({
     };
     const t = window.setInterval(() => void tick(), 15_000);
     return () => window.clearInterval(t);
-  }, [room, myId, bookingId, drawStroke, rebaseHistory, send, redraw]);
+  }, [room, myId, bookingId, drawStroke, rebaseHistory, send, redraw, checkDrawings]);
 
   // The host re-announces the board and its editors whenever someone arrives.
   React.useEffect(() => {

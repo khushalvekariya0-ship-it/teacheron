@@ -23,6 +23,7 @@ import {
 } from "./kit";
 import { REPORT_STATUS_META } from "./ReportsView";
 import { auditTone, describeAudit, sortAudit } from "./AuditLogView";
+import { AppealsPanel, ProtectionOverview, ProtectionSettings, RestrictionsPanel } from "./ProtectionPanels";
 
 /*
  * Admin → Chat safety. Every message, homework note, file and profile photo that was stopped because it
@@ -34,7 +35,7 @@ import { auditTone, describeAudit, sortAudit } from "./AuditLogView";
 type Kind = ContactFlag["kinds"][number];
 type FlagStatus = ContactFlag["status"];
 
-const KIND_LABEL: Record<Kind, string> = { phone: "Phone number", email: "Email", social: "Social / app", link: "Outside link" };
+const KIND_LABEL: Record<Kind, string> = { phone: "Phone number", email: "Email", social: "Social / app", link: "Outside link", request: "Asked to talk outside" };
 const STATUS_META: Record<FlagStatus, { label: string; tone: "warning" | "success" | "neutral" }> = {
   open: { label: "Needs review", tone: "warning" },
   actioned: { label: "Dealt with", tone: "success" },
@@ -183,7 +184,12 @@ function ChatSafetyInner() {
 
   const [personId, setPersonId] = useUrlParam("user");
   const fresh = useFreshLinks();
-  const [tab, setTab] = React.useState<"people" | "log" | "reported">("people");
+  const [tabParam, setTabParam] = useUrlParam("tab");
+  const TABS = ["overview", "people", "log", "restrictions", "appeals", "reported", "settings"] as const;
+  const tab: (typeof TABS)[number] = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as (typeof TABS)[number]) : "people";
+  const setTab = (v: (typeof TABS)[number]) => setTabParam(v === "people" ? null : v);
+  const restrictions = useApp((s) => s.classRestrictions);
+  const appeals = useApp((s) => s.safetyAppeals);
   const [q, setQ] = React.useState("");
   const [who, setWho] = React.useState<"review" | "paused" | "all">("review");
   const [kind, setKind] = React.useState<"all" | Kind>("all");
@@ -343,10 +349,27 @@ function ChatSafetyInner() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <TabsList aria-label="Chat safety views">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="people" count={stats.review}>People</TabsTrigger>
           <TabsTrigger value="log" count={flags.filter((f) => f.status === "open").length}>All attempts</TabsTrigger>
+          <TabsTrigger value="restrictions" count={restrictions.filter((r) => !r.liftedAt && new Date(r.endsAt).getTime() > now).length}>Class restrictions</TabsTrigger>
+          <TabsTrigger value="appeals" count={appeals.filter((a) => a.status === "open").length}>Appeals</TabsTrigger>
           <TabsTrigger value="reported" count={openReported}>Reported messages</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview">
+          <ProtectionOverview flags={flags} restrictions={restrictions} appeals={appeals} onOpenPerson={(id) => setPersonId(id)} />
+        </TabsContent>
+        <TabsContent value="restrictions">
+          <RestrictionsPanel restrictions={restrictions} />
+        </TabsContent>
+        <TabsContent value="appeals">
+          <AppealsPanel appeals={appeals} flags={flags} restrictions={restrictions} />
+        </TabsContent>
+        <TabsContent value="settings">
+          <ProtectionSettings />
+        </TabsContent>
 
         <TabsContent value="people">
           <Toolbar summary={pluralize(peopleRows.length, "person", "people")}>

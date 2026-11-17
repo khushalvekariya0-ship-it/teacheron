@@ -71,6 +71,8 @@ export function readMeta(metadata: string | undefined | null): ParticipantMeta |
 
 /** What GET /api/classroom/join (and the guest poll) hands the browser. */
 export interface JoinTicket {
+  /** Set when this person's audio is paused in this class (contact details were shared): until when, in ms. */
+  audioPausedUntil?: number;
   token: string;
   wsUrl: string;
   room: string;
@@ -106,10 +108,15 @@ export interface SafetyMessage {
   name: string;
   identity: string;
   source: "speech" | "board" | "screen" | "camera";
-  kinds: ("phone" | "email" | "social" | "link")[];
-  /** How many times in this lesson; at LIVE_STRIKE_LIMIT the person is removed from the class. */
+  kinds: ("phone" | "email" | "social" | "link" | "request")[];
+  /** How many times in this lesson, and where that is on the ladder (Admin → Chat safety → Settings). */
   strikes: number;
   removed: boolean;
+  level?: "warning" | "strong" | "muted" | "removed";
+  /** With level "muted": until when the person's audio doesn't reach the others. */
+  mutedUntil?: string;
+  muteAt?: number;
+  muteMinutes?: number;
 }
 
 /** Times contact details may be caught in one lesson before the person is removed from the class. */

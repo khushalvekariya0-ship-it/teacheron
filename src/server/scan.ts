@@ -1,11 +1,15 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
 import sharp from "sharp";
+import jsQR from "jsqr";
 import { scanContact, type ContactKind } from "@/lib/domain/contact";
 import { PRIVATE_BUCKET, signedDownload } from "./media";
 import { supabaseAdmin } from "./supabase";
+import { db } from "./db";
+import { contactSafety } from "./safety-settings";
 
 /*
  * Checks uploaded files for contact details before anyone else can open them.
@@ -17,7 +21,11 @@ import { supabaseAdmin } from "./supabase";
  *     and Word documents (plus headers, footers, comments and links), and printed text inside images,
  *     screenshots, scanned pages and pictures pasted into documents, using OCR (Tesseract, which runs
  *     here on the server; nothing is sent to an outside service).
+ *   • QR codes in pictures (and in pictures inside PDFs and Word files) are read too (jsQR): a phone,
+ *     email, WhatsApp / Telegram / social link, contact card or UPI payment code counts.
  *   • That text goes through the same contact-detail check as chat messages (file mode).
+ *   • Admin → Chat safety → Settings can switch off reading pictures, documents or QR codes.
+ *   • A file staff approved after an appeal (same SHA-256) is let through.
  *
  * Nothing read out of a file is stored or logged. Handwriting, very stylised text and text drawn as
  * shapes can't be read reliably; files are still checked for everything else.
@@ -25,7 +33,7 @@ import { supabaseAdmin } from "./supabase";
 
 export type FileCheck =
   | { ok: true }
-  | { ok: false; reason: "contact"; kinds: ContactKind[] }
+  | { ok: false; reason: "contact"; kinds: ContactKind[]; via?: "ocr" | "qr" | "rules"; hash?: string }
   | { ok: false; reason: "unchecked"; error: string };
 
 class Unchecked extends Error {}
@@ -54,6 +62,35 @@ function sniff(b: Buffer): Kind | "doc" | "zip" | "heic" | "unknown" {
 
 const EXPECTED: Record<string, Kind> = { png: "png", jpg: "jpg", jpeg: "jpg", webp: "webp", gif: "gif", pdf: "pdf", docx: "docx", txt: "txt" };
 
+/** What reading one file found besides text: contact details in QR codes. */
+type ReadCtx = { qr: boolean; qrKinds: Set<ContactKind> };
+
+/* ─── QR codes ──────────────────────────────────────────────────────────────── */
+
+// Links that open a call, message, email, chat app or payment straight away.
+const CONTACT_SCHEME = /^(?:whatsapp|tg|telegram|instagram|fb|fb-messenger|skype|viber|weixin|line|imo|upi|paytmmp|phonepe|gpay|tez):/i;
+
+/** Contact details in what a QR code holds. */
+export function qrKinds(payload: string): ContactKind[] {
+  const kinds = new Set<ContactKind>(scanContact(payload, "file").kinds);
+  if (/^(?:tel|sms|smsto|mms|facetime):/i.test(payload)) kinds.add("phone");
+  if (/^(?:mailto|matmsg):/i.test(payload)) kinds.add("email");
+  if (CONTACT_SCHEME.test(payload)) kinds.add("social");
+  if (/^(?:BEGIN:VCARD|MECARD:)/i.test(payload) && /\b(?:TEL|EMAIL|N|FN)[;:]/i.test(payload) && !kinds.size) kinds.add("social");
+  return [...kinds];
+}
+
+/** The texts of QR codes in an image (one pass at a size jsQR handles well). */
+async function qrTexts(open: () => ReturnType<typeof sharp>): Promise<string[]> {
+  try {
+    const { data, info } = await open().rotate().flatten({ background: "#ffffff" }).resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const code = jsQR(new Uint8ClampedArray(data.buffer, data.byteOffset, data.length), info.width, info.height);
+    return code?.data ? [code.data] : [];
+  } catch {
+    return [];
+  }
+}
+
 /* ─── OCR ───────────────────────────────────────────────────────────────────── */
 
 type OcrWorker = { recognize(image: Buffer): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> };
@@ -73,7 +110,7 @@ function ocrWorker(): Promise<OcrWorker> {
 }
 
 /** Printed text in an image. Tries dark-on-light, then light-on-dark, then sideways when little was found. */
-async function imageText(input: Buffer | { raw: Buffer; width: number; height: number; channels: 1 | 2 | 3 | 4 }): Promise<string> {
+async function imageText(input: Buffer | { raw: Buffer; width: number; height: number; channels: 1 | 2 | 3 | 4 }, ctx?: ReadCtx): Promise<string> {
   const open = () =>
     Buffer.isBuffer(input)
       ? sharp(input, { limitInputPixels: 60_000_000, failOn: "error" })
@@ -85,6 +122,9 @@ async function imageText(input: Buffer | { raw: Buffer; width: number; height: n
   if (long < 24) return ""; // too small to hold readable text
   // Small screenshots are enlarged (OCR reads bigger text better); huge photos are shrunk.
   const target = long < 1400 ? Math.min(long * 2, 2400) : Math.min(long, 3000);
+  // What a QR code holds is checked on its own (ctx.qrKinds): a code can hold just a link or a payment address.
+  const codes = ctx?.qr ? await qrTexts(open) : [];
+  for (const c of codes) for (const k of qrKinds(c)) ctx!.qrKinds.add(k);
   const base = () => open().rotate().flatten({ background: "#ffffff" }).grayscale().resize({ width: target, height: target, fit: "inside" });
   const ocr = await ocrWorker();
   const read = async (img: ReturnType<typeof sharp>) => (await ocr.recognize(await img.normalise().png().toBuffer())).data.text ?? "";
@@ -155,7 +195,7 @@ const decodeXml = (s: string) =>
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, "&");
 
-async function docxText(buf: Buffer): Promise<string> {
+async function docxText(buf: Buffer, ctx?: ReadCtx): Promise<string> {
   const zip = readZip(buf);
   if (!zip.has("word/document.xml")) throw new Unchecked("That file isn't a Word document. Attach a PDF, image, Word (.docx) or text file.");
   const names = [...zip.keys()];
@@ -173,13 +213,13 @@ async function docxText(buf: Buffer): Promise<string> {
   const images = media.filter((n) => /\.(png|jpe?g|gif|bmp|tiff?|webp)$/i.test(n));
   if (images.length > MAX_IMAGES) throw new Unchecked(`This document has more than ${MAX_IMAGES} pictures, which is too many to check. Send fewer pages.`);
   for (const n of media.filter((x) => /\.svg$/i.test(x))) parts.push(decodeXml(zip.get(n)!().toString("utf8")));
-  for (const n of images) parts.push(await imageText(zip.get(n)!()));
+  for (const n of images) parts.push(await imageText(zip.get(n)!(), ctx));
   return parts.join("\n");
 }
 
 /* ─── PDFs ──────────────────────────────────────────────────────────────────── */
 
-async function pdfText(buf: Buffer): Promise<string> {
+async function pdfText(buf: Buffer, ctx?: ReadCtx): Promise<string> {
   const { getDocumentProxy, extractText, extractLinks, extractImages } = await import("unpdf");
   let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
   try {
@@ -209,7 +249,7 @@ async function pdfText(buf: Buffer): Promise<string> {
       for (const img of found) {
         if (img.width < 40 || img.height < 16) continue;
         if (++images > MAX_IMAGES) throw new Unchecked(`This PDF has more than ${MAX_IMAGES} pictures or scanned pages, which is too many to check. Send fewer pages.`);
-        parts.push(await imageText({ raw: Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength), width: img.width, height: img.height, channels: img.channels as 1 | 2 | 3 | 4 }));
+        parts.push(await imageText({ raw: Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength), width: img.width, height: img.height, channels: img.channels as 1 | 2 | 3 | 4 }, ctx));
       }
     }
     return parts.join("\n");
@@ -234,7 +274,7 @@ function plainText(buf: Buffer): string {
 /* ─── Entry points ──────────────────────────────────────────────────────────── */
 
 /** Reads the text in a file of the given type (by extension). */
-export async function fileText(bytes: Buffer, extension: string): Promise<string> {
+export async function fileText(bytes: Buffer, extension: string, ctx?: ReadCtx): Promise<string> {
   if (bytes.length > MAX_BYTES) throw new Unchecked("That file is too large to check.");
   const expected = EXPECTED[extension.toLowerCase()];
   const actual = sniff(bytes);
@@ -244,13 +284,13 @@ export async function fileText(bytes: Buffer, extension: string): Promise<string
   if (!expected || !real || real !== expected) throw new Unchecked("That file's contents don't match its type, so it can't be checked. Attach a PDF, image, Word (.docx) or text file.");
   switch (real) {
     case "pdf":
-      return pdfText(bytes);
+      return pdfText(bytes, ctx);
     case "docx":
-      return docxText(bytes);
+      return docxText(bytes, ctx);
     case "txt":
       return plainText(bytes);
     default:
-      return imageText(bytes);
+      return imageText(bytes, ctx);
   }
 }
 
@@ -269,9 +309,20 @@ export async function checkStoredFile(storagePath: string): Promise<FileCheck> {
     const res = await fetch(await signedDownload(storagePath, 60), { signal: AbortSignal.timeout(20_000) });
     if (!res.ok) return { ok: false, reason: "unchecked", error: "We couldn't find that file. Attach it again." };
     const bytes = Buffer.from(await res.arrayBuffer());
-    const text = await withTimeout(fileText(bytes, storagePath.split(".").pop() ?? ""), TIME_LIMIT_MS);
+    const ext = (storagePath.split(".").pop() ?? "").toLowerCase();
+    const s = await contactSafety();
+    const isImage = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
+    // Switched off in Admin → Chat safety → Settings: not read (the type is still checked when it's read).
+    if (isImage ? !s.images : !s.documents) return { ok: true };
+    const hash = createHash("sha256").update(bytes).digest("hex");
+    // Staff accepted an appeal for this very file: it can be sent.
+    const [approved] = await db()`select 1 from public.contact_flags where file_hash = ${hash} and status = 'dismissed' limit 1`.catch(() => []);
+    if (approved) return { ok: true };
+    const ctx: ReadCtx = { qr: s.qr, qrKinds: new Set() };
+    const text = await withTimeout(fileText(bytes, ext, ctx), TIME_LIMIT_MS);
     const found = scanContact(text, "file");
-    verdict = found.found ? { ok: false, reason: "contact", kinds: found.kinds } : { ok: true };
+    const kinds = [...new Set([...found.kinds, ...ctx.qrKinds])];
+    verdict = kinds.length ? { ok: false, reason: "contact", kinds, via: ctx.qrKinds.size ? "qr" : isImage ? "ocr" : "rules", hash } : { ok: true };
   } catch (e) {
     if (e instanceof Unchecked) verdict = { ok: false, reason: "unchecked", error: e.message };
     else {
@@ -287,8 +338,12 @@ export async function checkStoredFile(storagePath: string): Promise<FileCheck> {
 /** Checks an image that's already on the server (a profile photo) for contact details. */
 export async function checkImageBytes(bytes: Buffer): Promise<FileCheck> {
   try {
-    const found = scanContact(await withTimeout(imageText(bytes), TIME_LIMIT_MS), "file");
-    return found.found ? { ok: false, reason: "contact", kinds: found.kinds } : { ok: true };
+    const s = await contactSafety();
+    if (!s.images) return { ok: true };
+    const ctx: ReadCtx = { qr: s.qr, qrKinds: new Set() };
+    const found = scanContact(await withTimeout(imageText(bytes, ctx), TIME_LIMIT_MS), "file");
+    const kinds = [...new Set([...found.kinds, ...ctx.qrKinds])];
+    return kinds.length ? { ok: false, reason: "contact", kinds, via: ctx.qrKinds.size ? "qr" : "ocr" } : { ok: true };
   } catch (e) {
     if (e instanceof Unchecked) return { ok: false, reason: "unchecked", error: e.message };
     console.error("[scan] couldn't check a photo", (e as Error)?.message ?? e);

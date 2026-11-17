@@ -3,6 +3,7 @@
 import * as React from "react";
 import { MessagesSquare, SendHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ContactHint } from "@/components/domain/ContactHint";
 
 export interface ChatLine {
   id: string;
@@ -87,6 +88,7 @@ export function ChatPanel({
               {error}
             </p>
           )}
+          {!error && <ContactHint text={draft} />}
           <div className="flex items-end gap-2">
             <label htmlFor="classroom-chat" className="sr-only">
               Message {peerName}

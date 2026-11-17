@@ -1,5 +1,5 @@
 import "server-only";
-import { closeFinishedClassrooms } from "./classroom";
+import { closeFinishedClassrooms, forgetOldSafetyRecords, liftExpiredRestrictions } from "./classroom";
 import { placeTutor } from "./geocode";
 import { db } from "./db";
 import { runAction } from "./engine";
@@ -24,7 +24,11 @@ export async function runScheduler(): Promise<number> {
   for (const t of unplaced) await placeTutor(t.id as string);
   // Card / UPI refunds that couldn't be sent to Razorpay when they were made (each is sent once, never twice).
   const refunds = razorpayReady() ? await retryPendingRefunds().catch((e) => (console.error("[scheduler] refunds", e), 0)) : 0;
-  return (r.ok ? (r.data as number) : 0) + closed + refunds;
+  // Class audio pauses whose time is up (the person's own page normally ends them first), and protection
+  // records older than the retention period (Admin → Chat safety → Settings).
+  const lifted = await liftExpiredRestrictions().catch((e) => (console.error("[scheduler] restrictions", e), 0));
+  const forgotten = await forgetOldSafetyRecords().catch((e) => (console.error("[scheduler] retention", e), 0));
+  return (r.ok ? (r.data as number) : 0) + closed + refunds + lifted + forgotten;
 }
 
 export async function maybeRunScheduler(): Promise<void> {

@@ -3,6 +3,7 @@ import type { Permission, User } from "@/lib/types";
 import type { Data, LoginEvent } from "@/lib/domain/data";
 import { hasPermission } from "@/lib/permissions";
 import { isFlagOn } from "@/lib/flags";
+import { publicContactSafety } from "@/lib/safety-settings";
 import { maskContactInfo } from "@/lib/domain/data";
 import { fileNameContact, maskMatches } from "@/lib/domain/contact";
 import { db } from "./db";
@@ -70,6 +71,9 @@ export async function buildState(userId: string | null): Promise<ClientState> {
       await Promise.all([
         L.load("messages", "id in (select id from public.messages where conversation_id = any($1) order by created_at desc limit 3000)", [d.conversations.map((c) => c.id)]),
         L.load("notifications", "user_id = $1", [me.id], 200),
+        // Their own class restrictions and appeals (to see a restriction's end and an appeal's answer).
+        L.load("class_restrictions", "user_id = $1", [me.id], 50),
+        L.load("safety_appeals", "user_id = $1", [me.id], 50),
         loginEvents(L, "user_id = $1", [me.id], 20).then((list) => (d.loginHistory = list)),
         // Jobs a tutor applied to or saved stay visible after they close.
         myTutor ? L.byId("requirements", d.applications.filter((a) => a.tutorId === myTutor).map((a) => a.requirementId)) : null,
@@ -101,7 +105,7 @@ export async function buildState(userId: string | null): Promise<ClientState> {
           );
         }
         if (can("disputes.manage")) loads.push(L.load("disputes", "true", [], 2000));
-        if (can("reports.moderate")) loads.push(L.load("reports", "true", [], 2000), L.load("reviews", "true", [], 3000), L.load("contact_flags", "true", [], 3000));
+        if (can("reports.moderate")) loads.push(L.load("reports", "true", [], 2000), L.load("reviews", "true", [], 3000), L.load("contact_flags", "true", [], 3000), L.load("class_restrictions", "true", [], 2000), L.load("safety_appeals", "true", [], 2000));
         if (can("tutors.verify")) loads.push(L.load("verification_requests", "true", [], 2000), L.load("tutors", "true"));
         if (can("conversations.read_flagged")) loads.push(L.load("conversations", "reported or exists (select 1 from public.disputes x join public.bookings b on b.id = x.booking_id where b.tutor_id = conversations.tutor_id and b.booker_id = conversations.user_id)"));
         if (can("audit.read")) loads.push(L.load("audit_logs", "true", [], 500));
@@ -112,6 +116,7 @@ export async function buildState(userId: string | null): Promise<ClientState> {
         await L.users([
           ...d.bookings.map((b) => b.bookerId), ...d.disputes.map((x) => x.openedBy), ...d.reports.map((x) => x.reporterId), ...d.payments.map((p) => p.userId),
           ...d.conversations.map((c) => c.userId), ...d.auditLogs.map((a) => a.actorId), ...d.contactFlags.flatMap((f) => [f.userId, f.recipientId]),
+          ...d.classRestrictions.map((r) => r.userId), ...d.safetyAppeals.map((a) => a.userId),
         ]);
         await L.usersByTutor(d.registeredTutors.map((t) => t.id));
       }
@@ -124,7 +129,13 @@ export async function buildState(userId: string | null): Promise<ClientState> {
     const moderator = can("reports.moderate");
     // Chat moderators also see warnings and pauses (Admin → Chat safety).
     d.users = d.users.map((u) => (u.id === myId || fullUsers ? u : moderator && u.chatModeration ? { ...stub(u), chatModeration: u.chatModeration } : stub(u)));
-    if (!moderator) d.contactFlags = [];
+    if (!moderator) {
+      d.contactFlags = [];
+      d.classRestrictions = d.classRestrictions.filter((r) => r.userId === myId);
+      d.safetyAppeals = d.safetyAppeals.filter((a) => a.userId === myId);
+    }
+    // The phrase lists are for staff; members get the switches and limits.
+    if (!moderator && !can("settings.manage")) d.contactSafety = publicContactSafety(d.contactSafety);
     if (!can("payments.read")) {
       // A tutor also sees refunds on their own lessons (they lower what the tutor is owed), as amounts only:
       // not how the family paid or Razorpay's ids.

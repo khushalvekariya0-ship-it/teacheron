@@ -205,6 +205,18 @@ const CONTACT_FLAG: Record<string, Col> = {
   id: ["id", "v"], userId: ["user_id", "v"], channel: ["channel", "v"], source: ["source", "v"], contextId: ["context_id", "v", true],
   recipientId: ["recipient_id", "v", true], kinds: ["kinds", "v"], excerpt: ["excerpt", "v"], fileName: ["file_name", "v", true], status: ["status", "v"],
   reviewedBy: ["reviewed_by", "v", true], reviewedAt: ["reviewed_at", "ts", true], createdAt: ["created_at", "ts"],
+  detector: ["detector", "v", true], fileHash: ["file_hash", "v", true],
+};
+
+const CLASS_RESTRICTION: Record<string, Col> = {
+  id: ["id", "v"], bookingId: ["booking_id", "v"], userId: ["user_id", "v"], kind: ["kind", "v"], reason: ["reason", "v"], startsAt: ["starts_at", "ts"],
+  endsAt: ["ends_at", "ts"], liftedAt: ["lifted_at", "ts", true], liftedBy: ["lifted_by", "v", true], createdAt: ["created_at", "ts"],
+};
+
+const SAFETY_APPEAL: Record<string, Col> = {
+  id: ["id", "v"], userId: ["user_id", "v"], flagId: ["flag_id", "v", true], restrictionId: ["restriction_id", "v", true], note: ["note", "v"],
+  status: ["status", "v"], decidedBy: ["decided_by", "v", true], decidedAt: ["decided_at", "ts", true], decisionNote: ["decision_note", "v", true],
+  createdAt: ["created_at", "ts"],
 };
 
 const DISPUTE: Record<string, Col> = {
@@ -331,6 +343,8 @@ export const SPECS: TableSpec[] = [
   arraySpec("walletTransactions", "wallet_transactions", WALLET_TX, "created_at desc"),
   arraySpec("reports", "reports", REPORT, "created_at desc"),
   arraySpec("contactFlags", "contact_flags", CONTACT_FLAG, "created_at desc"),
+  arraySpec("classRestrictions", "class_restrictions", CLASS_RESTRICTION, "created_at desc"),
+  arraySpec("safetyAppeals", "safety_appeals", SAFETY_APPEAL, "created_at desc"),
   arraySpec("disputes", "disputes", DISPUTE, "created_at desc"),
   arraySpec("verificationRequests", "verification_requests", VERIFICATION, "submitted_at desc"),
   arraySpec("auditLogs", "audit_logs", AUDIT, "created_at desc"),
@@ -358,6 +372,10 @@ export const SPECS: TableSpec[] = [
     collection: "pricing", table: "platform_settings", key: ["key"], cols: {}, order: "key",
     rowsOf: (d) => [{ key: "pricing", value: d.pricing }],
   },
+  {
+    collection: "contactSafety", table: "platform_settings", key: ["key"], cols: {}, order: "key",
+    rowsOf: (d) => [{ key: "contact_safety", value: d.contactSafety }],
+  },
   arraySpec("blogPosts", "blog_posts", BLOG, "published_on desc", { key: ["slug"] }),
   arraySpec("faqs", "faqs", FAQ, "position", { extraCols: (_x, _d, i) => ({ position: i }) }),
   {
@@ -375,7 +393,7 @@ export const SPECS: TableSpec[] = [
 ];
 
 /** Tables whose collection holds one value in the settings table (not a list of rows). */
-export const SETTING_COLLECTIONS = new Set<Collection>(["policy", "platformFeeBps", "pricing"]);
+export const SETTING_COLLECTIONS = new Set<Collection>(["policy", "platformFeeBps", "pricing", "contactSafety"]);
 
 /** jsonb columns per table — their values are sent with sql.json(). */
 export const JSON_COLUMNS: Record<string, Set<string>> = Object.fromEntries(
@@ -390,7 +408,7 @@ export const WRITE_ORDER = [
   "subject_categories", "subjects", "feature_flags", "platform_settings", "tutors", "users", "children", "student_profiles", "notification_prefs",
   "onboarding_drafts", "subscriptions", "lead_transactions", "verification_requests", "payouts", "payout_accounts", "favorites", "saved_searches", "requirements",
   "saved_jobs", "applications", "bookings", "reviews", "disputes", "conversations", "messages", "notifications", "learning_goals", "progress_notes",
-  "homework", "payments", "wallet_transactions", "coupons", "reports", "contact_flags", "audit_logs", "blog_posts", "faqs", "testimonials",
+  "homework", "payments", "wallet_transactions", "coupons", "reports", "contact_flags", "class_restrictions", "safety_appeals", "audit_logs", "blog_posts", "faqs", "testimonials",
 ];
 
 export const keyOf = (spec: TableSpec, row: Row) => spec.key.map((k) => String(row[k])).join("\u0000");

@@ -254,6 +254,19 @@ export const PLANS: Record<ActionName, Plan> = {
   },
   moveCatalogItem: self,
   loadStarterCatalog: self,
+  saveContactSafety: self,
+  appealContactFlag: async (L, me) => {
+    await Promise.all([
+      L.self(me),
+      L.load("contact_flags", "user_id = $1 and created_at > now() - interval '7 days'", [me?.id ?? ""]),
+      L.load("safety_appeals", "user_id = $1 and status = 'open'", [me?.id ?? ""]),
+      staffFor(L, "reports.moderate", `/admin/chat-safety?user=${me?.id ?? ""}`),
+    ]);
+  },
+  decideAppeal: async (L, me, [appealId]) => {
+    const [a] = await L.byId("safety_appeals", [str(appealId)]);
+    await Promise.all([L.self(me), L.byId("contact_flags", [a?.flag_id as string]), L.users([a?.user_id as string])]);
+  },
   setStaffAccess: async (L, me, [userId]) => {
     await Promise.all([L.self(me), L.users([str(userId)]), L.load("users", "role = 'admin'")]);
   },

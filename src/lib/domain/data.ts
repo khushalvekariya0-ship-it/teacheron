@@ -2,9 +2,10 @@ import type {
   Application, AppNotification, AuditLog, Booking, BookingType, Child, Conversation, Coupon, Dispute, FeatureFlag, Homework,
   LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod, Payment, Payout, PayoutAccount, ProgressNote, Report, Requirement, Review,
   SavedSearch, StudentProfile, Subject, SubjectCategory, Subscription, TeachingMode, Tutor, User, VerificationRequest, WalletTransaction,
-  ContactFlag,
+  ContactFlag, ClassRestriction, SafetyAppeal,
 } from "@/lib/types";
 import { readPricing, type BookingPolicy, type Pricing } from "@/lib/data/platform";
+import { DEFAULT_CONTACT_SAFETY, type ContactSafety } from "@/lib/safety-settings";
 import { maskMatches, scanContact } from "./contact";
 
 /*
@@ -122,6 +123,11 @@ export interface Data {
   reports: Report[];
   /** Messages, notes and files stopped for containing contact details (staff with reports.moderate only). */
   contactFlags: ContactFlag[];
+  /** Temporary audio restrictions in live classes, and appeals against catches or restrictions. */
+  classRestrictions: ClassRestriction[];
+  safetyAppeals: SafetyAppeal[];
+  /** Personal-information protection settings (Admin → Chat safety → Settings). */
+  contactSafety: ContactSafety;
   disputes: Dispute[];
   verificationRequests: VerificationRequest[];
   auditLogs: AuditLog[];
@@ -165,9 +171,10 @@ export function emptyData(defaults: Pick<Data, "flags" | "policy" | "platformFee
     users: [], children: [], tutorOverrides: {}, registeredTutors: [], onboarding: {}, studentProfiles: {}, favorites: {}, savedSearches: [],
     savedJobs: {}, requirements: [], applications: [], bookings: [], reviews: [], conversations: [], messages: [], notifications: [],
     notificationPrefs: {}, goals: [], progressNotes: [], homework: [], payments: [], payouts: [], payoutAccounts: [], leadTransactions: [], walletTransactions: [],
-    subscriptions: {}, reports: [], contactFlags: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [], tutorBusy: [],
+    subscriptions: {}, reports: [], contactFlags: [], classRestrictions: [], safetyAppeals: [], disputes: [], verificationRequests: [], auditLogs: [], coupons: [], loginHistory: [], tutorBusy: [],
     blogPosts: [], faqs: [], testimonials: [],
     pricing: readPricing(undefined, defaults.platformFeeBps),
+    contactSafety: DEFAULT_CONTACT_SAFETY,
     ...defaults,
   };
 }

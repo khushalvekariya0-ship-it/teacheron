@@ -9,12 +9,13 @@ import {
   AlertTriangle, Camera, Check, Copy, FileText, Flag, LayoutGrid, Link2, Loader2, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp, PenLine, PhoneOff,
   RefreshCw, User as UserIcon, Users, Video, VideoOff,
 } from "lucide-react";
-import { LIVE_STRIKE_LIMIT, readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
+import { readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
 import { maskMatches, scanContact, speechContact, speechSplitContact } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
 import { ChatPanel, type ChatLine } from "../ChatPanel";
 import { MeetingWhiteboard } from "./MeetingWhiteboard";
-import { ReportDialog, SafetyAlert, SafetyBanner, sendSafety, useSafetyAlerts, useVideoCheck } from "./LessonSafety";
+import { AudioPausedBar, ReportDialog, SafetyAlert, SafetyBanner, SafetyStatus, sendSafety, useSafetyAlerts, useVideoCheck, type SpeechState } from "./LessonSafety";
+import { useApp } from "@/lib/store";
 import { downloadTranscriptPdf, type Snapshot } from "./transcriptPdf";
 
 /*
@@ -102,7 +103,8 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
   const [ended, setEnded] = React.useState<{ title: string; message: string; rejoin: boolean } | null>(null);
   const leavingRef = React.useRef(false);
   const connectedRef = React.useRef(false);
-  // Set when contact details were caught LIVE_STRIKE_LIMIT times: the class ends with the reason (and says
+  // Set when the person is removed for sharing contact details (only when removal is switched on in
+  // Admin → Chat safety → Settings): the class ends with the reason (and says
   // so when it was the second lesson, which pauses the account).
   const safetyRemovedRef = React.useRef<{ suspended: boolean } | null>(null);
   const onSafetyRemoved = React.useCallback((suspended: boolean) => {
@@ -229,8 +231,8 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
             setEnded({
               title: "You were removed",
               message: safetyRemovedRef.current.suspended
-                ? `Contact details were shared ${LIVE_STRIKE_LIMIT} times in this class. This is the second lesson you were removed from, so your account is paused until TutorLink's team reviews it. We've emailed you.`
-                : `Contact details were shared ${LIVE_STRIKE_LIMIT} times in this class, so you were removed and your messaging is paused for 24 hours. TutorLink's team will review it.`,
+                ? `Contact details were shared too many times in this class. This is another lesson you were removed from, so your account is paused until TutorLink's team reviews it. We've emailed you.`
+                : `Contact details were shared too many times in this class, so you were removed and your messaging is paused for 24 hours. TutorLink's team will review it.`,
               rejoin: false,
             });
             return;
@@ -306,18 +308,27 @@ function MeetingRoom({
   const guest = ticket.identity.startsWith("guest-");
   // Speech is checked on computers only: on phones the browser's recogniser beeps at every restart and
   // can take the microphone away from the call.
-  const speechCheck = React.useMemo(() => {
+  const onComputer = React.useMemo(() => {
     if (typeof navigator === "undefined") return false;
     const ua = navigator.userAgent;
     return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
   }, []);
+  const hasSpeechRecognition = React.useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+    return !!(w.SpeechRecognition ?? w.webkitSpeechRecognition);
+  }, []);
+  // Admin → Chat safety → Settings: what is checked (speech, also on phones, camera, pictures).
+  const safety = useApp((s) => s.contactSafety);
+  const speechCheck = !guest && safety.voice && (onComputer || safety.voiceOnPhones);
+  const [speechBlocked, setSpeechBlocked] = React.useState(false);
   const canReport = !guest && ticket.me.role !== "Staff";
   const listenRef = React.useRef(false);
   const lastSafetyAt = React.useRef(0);
   // This person's finished sentences from the last minute (a number said in pieces is caught too).
   const recentSaid = React.useRef<{ at: number; text: string }[]>([]);
   const [reportOpen, setReportOpen] = React.useState(false);
-  // The LIVE_STRIKE_LIMIT-th time: this page leaves the class (the server removes the person too).
+  // Removed (when switched on): this page leaves the class (the server removes the person too).
   const leavingForSafety = React.useRef(false);
   const removedForSafety = React.useCallback(
     (suspended: boolean) => {
@@ -331,7 +342,35 @@ function MeetingRoom({
   // Who this page is in the room: the identity the server put in the join ticket. (The local participant's
   // own identity can still be empty when this first renders, and a warning must know it's about you.)
   const me = React.useMemo(() => ({ identity: ticket.identity, name: ticket.me.name }), [ticket.identity, ticket.me.name]);
-  const { alert: safetyAlert, dismiss: dismissSafety, caught } = useSafetyAlerts(room, me, removedForSafety);
+  // An audio pause (contact details shared again): the server stops the microphone reaching the others
+  // (a rejoin gets a pass without it); this page shows until when, and ends it when the time is up.
+  const [pausedUntil, setPausedUntil] = React.useState<number | null>(ticket.audioPausedUntil ?? null);
+  const micWanted = React.useRef(true);
+  const onPaused = React.useCallback((until: number) => setPausedUntil(until), []);
+  const ladder = React.useMemo(() => ({ muteAt: safety.muteAt, muteMinutes: safety.muteMinutes }), [safety.muteAt, safety.muteMinutes]);
+  const { alert: safetyAlert, dismiss: dismissSafety, caught } = useSafetyAlerts(room, me, ladder, removedForSafety, onPaused);
+  React.useEffect(() => {
+    if (!pausedUntil) return;
+    let stop = false;
+    const end = async () => {
+      try {
+        const res = await fetch("/api/classroom/unpause", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId }) });
+        const data = (await res.json().catch(() => ({}))) as { paused?: boolean; until?: string };
+        if (stop) return;
+        if (data.paused && data.until) return setPausedUntil(Date.parse(data.until));
+        setPausedUntil(null);
+        // The server allows the microphone again; turn it back on if it was on.
+        if (micWanted.current) window.setTimeout(() => void room.localParticipant.setMicrophoneEnabled(true).catch(() => {}), 1500);
+      } catch {
+        if (!stop) window.setTimeout(() => void end(), 15_000);
+      }
+    };
+    const t = window.setTimeout(() => void end(), Math.max(0, pausedUntil - Date.now()) + 500);
+    return () => {
+      stop = true;
+      window.clearTimeout(t);
+    };
+  }, [pausedUntil, bookingId, room]);
   const caughtRef = React.useRef(caught);
   React.useEffect(() => {
     caughtRef.current = caught;
@@ -340,7 +379,7 @@ function MeetingRoom({
     room,
     bookingId,
     source: "screen",
-    on: isScreenShareEnabled && !guest,
+    on: isScreenShareEnabled && !guest && safety.images,
     everyMs: 12_000,
     onFound: (res) => {
       void localParticipant.setScreenShareEnabled(false).catch(() => {});
@@ -352,7 +391,7 @@ function MeetingRoom({
     room,
     bookingId,
     source: "camera",
-    on: isCameraEnabled && !guest,
+    on: isCameraEnabled && !guest && safety.camera,
     everyMs: 20_000,
     onFound: (res) => {
       void localParticipant.setCameraEnabled(false).catch(() => {});
@@ -364,6 +403,8 @@ function MeetingRoom({
     setNotice(msg);
     window.setTimeout(() => setNotice((m) => (m === msg ? null : m)), ms);
   }, []);
+
+  const speechState: SpeechState = guest ? "guest" : !safety.voice ? "off" : !onComputer && !safety.voiceOnPhones ? "phone" : !hasSpeechRecognition ? "unsupported" : speechBlocked ? "blocked" : !isMicrophoneEnabled ? "mic-off" : "on";
 
   // Timer, and the clock used for "the room closes soon".
   React.useEffect(() => {
@@ -524,6 +565,7 @@ function MeetingRoom({
       rec.onerror = (e) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           listenRef.current = false;
+          setSpeechBlocked(true);
           if (captionsOnRef.current) {
             captionsOnRef.current = false;
             setCaptionsOn(false);
@@ -633,7 +675,11 @@ function MeetingRoom({
 
   const toggle = async (what: "mic" | "cam" | "screen") => {
     try {
-      if (what === "mic") await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+      if (what === "mic") {
+        if (pausedUntil && pausedUntil > Date.now()) return say("Your audio is paused for the others for now: it comes back by itself.");
+        micWanted.current = !isMicrophoneEnabled;
+        await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+      }
       else if (what === "cam") await localParticipant.setCameraEnabled(!isCameraEnabled);
       else await localParticipant.setScreenShareEnabled(!isScreenShareEnabled, { audio: false });
     } catch (e) {
@@ -803,11 +849,21 @@ function MeetingRoom({
           <button type="button" onClick={() => setGridView((v) => !v)} className="grid size-9 place-items-center text-muted hover:bg-sunken hover:text-ink" title={gridView ? "Speaker view" : "Grid view"} aria-label={gridView ? "Speaker view" : "Grid view"}>
             {gridView ? <UserIcon className="size-[18px]" /> : <LayoutGrid className="size-[18px]" />}
           </button>
+          <SafetyStatus
+            speech={speechState}
+            checks={[
+              { label: "Whiteboard", on: !guest && safety.images },
+              { label: "Shared screen", on: !guest && safety.images },
+              { label: "Camera", on: !guest && safety.camera },
+              { label: "Chat", on: safety.chat },
+            ]}
+          />
           <span className="flex items-center gap-1 text-sm text-muted" aria-label={`${participants.length} in the class`}>
             <Users className="size-4" aria-hidden /> {participants.length}
           </span>
         </div>
       </div>
+      {pausedUntil && pausedUntil > now && <AudioPausedBar bookingId={bookingId} until={pausedUntil} />}
       <SafetyBanner onReport={canReport ? () => setReportOpen(true) : undefined} />
 
       {/* Main area */}
@@ -862,7 +918,7 @@ function MeetingRoom({
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} />
+            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} checkDrawings={!guest && safety.images} />
           </div>
         </div>
 
@@ -995,7 +1051,7 @@ function MeetingRoom({
       <div className="flex flex-col-reverse gap-2 border-t border-line px-2 py-2 md:flex-row md:items-center md:justify-between md:gap-0 md:px-6 md:py-3">
         <div className="hidden w-40 font-mono text-sm text-muted md:block">{clock(elapsed)}</div>
         <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
-          <button type="button" onClick={() => void toggle("mic")} className={control(false, !isMicrophoneEnabled)} aria-label={isMicrophoneEnabled ? "Mute" : "Unmute"} title={isMicrophoneEnabled ? "Mute" : "Unmute"}>
+          <button type="button" onClick={() => void toggle("mic")} disabled={!!pausedUntil && pausedUntil > now} className={cn(control(false, !isMicrophoneEnabled), "disabled:opacity-50")} aria-label={pausedUntil && pausedUntil > now ? "Audio paused" : isMicrophoneEnabled ? "Mute" : "Unmute"} title={pausedUntil && pausedUntil > now ? "Your audio is paused for the others for now" : isMicrophoneEnabled ? "Mute" : "Unmute"}>
             {isMicrophoneEnabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
           </button>
           <button type="button" onClick={() => void toggle("cam")} className={control(false, !isCameraEnabled)} aria-label={isCameraEnabled ? "Turn off camera" : "Turn on camera"} title={isCameraEnabled ? "Turn off camera" : "Turn on camera"}>

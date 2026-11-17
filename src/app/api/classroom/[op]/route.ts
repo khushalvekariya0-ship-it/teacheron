@@ -3,7 +3,7 @@ import { z } from "zod";
 import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
-  acceptPush, checkClassImage, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
+  acceptPush, appealFromClass, checkClassImage, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
   pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
   validPushCode, type Lesson,
 } from "@/server/classroom";
@@ -165,7 +165,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const user = await signedIn();
         const v = z
           .object({
-            id, source: z.enum(["speech", "board", "screen", "camera"]), kinds: z.array(z.enum(["phone", "email", "social", "link"])).max(4).optional(),
+            id, source: z.enum(["speech", "board", "screen", "camera"]), kinds: z.array(z.enum(["phone", "email", "social", "link", "request"])).max(5).optional(),
             excerpt: z.string().max(600).optional(), image: z.string().max(4_500_000).optional(),
           })
           .safeParse(body);
@@ -180,6 +180,31 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         if (stop) return stop;
         if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
         return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request))) });
+      }
+      case "unpause": {
+        // The person's own page when their audio pause is over (the server checks the time).
+        const user = await signedIn();
+        const v = z.object({ id }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "Which lesson?" }, { status: 400 });
+        return json({ ok: true, ...(await endOwnPause(user, await lessonOf(v.data.id))) });
+      }
+      case "appeal": {
+        // "Ask for a review" in the class: the audio pause was a mistake.
+        const user = await signedIn();
+        const stop = limited(`class-appeal:${user.id}`, 5, 10);
+        if (stop) return stop;
+        const v = z.object({ id, note: z.string().max(1000).optional() }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "That request wasn't valid." }, { status: 400 });
+        await appealFromClass(user, await lessonOf(v.data.id), v.data.note ?? "", siteOrigin(request));
+        return json({ ok: true });
+      }
+      case "lift": {
+        // Staff end an audio pause early (Admin → Chat safety).
+        const user = await signedIn();
+        const v = z.object({ restrictionId: z.string().min(3).max(80), note: z.string().max(500).optional() }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "Which restriction?" }, { status: 400 });
+        await liftRestriction(user, v.data.restrictionId, v.data.note ?? "", siteOrigin(request));
+        return json({ ok: true });
       }
       case "report": {
         const user = await signedIn();
