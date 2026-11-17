@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Input";
 import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DialogClose } from "@/components/ui/Overlay";
 import { toast } from "@/components/ui/Toast";
-import { SlotPicker } from "@/components/domain/SlotPicker";
+import { BookingCalendar } from "@/components/domain/BookingCalendar";
 import { tzShort } from "./shared";
 
 const NOTE_MAX = 500;
@@ -204,7 +204,7 @@ export function RescheduleDialog({
               </dd>
             </div>
           </dl>
-          <SlotPicker tutor={tutor} durationMin={booking.durationMin} value={slot} onChange={(v) => { setSlot(v); setError(null); }} excludeBookingId={booking.id} />
+          <BookingCalendar tutor={tutor} durationMin={booking.durationMin} value={slot} onChange={(v) => { setSlot(v); setError(null); }} excludeBookingId={booking.id} />
           <p className="flex items-start gap-2 text-[13px] text-muted">
             <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden />
             {autoConfirm

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { Checkbox, RadioCards, Segmented } from "@/components/ui/Controls";
 import { InlineAlert } from "@/components/ui/States";
-import { SlotPicker } from "@/components/domain/SlotPicker";
+import { BookingCalendar } from "@/components/domain/BookingCalendar";
 import { PAY_METHOD_LABEL } from "@/lib/data/platform";
 import { useApp } from "@/lib/store";
 
@@ -211,9 +211,9 @@ export function TimeStep({ tutor, draft, set, tz }: { tutor: Tutor; draft: Draft
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Open {formatDuration(minutes)} times over the next three weeks. {tutor.firstName} needs at least {tutor.rules.minNoticeHours} hours&rsquo; notice.
+        Pick any day {tutor.firstName} is free, up to {tutor.rules.maxAdvanceDays} days ahead, then a {formatDuration(minutes)} time. {tutor.firstName} needs at least {tutor.rules.minNoticeHours} hours&rsquo; notice.
       </p>
-      <SlotPicker tutor={tutor} durationMin={minutes} value={draft.startUtc} onChange={onChange} />
+      <BookingCalendar tutor={tutor} durationMin={minutes} value={draft.startUtc} onChange={onChange} />
       {draft.startUtc && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 rounded-lg border border-navy/20 bg-navy-50/60 px-4 py-3 text-sm">
           <CalendarDays className="size-4 shrink-0 text-navy" aria-hidden />
