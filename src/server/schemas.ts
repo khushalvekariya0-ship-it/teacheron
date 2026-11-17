@@ -186,6 +186,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
 
   markNotificationRead: t(id),
   markAllNotificationsRead: none,
+  markSectionRead: t(z.string().min(1).max(200)),
   setNotificationPref: t(z.enum(["messages", "bookings", "reminders", "payments", "jobs", "progress", "marketing"]), z.enum(["in_app", "email", "sms"]), z.boolean()),
 
   saveChild: t(z.object({ id: id.optional(), firstName: text(60), grade: GRADE, birthYear: year.optional(), learningGoals: strings(10, 200), notes: text(1000).optional(), subjects: strings(10) })),

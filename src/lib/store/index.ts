@@ -140,7 +140,7 @@ const ACTIONS: (keyof DomainActions)[] = [
   "updateMe", "saveStudentProfile", "deleteMyAccount", "toggleFavorite", "saveSearch", "updateSavedSearch", "deleteSavedSearch", "toggleSavedJob",
   "saveRequirementDraft", "publishRequirement", "setRequirementStatus", "deleteRequirement", "applyToJob", "setApplicationStatus", "createBooking",
   "transitionBooking", "rescheduleBooking", "setLessonVideo", "removeLessonVideo", "setLessonRecording","validateCoupon", "topUpWallet", "submitReview", "respondToReview", "startConversation", "sendMessage",
-  "markConversationRead", "toggleBlock", "report", "markNotificationRead", "markAllNotificationsRead", "setNotificationPref", "saveChild", "removeChild",
+  "markConversationRead", "toggleBlock", "report", "markNotificationRead", "markAllNotificationsRead", "markSectionRead", "setNotificationPref", "saveChild", "removeChild",
   "addProgressNote", "assignHomework", "submitHomework", "reviewHomework", "setTopicStatus", "addGoal", "updateTutorProfile", "setAvailability",
   "setExceptions", "setBookingRules", "setTrial", "saveOnboarding", "submitOnboarding", "submitVerification", "buyCredits", "changePlan", "savePayoutAccount", "recordPayout", "markPayoutFailed", "openDispute",
   "addDisputeNote", "setDisputeStatus", "resolveDispute", "reviewVerification", "setUserStatus", "setReportStatus", "moderateReview", "setFlag",

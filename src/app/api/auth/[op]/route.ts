@@ -20,6 +20,11 @@ import { cleanCode, isCodeShape } from "@/server/email-codes";
 import { sendVerificationCode, verifyEmailCode } from "@/server/email-verification";
 import { checkResetToken, exchangeResetCode, finishPasswordReset, RESET_MINUTES, resetOrigin, sendPasswordChangedEmail, startPasswordReset } from "@/server/password-reset";
 import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
+import { alertStaff, shortName } from "@/server/staff-alerts";
+
+/** Admin → Users: a new account (in-app alert to staff who can see users). */
+const newAccountAlert = (id: string, first: unknown, last: unknown, role: string, how: string) =>
+  alertStaff("users.read", { title: "New sign-up", body: `${shortName(first, last)} joined as a ${role} (${how}).`, href: `/admin/users?id=${id}` });
 
 /*
  * Sign-in and account security, backed by Supabase Auth. Passwords never touch our database —
@@ -298,6 +303,7 @@ export async function POST(request: Request, ctx: Ctx) {
             consent = r.ok ? { sent: true } : { sent: false, error: r.error };
           }
           after(() => sendVerificationCode(input.email).catch((e) => console.error("[verify] send", e)));
+          after(() => newAccountAlert(created.data.user!.id, input.firstName, input.lastName, input.role, "email"));
           return json({ ok: true, needsConfirmation: true, verifyBy: "code", email: input.email, consent });
         }
         // Without the site's own email, Supabase sends its confirmation link (configure its SMTP).
@@ -320,6 +326,8 @@ export async function POST(request: Request, ctx: Ctx) {
         // Supabase answers an existing, confirmed email with a user that has no identities.
         if (data.user && (data.user.identities?.length ?? 0) === 0) return fail("An account with this email already exists. Try signing in.", 409);
         if (!data.user) return fail("We couldn't create your account. Please try again.");
+        const newId = data.user.id;
+        after(() => newAccountAlert(newId, input.firstName, input.lastName, input.role, "email"));
         let consent: { sent: boolean; error?: string } | undefined;
         if (teen) {
           const r = await sendConsentRequest(data.user.id, origin);
@@ -541,6 +549,8 @@ export async function POST(request: Request, ctx: Ctx) {
           consent = c.ok ? { sent: true } : { sent: false, error: c.error };
         }
         await auditDirect(session.user.id, "account.role_chosen", "user", session.user.id, { role: r.role });
+        const who = session.user;
+        after(() => newAccountAlert(who.id, who.firstName, who.lastName, r.role, "Google, Facebook or Apple"));
         const next = r.role === "tutor" ? "/onboarding/tutor" : r.role === "student" ? "/onboarding/student" : safePath(body.next, "/dashboard");
         return json({ ok: true, role: r.role, next, consent, state: await buildState(session.user.id) });
       }

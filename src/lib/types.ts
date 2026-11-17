@@ -493,7 +493,9 @@ export type NotificationType =
   | "homework"
   | "progress"
   | "security"
-  | "announcement";
+  | "announcement"
+  /** An in-app alert to staff about something new in their section (never emailed). */
+  | "staff";
 
 export interface AppNotification {
   id: ID;

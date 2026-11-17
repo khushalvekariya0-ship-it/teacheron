@@ -22,6 +22,8 @@ import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { VideoLinkDialog, videoLabel } from "@/components/dashboard/bookings/LessonVideo";
 import { videoMeetingId } from "@/lib/video-link";
+import { Badge } from "@/components/ui/Badge";
+import { useFreshLinks } from "@/components/dashboard/fresh-links";
 import {
   ClearFilters, ExportButton, Facts, FilterSelect, Mono, PermissionButton, PermissionNotice, RANGE_OPTIONS, ReasonDialog, SearchInput, Section, StatusPill,
   TextLink, Timeline, Toolbar, centsToDecimal, inRange, matches, settledNet, useDirectory, useStaff, useSticky, useUrlParam, type Directory, type RangePreset,
@@ -83,6 +85,7 @@ function BookingsInner() {
   const [type, setType] = React.useState<TypeFilter>("all");
   const [range, setRange] = React.useState<RangePreset>("all");
   const [openId, setOpenId] = useUrlParam("id");
+  const fresh = useFreshLinks();
 
   const searched = React.useMemo(
     () =>
@@ -125,7 +128,16 @@ function BookingsInner() {
       sortValue: (b) => subjectName(b.subject),
       cell: (b) => (
         <PersonCellLike
-          title={subjectName(b.subject)}
+          title={
+            <>
+              {subjectName(b.subject)}
+              {fresh.has(`/admin/bookings?id=${b.id}`) && (
+                <Badge tone="accent" size="sm" className="ml-1.5 align-middle" data-new="">
+                  New
+                </Badge>
+              )}
+            </>
+          }
           sub={
             <button
               type="button"

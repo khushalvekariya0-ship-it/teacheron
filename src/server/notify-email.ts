@@ -12,7 +12,7 @@ import { env } from "./env";
  * in Notifications → Email (account and security notices always go out).
  */
 
-const GROUP: Record<NotificationType, keyof NotificationPrefs | "account"> = {
+const GROUP: Record<NotificationType, keyof NotificationPrefs | "account" | "in_app_only"> = {
   message: "messages",
   application: "jobs",
   application_status: "jobs",
@@ -31,6 +31,8 @@ const GROUP: Record<NotificationType, keyof NotificationPrefs | "account"> = {
   announcement: "marketing",
   verification: "account",
   security: "account",
+  // Staff see these in the admin sidebar and bell; an email for every new booking or blocked message would be noise.
+  staff: "in_app_only",
 };
 
 type Recipient = { id: string; email: string; firstName: string; prefs: NotificationPrefs };
@@ -67,7 +69,7 @@ export async function emailNotifications(list: AppNotification[], origin = env.s
     const messages = list.flatMap((n) => {
       const to = people.get(n.userId);
       const group = GROUP[n.type] ?? "account";
-      if (!to || skip.has(n.id) || (group !== "account" && !to.prefs[group]?.email)) return [];
+      if (!to || skip.has(n.id) || group === "in_app_only" || (group !== "account" && !to.prefs[group]?.email)) return [];
       const link = n.href && origin ? `${origin}${n.href}` : "";
       const footer = group === "account" ? `You're getting this because it's about your ${SITE.name} account.` : `Change which emails you get: ${settings || "Notifications in your dashboard"}`;
       return [

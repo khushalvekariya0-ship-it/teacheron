@@ -11,6 +11,7 @@ import { env, liveVideoReady } from "./env";
 import { broadcastToRoom, closeRoom, mintToken, removeFromRoom } from "./livekit";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
 import { checkImageBytes } from "./scan";
+import { alertStaff, shortName } from "./staff-alerts";
 
 /*
  * The live classroom's server rules (see src/lib/classroom.ts for the time window and
@@ -253,6 +254,8 @@ async function flagLesson(userId: string, lesson: Lesson, kinds: ContactKind[], 
     values (${`cfl_${randomBytes(6).toString("hex")}`}, ${userId}, 'lesson', 'file', ${lesson.booking.id}, ${recipient}, ${kinds}, ${`[${what} in the live classroom]`}, ${what})`.catch((e) =>
     console.error("[classroom] couldn't record a contact flag", (e as Error)?.message),
   );
+  const [u] = await db()`select first_name, last_name from public.users where id = ${userId}`.catch(() => []);
+  await alertStaff("reports.moderate", { title: `Contact details blocked: ${shortName(u?.first_name, u?.last_name)}`, body: `A picture put on the class whiteboard (${what}).`, href: `/admin/chat-safety?user=${userId}` });
 }
 
 /** Reads an image for contact details (OCR) and refuses it if it has any. */
@@ -306,6 +309,11 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
   after(async () => {
     await broadcastToRoom(room, message);
     if (removed) await removeFromRoom(room, identity);
+  });
+  await alertStaff("reports.moderate", {
+    title: removed ? `Removed from a lesson: ${shortName(user.firstName, user.lastName)}` : `Contact details blocked: ${shortName(user.firstName, user.lastName)}`,
+    body: `${LIVE_WHERE[source]} (${kinds.join(", ")}). ${strikes} of ${LIVE_STRIKE_LIMIT} in this lesson.`,
+    href: `/admin/chat-safety?user=${user.id}`,
   });
   if (removed) {
     const until = new Date(Date.now() + 24 * 3_600_000).toISOString();

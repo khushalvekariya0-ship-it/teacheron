@@ -317,7 +317,9 @@ function MeetingRoom({
     onSafetyRemoved();
     window.setTimeout(() => void room.disconnect(), 1500);
   }, [onSafetyRemoved, room]);
-  const me = React.useMemo(() => ({ identity: localParticipant.identity, name: ticket.me.name }), [localParticipant.identity, ticket.me.name]);
+  // Who this page is in the room: the identity the server put in the join ticket. (The local participant's
+  // own identity can still be empty when this first renders, and a warning must know it's about you.)
+  const me = React.useMemo(() => ({ identity: ticket.identity, name: ticket.me.name }), [ticket.identity, ticket.me.name]);
   const { alert: safetyAlert, dismiss: dismissSafety, caught } = useSafetyAlerts(room, me, removedForSafety);
   const caughtRef = React.useRef(caught);
   React.useEffect(() => {

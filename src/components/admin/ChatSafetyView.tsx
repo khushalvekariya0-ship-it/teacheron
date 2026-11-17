@@ -13,6 +13,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Disclosure";
 import { Sheet, SheetContent } from "@/components/ui/Overlay";
 import { Badge } from "@/components/ui/Badge";
+import { useFreshLinks } from "@/components/dashboard/fresh-links";
 import { Field, Select } from "@/components/ui/Input";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
@@ -180,6 +181,7 @@ function ChatSafetyInner() {
   const now = useNow(60_000);
 
   const [personId, setPersonId] = useUrlParam("user");
+  const fresh = useFreshLinks();
   const [tab, setTab] = React.useState<"people" | "log" | "reported">("people");
   const [q, setQ] = React.useState("");
   const [who, setWho] = React.useState<"review" | "paused" | "all">("review");
@@ -254,7 +256,14 @@ function ChatSafetyInner() {
       sortValue: (p) => p.name,
       cell: (p) => (
         <RowOpen onOpen={() => setPersonId(p.id)} label={`Open ${p.name}`}>
-          <PersonCell name={p.name} sub={p.user ? ROLE_LABEL[p.user.role] : undefined} />
+          <span className="flex items-center gap-2">
+            <PersonCell name={p.name} sub={p.user ? ROLE_LABEL[p.user.role] : undefined} />
+            {fresh.has(`/admin/chat-safety?user=${p.id}`) && (
+              <Badge tone="accent" size="sm" data-new="">
+                New
+              </Badge>
+            )}
+          </span>
         </RowOpen>
       ),
     },

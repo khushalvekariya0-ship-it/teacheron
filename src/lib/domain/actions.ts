@@ -14,6 +14,7 @@ import { SITE } from "@/lib/site";
 import { applyBps, formatDate, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
 import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
 import { isFlagOn } from "@/lib/flags";
+import { inSection, notePath } from "@/lib/nav-sections";
 import { resolveLocation } from "@/lib/data/geo";
 import { canTransition, cancellationRefund, endMs, startMs, STATUS_META } from "@/lib/booking";
 import { checkPasscode, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL } from "@/lib/video-link";
@@ -182,6 +183,8 @@ export interface DomainActions {
   // notifications
   markNotificationRead(id: string): Result;
   markAllNotificationsRead(): Result;
+  /** Opening a sidebar item reads the notifications whose links open inside it (src/lib/nav-sections.ts). */
+  markSectionRead(section: string): Result;
   setNotificationPref(group: keyof NotificationPrefs, channel: keyof NotificationPrefs["messages"], value: boolean): Result;
   // children
   saveChild(input: Omit<Child, "id" | "parentId"> & { id?: string }): Result<Child>;
@@ -308,6 +311,18 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     set((s) => ({ notifications: [{ ...n, id: uid("ntf"), userId, createdAt: nowIso(), read: false }, ...s.notifications] }));
   };
   const tutorUserId = (tutorId: string) => get().users.find((u) => u.tutorId === tutorId)?.id;
+  /**
+   * An in-app alert (never emailed) to the staff who look after a section, shown as a count on that item
+   * of the admin sidebar. One unread alert per link: a repeat (the same person trying again) refreshes it.
+   * The action's plan loads those staff (and their unread alert for the link) on the server.
+   */
+  const notifyStaff = (perm: Permission, n: { title: string; body: string; href: string }, except?: string) => {
+    for (const m of get().users.filter((u) => u.status === "active" && u.id !== except && hasPermission(u, perm))) {
+      const open = get().notifications.find((x) => x.userId === m.id && x.type === "staff" && !x.read && x.href === n.href);
+      if (open) set((s) => ({ notifications: s.notifications.map((x) => (x.id === open.id ? { ...x, title: n.title, body: n.body, createdAt: nowIso() } : x)) }));
+      else notify(m.id, { type: "staff", ...n });
+    }
+  };
 
   /**
    * Lesson reminders, to the family and the tutor: the day before (only for lessons booked more than a day
@@ -382,11 +397,19 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   };
   /** Five stopped attempts within an hour pause messaging for an hour (it stops people probing the filter). */
   const AUTO_PAUSE_ATTEMPTS = 5;
+  const CONTACT_KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or app contact", link: "an outside link" };
+  const FLAG_PLACE: Record<ContactFlag["channel"], string> = { chat: "chat", homework: "homework", lesson: "lesson notes", profile: "their profile" };
   const flagContact = (u: User, f: Omit<ContactFlag, "id" | "userId" | "status" | "createdAt">): boolean => {
     const flag: ContactFlag = { ...f, id: uid("cfl"), userId: u.id, status: "open", createdAt: nowIso() };
     set((s) => ({ contactFlags: [flag, ...s.contactFlags] }));
     const hourAgo = Date.now() - 3_600_000;
     const recent = get().contactFlags.filter((x) => x.userId === u.id && new Date(x.createdAt).getTime() > hourAgo).length;
+    const what = f.kinds.map((k) => CONTACT_KIND_LABEL[k]).join(" and ");
+    notifyStaff("reports.moderate", {
+      title: `Contact details blocked: ${u.firstName} ${u.lastName.charAt(0)}.`,
+      body: `${what[0]?.toUpperCase() ?? ""}${what.slice(1)} in ${FLAG_PLACE[f.channel] ?? "a message"}${f.source === "file" ? " (a file)" : ""}. ${recent} in the last hour.`,
+      href: `/admin/chat-safety?user=${u.id}`,
+    });
     if (recent < AUTO_PAUSE_ATTEMPTS || pausedUntil(u)) return false;
     const until = new Date(Date.now() + 3_600_000).toISOString();
     const chatModeration = { warnings: 0, ...u.chatModeration, restrictedUntil: until, restrictionReason: "Repeated attempts to share contact details", restrictedBy: "system", unlockRequestedAt: undefined, unlockRequestNote: undefined, unlockDeclinedAt: undefined };
@@ -748,6 +771,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (missing.length) return fail(`Please add ${missing.join(", ")} before publishing.`);
       const updated = { ...req, status: "published" as const, publishedAt: req.publishedAt ?? nowIso(), updatedAt: nowIso(), draftStep: undefined };
       set((s) => ({ requirements: s.requirements.map((x) => (x.id === id ? updated : x)) }));
+      if (!req.publishedAt) notifyStaff("users.read", { title: "New student requirement", body: `${req.title.slice(0, 80)} · ${subjectName(req.subject)}`, href: `/admin/requirements?id=${req.id}` });
       // Job alerts for tutors whose saved searches match the subject
       get().savedSearches.filter((ss) => ss.kind === "jobs" && ss.frequency === "instant" && ss.userId !== r.data.id && (ss.query.subject ?? "").split(",").includes(req.subject))
         .forEach((ss) => notify(ss.userId, { type: "job_match", title: "New job matches your alert", body: `${req.title} · ${subjectName(req.subject)}`, href: `/tutor-jobs/${req.id}` }));
@@ -912,6 +936,12 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const tutorUser = tutorUserId(tutor.id);
       notify(user.id, { type: instant ? "booking_confirmed" : "booking_request", title: instant ? "Lesson confirmed" : "Request sent", body: `${subjectName(input.subject)} with ${tutor.firstName} · ${formatDateTime(booking.startUtc, tzOf(user.id))}`, href: `/dashboard/bookings/${id}` });
       notify(tutorUser, { type: "booking_request", title: instant ? "New lesson booked" : "New booking request", body: `${user.firstName} ${user.lastName.charAt(0)}. · ${subjectName(input.subject)} · ${formatDateTime(booking.startUtc, tzOf(tutorUser))}`, href: `/dashboard/bookings/${id}` });
+      const kind = input.type === "trial" ? "trial lesson" : "lesson";
+      notifyStaff("bookings.manage", {
+        title: instant ? `New ${kind} booked` : `New ${kind} request`,
+        body: `${user.firstName} ${user.lastName.charAt(0)}. with ${tutor.firstName} ${tutor.lastName.charAt(0)}. · ${subjectName(input.subject)} · ${formatDateTime(booking.startUtc, SITE.defaultTimezone)}`,
+        href: `/admin/bookings?id=${id}`,
+      }, user.id);
       return ok(booking);
     },
     transitionBooking(id, to, note) {
@@ -1095,6 +1125,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       set((s) => ({ reviews: [review, ...s.reviews] }));
       patchBooking(bookingId, { reviewId: review.id });
       notify(tutorUserId(b.tutorId), { type: "review_request", title: `New ${rating}-star review`, body: review.body.slice(0, 80), href: "/dashboard/reviews" });
+      notifyStaff("reports.moderate", { title: `New ${rating}-star review`, body: `${review.authorName} · ${subjectName(b.subject)}`, href: `/admin/reviews?id=${review.id}` });
       return ok(review);
     },
     respondToReview(reviewId, body) {
@@ -1249,6 +1280,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         reports: [rep, ...s.reports],
         conversations: input.targetType === "message" ? s.conversations.map((c) => (s.messages.some((m) => m.id === input.targetId && m.conversationId === c.id) ? { ...c, reported: true } : c)) : s.conversations,
       }));
+      notifyStaff("reports.moderate", { title: "New report", body: `${input.reason.trim().slice(0, 100)} · about a ${input.targetType}`, href: `/admin/reports?id=${rep.id}` }, r.data.id);
       return ok(rep);
     },
     quoteBooking(input) {
@@ -1323,6 +1355,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const r = requireUser();
       if (!r.ok) return r;
       set((s) => ({ notifications: s.notifications.map((n) => (n.userId === r.data.id ? { ...n, read: true } : n)) }));
+      return ok(undefined);
+    },
+    markSectionRead(section) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      if (!section.startsWith("/") || section.startsWith("//")) return fail("Unknown section.");
+      const inIt = (href?: string) => {
+        const path = notePath(href);
+        return !!path && inSection(path, section);
+      };
+      set((s) => ({ notifications: s.notifications.map((n) => (n.userId === r.data.id && !n.read && inIt(n.href) ? { ...n, read: true } : n)) }));
       return ok(undefined);
     },
     setNotificationPref(group, channel, value) {
@@ -1606,14 +1649,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         ...(typeof d.introVideoUrl === "string" && parseIntroVideo(d.introVideoUrl) ? { introVideoUrl: String(d.introVideoUrl).trim() } : {}),
       };
       if (!tutor.modes.length || tutor.modes.some((m) => m !== "online" && m !== "in_person")) return fail("Choose online, in person, or both.");
+      const idCheckId = uid("vr");
       const idDocument = d.idDocument ? { name: str(d.idDocument, 200), sizeKb: Number(d.idDocumentSizeKb ?? 0) || 1, ...(typeof d.idDocumentPath === "string" ? { path: String(d.idDocumentPath) } : {}) } : null;
       set((s) => ({
         registeredTutors: [...s.registeredTutors, tutor],
         users: s.users.map((u) => (u.id === r.data.id ? { ...u, tutorId: id } : u)),
         onboarding: { ...s.onboarding, [r.data.id]: { ...draft, submittedAt: nowIso() } },
         leadTransactions: [{ id: uid("lt"), tutorId: id, delta: 3, reason: "Starter plan — monthly credits", createdAt: nowIso() }, ...s.leadTransactions],
-        verificationRequests: idDocument ? [{ id: uid("vr"), tutorId: id, kind: "identity", status: "submitted", documents: [idDocument], submittedAt: nowIso() }, ...s.verificationRequests] : s.verificationRequests,
+        verificationRequests: idDocument ? [{ id: idCheckId, tutorId: id, kind: "identity", status: "submitted", documents: [idDocument], submittedAt: nowIso() }, ...s.verificationRequests] : s.verificationRequests,
       }));
+      notifyStaff("users.read", { title: "New tutor profile", body: `${tutor.firstName} ${tutor.lastName.charAt(0)}. finished setting up their tutor profile.`, href: `/admin/tutors?id=${id}` });
+      if (idDocument) notifyStaff("tutors.verify", { title: "New ID to check", body: `${tutor.firstName} ${tutor.lastName.charAt(0)}. sent an identity document.`, href: `/admin/verification?id=${idCheckId}` });
       return ok(tutor);
     },
     submitVerification(kind, documents) {
@@ -1629,6 +1675,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const req: VerificationRequest = { id: uid("vr"), tutorId, kind, status: "submitted", documents, submittedAt: nowIso() };
       set((s) => ({ verificationRequests: [req, ...s.verificationRequests] }));
       patchTutor(tutorId, { verification: { ...t.verification, [kind]: "submitted" } });
+      notifyStaff("tutors.verify", { title: `New ${kind} check`, body: `${t.firstName} ${t.lastName.charAt(0)}. sent ${documents.length} document${documents.length === 1 ? "" : "s"}.`, href: `/admin/verification?id=${req.id}` });
       return ok(req);
     },
     buyCredits(packId) {
@@ -1774,6 +1821,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       set((s) => ({ disputes: [d, ...s.disputes] }));
       patchBooking(bookingId, { status: "disputed", history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to: "disputed", note: reason.replace(/_/g, " ") }] });
       notify(actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId, { type: "booking_cancelled", title: "A dispute was opened", body: "Our team will review and contact you.", href: `/dashboard/bookings/${bookingId}` });
+      notifyStaff("disputes.manage", { title: "New dispute", body: `${reason.replace(/_/g, " ")} · ${subjectName(b.subject)} lesson`, href: `/admin/disputes/${d.id}` });
       return ok(d);
     },
     addDisputeNote(id, body) {

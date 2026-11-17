@@ -19,6 +19,7 @@ import { BookingStatusBadge } from "@/components/domain/Badges";
 import { DeclineDialog } from "./BookingDialogs";
 import { DateBlock, ModeIcon, needsWrapUp, timeRange, tzShort, type BookingPeople } from "./shared";
 import { videoLabel } from "./LessonVideo";
+import { useFreshLinks } from "../fresh-links";
 
 export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Booking; people: BookingPeople; actor: Actor | null; now: number; tz: string }) {
   const transition = useApp((s) => s.transitionBooking);
@@ -32,6 +33,7 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
   const total = b.priceCents - b.discountCents;
   const subject = subjectName(b.subject);
   const href = `/dashboard/bookings/${b.id}`;
+  const isNew = useFreshLinks().has(href);
 
   const accept = async () => {
     const res = await transition(b.id, "confirmed");
@@ -77,13 +79,14 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
   const hasActions = joinable || canAccept || canDecline;
 
   return (
-    <div className={cn("group relative rounded-xl border border-line bg-surface p-3.5 transition-colors duration-200 hover:border-ink sm:p-4", b.status === "in_progress" && "border-ink")}>
+    <div className={cn("group relative rounded-xl border border-line bg-surface p-3.5 transition-colors duration-200 hover:border-ink sm:p-4", b.status === "in_progress" && "border-ink", isNew && "border-brand")} data-new={isNew ? "" : undefined}>
       <Link href={href} className="absolute inset-0 z-0 rounded-xl focus-visible:outline-offset-[-2px]" aria-label={`${subject}${b.type === "trial" ? " trial" : ""} lesson with ${people.counterpart}, ${formatWeekdayDate(b.startUtc, tz)} ${timeRange(b, tz)}`} />
       <div className="pointer-events-none relative flex gap-3.5 sm:gap-4">
         <DateBlock iso={b.startUtc} tz={tz} muted={muted} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className={cn("truncate text-[15px] font-semibold tracking-tight text-ink", muted && "text-ink-2")}>{subject}</p>
+            {isNew && <Badge tone="accent" size="sm">New</Badge>}
             {b.type === "trial" && <Badge tone="outline" size="sm">Trial</Badge>}
             <BookingStatusBadge status={b.status} />
           </div>

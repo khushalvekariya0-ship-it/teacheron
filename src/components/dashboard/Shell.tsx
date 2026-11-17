@@ -20,8 +20,10 @@ import { useSession, useUnreadMessages, useUnreadNotifications } from "@/lib/sto
 import { ROLE_LABEL } from "@/lib/data/users";
 import { hasPermission, isStaff } from "@/lib/permissions";
 import { formatRelative } from "@/lib/format";
-import { ADMIN_NAV, NAV_BY_ROLE, type NavSection } from "./nav";
-import type { Role, User } from "@/lib/types";
+import { inSection, notePath } from "@/lib/nav-sections";
+import { ADMIN_NAV, NAV_BY_ROLE, type NavItem, type NavSection } from "./nav";
+import { rememberFresh } from "./fresh-links";
+import type { AppNotification, Role, User } from "@/lib/types";
 
 function sectionsFor(user: User, area: "app" | "admin"): NavSection[] {
   if (area === "admin") {
@@ -30,9 +32,44 @@ function sectionsFor(user: User, area: "app" | "admin"): NavSection[] {
   return NAV_BY_ROLE[user.role as "student" | "parent" | "tutor"] ?? [];
 }
 
-function isActive(pathname: string, href: string) {
-  if (href === "/dashboard" || href === "/admin") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+const isActive = (pathname: string, href: string) => inSection(pathname, href);
+
+/* ─── "Something new here": counts on the sidebar items ───────────────────────
+ * Every notification links to the page it's about, so it counts on the sidebar item that page belongs
+ * to (src/lib/nav-sections.ts): a new booking on Bookings, a blocked message on Chat safety, homework
+ * on Homework. Opening the item reads them; the links that were new stay marked "New" on that page
+ * until the person moves to another item (fresh-links.ts). */
+
+/** The item a notification counts on (the overview and Notifications items only count their own). */
+function itemFor(n: AppNotification, items: NavItem[]): NavItem | undefined {
+  const path = notePath(n.href);
+  return path ? items.find((i) => i.badge !== "notifications" && inSection(path, i.href)) : undefined;
+}
+
+function useSectionBadges(sections: NavSection[], user: User, pathname: string) {
+  const all = useApp((s) => s.notifications);
+  const markSectionRead = useApp((s) => s.markSectionRead);
+  const items = React.useMemo(() => sections.flatMap((s) => s.items), [sections]);
+  const unread = React.useMemo(() => all.filter((n) => n.userId === user.id && !n.read), [all, user.id]);
+  const counts = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of unread) {
+      // Messages already counts unread messages themselves.
+      if (n.type === "message") continue;
+      const item = itemFor(n, items);
+      if (item) m.set(item.href, (m.get(item.href) ?? 0) + 1);
+    }
+    return m;
+  }, [unread, items]);
+  // Opening an item reads what's new in it.
+  const active = items.find((i) => i.badge !== "notifications" && isActive(pathname, i.href));
+  const waiting = React.useMemo(() => (active ? unread.filter((n) => itemFor(n, items) === active) : []), [active, unread, items]);
+  React.useEffect(() => {
+    if (!active || !waiting.length) return;
+    rememberFresh(active.href, waiting.map((n) => n.href ?? ""));
+    void markSectionRead(active.href);
+  }, [active, waiting, markSectionRead]);
+  return counts;
 }
 
 /* ─── Collapsible sidebar preference (per viewer, this browser) ─── */
@@ -65,7 +102,7 @@ function useSidebarCollapsed(): [boolean, () => void] {
   return [collapsed, toggle];
 }
 
-function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSection[]; onNavigate?: () => void; collapsed?: boolean }) {
+function NavList({ sections, counts, onNavigate, collapsed = false }: { sections: NavSection[]; counts: Map<string, number>; onNavigate?: () => void; collapsed?: boolean }) {
   const pathname = usePathname();
   const unreadMsgs = useUnreadMessages();
   const unreadNotes = useUnreadNotifications();
@@ -77,7 +114,7 @@ function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSec
           <ul className="space-y-0.5">
             {s.items.map((item) => {
               const active = isActive(pathname, item.href);
-              const count = item.badge === "messages" ? unreadMsgs : item.badge === "notifications" ? unreadNotes : 0;
+              const count = item.badge === "notifications" ? unreadNotes : (item.badge === "messages" ? unreadMsgs : 0) + (counts.get(item.href) ?? 0);
               return (
                 <li key={item.href}>
                   <Link
@@ -95,7 +132,10 @@ function NavList({ sections, onNavigate, collapsed = false }: { sections: NavSec
                       <motion.span layoutId="dash-nav-active" className="absolute inset-0 rounded-lg bg-ink/[0.06] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-gradient" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />
                     )}
                     <item.icon className={cn("relative size-[18px] shrink-0", active ? "text-brand [stroke-width:2.25]" : "text-ink-2")} />
-                    <span className={cn("relative flex-1 truncate", collapsed && "sr-only")}>{item.label}</span>
+                    <span className={cn("relative flex-1 truncate", collapsed && "sr-only")}>
+                      {item.label}
+                      {count > 0 && <span className="sr-only">, {count} new</span>}
+                    </span>
                     {count > 0 &&
                       (collapsed ? (
                         <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-ink ring-2 ring-surface" />
@@ -280,6 +320,8 @@ export function DashboardShell({ area, children }: { area: "app" | "admin"; chil
   const user = useSession();
   const pathname = usePathname();
   const [mobileNav, setMobileNav] = React.useState(false);
+  // Kept between renders: the sidebar counts and "opening an item reads it" compare items.
+  const sections = React.useMemo(() => (user ? sectionsFor(user, area) : []), [user, area]);
 
   if (!hydrated) return <ShellSkeleton />;
 
@@ -337,8 +379,6 @@ export function DashboardShell({ area, children }: { area: "app" | "admin"; chil
     );
   }
 
-  const sections = sectionsFor(user, area);
-
   return (
     <ShellLayout area={area} user={user} sections={sections} pathname={pathname} mobileNav={mobileNav} setMobileNav={setMobileNav}>
       {children}
@@ -364,6 +404,9 @@ function ShellLayout({
   children: React.ReactNode;
 }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
+  const counts = useSectionBadges(sections, user, pathname);
+  const unreadMsgs = useUnreadMessages();
+  const anyNew = unreadMsgs > 0 || [...counts.values()].some((n) => n > 0);
   return (
     <div className="min-h-dvh bg-page">
       {/* Desktop sidebar: white with a hairline edge, collapsible to an icon rail */}
@@ -385,7 +428,7 @@ function ShellLayout({
           </button>
         )}
         <div className={cn("scrollbar-none flex-1 overflow-y-auto pb-6 pt-4", collapsed ? "px-2" : "px-3")}>
-          <NavList sections={sections} collapsed={collapsed} />
+          <NavList sections={sections} counts={counts} collapsed={collapsed} />
         </div>
         {collapsed ? (
           <div className="flex justify-center border-t border-line p-3">
@@ -400,15 +443,16 @@ function ShellLayout({
       <Sheet open={mobileNav} onOpenChange={setMobileNav}>
         <SheetContent side="left" title={area === "admin" ? "Admin" : "Dashboard"} footer={<AccountMenu user={user} />}>
           <div className="px-3 py-4">
-            <NavList sections={sections} onNavigate={() => setMobileNav(false)} />
+            <NavList sections={sections} counts={counts} onNavigate={() => setMobileNav(false)} />
           </div>
         </SheetContent>
       </Sheet>
 
       <div className={cn("relative min-h-dvh bg-page transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]", collapsed ? "lg:pl-[76px]" : "lg:pl-[248px]")}>
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-page/80 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
-          <button type="button" onClick={() => setMobileNav(true)} className="-ml-1 grid size-10 place-items-center rounded-lg text-ink hover:bg-canvas lg:hidden" aria-label="Open navigation">
+          <button type="button" onClick={() => setMobileNav(true)} className="relative -ml-1 grid size-10 place-items-center rounded-lg text-ink hover:bg-canvas lg:hidden" aria-label={anyNew ? "Open navigation (something new)" : "Open navigation"}>
             <Menu className="size-5" />
+            {anyNew && <span className="absolute right-1.5 top-1.5 size-2.5 rounded-full bg-brand ring-2 ring-page" aria-hidden data-nav-new="" />}
           </button>
           <span className="lg:hidden">
             <Logo compact href={area === "admin" ? "/admin" : "/dashboard"} />

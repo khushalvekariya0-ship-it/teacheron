@@ -5,14 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, House, Search, Sparkles, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSession } from "@/lib/store/hooks";
+import { useApp } from "@/lib/store";
+import { useSession, useUnreadMessages } from "@/lib/store/hooks";
+import { inSection, notePath } from "@/lib/nav-sections";
 import { homeFor } from "@/lib/permissions";
 import { SmartMatchQuiz } from "@/components/home/SmartMatchQuiz";
 
 /** Pages that pin their own action bar to the bottom of the screen keep that edge to themselves. */
 const OWN_BOTTOM_BAR = [/^\/tutors\/[^/]+$/, /^\/tutor-jobs\/[^/]+$/, /^\/post-requirement/];
 
-function Tab({ href, label, icon: Icon, active }: { href: string; label: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; active: boolean }) {
+function Tab({ href, label, icon: Icon, active, dot }: { href: string; label: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; active: boolean; dot?: boolean }) {
   return (
     <li>
       <Link
@@ -20,8 +22,12 @@ function Tab({ href, label, icon: Icon, active }: { href: string; label: string;
         aria-current={active ? "page" : undefined}
         className={cn("flex h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium transition-colors", active ? "text-brand" : "text-muted hover:text-ink")}
       >
-        <Icon className="size-[22px]" strokeWidth={active ? 2.4 : 2} />
+        <span className="relative">
+          <Icon className="size-[22px]" strokeWidth={active ? 2.4 : 2} />
+          {dot && <span className="absolute -right-1 -top-0.5 size-2.5 rounded-full bg-brand ring-2 ring-surface" aria-hidden />}
+        </span>
         {label}
+        {dot && <span className="sr-only"> (something new)</span>}
       </Link>
     </li>
   );
@@ -35,10 +41,17 @@ export function MobileTabBar() {
   const pathname = usePathname();
   const me = useSession();
   const [quizOpen, setQuizOpen] = React.useState(false);
-  if (OWN_BOTTOM_BAR.some((r) => r.test(pathname))) return null;
-
+  const notes = useApp((s) => s.notifications);
+  const unreadMsgs = useUnreadMessages();
   const staff = me?.role === "admin" || me?.role === "support";
   const lessons = !me ? "/login?next=%2Fdashboard%2Fbookings" : staff ? "/admin/bookings" : "/dashboard/bookings";
+  // A dot when something is new (the dashboard sidebar shows where).
+  const unread = me ? notes.filter((n) => n.userId === me.id && !n.read) : [];
+  const newLessons = unread.some((n) => {
+    const path = notePath(n.href);
+    return !!path && inSection(path, lessons);
+  });
+  if (OWN_BOTTOM_BAR.some((r) => r.test(pathname))) return null;
 
   return (
     <>
@@ -58,8 +71,8 @@ export function MobileTabBar() {
               <Sparkles className="size-6" />
             </button>
           </li>
-          <Tab href={lessons} label="Lessons" icon={CalendarDays} active={false} />
-          <Tab href={me ? homeFor(me.role) : "/login"} label={me ? "Account" : "Log in"} icon={UserRound} active={pathname === "/login"} />
+          <Tab href={lessons} label="Lessons" icon={CalendarDays} active={false} dot={newLessons} />
+          <Tab href={me ? homeFor(me.role) : "/login"} label={me ? "Account" : "Log in"} icon={UserRound} active={pathname === "/login"} dot={unread.length > 0 || unreadMsgs > 0} />
         </ul>
       </nav>
       <SmartMatchQuiz open={quizOpen} onOpenChange={setQuizOpen} />

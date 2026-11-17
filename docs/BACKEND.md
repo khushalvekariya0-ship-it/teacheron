@@ -193,6 +193,26 @@ Distance ("tutors near me", in-person filters) needs coordinates. US ZIP codes a
 
 `next.config.ts` sends on every response: `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security`, a `Permissions-Policy` allowing camera, microphone, screen capture, location and clipboard for this site only, and no `X-Powered-By`. Scripts aren't restricted by CSP (Next.js, Supabase and LiveKit would need nonces).
 
+## "Something new" counts on the sidebar
+
+Every notification links to the page it's about, so it counts on the sidebar item that page belongs to (`src/lib/nav-sections.ts`: `notePath` drops the query and maps `/tutor-jobs/…` to Student jobs; `inSection` matches an item and its sub-pages, the overview pages only themselves). `Shell.tsx` shows the counts (Messages adds unread messages; Notifications keeps the total), a dot on the phone menu button, and a dot on the public phone bar's Lessons / Account tabs. Opening an item runs `markSectionRead(item)` for that section only; the links that were unread stay marked "New" on the page (`src/components/dashboard/fresh-links.ts`; booking rows, Admin → Bookings, Admin → Chat safety) until the person opens another item. Pages refresh every 30 s (and on focus), so a count appears within about half a minute.
+
+Staff get notifications of type `staff` for their own sections, only with the matching permission, in-app only (`notify-email.ts` never emails them):
+
+| Event | Permission | Link |
+|---|---|---|
+| new booking or request (`createBooking`) | `bookings.manage` | `/admin/bookings?id=<booking>` |
+| contact details stopped (chat, homework, notes, files; in class: speech, whiteboard, screen, board pictures) | `reports.moderate` | `/admin/chat-safety?user=<person>`, one unread alert per person (a repeat refreshes it) |
+| report (`report`; class reports also email) | `reports.moderate` | `/admin/reports?id=<report>` |
+| dispute opened | `disputes.manage` | `/admin/disputes/<id>` |
+| verification sent (and the ID at tutor sign-up) | `tutors.verify` | `/admin/verification?id=<request>` |
+| tutor profile finished | `users.read` | `/admin/tutors?id=<tutor>` |
+| job post published (first time) | `users.read` | `/admin/requirements?id=<requirement>` |
+| review posted | `reports.moderate` | `/admin/reviews?id=<review>` |
+| sign-up (email, or role chosen after Google / Facebook / Apple) | `users.read` | `/admin/users?id=<user>` |
+
+Actions call `notifyStaff` (their plans load the staff with `staffFor` in `plan.ts`); the server-side events (sign-up, live class) use `alertStaff` in `src/server/staff-alerts.ts`. No database change: `notifications.type` has no fixed list.
+
 ## Chat safety: outside links
 
 Besides phone numbers, emails and other apps (`src/lib/domain/contact.ts`), links to outside documents, forms, file-sharing and paste sites and link shorteners (Google Docs/Drive/Forms, Dropbox, OneDrive, Notion, Pastebin, bit.ly…) are stopped as kind `link`: they can hide contact details out of sight. Learning links (YouTube, Khan Academy, Wikipedia, Desmos) and meeting links stay allowed; documents can be attached instead (attachments are read). Blocked links are logged in `contact_flags` like other attempts (migration `20261105000200_outside_links.sql`).

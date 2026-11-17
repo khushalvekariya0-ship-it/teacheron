@@ -1,5 +1,5 @@
 import "server-only";
-import type { User } from "@/lib/types";
+import type { Permission, User } from "@/lib/types";
 import type { ActionName } from "@/lib/domain/actions";
 import type { Loader } from "./load";
 
@@ -19,9 +19,23 @@ async function cms(L: Loader) {
   await Promise.all([L.load("blog_posts", "true"), L.load("faqs", "true"), L.load("testimonials", "true")]);
 }
 
-/** The account's stopped attempts in the last hour (for the automatic pause). */
+/**
+ * The staff who look after a section (they get an in-app alert, see notifyStaff in actions.ts) and, when
+ * the alert has a fixed link, their unread alert for it (so a repeat refreshes it instead of adding one).
+ */
+async function staffFor(L: Loader, perm: Permission, href?: string) {
+  await Promise.all([
+    L.load("users", "role in ('admin', 'support') and status = 'active' and $1 = any(permissions)", [perm]),
+    href ? L.load("notifications", "type = 'staff' and not read and href = $1", [href]) : Promise.resolve(),
+  ]);
+}
+
+/** Chat-safety staff, told when this account's contact details are stopped. */
+const flagWatchers = (L: Loader, me: User | null) => staffFor(L, "reports.moderate", `/admin/chat-safety?user=${me?.id ?? ""}`);
+
+/** The account's stopped attempts in the last hour (for the automatic pause), and who is told about them. */
 async function recentFlags(L: Loader, me: User | null) {
-  await L.load("contact_flags", "user_id = $1 and created_at > now() - interval '1 hour'", [me?.id ?? ""]);
+  await Promise.all([L.load("contact_flags", "user_id = $1 and created_at > now() - interval '1 hour'", [me?.id ?? ""]), flagWatchers(L, me)]);
 }
 
 async function jobAlerts(L: Loader) {
@@ -48,7 +62,7 @@ export const PLANS: Record<ActionName, Plan> = {
     await Promise.all([L.self(me), L.byId("requirements", [str(obj(input).id)])]);
   },
   publishRequirement: async (L, me) => {
-    await Promise.all([L.self(me), jobAlerts(L)]);
+    await Promise.all([L.self(me), jobAlerts(L), staffFor(L, "users.read")]);
   },
   setRequirementStatus: async (L, me) => {
     await Promise.all([L.self(me), jobAlerts(L)]);
@@ -75,6 +89,7 @@ export const PLANS: Record<ActionName, Plan> = {
       L.world([me?.id], [me?.tutorId, str(i.tutorId)]),
       L.load("bookings", "idempotency_key = $1", [String(i.idempotencyKey ?? "")]),
       str(i.couponCode) ? L.load("coupons", "code = upper($1)", [String(i.couponCode).trim()]) : Promise.resolve(),
+      staffFor(L, "bookings.manage"),
     ]);
   },
   transitionBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
@@ -84,7 +99,9 @@ export const PLANS: Record<ActionName, Plan> = {
   setLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
   removeLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
   setLessonRecording: (L, me, [id]) => L.bookingParticipants(str(id), me),
-  submitReview: (L, me, [bookingId]) => L.bookingParticipants(str(bookingId), me),
+  submitReview: async (L, me, [bookingId]) => {
+    await Promise.all([L.bookingParticipants(str(bookingId), me), staffFor(L, "reports.moderate")]);
+  },
   respondToReview: self,
 
   startConversation: async (L, me, [tutorId]) => {
@@ -126,7 +143,7 @@ export const PLANS: Record<ActionName, Plan> = {
   },
   report: async (L, me, [input]) => {
     const i = obj(input);
-    await L.self(me);
+    await Promise.all([L.self(me), staffFor(L, "reports.moderate")]);
     if (i.targetType === "message") {
       const [m] = await L.byId("messages", [str(i.targetId)]);
       await L.byId("conversations", [m?.conversation_id as string]);
@@ -139,16 +156,19 @@ export const PLANS: Record<ActionName, Plan> = {
   markAllNotificationsRead: async (L, me) => {
     await Promise.all([L.self(me), L.load("notifications", "user_id = $1 and not read", [me?.id ?? ""])]);
   },
+  markSectionRead: async (L, me) => {
+    await Promise.all([L.self(me), L.load("notifications", "user_id = $1 and not read", [me?.id ?? ""])]);
+  },
   setNotificationPref: self,
 
   saveChild: self,
   removeChild: self,
 
   addProgressNote: async (L, me, [learnerId]) => {
-    await Promise.all([L.self(me), L.byId("children", [str(learnerId)])]);
+    await Promise.all([L.self(me), L.byId("children", [str(learnerId)]), flagWatchers(L, me)]);
   },
   assignHomework: async (L, me, [input]) => {
-    await Promise.all([L.self(me), L.byId("children", [str(obj(input).learnerId)])]);
+    await Promise.all([L.self(me), L.byId("children", [str(obj(input).learnerId)]), flagWatchers(L, me)]);
   },
   submitHomework: async (L, me, [id]) => {
     const [hw] = await L.byId("homework", [str(id)]);
@@ -160,7 +180,7 @@ export const PLANS: Record<ActionName, Plan> = {
   },
   setTopicStatus: self,
   addGoal: async (L, me, [input]) => {
-    await Promise.all([L.self(me), L.tutors([str(obj(input).tutorId)])]);
+    await Promise.all([L.self(me), L.tutors([str(obj(input).tutorId)]), flagWatchers(L, me)]);
   },
 
   updateTutorProfile: self,
@@ -169,8 +189,12 @@ export const PLANS: Record<ActionName, Plan> = {
   setBookingRules: self,
   setTrial: self,
   saveOnboarding: self,
-  submitOnboarding: self,
-  submitVerification: self,
+  submitOnboarding: async (L, me) => {
+    await Promise.all([L.self(me), staffFor(L, "users.read"), staffFor(L, "tutors.verify")]);
+  },
+  submitVerification: async (L, me) => {
+    await Promise.all([L.self(me), staffFor(L, "tutors.verify")]);
+  },
   buyCredits: self,
   changePlan: self,
   savePayoutAccount: self,
@@ -182,7 +206,9 @@ export const PLANS: Record<ActionName, Plan> = {
     await L.world([me?.id], [me?.tutorId, p?.tutor_id as string]);
   },
 
-  openDispute: (L, me, [bookingId]) => L.bookingParticipants(str(bookingId), me),
+  openDispute: async (L, me, [bookingId]) => {
+    await Promise.all([L.bookingParticipants(str(bookingId), me), staffFor(L, "disputes.manage")]);
+  },
   addDisputeNote: disputePlan,
   setDisputeStatus: disputePlan,
   resolveDispute: disputePlan,
