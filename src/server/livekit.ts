@@ -1,5 +1,5 @@
 import "server-only";
-import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+import { AccessToken, DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
 import type { ParticipantMeta } from "@/lib/classroom";
 import { env, liveVideoReady } from "./env";
 
@@ -29,8 +29,33 @@ export function livekitHost(): string {
   }
 }
 
-function roomService(): RoomServiceClient | null {
-  return liveVideoReady() ? new RoomServiceClient(livekitHost(), env.livekitKey, env.livekitSecret) : null;
+function roomService(timeoutSeconds = 10): RoomServiceClient | null {
+  return liveVideoReady() ? new RoomServiceClient(livekitHost(), env.livekitKey, env.livekitSecret, { requestTimeout: timeoutSeconds }) : null;
+}
+
+/** "Not found" / "does not exist": the room or the person is already gone. */
+const gone = (msg: string) => /not.?found|does not exist/i.test(msg);
+
+/**
+ * A call about a room people are in. LiveKit Cloud can take several seconds to answer those (the room
+ * lives on the media server nearest the people in it), so it gets a longer limit and a second try.
+ */
+async function roomCall(what: string, room: string, call: (svc: RoomServiceClient) => Promise<unknown>): Promise<boolean> {
+  const svc = roomService(20);
+  if (!svc) return false;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await call(svc);
+      return true;
+    } catch (e) {
+      const err = e as Error & { cause?: { code?: string; message?: string } };
+      const msg = String(err?.message ?? "");
+      if (gone(msg)) return false;
+      if (attempt === 2) console.error(`[livekit] couldn't ${what}`, room, "-", msg, err?.cause?.code ?? err?.cause?.message ?? "");
+      else await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  return false;
 }
 
 /** A join token for one room. Host-ness and role go into server-signed metadata the browsers can trust. */
@@ -55,10 +80,20 @@ export async function closeRoom(room: string): Promise<boolean> {
   } catch (e) {
     // A room nobody joined doesn't exist on the server: that counts as closed.
     const msg = String((e as Error)?.message ?? "");
-    if (/not.?found/i.test(msg)) return true;
+    if (gone(msg)) return true;
     console.error("[livekit] couldn't close", room, "-", msg);
     return false;
   }
+}
+
+/** Takes one person out of a room (they see "You were removed"). Never throws. */
+export function removeFromRoom(room: string, identity: string): Promise<boolean> {
+  return roomCall("remove a participant from", room, (svc) => svc.removeParticipant(room, identity));
+}
+
+/** A message from the server to everyone in a room (reliable data packet, JSON). Never throws. */
+export function broadcastToRoom(room: string, message: object): Promise<boolean> {
+  return roomCall("send to", room, (svc) => svc.sendData(room, new TextEncoder().encode(JSON.stringify(message)), DataPacket_Kind.RELIABLE, {}));
 }
 
 /** Who is in a room right now (identities). Empty when the room doesn't exist or the server can't be reached. */

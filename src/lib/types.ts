@@ -668,7 +668,8 @@ export interface ContactFlag {
   /** Who tried to send it. */
   userId: ID;
   channel: "chat" | "homework" | "lesson" | "profile";
-  source: "text" | "file";
+  /** text / file; in the live classroom: speech (said out loud), board (drawn on the whiteboard), screen (on a shared screen). */
+  source: "text" | "file" | "speech" | "board" | "screen";
   /** The conversation, homework or tutor profile it was meant for. */
   contextId?: ID;
   /** The person who would have received it (user id, or tutor id for a tutor). */

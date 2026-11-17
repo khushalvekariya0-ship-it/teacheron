@@ -179,6 +179,13 @@ export const DEFAULT_FLAGS: FeatureFlag[] = [
   { key: "trial_lessons", label: "Trial lessons", description: "Allow tutors to offer free or paid trial lessons.", enabled: true, rolloutPercent: 100 },
   { key: "instant_booking", label: "Instant booking", description: "Let tutors accept bookings without manual approval.", enabled: true, rolloutPercent: 100 },
   { key: "online_lessons", label: "Online lessons", description: "Integrated online lesson page with meeting links.", enabled: true, rolloutPercent: 100 },
+  {
+    key: "outside_meeting_links",
+    label: "Zoom / Google Meet links",
+    description: "Let tutors add Zoom or Google Meet links to lessons. Off: every online lesson uses the TutorLink classroom, where phone numbers, emails and social media are checked (speech, whiteboard, shared screen and chat).",
+    enabled: false,
+    rolloutPercent: 100,
+  },
   { key: "lead_credits", label: "Lead credits", description: "Tutors spend credits to apply to student jobs.", enabled: true, rolloutPercent: 100 },
   { key: "ai_matching", label: "AI-assisted matching", description: "Natural-language concierge input. Rules-based scoring remains the source of truth.", enabled: true, rolloutPercent: 25 },
   { key: "coupons", label: "Coupons", description: "Promotional codes at checkout.", enabled: true, rolloutPercent: 100 },

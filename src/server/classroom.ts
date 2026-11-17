@@ -1,13 +1,14 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { classWindow, roomFor, type ClassWindow, type JoinTicket, type ParticipantMeta } from "@/lib/classroom";
+import { after } from "next/server";
+import { classWindow, LIVE_STRIKE_LIMIT, roomFor, TOPIC, type ClassWindow, type JoinTicket, type ParticipantMeta, type SafetyMessage } from "@/lib/classroom";
 import { blockedMessage, maskMatches, NAME_RULE, scanContact, type ContactKind } from "@/lib/domain/contact";
 import { hasPermission } from "@/lib/permissions";
 import type { Booking, User } from "@/lib/types";
 import { auditDirect, notifyDirect } from "./auth";
 import { db } from "./db";
 import { env, liveVideoReady } from "./env";
-import { closeRoom, mintToken } from "./livekit";
+import { broadcastToRoom, closeRoom, mintToken, removeFromRoom } from "./livekit";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
 import { checkImageBytes } from "./scan";
 
@@ -109,6 +110,9 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   const role = requireRole(user, lesson);
   const w = windowOf(lesson);
   if (!w.canJoin) windowError(w);
+  if (role !== "staff" && (await liveStrikes(user.id, lesson.booking.id)) >= LIVE_STRIKE_LIMIT) {
+    throw new ClassError("You were removed from this class because contact details were shared in it. Our team will review it.", 403);
+  }
   const meta = metaFor(user, lesson, role);
   const room = roomFor(lesson.booking.id);
   if (meta.isHost) {
@@ -260,6 +264,101 @@ async function checkImage(userId: string | null, lesson: Lesson, bytes: Buffer, 
     throw new ClassError(blockedMessage(check.kinds, "file"), 422);
   }
   throw new ClassError(check.error, 422);
+}
+
+/* ─── Keeping contact details out of the live class ───────────────────────────
+ * Each person's own browser checks what they say (speech recognition, while their microphone is on),
+ * what they draw on the whiteboard and what they share on screen (pictures read here with OCR). When
+ * contact details are found, it's recorded like a blocked message (Admin → Chat safety), everyone in
+ * the room is told, and at LIVE_STRIKE_LIMIT the person is removed, can't rejoin this lesson, and their
+ * messaging is paused for a day while the moderators are alerted.
+ */
+
+type LiveSource = "speech" | "board" | "screen";
+const LIVE_WHERE: Record<LiveSource, string> = { speech: "Said out loud in class", board: "Written on the class whiteboard", screen: "Shown on a shared screen in class" };
+
+/** How many times this person's contact details were caught in this lesson's class. */
+export async function liveStrikes(userId: string, bookingId: string): Promise<number> {
+  const [{ n }] = await db()`select count(*)::int n from public.contact_flags where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source in ('speech', 'board', 'screen')`;
+  return Number(n);
+}
+
+/** In-app and email alert to everyone who moderates chat safety. */
+async function alertModerators(n: { title: string; body: string; href: string }, origin: string) {
+  const mods = await db()`select id from public.users where status = 'active' and role in ('admin', 'support') and 'reports.moderate' = any(permissions)`;
+  for (const m of mods) await notifyDirect(String(m.id), n, origin).catch(() => {});
+}
+
+async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kinds: ContactKind[], excerpt: string, origin: string) {
+  const recipient = user.id === lesson.booking.bookerId ? lesson.tutorUserId : lesson.booking.bookerId;
+  await db()`insert into public.contact_flags (id, user_id, channel, source, context_id, recipient_id, kinds, excerpt)
+    values (${`cfl_${randomBytes(6).toString("hex")}`}, ${user.id}, 'lesson', ${source}, ${lesson.booking.id}, ${recipient}, ${kinds}, ${excerpt.slice(0, 300)})`;
+  const strikes = await liveStrikes(user.id, lesson.booking.id);
+  const removed = strikes >= LIVE_STRIKE_LIMIT;
+  const role = roleOf(user, lesson);
+  const name = role ? metaFor(user, lesson, role).name : user.firstName;
+  const identity = `u-${user.id}`;
+  const room = roomFor(lesson.booking.id);
+  const message: SafetyMessage = { type: TOPIC.safety, name, identity, source, kinds, strikes, removed };
+  // LiveKit Cloud can take several seconds for a room people are in, so the room is told (and the person
+  // removed) after this answer goes back; the person's own browser shows the warning from the answer and
+  // tells the others itself straight away. The message goes first, so the person removed sees why.
+  after(async () => {
+    await broadcastToRoom(room, message);
+    if (removed) await removeFromRoom(room, identity);
+  });
+  if (removed) {
+    const until = new Date(Date.now() + 24 * 3_600_000).toISOString();
+    await db()`update public.users set chat_moderation = coalesce(chat_moderation, '{}'::jsonb) || ${db().json({ restrictedUntil: until, restrictionReason: "Shared contact details in a lesson", restrictedBy: "system" })} where id = ${user.id}`;
+    await notifyDirect(
+      user.id,
+      { title: "Removed from a lesson", body: `Contact details were caught ${LIVE_STRIKE_LIMIT} times in your lesson, so you were removed from the class and your messaging is paused for 24 hours. Keep lessons, contact and payments on TutorLink.`, href: "/dashboard/messages" },
+      origin,
+    );
+    await alertModerators({ title: "Contact details shared in a lesson", body: `${name} was removed from a lesson after contact details were caught ${strikes} times (${LIVE_WHERE[source].toLowerCase()}). Review it in Chat safety.`, href: "/admin/chat-safety" }, origin);
+  }
+  return { strikes, removed };
+}
+
+/** The person's own browser heard contact details in what they said. Only the masked text is sent. */
+export async function reportSpeech(user: User, lesson: Lesson, kinds: ContactKind[], excerpt: string, origin: string) {
+  requireRole(user, lesson);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  if (!kinds.length) throw new ClassError("Nothing to record.");
+  const found = scanContact(excerpt, "chat");
+  const clean = (found.found ? maskMatches(excerpt, found.matches) : excerpt).trim().slice(0, 200);
+  return { found: true, kinds, ...(await caughtInClass(user, lesson, "speech", kinds, `${LIVE_WHERE.speech}: "${clean}"`, origin)) };
+}
+
+/** A picture of what the person drew on the whiteboard, or a frame of their shared screen, read with OCR. */
+export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen", dataUrl: string, origin: string) {
+  requireRole(user, lesson);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  const img = decodeImage(dataUrl, 3 * 1024 * 1024);
+  const check = await checkImageBytes(img.bytes);
+  // An unreadable picture is let through: the check must never block the lesson itself.
+  if (check.ok || check.reason !== "contact") return { found: false as const };
+  return { found: true as const, kinds: check.kinds, ...(await caughtInClass(user, lesson, source, check.kinds, `[${LIVE_WHERE[source]}]`, origin)) };
+}
+
+export const CLASS_REPORT_REASONS = {
+  asked_contact: "Asked for my phone number, email or social media",
+  shared_contact: "Shared their own contact details",
+  pay_outside: "Asked to pay or meet outside TutorLink",
+  other: "Something else",
+} as const;
+
+/** "Report" in the class: the other side of the lesson, to Admin → Reports. */
+export async function reportFromClass(user: User, lesson: Lesson, reason: keyof typeof CLASS_REPORT_REASONS, details: string, origin: string) {
+  const role = requireRole(user, lesson);
+  if (role === "staff") throw new ClassError("Staff can act on the lesson directly from Admin → Bookings.");
+  const target = role === "tutor" ? lesson.booking.bookerId : lesson.tutorUserId;
+  if (!target) throw new ClassError("There's no one to report in this lesson.");
+  const found = scanContact(details, "chat");
+  const note = (found.found ? maskMatches(details, found.matches) : details).trim().slice(0, 2000);
+  await db()`insert into public.reports (id, reporter_id, target_type, target_id, reason, details, status, created_at)
+    values (${`rep_${randomBytes(6).toString("hex")}`}, ${user.id}, 'user', ${target}, ${CLASS_REPORT_REASONS[reason]}, ${`From the live class of lesson ${lesson.booking.id}.${note ? ` ${note}` : ""}`}, 'open', now())`;
+  await alertModerators({ title: "New report from a lesson", body: `${CLASS_REPORT_REASONS[reason]}. Review it in Reports.`, href: "/admin/reports" }, origin);
 }
 
 /** How long a whiteboard image link stays valid: until the room closes, plus an hour. */

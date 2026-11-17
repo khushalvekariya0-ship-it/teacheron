@@ -5,6 +5,7 @@ import { Check, Copy, Film, KeyRound, Link2, Pencil, Trash2, Video } from "lucid
 import type { Booking } from "@/lib/types";
 import { endMs, startMs } from "@/lib/booking";
 import { useApp } from "@/lib/store";
+import { useFlag } from "@/lib/store/hooks";
 import { checkPasscode, MAX_PASSCODE, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL, videoMeetingId, videoProvider } from "@/lib/video-link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -91,9 +92,11 @@ function CopyRow({ icon: Icon, label, value, mono }: { icon: React.ComponentType
 export function LessonVideoCard({ booking: b, canManage, now, counterpart }: { booking: Booking; canManage: boolean; now: number; counterpart: string }) {
   const [dialog, setDialog] = React.useState<"link" | "remove" | "recording" | null>(null);
   const removeVideo = useApp((s) => s.removeLessonVideo);
+  // Off: every online lesson uses the TutorLink classroom (Admin → Feature flags → Zoom / Google Meet links).
+  const linksOn = useFlag("outside_meeting_links");
   const [busy, setBusy] = React.useState(false);
   if (b.mode !== "online") return null;
-  const canEdit = canManage && editable(b, now);
+  const canEdit = linksOn && canManage && editable(b, now);
   const canRecord = canManage && startMs(b) <= now && ["in_progress", "completed", "confirmed", "disputed", "refunded"].includes(b.status);
   if (!b.videoLink && !b.recordingUrl && !canEdit && !canRecord) return null;
   const name = b.videoLink ? videoLabel(b) : "Zoom or Google Meet";
@@ -102,7 +105,7 @@ export function LessonVideoCard({ booking: b, canManage, now, counterpart }: { b
   return (
     <Card>
       <CardHeader
-        title={b.videoLink ? `${name} meeting` : "Teach on Zoom or Google Meet"}
+        title={b.videoLink ? `${name} meeting` : linksOn ? "Teach on Zoom or Google Meet" : "Lesson recording"}
         description={
           b.videoLink
             ? canManage

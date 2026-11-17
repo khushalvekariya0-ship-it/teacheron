@@ -271,7 +271,14 @@ How it behaves:
 - Chat in class is the family's normal conversation with the tutor, so contact details are blocked as
   everywhere else. Images put on the whiteboard and boards saved to the lesson page are read for
   contact details first; captions and transcripts have contact details hidden.
-- Lessons where the tutor added a Zoom or Google Meet link keep using that meeting for video.
+- **Contact details in class**: phone numbers, emails and social media are also checked in what people
+  say (on computers, while their microphone is on, in Chrome or Edge), on the whiteboard and on shared screens. Each
+  time, both people see a warning and it's listed in Admin → Chat safety; the 3rd time the person is
+  removed from the class, can't rejoin it, and their messaging is paused for 24 hours. **Report** in
+  class sends a report to Admin → Reports. The camera picture isn't checked.
+- Zoom and Google Meet links are **off** (Admin → Feature flags → "Zoom / Google Meet links"), so every
+  lesson uses the TutorLink classroom where these checks run. If you turn them on, lessons with a Zoom
+  or Meet link use that meeting instead, and nothing said or shown there is checked.
 
 ---
 
@@ -381,5 +388,6 @@ pretend they work: the buttons say "not available yet" or the server refuses wit
 - **Automatic payouts to tutors** (Razorpay Route / RazorpayX, which need Razorpay's approval). Until
   then, send payouts by UPI or bank transfer and record them in Admin → Payments → Payouts (see step 10).
 - **Two-way video in the classroom** needs your LiveKit keys (step 9). Without them, lessons use the
-  basic classroom (own camera, whiteboard and chat) or the tutor's Zoom / Google Meet link.
+  basic classroom (own camera, whiteboard and chat), or the tutor's Zoom / Google Meet link if you
+  turned those on.
 - **Text-message notifications** (Twilio).

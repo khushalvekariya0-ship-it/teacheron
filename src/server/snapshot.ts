@@ -2,6 +2,7 @@ import "server-only";
 import type { Permission, User } from "@/lib/types";
 import type { Data, LoginEvent } from "@/lib/domain/data";
 import { hasPermission } from "@/lib/permissions";
+import { isFlagOn } from "@/lib/flags";
 import { maskContactInfo } from "@/lib/domain/data";
 import { fileNameContact, maskMatches } from "@/lib/domain/contact";
 import { db } from "./db";
@@ -176,6 +177,17 @@ export async function buildState(userId: string | null): Promise<ClientState> {
       (d as unknown as Record<string, unknown>)[key] = own ? { [myId!]: own } : {};
     }
     d.savedSearches = d.savedSearches.filter((s) => s.userId === myId);
+    // With Zoom / Google Meet links switched off (Admin → Feature flags), every online lesson uses the TutorLink
+    // classroom, where contact details are checked: links saved earlier aren't sent, so every Join opens it.
+    if (!isFlagOn(d.flags, "outside_meeting_links", myId)) {
+      d.bookings = d.bookings.map((b) => {
+        if (!b.videoLink && !b.videoPasscode) return b;
+        const { videoLink: _l, videoPasscode: _p, ...rest } = b;
+        void _l;
+        void _p;
+        return rest;
+      });
+    }
     if (!can("reports.moderate")) d.reports = d.reports.filter((r) => r.reporterId === myId);
     // Messages are sent only for the viewer's own conversations. Staff load a flagged conversation's
     // messages through logConversationAccess, which records the reason in the audit log first.

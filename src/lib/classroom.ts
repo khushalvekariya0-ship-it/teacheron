@@ -95,4 +95,21 @@ export const TOPIC = {
   remove: "wb-delete", // one stroke removed
   chat: "chat-ping", // "a new message is saved, refresh" (the message itself goes through the moderated inbox)
   caption: "caption", // one finished caption line
+  safety: "safety", // from the server: contact details were caught (and maybe someone was removed)
 } as const;
+
+/** What the server tells everyone in the room when contact details are caught in class. */
+export interface SafetyMessage {
+  type: typeof TOPIC.safety;
+  /** The person's name and room identity. */
+  name: string;
+  identity: string;
+  source: "speech" | "board" | "screen";
+  kinds: ("phone" | "email" | "social" | "link")[];
+  /** How many times in this lesson; at LIVE_STRIKE_LIMIT the person is removed from the class. */
+  strikes: number;
+  removed: boolean;
+}
+
+/** Times contact details may be caught in one lesson before the person is removed from the class. */
+export const LIVE_STRIKE_LIMIT = 3;

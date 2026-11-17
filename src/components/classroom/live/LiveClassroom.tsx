@@ -6,14 +6,15 @@ import {
 } from "@livekit/components-react";
 import { DisconnectReason, MediaDeviceFailure, RoomEvent, Track, type Participant } from "livekit-client";
 import {
-  AlertTriangle, Camera, Check, Copy, FileText, LayoutGrid, Link2, Loader2, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp, PenLine, PhoneOff,
+  AlertTriangle, Camera, Check, Copy, FileText, Flag, LayoutGrid, Link2, Loader2, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp, PenLine, PhoneOff,
   RefreshCw, User as UserIcon, Users, Video, VideoOff,
 } from "lucide-react";
-import { readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
+import { LIVE_STRIKE_LIMIT, readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
 import { maskMatches, scanContact } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
 import { ChatPanel, type ChatLine } from "../ChatPanel";
 import { MeetingWhiteboard } from "./MeetingWhiteboard";
+import { ReportDialog, SafetyAlert, SafetyBanner, sendSafety, speechContact, useSafetyAlerts, useScreenShareCheck } from "./LessonSafety";
 import { downloadTranscriptPdf, type Snapshot } from "./transcriptPdf";
 
 /*
@@ -101,6 +102,11 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
   const [ended, setEnded] = React.useState<{ title: string; message: string; rejoin: boolean } | null>(null);
   const leavingRef = React.useRef(false);
   const connectedRef = React.useRef(false);
+  // Set when contact details were caught LIVE_STRIKE_LIMIT times: the class ends with the reason.
+  const safetyRemovedRef = React.useRef(false);
+  const onSafetyRemoved = React.useCallback(() => {
+    safetyRemovedRef.current = true;
+  }, []);
 
   React.useEffect(() => {
     if (given) return;
@@ -218,6 +224,14 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
         }}
         onDisconnected={(reason) => {
           if (leavingRef.current) return;
+          if (safetyRemovedRef.current) {
+            setEnded({
+              title: "You were removed",
+              message: `Contact details were shared ${LIVE_STRIKE_LIMIT} times in this class, so you were removed and your messaging is paused for 24 hours. TutorLink's team will review it.`,
+              rejoin: false,
+            });
+            return;
+          }
           if (!connectedRef.current) {
             setEnded({ title: "Couldn't connect to the class", message: "We couldn't reach the video server. Check your internet connection and try again.", rejoin: true });
             return;
@@ -229,7 +243,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
         }}
         style={{ position: "fixed", inset: 0, zIndex: 50 }}
       >
-        <MeetingRoom bookingId={bookingId} title={title} ticket={ticket} chat={chat} onRefresh={onRefresh} leavingRef={leavingRef} onLeave={onLeave} />
+        <MeetingRoom bookingId={bookingId} title={title} ticket={ticket} chat={chat} onRefresh={onRefresh} leavingRef={leavingRef} onLeave={onLeave} onSafetyRemoved={onSafetyRemoved} />
       </LiveKitRoom>
     </div>
   );
@@ -238,7 +252,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
 /* ─── Inner: the room ────────────────────────────────────────────────────── */
 
 function MeetingRoom({
-  bookingId, title, ticket, chat, onRefresh, leavingRef, onLeave,
+  bookingId, title, ticket, chat, onRefresh, leavingRef, onLeave, onSafetyRemoved,
 }: {
   bookingId: string;
   title: string;
@@ -247,6 +261,7 @@ function MeetingRoom({
   onRefresh?: () => void;
   leavingRef: React.RefObject<boolean>;
   onLeave: () => void;
+  onSafetyRemoved: () => void;
 }) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -276,13 +291,47 @@ function MeetingRoom({
   const [captionStatus, setCaptionStatus] = React.useState<"idle" | "listening" | "error">("idle");
   const [interim, setInterim] = React.useState("");
   const [lines, setLines] = React.useState<{ id: number; speaker: string; text: string }[]>([]);
-  const [lang, setLang] = React.useState("en-US");
+  // Speech is recognised in English (India) for people in India, else English (US); the CC menu changes it.
+  const [lang, setLang] = React.useState(() => (Intl.DateTimeFormat().resolvedOptions().timeZone === "Asia/Kolkata" ? "en-IN" : "en-US"));
   const [langOpen, setLangOpen] = React.useState(false);
   const [langSearch, setLangSearch] = React.useState("");
   const captionsOnRef = React.useRef(false);
   const recRef = React.useRef<Recognition | null>(null);
   const langRef = React.useRef(lang);
   const lineSeq = React.useRef(0);
+  // Keeping contact details out of the class (see LessonSafety).
+  const guest = ticket.identity.startsWith("guest-");
+  // Speech is checked on computers only: on phones the browser's recogniser beeps at every restart and
+  // can take the microphone away from the call.
+  const speechCheck = React.useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+  }, []);
+  const canReport = !guest && ticket.me.role !== "Staff";
+  const listenRef = React.useRef(false);
+  const lastSafetyAt = React.useRef(0);
+  const [reportOpen, setReportOpen] = React.useState(false);
+  // The LIVE_STRIKE_LIMIT-th time: this page leaves the class (the server removes the person too).
+  const removedForSafety = React.useCallback(() => {
+    onSafetyRemoved();
+    window.setTimeout(() => void room.disconnect(), 1500);
+  }, [onSafetyRemoved, room]);
+  const me = React.useMemo(() => ({ identity: localParticipant.identity, name: ticket.me.name }), [localParticipant.identity, ticket.me.name]);
+  const { alert: safetyAlert, dismiss: dismissSafety, caught } = useSafetyAlerts(room, me, removedForSafety);
+  const caughtRef = React.useRef(caught);
+  React.useEffect(() => {
+    caughtRef.current = caught;
+  }, [caught]);
+  useScreenShareCheck({
+    room,
+    bookingId,
+    sharing: isScreenShareEnabled && !guest,
+    onFound: (res) => {
+      void localParticipant.setScreenShareEnabled(false).catch(() => {});
+      caught("screen", res);
+    },
+  });
 
   const say = React.useCallback((msg: string, ms = 4000) => {
     setNotice(msg);
@@ -370,7 +419,9 @@ function MeetingRoom({
     return err;
   };
 
-  /* ── live captions (Web Speech API) ── */
+  /* ── speech (Web Speech API): the safety check, and live captions (CC) ──
+   * One recogniser serves both. It runs while the microphone is on, so contact details said out loud are
+   * caught (only the masked sentence is sent, see LessonSafety), and while captions are on. */
 
   const stopRecognition = React.useCallback(() => {
     const rec = recRef.current;
@@ -386,16 +437,19 @@ function MeetingRoom({
     }
   }, []);
 
-  const startCaptions = React.useCallback(() => {
+  const startRecognition = React.useCallback(() => {
     const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!SR) {
-      setCaptionStatus("error");
-      say("Live captions need Chrome or Edge.");
+      if (captionsOnRef.current) {
+        setCaptionStatus("error");
+        say("Live captions need Chrome or Edge.");
+      }
       return;
     }
     stopRecognition();
     const me = ticket.me.name;
+    const wanted = () => captionsOnRef.current || listenRef.current;
     const create = (): Recognition => {
       const rec = new SR();
       rec.continuous = true;
@@ -410,6 +464,15 @@ function MeetingRoom({
             pending += said;
             continue;
           }
+          // Safety: contact details said out loud are reported (masked), at most every 5 seconds.
+          if (listenRef.current) {
+            const hit = speechContact(said);
+            if (hit && Date.now() - lastSafetyAt.current > 5000) {
+              lastSafetyAt.current = Date.now();
+              void sendSafety(bookingId, { source: "speech", kinds: hit.kinds, excerpt: hit.masked }).then((res) => caughtRef.current("speech", res));
+            }
+          }
+          if (!captionsOnRef.current) continue;
           const text = mask(said.trim());
           if (!text) continue;
           const id = ++lineSeq.current;
@@ -419,25 +482,29 @@ function MeetingRoom({
           // Captions may be dropped rather than stall the room.
           room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.caption, text: text.slice(0, 500) })), { reliable: false }).catch(() => {});
         }
-        setInterim(pending);
+        setInterim(captionsOnRef.current ? pending : "");
       };
       rec.onerror = (e) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          captionsOnRef.current = false;
-          setCaptionsOn(false);
-          setCaptionStatus("error");
-          say("The microphone is blocked, so captions are off. Allow it in your browser to use them.");
+          listenRef.current = false;
+          if (captionsOnRef.current) {
+            captionsOnRef.current = false;
+            setCaptionsOn(false);
+            setCaptionStatus("error");
+            say("The microphone is blocked, so captions are off. Allow it in your browser to use them.");
+          }
           stopRecognition();
         } else if (e.error === "network") setCaptionStatus("error");
       };
       rec.onend = () => {
         setInterim("");
-        if (!captionsOnRef.current) {
+        if (!wanted()) {
           setCaptionStatus("idle");
+          if (recRef.current === rec) recRef.current = null;
           return;
         }
         window.setTimeout(() => {
-          if (!captionsOnRef.current) return;
+          if (!wanted()) return;
           try {
             const next = create();
             next.start();
@@ -456,12 +523,20 @@ function MeetingRoom({
     } catch {
       setCaptionStatus("error");
     }
-  }, [room, ticket.me.name, say, stopRecognition]);
+  }, [room, ticket.me.name, say, stopRecognition, bookingId]);
+
+  // The safety check listens while this person's microphone is on (guests have no account to hold to it).
+  React.useEffect(() => {
+    listenRef.current = isMicrophoneEnabled && !guest && speechCheck;
+    if (listenRef.current && !recRef.current) startRecognition();
+    else if (!listenRef.current && !captionsOnRef.current && recRef.current) stopRecognition();
+  }, [isMicrophoneEnabled, guest, speechCheck, startRecognition, stopRecognition]);
 
   // Leaving switches the microphone off for good.
   React.useEffect(
     () => () => {
       captionsOnRef.current = false;
+      listenRef.current = false;
       stopRecognition();
     },
     [stopRecognition],
@@ -472,13 +547,13 @@ function MeetingRoom({
       setPanel("transcript");
       captionsOnRef.current = true;
       setCaptionsOn(true);
-      setCaptionStatus("idle");
-      startCaptions();
+      setCaptionStatus(recRef.current ? "listening" : "idle");
+      if (!recRef.current) startRecognition();
     } else {
       captionsOnRef.current = false;
       setCaptionsOn(false);
       setCaptionStatus("idle");
-      stopRecognition();
+      if (!listenRef.current) stopRecognition();
       setInterim("");
       setLines([]);
     }
@@ -489,7 +564,7 @@ function MeetingRoom({
     langRef.current = code;
     setLangOpen(false);
     setLangSearch("");
-    if (captionsOnRef.current) window.setTimeout(startCaptions, 200);
+    if (recRef.current) window.setTimeout(startRecognition, 200);
   };
 
   /* ── devices ── */
@@ -671,6 +746,7 @@ function MeetingRoom({
           </span>
         </div>
       </div>
+      <SafetyBanner onReport={canReport ? () => setReportOpen(true) : undefined} />
 
       {/* Main area */}
       <div className="relative flex flex-1 overflow-hidden">
@@ -724,7 +800,7 @@ function MeetingRoom({
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} />
+            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} />
           </div>
         </div>
 
@@ -842,6 +918,9 @@ function MeetingRoom({
         </div>
       )}
 
+      <SafetyAlert alert={safetyAlert} onDismiss={dismissSafety} />
+      <ReportDialog bookingId={bookingId} open={reportOpen} onClose={() => setReportOpen(false)} onSent={(msg) => say(msg, 5000)} />
+
       {notice && (
         <div className="pointer-events-none absolute inset-x-0 top-16 z-[56] flex justify-center px-4">
           <p className="bg-night px-4 py-2 text-sm text-white shadow-xl" role="status">
@@ -919,6 +998,11 @@ function MeetingRoom({
           <button type="button" onClick={() => side("people")} className={control(panel === "people", false)} aria-label="People" title="People">
             <Users className="size-[18px]" />
           </button>
+          {canReport && (
+            <button type="button" onClick={() => setReportOpen(true)} className={control(false, false)} aria-label="Report a problem" title="Report: asked for contact details, to pay outside TutorLink…">
+              <Flag className="size-[18px]" />
+            </button>
+          )}
           {isHost && (
             <button type="button" onClick={() => void captureSnapshot()} className={control(false, false)} aria-label="Take a snapshot for the transcript" title="Snapshot of the board or shared screen">
               <Camera className="size-[18px]" />

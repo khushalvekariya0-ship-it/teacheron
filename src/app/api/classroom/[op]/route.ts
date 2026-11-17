@@ -3,8 +3,8 @@ import { z } from "zod";
 import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
-  acceptPush, classInfo, ClassError, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
-  pollGuest, pushCode, pushCodeLesson, recapFor, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
+  acceptPush, checkClassImage, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
+  pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
   validPushCode, type Lesson,
 } from "@/server/classroom";
 import { backendStatus } from "@/server/env";
@@ -158,6 +158,37 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const v = z.object({ id, code: z.string().max(20), name: z.string().max(200) }).safeParse(body);
         if (!v.success) return json({ ok: false, error: "Please enter your name." }, { status: 400 });
         return json({ ok: true, claim: await knock(await lessonOf(v.data.id), v.data.code, v.data.name) });
+      }
+      case "safety": {
+        // Contact details found by the person's own browser (speech), or a picture of their whiteboard
+        // drawing / shared screen to read with OCR.
+        const user = await signedIn();
+        const v = z
+          .object({
+            id, source: z.enum(["speech", "board", "screen"]), kinds: z.array(z.enum(["phone", "email", "social", "link"])).max(4).optional(),
+            excerpt: z.string().max(600).optional(), image: z.string().max(4_500_000).optional(),
+          })
+          .safeParse(body);
+        if (!v.success) return json({ ok: false, error: "That safety check wasn't valid." }, { status: 400 });
+        const lesson = await lessonOf(v.data.id);
+        if (v.data.source === "speech") {
+          const stop = limited(`class-safety-speech:${user.id}`, 30, 10);
+          if (stop) return stop;
+          return json({ ok: true, ...(await reportSpeech(user, lesson, v.data.kinds ?? [], v.data.excerpt ?? "", siteOrigin(request))) });
+        }
+        const stop = limited(`class-safety-image:${user.id}`, 150, 10);
+        if (stop) return stop;
+        if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
+        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request))) });
+      }
+      case "report": {
+        const user = await signedIn();
+        const stop = limited(`class-report:${user.id}`, 5, 10);
+        if (stop) return stop;
+        const v = z.object({ id, reason: z.enum(Object.keys(CLASS_REPORT_REASONS) as [keyof typeof CLASS_REPORT_REASONS]), details: z.string().max(2000).optional() }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "Choose what happened." }, { status: 400 });
+        await reportFromClass(user, await lessonOf(v.data.id), v.data.reason, v.data.details ?? "", siteOrigin(request));
+        return json({ ok: true });
       }
       case "decide": {
         const user = await signedIn();

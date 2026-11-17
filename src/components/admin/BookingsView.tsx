@@ -6,7 +6,7 @@ import { ArrowUpRight, BookOpen, CircleAlert, Gavel, MapPin, Video } from "lucid
 import type { Booking, BookingStatus, BookingType, Payment } from "@/lib/types";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { useApp } from "@/lib/store";
-import { useNow, useViewerTimezone } from "@/lib/store/hooks";
+import { useFlag, useNow, useViewerTimezone } from "@/lib/store/hooks";
 import { availableTransitions, cancellationRefund, endMs, STATUS_META } from "@/lib/booking";
 import { subjectName } from "@/lib/data/catalog";
 import { formatDateTime, formatDuration, formatTime, percentOf, pluralize, tzAbbrev } from "@/lib/format";
@@ -366,7 +366,8 @@ function BookingDetail({ booking: b, onOpen }: { booking: Booking; onOpen: (id: 
   const reason = attentionReason(b, now);
   // Staff who manage bookings can add or change a lesson's Zoom / Google Meet link while it's still to come.
   const [videoOpen, setVideoOpen] = React.useState(false);
-  const lessonOpen = b.mode === "online" && ["pending", "confirmed", "in_progress"].includes(b.status) && now < endMs(b);
+  const linksOn = useFlag("outside_meeting_links");
+  const lessonOpen = linksOn && b.mode === "online" && ["pending", "confirmed", "in_progress"].includes(b.status) && now < endMs(b);
   const child = b.childId ? dir.children.find((c) => c.id === b.childId) : undefined;
   const end = new Date(endMs(b)).toISOString();
 

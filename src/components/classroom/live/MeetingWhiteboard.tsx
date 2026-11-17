@@ -10,6 +10,7 @@ import { readMeta, TOPIC } from "@/lib/classroom";
 import { scanContact } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
 import { BoardSnip } from "./BoardSnip";
+import { sendSafety, type SafetyResult } from "./LessonSafety";
 
 /*
  * The shared whiteboard. Strokes travel over LiveKit's data channel (no server of our own in the loop):
@@ -133,6 +134,7 @@ export function MeetingWhiteboard({
   title,
   participants,
   onCanDrawChange,
+  onCaught,
 }: {
   isHost: boolean;
   bookingId: string;
@@ -140,6 +142,8 @@ export function MeetingWhiteboard({
   /** Everyone else in the room (identity + name). */
   participants: Person[];
   onCanDrawChange?: (canDraw: boolean) => void;
+  /** The server found contact details in this person's drawing (the class warning is shown from it). */
+  onCaught?: (res: SafetyResult) => void;
 }) {
   const room = useRoomContext();
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -196,6 +200,10 @@ export function MeetingWhiteboard({
   React.useEffect(() => {
     onCanDrawChange?.(canDraw);
   }, [canDraw, onCanDrawChange]);
+  const onCaughtRef = React.useRef(onCaught);
+  React.useEffect(() => {
+    onCaughtRef.current = onCaught;
+  }, [onCaught]);
 
   const nextStrokeId = () => `${room.localParticipant.identity || "me"}-${Date.now()}-${++strokeSeq.current}`;
   const flash = (msg: string, ms = 2500) => {
@@ -478,6 +486,47 @@ export function MeetingWhiteboard({
       room.off(RoomEvent.Reconnected, ask);
     };
   }, [room, send]);
+
+  // Contact details written by hand: every 15 seconds, what this person drew since the last check (pen, lines,
+  // shapes, in black for a clean read) is read on the server. If it has contact details, those strokes are
+  // removed for everyone (see LessonSafety). Typed text and pictures are already checked when they're added.
+  const checkedRef = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    if (myId.startsWith("guest-")) return;
+    let busy = false;
+    const tick = async () => {
+      if (busy || room.state !== ConnectionState.Connected) return;
+      const mine = strokesRef.current.filter((s) => s.id.startsWith(`${myId}-`) && s.tool !== "image" && s.tool !== "text" && s.tool !== "eraser");
+      const fresh = mine.filter((s) => !checkedRef.current.has(s.id));
+      if (!fresh.length) return;
+      const c = document.createElement("canvas");
+      c.width = 1280;
+      c.height = 800;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      for (const s of mine) drawStroke(ctx, { ...s, color: "#000000", size: Math.max(3, s.size ?? 4) });
+      busy = true;
+      const res = await sendSafety(bookingId, { source: "board", image: c.toDataURL("image/png") });
+      busy = false;
+      if (!res) return; // offline for a moment: tried again next time
+      if (!res.found) {
+        for (const s of fresh) checkedRef.current.add(s.id);
+        return;
+      }
+      const ids = new Set(fresh.map((s) => s.id));
+      strokesRef.current = strokesRef.current.filter((s) => !ids.has(s.id));
+      rebaseHistory((list) => list.filter((s) => !ids.has(s.id)));
+      for (const id of ids) send({ type: TOPIC.remove, id });
+      redraw();
+      setPasteMsg("Contact details can't be written on the whiteboard: your latest drawing was removed.");
+      window.setTimeout(() => setPasteMsg(""), 6000);
+      onCaughtRef.current?.(res);
+    };
+    const t = window.setInterval(() => void tick(), 15_000);
+    return () => window.clearInterval(t);
+  }, [room, myId, bookingId, drawStroke, rebaseHistory, send, redraw]);
 
   // The host re-announces the board and its editors whenever someone arrives.
   React.useEffect(() => {

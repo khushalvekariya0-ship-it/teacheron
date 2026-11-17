@@ -331,7 +331,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const at = nowIso();
       const minutesLeft = Math.max(1, Math.round((start - now) / 60_000));
       patches.set(b.id, kind === "hour" ? { reminded1hAt: at, reminded24hAt: b.reminded24hAt ?? at } : { reminded24hAt: at });
-      const where = b.mode === "online" ? (b.videoLink ? "Join from the lesson page" : "Join the TutorLink classroom from the lesson page") : b.locationNote ? `Meeting place: ${b.locationNote}` : "In person";
+      const where = b.mode === "online" ? (b.videoLink && flag("outside_meeting_links") ? "Join from the lesson page" : "Join the TutorLink classroom from the lesson page") : b.locationNote ? `Meeting place: ${b.locationNote}` : "In person";
       const tutorUser = tutorUserId(b.tutorId);
       for (const to of [b.bookerId, tutorUser].filter((x): x is string => !!x)) {
         const when = formatDateTime(b.startUtc, tzOf(to));
@@ -1023,6 +1023,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       return ok(next);
     },
     setLessonVideo(bookingId, input) {
+      if (!flag("outside_meeting_links")) return fail("Zoom and Google Meet links are turned off: every online lesson uses the TutorLink classroom.");
       const check = lessonVideoAccess(bookingId);
       if (!check.ok) return check;
       const { booking: b, actor } = check.data;

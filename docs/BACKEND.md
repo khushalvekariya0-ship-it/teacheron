@@ -68,7 +68,8 @@ Accounts, tutor profiles and job posts have a `country` (ISO code; empty = US; m
 server rules `src/server/classroom.ts`, media server calls `src/server/livekit.ts`, shared window
 rules `src/lib/classroom.ts`; migration `20261105000000_live_classroom.sql`). Set up with
 `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_WS_URL` (optional `LIVEKIT_HOST_URL`,
-`GEMINI_API_KEY`); without them the basic classroom is shown. Lessons with a Zoom / Meet link keep that.
+`GEMINI_API_KEY`); without them the basic classroom is shown. Lessons with a Zoom / Meet link keep that
+(only while the `outside_meeting_links` switch is on, see below).
 
 | API (`/api/classroom/<op>`) | Who | What |
 |---|---|---|
@@ -81,6 +82,8 @@ rules `src/lib/classroom.ts`; migration `20261105000000_live_classroom.sql`). Se
 | `POST share-board`, `GET boards`, `POST delete-board` | host / participants | the flattened board saved for the lesson page (checked the same way); the student is notified |
 | `POST push-code`, `GET helper?code=`, `POST push`, `GET push?code=` | host / the helper | the desktop snipping helper: a 12-hour room code (`XXXX-XXXX`, max 400 images) lets a PowerShell script post clipboard images; reading them back needs the host's own session |
 | `POST transcript`, `GET recap`, `POST delete-recap` | host / participants | captions saved with contact details masked; snapshots (≤ 20) checked and stored after the answer; optional Gemini recap |
+| `POST safety` | tutor, booker (not guests) | `{ id, source: speech / board / screen, kinds?, excerpt?, image? }`: contact details said out loud (found by the person's own browser; only the masked words are sent) or a picture of their whiteboard drawing / shared screen (read here with OCR). Returns `{ found, kinds, strikes, removed }`. Rate-limited (speech 30, pictures 150 per 10 min) |
+| `POST report` | tutor, booker | `{ id, reason: asked_contact / shared_contact / pay_outside / other, details? }` → a `reports` row about the other side of the lesson (details masked), moderators alerted. 5 per 10 min |
 
 In the room, strokes, image moves, drawing rights and "new chat message" pings travel over LiveKit's
 data channel; every receiver checks them (only the host may clear, undo, grant or post images; image
@@ -88,7 +91,34 @@ addresses must be this project's signed classroom files; text with contact detai
 messages themselves go through the normal moderated inbox. Blocked images are recorded in
 `contact_flags` (channel `lesson`). The scheduler closes rooms whose window is over.
 
+### Contact details in class (speech, whiteboard, shared screen)
+
+Phone numbers, emails and social media are checked in class as well as in chat (`src/components/classroom/live/LessonSafety.tsx`,
+`caughtInClass` in `src/server/classroom.ts`; migration `20261117000000_live_class_safety.sql` adds the
+`speech`, `board` and `screen` sources to `contact_flags`):
+
+- **Speech** (computers only; on phones the recogniser beeps and can take the call's microphone): while
+  someone's microphone is on, their own browser's speech recognition (Chrome / Edge; audio goes to the
+  browser maker's speech service) listens; a finished sentence with a phone number (10+ digits, or "WhatsApp / call me / my number"), an
+  email or a social handle is sent as `POST safety` with the words masked. Other browsers don't check speech.
+- **Whiteboard**: every 15 s each person's own new strokes are drawn black on white and read with OCR;
+  if contact details are found, those strokes are removed for everyone.
+- **Shared screen**: every 12 s, when the picture changed, a frame (≤ 1600 px wide) is read; if contact
+  details are found, the share stops.
+- Each catch is a `contact_flags` row (channel `lesson`, context the booking) shown in Admin → Chat
+  safety. The person's browser shows the warning from the answer and tells the room itself (a data
+  packet about itself; receivers accept one only from the person it names). The server also tells the
+  room through LiveKit after answering (`after()`; LiveKit Cloud can take several seconds for a room in
+  use, so `src/server/livekit.ts` gives room calls 20 s and a second try).
+- The 3rd time (`LIVE_STRIKE_LIMIT`) the person is removed (their page leaves, and the server removes
+  them), can't rejoin this lesson, their messaging is paused for 24 hours, they're notified and
+  moderators (`reports.moderate`) are alerted. Staff aren't counted; guests aren't checked.
+- A banner in class says what's checked; **Report** (flag button) sends the other side to Admin → Reports.
+- Not checked: what's held up to the camera, and handwriting OCR can't read well. Recording isn't on.
+
 ## Zoom / Google Meet on online lessons
+
+Off by default: the feature flag `outside_meeting_links` (Admin → Feature flags, "Zoom / Google Meet links") is off, so every online lesson uses the TutorLink classroom, where contact details are checked. While it's off, `setLessonVideo` is refused, the lesson page has no link form, and `snapshot.ts` doesn't send saved `videoLink` / `videoPasscode` (they stay in the database and come back if the flag is turned on). With it on:
 
 Online lessons open the TutorLink classroom by default. A tutor who teaches on Zoom (or Google Meet) creates the meeting in their own account and pastes its invite link on the lesson page ("Add Zoom or Google Meet link"); staff with `bookings.manage` can do the same from Admin → Bookings (audited). Actions: `setLessonVideo(bookingId, { link, passcode?, applyToUpcoming? })`, `removeLessonVideo(bookingId)`, `setLessonRecording(bookingId, link)` (Zoom cloud recording or Google Drive, once the lesson has started). `src/lib/video-link.ts` accepts only https Zoom (`/j/<id>`, `/my/<name>`) and Google Meet (`abc-defg-hij`) links, keeps only the `pwd` token, and refuses Zoom start links (`/s/…`, which carry host access); passcodes are up to 10 characters and refused if they look like a phone number. The database checks the same shapes (`bookings.video_link`, `video_passcode`, `recording_url`; migration `20261104000400_lesson_video_links.sql`). Links live on the booking, so only its student or parent, its tutor and booking staff receive them. The student or parent is notified when a link or recording is added. "Join Zoom" appears on the lesson page and in the classroom from confirmation until the lesson ends, and on lesson lists, the calendar and dashboards inside the usual join window. A rescheduled lesson keeps its link; "use this link for my other upcoming lessons" copies it to the tutor's upcoming online lessons that have none. Free Zoom accounts end meetings after 40 minutes.
 
