@@ -109,6 +109,13 @@ export async function POST(request: Request, ctx: Ctx) {
         const confirmFirst = emailReady() ? "Please confirm your email address first: enter the 6-digit code we emailed you." : "Please confirm your email address first — use the link we sent you.";
         if (error || !data.user) {
           if (error?.code === "email_not_confirmed") return fail(confirmFirst, 400, { code: "email_not_confirmed" });
+          // Supabase busy or unreachable is not a wrong password: say so, and don't count it as a failed sign-in.
+          const status = (error as { status?: number } | null)?.status ?? 0;
+          if (error && (status === 429 || error.code === "over_request_rate_limit")) return fail("Too many sign-in attempts just now. Please wait a minute and try again.", 429);
+          if (error && (status === 0 || status >= 500)) {
+            console.error("[auth:sign-in] sign-in service", error.code ?? error.name, status);
+            return fail("We couldn't reach the sign-in service. Please try again in a minute.", 503);
+          }
           await recordFailedLogin(parsed.data.email, request);
           // Same message for unknown email and wrong password, so accounts can't be discovered.
           return fail("Email or password is incorrect.", 401);
