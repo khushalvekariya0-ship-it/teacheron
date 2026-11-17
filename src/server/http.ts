@@ -62,5 +62,12 @@ export async function readJson<T = unknown>(request: Request, maxBytes = 3_000_0
 export function serverError(e: unknown, where: string) {
   if (e instanceof NotConfiguredError) return json({ ok: false, error: e.message, notConfigured: true }, { status: 503 });
   console.error(`[${where}]`, e);
+  if (databaseBusy(e)) return json({ ok: false, error: "The site is very busy for a moment. Please try again in a few seconds.", busy: true }, { status: 503, headers: { "retry-after": "5" } });
   return json({ ok: false, error: "Something went wrong on our side. Please try again." }, { status: 500 });
+}
+
+/** The database couldn't give this request a connection (pooler full, too many connections, timed out connecting). */
+function databaseBusy(e: unknown) {
+  const { code, message } = (e ?? {}) as { code?: string; message?: string };
+  return code === "EMAXCONNSESSION" || code === "53300" || code === "CONNECT_TIMEOUT" || /max clients reached|too many (clients|connections)/i.test(message ?? "");
 }

@@ -361,6 +361,13 @@ How it works on the site:
    add it to the Redirect URLs.
 3. Deploy. Open `https://your-domain.com/api/health` to check.
 
+**Database connections on Vercel.** Supabase's pooler only allows a few connections at once (15 on
+the smallest plan). Vercel puts idle copies of the site to sleep, and a sleeping copy can't close its
+connections, so `src/server/db.ts` closes them a few seconds after the last query and keeps the copy
+awake until they are closed. If sign-in ever fails and the Vercel log says `max clients reached`,
+something else is holding connections: in the Supabase SQL editor,
+`select application_name, state, count(*) from pg_stat_activity group by 1, 2;` shows who.
+
 ### Launch checklist
 
 | | What | Why |
