@@ -483,8 +483,9 @@ export async function forgetOldSafetyRecords(): Promise<number> {
  * by Gemini too (handwriting, Gujarati / Hindi digits); TutorLink's own rules decide on what was read.
  * An unreadable picture is let through: the check must never block the lesson itself.
  */
-async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: boolean): Promise<{ kinds: ContactKind[]; detector: "ocr" | "qr" | "ai" }> {
-  const [ocr, ai] = await Promise.all([checkImageBytes(bytes), aiReading ? readTextWithAI(bytes, mimeType) : Promise.resolve(null)]);
+async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: boolean, aiKey?: string): Promise<{ kinds: ContactKind[]; detector: "ocr" | "qr" | "ai" }> {
+  // Gemini gets 6 s: the whiteboard waits for this answer before others see a drawing.
+  const [ocr, ai] = await Promise.all([checkImageBytes(bytes), aiReading ? readTextWithAI(bytes, mimeType, { key: aiKey, timeoutMs: 6_000 }) : Promise.resolve(null)]);
   const kinds = new Set<ContactKind>(!ocr.ok && ocr.reason === "contact" ? ocr.kinds : []);
   let detector: "ocr" | "qr" | "ai" = !ocr.ok && ocr.reason === "contact" && ocr.via === "qr" ? "qr" : "ocr";
   if (ai) {
@@ -496,13 +497,18 @@ async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: bool
 }
 
 /** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
-export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string) {
+export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "") {
   requireRole(user, lesson);
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
   const s = await contactSafety();
   if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
   const img = decodeImage(dataUrl, 3 * 1024 * 1024);
-  const read = await readClassPicture(img.bytes, img.type, s.aiReading);
+  const read = await readClassPicture(img.bytes, img.type, s.aiReading, `${lesson.booking.id}:${source}`);
+  // Digits the person's own browser read in their handwriting (whiteboard): TutorLink's rules decide on them too.
+  const digits = handwriting.replace(/\?/g, "");
+  if (source === "board" && digits.length >= 10) {
+    for (const k of scanContact(digits, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
+  }
   if (!read.kinds.length) return { found: false as const };
   return { found: true as const, kinds: read.kinds, ...(await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector)) };
 }

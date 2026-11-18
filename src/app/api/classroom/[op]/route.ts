@@ -176,10 +176,13 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
           if (stop) return stop;
           return json({ ok: true, ...(await reportSpeech(user, lesson, v.data.kinds ?? [], v.data.excerpt ?? "", siteOrigin(request))) });
         }
-        const stop = limited(`class-safety-image:${user.id}`, 150, 10);
+        // The whiteboard is checked each time someone stops drawing (before others see it), so it gets more room.
+        const stop = limited(`class-safety-${v.data.source}:${user.id}`, v.data.source === "board" ? 600 : 150, 10);
         if (stop) return stop;
         if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
-        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request))) });
+        // A handwritten number the person's own browser read on their drawing (board only): the site's rules decide.
+        const handwriting = v.data.source === "board" ? (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40) : "";
+        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting)) });
       }
       case "unpause": {
         // The person's own page when their audio pause is over (the server checks the time).

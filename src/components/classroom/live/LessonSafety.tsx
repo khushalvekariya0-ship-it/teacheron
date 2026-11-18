@@ -24,13 +24,21 @@ import { cn } from "@/lib/utils";
 export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean; suspended?: boolean; level?: SafetyMessage["level"]; mutedUntil?: string };
 
 /** Sends one safety check to the server. Guests (no account) and network trouble return null. */
-export async function sendSafety(bookingId: string, body: { source: SafetyMessage["source"]; kinds?: ContactKind[]; excerpt?: string; image?: string }): Promise<SafetyResult | null> {
+export async function sendSafety(
+  bookingId: string,
+  body: { source: SafetyMessage["source"]; kinds?: ContactKind[]; excerpt?: string; image?: string },
+  timeoutMs = 30_000,
+): Promise<SafetyResult | null> {
+  const stop = new AbortController();
+  const t = window.setTimeout(() => stop.abort(), timeoutMs);
   try {
-    const res = await fetch("/api/classroom/safety", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, ...body }) });
+    const res = await fetch("/api/classroom/safety", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, ...body }), signal: stop.signal });
     if (!res.ok) return null;
     return (await res.json()) as SafetyResult;
   } catch {
     return null;
+  } finally {
+    window.clearTimeout(t);
   }
 }
 

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { readMeta, TOPIC } from "@/lib/classroom";
 import { scanContact } from "@/lib/domain/contact";
+import { handwrittenNumbers, MIN_DIGITS } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 import { BoardSnip } from "./BoardSnip";
 import { sendSafety, type SafetyResult } from "./LessonSafety";
@@ -194,6 +195,9 @@ export function MeetingWhiteboard({
   const [pushCount, setPushCount] = React.useState(0);
   const [copied, setCopied] = React.useState(false);
   const redrawRef = React.useRef<() => void>(() => {});
+  // This person's drawings still being checked: on their own screen only (see "Check before showing").
+  const heldRef = React.useRef(new Set<string>());
+  const [holding, setHolding] = React.useState(false);
 
   const myId = room.localParticipant.identity;
   const canDraw = isHost || editors.includes(myId);
@@ -345,9 +349,11 @@ export function MeetingWhiteboard({
   const broadcastStroke = React.useCallback((stroke: Stroke) => send({ type: TOPIC.stroke, stroke }), [send]);
 
   const sendSnapshot = React.useCallback(() => {
-    const json = JSON.stringify(strokesRef.current);
+    // Drawings still being checked stay on this screen only.
+    const shown = strokesRef.current.filter((s) => !heldRef.current.has(s.id));
+    const json = JSON.stringify(shown);
     if (json.length <= SNAP_CHUNK) {
-      send({ type: TOPIC.board, strokes: strokesRef.current });
+      send({ type: TOPIC.board, strokes: shown });
       return;
     }
     const seq = ++snapSeq.current;
@@ -401,7 +407,8 @@ export function MeetingWhiteboard({
           const clean = list.map(cleanStroke).filter((s): s is Stroke => !!s);
           if (!fromHost && clean.length === 0) return;
           awaitingSyncRef.current = false;
-          strokesRef.current = clean;
+          // This person's drawings still being checked aren't in anyone else's board yet: keep them.
+          strokesRef.current = [...clean, ...strokesRef.current.filter((s) => heldRef.current.has(s.id) && !clean.some((c) => c.id === s.id))];
           resetHistory();
           redraw();
           if (!strokesRef.current.some((x) => x.id === selectedIdRef.current)) selectImage(null);
@@ -414,6 +421,8 @@ export function MeetingWhiteboard({
           if (!fromHost) return;
           awaitingSyncRef.current = false;
           strokesRef.current = [];
+          heldRef.current.clear();
+          setHolding(false);
           resetHistory();
           selectImage(null);
           redraw();
@@ -490,46 +499,108 @@ export function MeetingWhiteboard({
     };
   }, [room, send]);
 
-  // Contact details written by hand: every 15 seconds, what this person drew since the last check (pen, lines,
-  // shapes, in black for a clean read) is read on the server. If it has contact details, those strokes are
-  // removed for everyone (see LessonSafety). Typed text and pictures are already checked when they're added.
-  const checkedRef = React.useRef(new Set<string>());
-  React.useEffect(() => {
-    if (myId.startsWith("guest-") || !checkDrawings) return;
-    let busy = false;
-    const tick = async () => {
-      if (busy || room.state !== ConnectionState.Connected) return;
-      const mine = strokesRef.current.filter((s) => s.id.startsWith(`${myId}-`) && s.tool !== "image" && s.tool !== "text" && s.tool !== "eraser");
-      const fresh = mine.filter((s) => !checkedRef.current.has(s.id));
-      if (!fresh.length) return;
+  // Check before showing: this person's new drawings stay on their own screen until they're read for contact
+  // details: handwritten phone numbers in this browser (nothing leaves the computer), printed text, QR codes
+  // and (when switched on) AI reading on the server. Clean drawings then go to everyone, in order, about a
+  // second after the pen stops; drawings with contact details never leave this screen. If the server can't
+  // answer in time the lesson goes on (the drawing is shown). Typed text and pictures are checked when added.
+  const gate = checkDrawings && !myId.startsWith("guest-");
+  const checkTimer = React.useRef<number | undefined>(undefined);
+  const checkingRef = React.useRef(false);
+  const heldSince = React.useRef(0);
+  const lastPenUp = React.useRef(0);
+  const runCheckRef = React.useRef<() => Promise<void>>(async () => {});
+  const checkLater = React.useCallback((ms: number) => {
+    window.clearTimeout(checkTimer.current);
+    checkTimer.current = window.setTimeout(() => void runCheckRef.current(), ms);
+  }, []);
+
+  const runCheck = React.useCallback(async () => {
+    window.clearTimeout(checkTimer.current);
+    if (checkingRef.current) return;
+    if (drawing.current) {
+      checkLater(400);
+      return;
+    }
+    for (const id of [...heldRef.current]) if (!strokesRef.current.some((s) => s.id === id)) heldRef.current.delete(id);
+    const batch = new Set(heldRef.current);
+    if (!batch.size) {
+      setHolding(false);
+      return;
+    }
+    checkingRef.current = true;
+    let waitMore = 0;
+    try {
+      const mine = strokesRef.current.filter((s) => s.id.startsWith(`${myId}-`) && (s.tool === "pen" || s.tool === "line" || s.tool === "rect" || s.tool === "circle"));
+      const canvas = canvasRef.current;
+      const ink = (list: Stroke[]) => list.filter((s) => s.tool === "pen" || s.tool === "line").map((s) => ({ pts: s.pts ?? [] }));
+      // A handwritten phone number this drawing adds (one already on the board before doesn't count again).
+      let local: string | null = null;
+      let growing = false;
+      try {
+        const [after, before] = await Promise.all([
+          handwrittenNumbers(ink(mine), canvas?.width || 1280, canvas?.height || 800, 5),
+          handwrittenNumbers(ink(mine.filter((s) => !batch.has(s.id))), canvas?.width || 1280, canvas?.height || 800, 5),
+        ]);
+        const known = new Set(before.map((n) => n.digits));
+        const fresh = after.filter((n) => !known.has(n.digits));
+        local = fresh.find((n) => n.count >= MIN_DIGITS)?.digits ?? null;
+        growing = !local && fresh.length > 0;
+      } catch (e) {
+        console.warn("[whiteboard] handwriting check", e);
+      }
+      // A new row of 5+ digits may be a phone number still being written: nothing is shown until the pen has
+      // rested for 2.5 s (10 s at most), so a number can't leak out half-written.
+      const rested = Date.now() - lastPenUp.current;
+      if (growing && rested < 2500 && Date.now() - heldSince.current < 10_000) {
+        waitMore = 2500 - rested;
+        return;
+      }
+      heldSince.current = 0;
+      let res: SafetyResult | null = null;
       const c = document.createElement("canvas");
       c.width = 1280;
       c.height = 800;
       const ctx = c.getContext("2d");
-      if (!ctx) return;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, c.width, c.height);
-      for (const s of mine) drawStroke(ctx, { ...s, color: "#000000", size: Math.max(3, s.size ?? 4) });
-      busy = true;
-      const res = await sendSafety(bookingId, { source: "board", image: c.toDataURL("image/png") });
-      busy = false;
-      if (!res) return; // offline for a moment: tried again next time
-      if (!res.found) {
-        for (const s of fresh) checkedRef.current.add(s.id);
-        return;
+      if (ctx) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, c.width, c.height);
+        for (const s of mine) drawStroke(ctx, { ...s, color: "#000000", size: Math.max(3, s.size ?? 4) });
+        res = await sendSafety(bookingId, { source: "board", image: c.toDataURL("image/png"), ...(local ? { kinds: ["phone" as const], excerpt: local } : {}) }, 8000);
       }
-      const ids = new Set(fresh.map((s) => s.id));
-      strokesRef.current = strokesRef.current.filter((s) => !ids.has(s.id));
-      rebaseHistory((list) => list.filter((s) => !ids.has(s.id)));
-      for (const id of ids) send({ type: TOPIC.remove, id });
-      redraw();
-      setPasteMsg("Contact details can't be written on the whiteboard: your latest drawing was removed.");
-      window.setTimeout(() => setPasteMsg(""), 6000);
-      onCaughtRef.current?.(res);
-    };
-    const t = window.setInterval(() => void tick(), 15_000);
-    return () => window.clearInterval(t);
-  }, [room, myId, bookingId, drawStroke, rebaseHistory, send, redraw, checkDrawings]);
+      if (res?.found || local) {
+        strokesRef.current = strokesRef.current.filter((s) => !batch.has(s.id));
+        rebaseHistory((list) => list.filter((s) => !batch.has(s.id)));
+        redraw();
+        setPasteMsg("Contact details can't be written on the whiteboard: your drawing wasn't shown to anyone and was removed.");
+        window.setTimeout(() => setPasteMsg(""), 7000);
+        if (res?.found) onCaughtRef.current?.(res);
+      } else {
+        for (const s of strokesRef.current) if (batch.has(s.id)) broadcastStroke(s);
+      }
+      for (const id of batch) heldRef.current.delete(id);
+    } finally {
+      checkingRef.current = false;
+      setHolding(heldRef.current.size > 0);
+      if (heldRef.current.size) checkLater(waitMore || 300);
+    }
+  }, [myId, bookingId, drawStroke, rebaseHistory, redraw, broadcastStroke, checkLater]);
+  React.useEffect(() => {
+    runCheckRef.current = runCheck;
+  }, [runCheck]);
+
+  /** Keeps a new drawing on this screen until it's checked: about a second after the pen stops (4 s at most while writing on). */
+  const hold = React.useCallback(
+    (id: string) => {
+      heldRef.current.add(id);
+      setHolding(true);
+      lastPenUp.current = Date.now();
+      heldSince.current ||= Date.now();
+      checkLater(Date.now() - heldSince.current > 4000 ? 0 : 900);
+    },
+    [checkLater],
+  );
+  React.useEffect(() => () => window.clearTimeout(checkTimer.current), []);
 
   // The host re-announces the board and its editors whenever someone arrives.
   React.useEffect(() => {
@@ -767,7 +838,9 @@ export function MeetingWhiteboard({
       pushHistory();
       const stroke: Stroke = { ...cur, pts, id: nextStrokeId() };
       strokesRef.current.push(stroke);
-      broadcastStroke(stroke);
+      // An eraser stroke can't share anything; it waits only behind drawings being checked (to keep the order).
+      if (gate && (stroke.tool !== "eraser" || heldRef.current.size)) hold(stroke.id);
+      else broadcastStroke(stroke);
     }
     redraw();
   };
@@ -795,6 +868,8 @@ export function MeetingWhiteboard({
     pushHistory();
     strokesRef.current = [];
     currentRef.current = null;
+    heldRef.current.clear();
+    setHolding(false);
     selectImage(null);
     send({ type: TOPIC.clear });
     redraw();
@@ -1272,6 +1347,11 @@ export function MeetingWhiteboard({
             </>
           )}
           {pasteMsg && <span className="max-w-[16rem] truncate text-xs text-live" role="status">{pasteMsg}</span>}
+          {holding && !pasteMsg && (
+            <span className="max-w-[16rem] truncate text-xs text-muted" role="status" data-board-checking>
+              Checking your drawing before others see it…
+            </span>
+          )}
           <span className="mx-0.5 h-6 w-px bg-line" />
           <div className="flex gap-1">
             {COLORS.map((c) => (
