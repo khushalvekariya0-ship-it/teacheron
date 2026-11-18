@@ -24,6 +24,25 @@ const nextConfig: NextConfig = {
   // The file check (src/server/scan.ts) runs OCR in a worker thread and reads PDFs; these load from node_modules as they are.
   // nodemailer sends the site's own email over SMTP.
   serverExternalPackages: ["tesseract.js", "unpdf", "nodemailer"],
+  // The OCR worker starts from a file path and loads its engine and the English model by name at run time,
+  // so hosting (Vercel) wouldn't pack them on its own: without these the reader never starts there.
+  outputFileTracingIncludes: {
+    "/api/**/*": [
+      "./node_modules/tesseract.js/src/**/*",
+      "./node_modules/tesseract.js-core/package.json",
+      "./node_modules/tesseract.js-core/tesseract-core*lstm.js",
+      "./node_modules/tesseract.js-core/tesseract-core*lstm.wasm",
+      "./node_modules/@tesseract.js-data/eng/4.0.0_best_int/**/*",
+      "./node_modules/wasm-feature-detect/**/*",
+      "./node_modules/bmp-js/**/*",
+      "./node_modules/is-url/**/*",
+      "./node_modules/node-fetch/**/*",
+      "./node_modules/whatwg-url/**/*",
+      "./node_modules/webidl-conversions/**/*",
+      "./node_modules/tr46/**/*",
+      "./node_modules/regenerator-runtime/**/*",
+    ],
+  },
   poweredByHeader: false,
   async headers() {
     return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
