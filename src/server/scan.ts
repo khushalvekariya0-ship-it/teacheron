@@ -335,6 +335,13 @@ export async function checkStoredFile(storagePath: string): Promise<FileCheck> {
   return verdict;
 }
 
+/** Self-test (/api/health/deep): reads one picture like a class picture, letting any error through. */
+export async function readPictureForSelfTest(bytes: Buffer): Promise<{ text: string; qrKinds: ContactKind[] }> {
+  const ctx: ReadCtx = { qr: true, qrKinds: new Set() };
+  const text = await withTimeout(imageText(bytes, ctx), 45_000);
+  return { text: text.trim().slice(0, 200), qrKinds: [...ctx.qrKinds] };
+}
+
 /** Checks an image that's already on the server (a profile photo) for contact details. */
 export async function checkImageBytes(bytes: Buffer): Promise<FileCheck> {
   try {

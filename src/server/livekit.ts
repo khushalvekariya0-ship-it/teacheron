@@ -110,15 +110,15 @@ export function broadcastToRoom(room: string, message: object): Promise<boolean>
 }
 
 /** Whether the video-class service answers with these keys (health self-test). Never throws. */
-export async function livekitReachable(): Promise<boolean> {
+export async function livekitReachable(): Promise<{ ok: boolean; host: string; error?: string }> {
   const svc = roomService(15);
-  if (!svc) return false;
+  if (!svc) return { ok: false, host: "", error: "not set up" };
   try {
     await svc.listRooms();
-    return true;
+    return { ok: true, host: new URL(livekitHost()).hostname };
   } catch (e) {
     console.warn("[livekit] health check", (e as Error)?.message ?? e);
-    return false;
+    return { ok: false, host: new URL(livekitHost()).hostname, error: String((e as Error)?.message ?? e).slice(0, 300) };
   }
 }
 

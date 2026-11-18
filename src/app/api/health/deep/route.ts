@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { env, liveVideoReady } from "@/server/env";
 import { json } from "@/server/http";
 import { livekitReachable } from "@/server/livekit";
-import { checkImageBytes } from "@/server/scan";
+import { checkImageBytes, readPictureForSelfTest } from "@/server/scan";
 
 /*
  * GET /api/health/deep — for the owner only (Authorization: Bearer <CRON_SECRET>): proves on THIS server
@@ -39,10 +39,12 @@ export async function GET(request: Request) {
     const r = await checkImageBytes(Buffer.from(TEXT_PICTURE, "base64"));
     return { ok: !r.ok && r.reason === "contact" && r.kinds.includes("phone"), result: r };
   });
+  // The same reading step on its own, so an error shows here instead of only in the server log.
+  const rawReading = await timed(async () => ({ ok: true, ...(await readPictureForSelfTest(Buffer.from(QR_PICTURE, "base64"))) }));
   const qrReading = await timed(async () => {
     const r = await checkImageBytes(Buffer.from(QR_PICTURE, "base64"));
     return { ok: !r.ok && r.reason === "contact" && r.via === "qr", result: r };
   });
-  const videoClasses = liveVideoReady() ? await timed(async () => ({ ok: await livekitReachable() })) : { ok: false, error: "LiveKit isn't set up on this server." };
-  return json({ ok: textReading.ok && qrReading.ok && videoClasses.ok, textReading, qrReading, videoClasses });
+  const videoClasses = liveVideoReady() ? await timed(async () => await livekitReachable()) : { ok: false, error: "LiveKit isn't set up on this server." };
+  return json({ ok: textReading.ok && qrReading.ok && videoClasses.ok, textReading, qrReading, rawReading, videoClasses });
 }
