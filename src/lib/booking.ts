@@ -10,7 +10,7 @@ import { percentOf } from "@/lib/format";
 
 export type Actor = "booker" | "tutor" | "admin" | "system";
 
-type Rule = { actors: Actor[]; guard?: (b: Booking, now: number, p: BookingPolicy) => string | null };
+type Rule = { actors: Actor[]; guard?: (b: Booking, now: number, p: BookingPolicy, actor: Actor) => string | null };
 
 const startMs = (b: Booking) => new Date(b.startUtc).getTime();
 const endMs = (b: Booking) => startMs(b) + b.durationMin * 60_000;
@@ -21,8 +21,12 @@ const afterGrace: Rule["guard"] = (b, now, p) =>
   now >= startMs(b) + p.noShowGraceMinutes * 60_000 ? null : `No-shows can be reported ${p.noShowGraceMinutes} minutes after the start time.`;
 const withinDisputeWindow: Rule["guard"] = (b, now, p) =>
   now <= endMs(b) + p.disputeWindowDays * 86_400_000 ? null : `Disputes must be opened within ${p.disputeWindowDays} days of the lesson.`;
-const canReschedule: Rule["guard"] = (b, now, p) => {
-  if (now >= startMs(b) - p.rescheduleMinHours * 3_600_000) return `Lessons can be rescheduled up to ${p.rescheduleMinHours} hours before the start time.`;
+// The tutor can move their own lesson until it starts (the student is told); the person who booked it, up to
+// the platform's notice (Admin → Settings → booking policy).
+const canReschedule: Rule["guard"] = (b, now, p, actor) => {
+  if (actor === "tutor") {
+    if (now >= startMs(b)) return "This lesson has already started, so it can't be moved.";
+  } else if (now >= startMs(b) - p.rescheduleMinHours * 3_600_000) return `Lessons can be rescheduled up to ${p.rescheduleMinHours} hours before the start time.`;
   return (b.rescheduleCount ?? 0) >= p.maxReschedulesPerBooking ? "This lesson has reached the reschedule limit." : null;
 };
 
@@ -66,7 +70,7 @@ export function canTransition(b: Booking, to: BookingStatus, actor: Actor, now =
   const rule = TRANSITIONS[b.status][to];
   if (!rule) return { ok: false, reason: `A ${STATUS_META[b.status].label.toLowerCase()} booking cannot become ${STATUS_META[to].label.toLowerCase()}.` };
   if (!rule.actors.includes(actor)) return { ok: false, reason: "You don't have permission to make this change." };
-  const guard = rule.guard?.(b, now, policy);
+  const guard = rule.guard?.(b, now, policy, actor);
   return guard ? { ok: false, reason: guard } : { ok: true };
 }
 

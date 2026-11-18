@@ -186,7 +186,15 @@ export function RescheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent size="lg" title="Reschedule lesson" description={`Choose a new time from ${tutor.firstName}'s availability. The lesson length stays ${booking.durationMin} minutes.`}>
+      <DialogContent
+        size="lg"
+        title="Reschedule lesson"
+        description={
+          actor === "tutor"
+            ? `Choose any free time, today included: your weekly hours and notice apply to students, not to you. The lesson length stays ${booking.durationMin} minutes.`
+            : `Choose a new time from ${tutor.firstName}'s availability. The lesson length stays ${booking.durationMin} minutes.`
+        }
+      >
         <DialogBody className="space-y-5">
           <dl className="grid gap-3 rounded-lg border border-line bg-canvas p-3.5 text-[13px] sm:grid-cols-2">
             <div>
@@ -200,11 +208,11 @@ export function RescheduleDialog({
               <dd className="mt-0.5 flex items-center gap-1.5 font-medium text-ink">
                 <Repeat className="size-3.5 text-muted" aria-hidden />
                 {left} of {policy.maxReschedulesPerBooking}
-                <span className="font-normal text-muted">· up to {policy.rescheduleMinHours}h before</span>
+                <span className="font-normal text-muted">· {actor === "tutor" ? "until it starts" : `up to ${policy.rescheduleMinHours}h before`}</span>
               </dd>
             </div>
           </dl>
-          <BookingCalendar tutor={tutor} durationMin={booking.durationMin} value={slot} onChange={(v) => { setSlot(v); setError(null); }} excludeBookingId={booking.id} />
+          <BookingCalendar tutor={tutor} durationMin={booking.durationMin} value={slot} onChange={(v) => { setSlot(v); setError(null); }} excludeBookingId={booking.id} anyTime={actor === "tutor"} />
           <p className="flex items-start gap-2 text-[13px] text-muted">
             <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden />
             {autoConfirm

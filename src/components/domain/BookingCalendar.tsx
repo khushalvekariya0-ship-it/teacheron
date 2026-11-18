@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { CalendarX2, ChevronLeft, ChevronRight, Globe } from "lucide-react";
-import type { Tutor } from "@/lib/types";
+import type { Tutor, WeeklyWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useHydrated, useNow, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
 import { dateKey, generateSlots, groupSlotsByDay, zonedParts, type Slot } from "@/lib/time";
@@ -52,15 +52,19 @@ function partOfDay(startUtc: string, tz: string): "Morning" | "Afternoon" | "Eve
  * times are grouped into morning, afternoon and evening. Everything comes from the tutor's real
  * availability, shown in the viewer's time zone: existing bookings, buffers, minimum notice and the
  * advance window are all respected. Pass `excludeBookingId` when rescheduling so the lesson being moved
- * doesn't block itself.
+ * doesn't block itself, and `anyTime` when the tutor moves their own lesson: their weekly hours, days off
+ * and notice are rules for students, so every free time from now on is offered (clashes still count).
  */
+const ALL_DAY: WeeklyWindow[] = ([0, 1, 2, 3, 4, 5, 6] as const).map((day) => ({ day, start: "00:00", end: "24:00" }));
+
 export function BookingCalendar({
-  tutor,
+  tutor: tutorIn,
   durationMin,
   value,
   onChange,
   className,
   excludeBookingId,
+  anyTime = false,
 }: {
   tutor: Tutor;
   durationMin: number;
@@ -68,7 +72,12 @@ export function BookingCalendar({
   onChange: (startUtc: string | null) => void;
   className?: string;
   excludeBookingId?: string;
+  anyTime?: boolean;
 }) {
+  const tutor = React.useMemo(
+    () => (anyTime ? { ...tutorIn, availability: ALL_DAY, exceptions: tutorIn.exceptions.filter((e) => e.type !== "blocked"), rules: { ...tutorIn.rules, minNoticeHours: 0 } } : tutorIn),
+    [tutorIn, anyTime],
+  );
   const hydrated = useHydrated();
   const tz = useViewerTimezone();
   const now = useNow(60_000);
@@ -129,6 +138,7 @@ export function BookingCalendar({
   const whyClosed = (key: string): string => {
     if (key > lastBookable) return `${tutor.firstName} takes bookings up to ${horizon} days ahead, so this day isn't open yet.`;
     if (teaches.has(key)) {
+      if (anyTime) return key === today ? "No free times left today: the rest of the day is taken by other lessons." : "Every time that day is taken by other lessons.";
       return key <= dateKey(new Date(now + tutor.rules.minNoticeHours * 3_600_000), tz)
         ? `Too soon: ${tutor.firstName} needs at least ${tutor.rules.minNoticeHours} hours' notice.`
         : `All of ${tutor.firstName}'s times that day are booked.`;

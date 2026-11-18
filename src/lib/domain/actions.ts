@@ -601,6 +601,15 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     return null;
   };
 
+  /** A time the tutor picks for their own lesson: not past, within their advance window (clashes are checked apart). */
+  const ownTimeProblem = (tutor: Tutor, startUtc: string): string | null => {
+    const s = new Date(startUtc).getTime();
+    if (Number.isNaN(s)) return "Choose a valid time.";
+    if (s < Date.now() - 60_000) return "Choose a time that hasn't passed yet.";
+    if (s > Date.now() + tutor.rules.maxAdvanceDays * 86_400_000) return `Lessons can be moved up to ${tutor.rules.maxAdvanceDays} days ahead.`;
+    return null;
+  };
+
   /** Moves an item one place up or down among its peers. Null when it's already at the edge. */
   const swapBy = <T,>(list: T[], key: (x: T) => string, id: string, direction: -1 | 1, peers: (x: T) => boolean = () => true): T[] | null => {
     const i = list.findIndex((x) => key(x) === id);
@@ -1036,11 +1045,13 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!b) return fail("Booking not found.");
       const actor = actorFor(r.data, b);
       if (actor !== "booker" && actor !== "tutor") return fail("Only the student, parent or tutor can reschedule.");
+      if (b.status === "in_progress") return fail("This lesson has already started, so it can't be moved.");
       const check = canTransition(b, "rescheduled", actor, Date.now(), get().policy);
       if (!check.ok) return fail(check.reason);
       const tutor = resolveTutor(get(), b.tutorId)!;
       const start = new Date(newStartUtc).toISOString();
-      const availErr = withinAvailability(tutor, start, b.durationMin);
+      // The tutor's weekly hours and notice are rules for students: moving their own lesson, any free time works.
+      const availErr = actor === "tutor" ? ownTimeProblem(tutor, start) : withinAvailability(tutor, start, b.durationMin);
       if (availErr) return fail(availErr);
       if (slotConflict(b.tutorId, start, b.durationMin, b.id)) return fail("That time isn't available. Please choose another slot.");
       const newId = uid("bk");
