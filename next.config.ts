@@ -29,9 +29,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/**/*": [
       "./node_modules/tesseract.js/src/**/*",
-      "./node_modules/tesseract.js-core/package.json",
-      "./node_modules/tesseract.js-core/tesseract-core*lstm.js",
-      "./node_modules/tesseract.js-core/tesseract-core*lstm.wasm",
+      // Every engine variant: which one loads depends on the server's CPU (Vercel's picks relaxed-SIMD).
+      "./node_modules/tesseract.js-core/**/*",
       "./node_modules/@tesseract.js-data/eng/4.0.0_best_int/**/*",
       "./node_modules/wasm-feature-detect/**/*",
       "./node_modules/bmp-js/**/*",
