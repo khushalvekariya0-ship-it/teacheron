@@ -50,7 +50,8 @@ const schema = z
     terms: z.boolean().refine((v) => v, "Please accept the Terms of Service and Privacy Policy"),
   })
   .superRefine((v, ctx) => {
-    if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zip"], message: postalError(v.country) });
+    // Students only choose their country; a PIN / postal code is asked of parents and tutors.
+    if (v.role !== "student" && (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zip"], message: postalError(v.country) });
     if (v.role !== "student") return;
     if (!v.ageBand) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ageBand"], message: "Tell us your age range" });
@@ -179,7 +180,7 @@ export function RegisterView() {
       email: v.email,
       password: v.password,
       country: v.country,
-      zip: v.zip.trim(),
+      zip: v.role === "student" ? "" : v.zip.trim(),
       ...(v.role === "student" && v.ageBand && v.ageBand !== "under13" ? { ageBand: v.ageBand } : {}),
       ...(parentEmail ? { parentEmail } : {}),
       next: setupFor(v.role),
@@ -444,7 +445,7 @@ export function RegisterView() {
           <PasswordStrengthMeter value={password} />
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]">
+        <div className={role === "student" ? "grid gap-5" : "grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]"}>
           <Field label="Country" error={errors.country?.message} id="reg-country">
             <Controller
               control={form.control}
@@ -464,23 +465,28 @@ export function RegisterView() {
               )}
             />
           </Field>
-          <Field
-            label={postalLabel(country)}
-            error={errors.zip?.message}
-            optional={!postalRequired(country)}
-            hint={role === "tutor" ? "Sets your in-person service area. Your exact address is never shown." : "Helps us show tutors near you. Online tutors are available everywhere."}
-          >
-            <Input
-              inputMode={postalNumeric(country) ? "numeric" : "text"}
-              autoComplete="postal-code"
-              maxLength={POSTAL_MAX_LENGTH}
-              icon={<MapPin />}
-              placeholder={postalPlaceholder(country)}
-              {...form.register("zip")}
-            />
-          </Field>
+          {/* Students only choose their country; parents and tutors also give a PIN / postal code. */}
+          {role !== "student" && (
+            <Field
+              label={postalLabel(country)}
+              error={errors.zip?.message}
+              optional={!postalRequired(country)}
+              hint={role === "tutor" ? "Sets your in-person service area. Your exact address is never shown." : "Helps us show tutors near you. Online tutors are available everywhere."}
+            >
+              <Input
+                inputMode={postalNumeric(country) ? "numeric" : "text"}
+                autoComplete="postal-code"
+                maxLength={POSTAL_MAX_LENGTH}
+                icon={<MapPin />}
+                placeholder={postalPlaceholder(country)}
+                {...form.register("zip")}
+              />
+            </Field>
+          )}
         </div>
-        <AddressLookup key={country} collapsed country={country} className="-mt-2" onPick={(a) => a.zip && form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true })} />
+        {role !== "student" && (
+          <AddressLookup key={country} collapsed country={country} className="-mt-2" onPick={(a) => a.zip && form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true })} />
+        )}
 
         <AnimatePresence initial={false}>
           {role === "student" && (
