@@ -109,6 +109,19 @@ export function broadcastToRoom(room: string, message: object): Promise<boolean>
   return roomCall("send to", room, (svc) => svc.sendData(room, new TextEncoder().encode(JSON.stringify(message)), DataPacket_Kind.RELIABLE, {}));
 }
 
+/** Whether the video-class service answers with these keys (health self-test). Never throws. */
+export async function livekitReachable(): Promise<boolean> {
+  const svc = roomService(15);
+  if (!svc) return false;
+  try {
+    await svc.listRooms();
+    return true;
+  } catch (e) {
+    console.warn("[livekit] health check", (e as Error)?.message ?? e);
+    return false;
+  }
+}
+
 /** Who is in a room right now (identities). Empty when the room doesn't exist or the server can't be reached. */
 export async function roomParticipants(room: string): Promise<string[]> {
   const svc = roomService();
