@@ -287,7 +287,7 @@ const APP_NAMES: RegExp[] = [
 const SHORT_APPS = "(?:snap|sc|ig|fb|signal|tg|wa|insta|messenger|telegram|whatsapp)";
 const MY_APPS = "(?:snap|ig|fb|insta|messenger)";
 const CONTACT_LINK =
-  /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9-]+\.)*(?:wa\.me|whatsapp\.com|t\.me|telegram\.(?:me|org|dog)|instagram\.com|instagr\.am|facebook\.com|fb\.(?:com|me)|m\.me|messenger\.com|snapchat\.com|tiktok\.com|twitter\.com|x\.com|linkedin\.com|discord\.(?:gg|com)|signal\.(?:me|group)|skype\.com|line\.me|wechat\.com|viber\.com|kik\.me|calendly\.com|linktr\.ee|beacons\.ai|venmo\.com|cash\.app|paypal\.(?:me|com)|threads\.net|bsky\.app)\b(?:\/[^\s]*)?/g;
+  /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9-]+\.)*(?:wa\.me|wa\.link|whatsapp\.com|t\.me|telegram\.(?:me|org|dog)|instagram\.com|instagr\.am|facebook\.com|fb\.(?:com|me)|m\.me|messenger\.com|snapchat\.com|tiktok\.com|twitter\.com|x\.com|linkedin\.com|discord\.(?:gg|com)|signal\.(?:me|group)|skype\.com|line\.me|wechat\.com|viber\.com|kik\.me|calendly\.com|linktr\.ee|beacons\.ai|venmo\.com|cash\.app|paypal\.(?:me|com)|threads\.net|bsky\.app)\b(?:\/[^\s]*)?/g;
 // Links that can hide contact details out of sight: shared documents and forms, file sharing, paste sites,
 // one-page "link in bio" sites and link shorteners (which hide where they go). Learning links (YouTube,
 // Khan Academy, Wikipedia, Desmos…) stay allowed; documents can be attached instead, and attachments are read.
@@ -456,7 +456,10 @@ function runIsPhone(all: Unit[], mode: ScanMode): boolean {
   if (units.slice(1).some((u) => /[=×÷*^]/.test(u.sep))) {
     const eq = units.findIndex((u, k) => k > 0 && u.sep.includes("="));
     const before = (eq > 0 ? units.slice(0, eq) : units).filter((u) => !u.exempt).map((u) => u.digits).join("");
-    return mobileLike(before) || mobileLike(joined);
+    // A real calculation before the "=" (12345 + 67890 = 80235): only those numbers count, never the answer
+    // joined on. A bare "98765=43210" is a number split by a sign.
+    const arithmetic = eq > 0 && units.slice(0, eq + 1).some((u, k) => k < eq && /[+×÷*^]/.test(u.sep));
+    return arithmetic ? mobileLike(before) : mobileLike(before) || mobileLike(joined);
   }
   // A labelled school number (roll no 2104567890, page 345, PNR 4512345678) that isn't a mobile number.
   if (SCHOOL_LABEL.test(units[0].gap.slice(-40)) && !mobileLike(joined) && !/\+/.test(units[0].sep)) return false;
@@ -680,6 +683,10 @@ function findPhones(v: View, mode: ScanMode): [number, number][] {
   for (let m = INTENT.exec(s); m; m = INTENT.exec(s)) {
     const from = m.index + m[0].length;
     const near = units.filter((u) => u.start >= from && u.start <= from + 80 && !u.exempt);
+    // A calculation after it ("call me Riley … 12345 + 67890 = 80235") is maths, not a number to call (the
+    // "=" may sit just past the numbers looked at, so a little more is read for it).
+    const around = units.filter((u) => u.start >= from && u.start <= from + 160);
+    if (around.some((u) => u.sep.includes("=")) && around.some((u) => /[+×÷*^]/.test(u.sep))) continue;
     if (sum(near) >= 7) spans.push([near[0].start, near[near.length - 1].end]);
   }
   return spans;
@@ -778,9 +785,12 @@ function findSocial(views: View[], mode: ScanMode): [number, number][] {
   for (const w of views) {
     spans.push(...rangesOf(w, CONTACT_LINK));
     spans.push(...rangesOf(w, /(?<![a-z0-9._%+-])@[a-z_][a-z0-9_.]{2,}/g)); // @handles
-    spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b(?:\\s*(?:\\bid\\b|\\bis\\b|[:@=-]))+\\s*@?[a-z0-9_.]{3,}`, "g"))); // ig: jane_doe
+    // "ig: jane_doe", "insta id = jane", "snap - jane" (a "-" joined to the word, as in "insta-pot", is just a word)
+    spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b(?:\\s*\\bid\\b)?(?:\\s*\\bis\\b)?(?:\\s*[:@=]|\\s+-)\\s*@?[a-z0-9_.]{3,}`, "g")));
+    // "insta id is jane_doe": after "is", only something shaped like a username ("WhatsApp is owned by …" is a lesson)
+    spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b(?:\\s+id)?\\s+is\\s+@?(?=[a-z0-9_.]*[0-9_.])[a-z0-9_.]{3,}`, "g")));
     // "snap jordan_99": an app name right before a handle with a digit or underscore
-    spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b\\s+@?(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_])[a-z0-9_.]{4,}`, "g")));
+    spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b\\s+@?(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_]|[a-z0-9_]+\\.[a-z0-9_])[a-z0-9_.]{4,}`, "g")));
     spans.push(...rangesOf(w, new RegExp(`\\b(?:add|follow|text|msg|message|dm|ping|find|reach|contact|hmu|hit)\\s+(?:me|us)\\s+(?:up\\s+)?(?:on|at|via|in)\\s+${SHORT_APPS}\\b`, "g")));
     if (mode === "chat") spans.push(...rangesOf(w, new RegExp(`\\b(?:my|on|via)\\s+${MY_APPS}\\b(?!\\s+(?:of|to|the)\\b)`, "g")));
     if (mode === "chat" && RULES.sensitivity === "strict") {
@@ -789,7 +799,7 @@ function findSocial(views: View[], mode: ScanMode): [number, number][] {
       // An app name only counts next to a handle or a number ("WhatsApp was bought by Facebook" is a
       // lesson); asking to talk there is caught as a request (findRequests).
       for (const re of APP_NAMES) {
-        spans.push(...rangesOf(w, re, (m) => /^\s*(?:(?:id|is|[:@=-])\s*)*[@+(]?[a-z0-9_.]*\d|^\s*[:@-]\s*@?[a-z0-9_.]{3,}/.test(w.s.slice(m.index + m[0].length, m.index + m[0].length + 40))));
+        spans.push(...rangesOf(w, re, (m) => /^\s*(?:(?:id|is|[:@=-])\s*)*[@+(]?[a-z0-9_.]*\d|^(?:\s*[:@]|\s+-)\s*@?[a-z0-9_.]{3,}/.test(w.s.slice(m.index + m[0].length, m.index + m[0].length + 40))));
       }
     }
   }
@@ -799,7 +809,8 @@ function findSocial(views: View[], mode: ScanMode): [number, number][] {
 /* ─── 5b. Asking to talk, meet or pay outside TutorLink ────────────────────────── */
 
 // English (and Gujarati / Hindi typed in English letters), read on the normalised text.
-const REACH = "(?:whats ?app|wa|insta(?:gram)?|ig|snap(?:chat)?|telegram|tg|signal|facebook|fb|messenger|discord|skype|imo|zoom|google meet|g ?meet)";
+const REACH =
+  "(?:whats ?app|watsapp|wats ?app|wa|insta(?:gram)?|ig|snap(?:chat)?|telegram|tg|signal|facebook|fb|messenger|discord|skype|imo|zoom|google meet|g ?meet|wechat|viber|koo|threads|tiktok|twitter|linkedin|kik|hangouts|google duo|teams)";
 const ASK_FOR = "(?:number|no|num|phone(?: number)?|mobile(?: number)?|cell|contact(?: number| details)?|contacts|email(?: id| address)?|e-mail|mail id|gmail|id|handle|whats ?app(?: number)?|wa|insta(?:gram)?|ig|snap(?:chat)?|telegram|tg|upi(?: id)?)";
 const REQUEST_LATIN: RegExp[] = [
   // "send me your number", "give me ur whatsapp", "can I get your email"
@@ -826,6 +837,34 @@ const REQUEST_LATIN: RegExp[] = [
   /\b(?:whats ?app|wa|call|phone|miss ?call)\s+(?:karjo|karje|kar dena|kar do|karna|kariye|kijiye|krjo|krna)\b/g,
   /\b(?:class|lesson|tuition|lecture)\s+(?:pachi|pachhi|baad|ke baad|bad)\b[^.!?\n]{0,25}\b(?:call|phone|whats ?app|wa|maliye|malie|milte|milo|malo|baat|vaat)\b/g,
   /\bbahar\s+(?:vaat|vat|baat|maliye|malie|milte|milo|malo|class|tuition)\b/g,
+  // An app used as a verb: "whatsapp me", "WA me", "signal me", "gpay me"
+  /\b(?:whats ?app|watsapp|wats ?app|whtsapp|wa|wp|telegram|tg|insta(?:gram)?|ig|snap(?:chat)?|signal|imo|wechat|viber|skype|discord|fb|messenger|koo|g ?pay|google\s+pay|paytm|phone ?pe|bhim)\s+(?:me|us)\b/g,
+  // Hinglish / Gujarati in English letters: "wp kar", "WA pe msg karo", "whatsapp pe baat karte hai", "imo pe call karo", "phonepe kar do"
+  /\b(?:whats ?app|watsapp|wats ?app|whtsapp|wa|wp|telegram|tg|insta(?:gram)?|ig|snap(?:chat)?|signal|imo|wechat|g ?pay|google\s+pay|paytm|phone ?pe)\s+(?:(?:pe|par|per|pr|ma|maa|pa)\s+)?(?:(?:msg|message|call|baat|vaat|dm|ping|text|follow|add|video\s+call)\s+)?(?:kar|karo|kr|kro|karjo|krjo|karje|karna|kariye|kardo|kar\s+do|kar\s+dena|kar\s+de|karte\s+(?:hai|hain|he)|karenge|karshu|karisu|karishu|karvanu)\b/g,
+  // "dm kar insta pe", "msg karo telegram par"
+  new RegExp(`\\b(?:dm|msg|message|ping|call|text|follow)\\s+(?:kar|karo|kr|kro|karjo|krjo|kardo|kar\\s+do)\\b[^.!?\\n]{0,25}\\b${REACH}\\b`, "g"),
+  // "follow riley_draws on instagram", "follow karo riley_draws ko insta pe", "koo pe follow karo"
+  /\bfollow\s+@?[a-z0-9_.]{3,30}\s+(?:on|pe|par|in)\s+(?:insta(?:gram)?|ig|twitter|x|tiktok|threads|youtube|yt|koo|facebook|fb|snap(?:chat)?|linkedin)\b/g,
+  /\bfollow\s+(?:karo|kar|kr|karjo|kro)\b[^.!?\n]{0,30}\b(?:insta(?:gram)?|ig|twitter|tiktok|threads|youtube|yt|koo|facebook|fb|snap(?:chat)?)\b/g,
+  /\b(?:insta(?:gram)?|ig|twitter|tiktok|threads|youtube|yt|koo|facebook|fb|snap(?:chat)?|telegram|tg)\s+(?:pe|par|per|on|ma|maa)\s+(?:follow|add|dm|msg|message|subscribe)\b/g,
+  // "search riley shah on facebook" (a social site; "search photosynthesis on Google" is homework)
+  /\b(?:search|find|look\s+(?:me\s+)?up)\s+(?:for\s+)?[a-z][a-z0-9_. ]{1,30}?\s+on\s+(?:facebook|fb|insta(?:gram)?|ig|linkedin|twitter|snap(?:chat)?|telegram|tiktok|threads)\b/g,
+  // "discord riley#1234", "my youtube channel", "my whatsapp group"
+  /\bdiscord\b[^.!?\n]{0,12}[a-z0-9_.]{2,32}#\d{4}\b/g,
+  /\bmy\s+(?:youtube|yt|insta(?:gram)?|telegram|whats ?app|facebook|fb)\s+(?:channel|group|page|account|profile)\b/g,
+  // "whatsapp group join karo", "join my telegram group"
+  /\b(?:whats ?app|wa|telegram|tg|signal|insta(?:gram)?)\s+(?:group|channel|community)\b[^.!?\n]{0,20}\b(?:join|link|add)\b|\b(?:join|add)\b[^.!?\n]{0,20}\b(?:whats ?app|wa|telegram|tg|signal)\s+(?:group|channel|community)\b/g,
+  // Money outside: "send money on google pay", "transfer the fees via paytm"
+  /\b(?:send|transfer|pay|give)\s+(?:the\s+|me\s+|my\s+)?(?:money|fees?|payment|amount|paise|paisa|rupees|cash)\s+(?:on|via|through|by|to|in)\s+(?:g ?pay|google\s+pay|paytm|phone ?pe|upi|bhim|paypal|my\s+(?:bank|account))\b/g,
+  // Talking or meeting outside: "let's talk on phone", "come to my home for tuition", "meet at the cafe near my house"
+  /\b(?:talk|speak|chat)\s+(?:on|over)\s+(?:the\s+)?(?:phone|call|mobile|cell)\b/g,
+  /\b(?:come|coming|visit)\s+(?:to\s+)?(?:my|our)\s+(?:home|house|place|flat|room|office|centre|center|coaching|institute)\b/g,
+  /\b(?:lets|we\s+can|can\s+we|shall\s+we)\s+meet\s+(?:at|in|near|outside|somewhere)\s+(?!(?:the\s+)?(?:class|classroom|tutor ?link|lesson|session|online|app)\b)/g,
+  /\b(?:near|at)\s+my\s+(?:home|house|place|flat)\b/g,
+  // "number aapo", "whatsapp number aapo" (not a roll, question or page number)
+  /(?<!\b(?:roll|question|page|chapter|q|ex|exercise|seat|answer)\s)\b(?:number|no|num|mobile|whats ?app(?:\s+number)?|wa\s+number|insta(?:\s+id)?|email(?:\s+id)?|gmail)\s+(?:aapo|apo|aapjo|apjo|moklo|mokaljo|bhejo|bhej\s+do|de\s+do|dedo|dijiye|batao|lakhi\s+do|likh\s+do)\b/g,
+  // "text me", "call me tonight" (not "text me here on TutorLink", not "call me Riley")
+  /\b(?:text|sms|call|ring|phone)\s+(?:me|us)\b(?![^.!?\n]*\b(?:here|tutor ?link|in\s+(?:the\s+)?(?:chat|class|app))\b)(?=\s*(?:$|[.!?,]|\s+(?:later|tonight|tomorrow|anytime|sometime|after|on\s+(?:my|this)\s+(?:number|phone|mobile)|please|pls|plz|asap|when|whenever|if)\b))/g,
 ];
 // Gujarati and Hindi script, read on the text as typed (normalising drops their vowel signs).
 const APP_GU = "(?:વોટ્સએપ|વોટસએપ|વૉટ્સઍપ|વૉટ્સએપ|વોટ્સ એપ|व्हाट्सएप|व्हाट्सऐप|वॉट्सऐप|whats ?app)";
@@ -844,6 +883,11 @@ const REQUEST_SCRIPT: RegExp[] = [
   new RegExp(`${APP_GU}\\s*(?:पर|पे)?\\s*(?:मैसेज|बात|कॉल)?\\s*(?:करना|करो|करें|कीजिए|कर\\s*देना)`, "gu"),
   /(?:फोन|फ़ोन|कॉल)\s*(?:करना|करो|करें|कर\s*देना)/gu,
   /बाहर\s*(?:बात|मिलते|मिलो|मिलें)/gu,
+  // "ઘરે આવજો", "મારા ઘરે ટ્યુશન", "मेरे घर आओ"
+  /(?:મારા\s*)?ઘરે\s*(?:આવજો|આવો|આવી\s*જજો|આવ|આવશો|ટ્યુશન|ભણવા)/gu,
+  /(?:मेरे|हमारे)\s*घर\s*(?:आओ|आना|आइए|आ\s*जाओ|पर|पे)|घर\s*(?:आओ|आ\s*जाओ)\s*(?:ट्यूशन|पढ़ने)?/gu,
+  // An app name in the script before a username: "મારું ઇન્સ્ટા riley_draws છે", "मेरा इंस्टा riley_draws है"
+  /(?:ઇન્સ્ટા|ઇન્સ્ટાગ્રામ|इंस्टा|इंस्टाग्राम|ટેલિગ્રામ|टेलीग्राम|સ્નેપ|स्नैप)\s*(?:id|આઈડી|आईडी)?\s*[:@=]?\s*@?[a-z0-9_.]{3,30}/gu,
 ];
 
 /** The text as typed (lower case), for patterns in scripts the normaliser would strip. */
@@ -870,7 +914,9 @@ function phraseSpans(typed: string, phrases: string[]): [number, number][] {
 function findRequests(v: View, text: string): [number, number][] {
   const typed = typedView(text);
   const spans: [number, number][] = [];
-  for (const re of REQUEST_LATIN) spans.push(...rangesOf(v, re));
+  // Also with letters typed one at a time put back together ("w h a t s a p p me").
+  const joined = joinSpacedLetters(v);
+  for (const re of REQUEST_LATIN) spans.push(...rangesOf(v, re), ...(joined.s !== v.s ? rangesOf(joined, re) : []));
   for (const re of REQUEST_SCRIPT) spans.push(...rangesOf(typed, re));
   spans.push(...phraseSpans(typed.s, RULES.block));
   return spans;
@@ -911,7 +957,11 @@ function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
   add("email", findEmails([v, ...rebuilt]));
   add("phone", phonesIn(v));
   add("social", findSocial([v, rebuilt[2], unmaskLinks(unmasked)], mode));
-  for (const w of [v, unmaskLinks(unmasked)]) add("link", rangesOf(w, OUTSIDE_LINK));
+  for (const w of [v, unmaskLinks(unmasked)]) {
+    add("link", rangesOf(w, OUTSIDE_LINK));
+    // Lessons happen in the TutorLink classroom: a Zoom / Meet / Teams link moves them outside.
+    if (mode === "chat") add("link", rangesOf(w, MEETING_LINK));
+  }
   if (mode === "chat" && RULES.requests && depth === 0) add("request", findRequests(v, text));
   // Phrases staff marked as fine ("WhatsApp Business case study") don't count as a request or an app
   // mention; real numbers, emails and handles inside them still do.
