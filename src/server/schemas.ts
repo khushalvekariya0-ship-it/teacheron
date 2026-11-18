@@ -258,7 +258,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
       .object({
         chat: z.boolean(), requests: z.boolean(), sensitivity: z.enum(["normal", "strict"]), voice: z.boolean(), voiceOnPhones: z.boolean(), images: z.boolean(),
         camera: z.boolean(), documents: z.boolean(), qr: z.boolean(), aiReading: z.boolean(), strongWarningAt: int(1, 20), muteAt: int(0, 20), muteMinutes: int(1, 120),
-        removeAt: int(0, 20), pauseAccountAfterRemovals: int(0, 10), block: z.array(text(120)).max(200), allow: z.array(text(120)).max(200), retentionDays: int(30, 3650),
+        removeAt: int(0, 20), pauseAccountAfterRemovals: int(0, 10), block: z.array(text(120)).max(200), allow: z.array(text(120)).max(200), retentionDays: int(30, 3650), splitWindowMinutes: int(5, 240).optional(),
       })
       .partial(),
   ),

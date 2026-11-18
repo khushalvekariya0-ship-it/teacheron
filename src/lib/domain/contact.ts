@@ -33,9 +33,11 @@ export interface ContactRules {
   /** Extra phrases that count as such a request (any language), and phrases that never count. */
   block: string[];
   allow: string[];
+  /** How far back one person's short messages are read together for a number sent in pieces (minutes). */
+  splitWindowMinutes: number;
 }
 const cleanPhrase = (p: string) => p.toLowerCase().replace(/\s+/g, " ").trim();
-let RULES: ContactRules = { chat: true, sensitivity: "normal", requests: true, block: [], allow: [] };
+let RULES: ContactRules = { chat: true, sensitivity: "normal", requests: true, block: [], allow: [], splitWindowMinutes: 30 };
 export function setContactRules(rules: Partial<ContactRules>) {
   RULES = {
     chat: rules.chat ?? RULES.chat,
@@ -43,6 +45,7 @@ export function setContactRules(rules: Partial<ContactRules>) {
     requests: rules.requests ?? RULES.requests,
     block: (rules.block ?? RULES.block).map(cleanPhrase).filter((p) => p.length >= 3),
     allow: (rules.allow ?? RULES.allow).map(cleanPhrase).filter((p) => p.length >= 3),
+    splitWindowMinutes: Math.min(240, Math.max(5, Math.round(rules.splitWindowMinutes ?? RULES.splitWindowMinutes))),
   };
 }
 export const contactRules = (): ContactRules => RULES;
@@ -198,6 +201,9 @@ const UNIT_WORDS: Record<string, string> = {
   cero: "0", uno: "1", dos: "2", tres: "3", cuatro: "4", cinco: "5", seis: "6", siete: "7", ocho: "8", nueve: "9",
   // Common misspellings
   nien: "9", nyne: "9", sevn: "7", sevan: "7", fiv: "5", fyve: "5", thre: "3", sixx: "6", zro: "0", wun: "1", eigth: "8", eigt: "8",
+  // Spelled the way they sound ("nain eit sevan siks faiv …")
+  nain: "9", nayn: "9", naine: "9", nyn: "9", eit: "8", eyt: "8", siks: "6", sikks: "6", sicks: "6", faiv: "5", fayv: "5", faive: "5",
+  thri: "3", threee: "3", sevun: "7", seben: "7", fower: "4", foar: "4", zeero: "0", ziro: "0", zirro: "0", jero: "0",
 };
 
 /**
@@ -206,7 +212,7 @@ const UNIT_WORDS: Record<string, string> = {
  * (written in English letters or in their own script, vowel signs removed) and Roman numerals.
  */
 const WEAK_WORDS: Record<string, string> = {
-  won: "1", to: "2", too: "2", tu: "2", tree: "3", for: "4", fore: "4", foor: "4", ate: "8", nil: "0", naught: "0", nought: "0", oh: "0",
+  won: "1", wan: "1", to: "2", too: "2", tu: "2", tree: "3", tri: "3", for: "4", fore: "4", foor: "4", ate: "8", ait: "8", nil: "0", naught: "0", nought: "0", oh: "0",
   // French, German, Italian, Portuguese
   un: "1", deux: "2", trois: "3", quatre: "4", cinq: "5", sept: "7", huit: "8", neuf: "9",
   null: "0", eins: "1", zwei: "2", drei: "3", vier: "4", funf: "5", fuenf: "5", sechs: "6", sieben: "7", acht: "8", neun: "9",
@@ -396,10 +402,12 @@ function readChunk(chunk: string): { digits: string; spelled: boolean } | null {
 /** Ranges of the normalised text holding dates, times, prices, decimals, ISBNs and meeting links. */
 function exemptSpans(s: string): [number, number][] {
   const out: [number, number][] = [];
-  const add = (re: RegExp) => {
+  const add = (re: RegExp, keep?: (m: RegExpExecArray) => boolean) => {
     re.lastIndex = 0;
-    for (let m = re.exec(s); m; m = re.exec(s)) if (m[0]) out.push([m.index, m.index + m[0].length]);
+    for (let m = re.exec(s); m; m = re.exec(s)) if (m[0] && (!keep || keep(m))) out.push([m.index, m.index + m[0].length]);
   };
+  // A long decimal (3.14159265358979) is an answer, unless its digits are really a mobile number.
+  add(/(?<![\d.])\d{1,3}\.\d{7,30}(?![\d.])/g, (m) => !mobileLike(m[0].replace(/\D/g, "")));
   add(/\b(?:0?[1-9]|1[0-2])[/.-](?:0?[1-9]|[12]\d|3[01])[/.-](?:(?:19|20)\d{2}|\d{2})\b/g); // 12/15/2026
   add(/\b(?:0?[1-9]|[12]\d|3[01])[/.](?:0?[1-9]|1[0-2])[/.](?:19|20)\d{2}\b/g); // 15.12.2026
   add(/\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b/g); // 2026-12-15
@@ -415,6 +423,14 @@ function exemptSpans(s: string): [number, number][] {
 }
 
 const isYear = (d: string) => /^(?:19|20)\d\d$/.test(d);
+/** An Indian mobile number: 10 digits starting 6–9, maybe after 91, 0091 or 0. */
+export const mobileLike = (d: string) => /^(?:0091|91|0)?[6-9]\d{9}$/.test(d);
+/**
+ * Numbers a lesson labels (roll no, registration, page, question, answer, total, population, PNR, train …).
+ * They're allowed unless the digits are a mobile number: a label can't excuse one.
+ */
+const SCHOOL_LABEL =
+  /\b(?:roll|reg(?:istration)?|enrol+(?:ment)?|admission|student id|answer|ans|result|value|total|sum|product|difference|population|area|volume|perimeter|marks?|score|page|pages|question|questions|chapter|exercise|isbn|pin ?code|postal code|zip|pnr|train|flight|invoice|order|ticket|seat|year|amount|price|cost|salary|rs|rupees|inr)\b[\s.:#=-]*(?:(?:no|number|num|is|was|of|code)\b[\s.:#=-]*){0,3}$/;
 const listSep = (sep: string) => /[,;]|\band\b/.test(sep);
 const sum = (units: Unit[]) => units.reduce((n, u) => n + u.digits.length, 0);
 const sameLength = (units: Unit[]) => units.every((u) => u.digits.length === units[0].digits.length);
@@ -434,6 +450,18 @@ function runIsPhone(all: Unit[], mode: ScanMode): boolean {
   const units = mode === "file" && all.length > 1 && all[0].digits.length <= 2 && /^\s*[).]/.test(all[1].sep) && !/[(+]/.test(all[0].sep) ? all.slice(1) : all;
   const live = units.filter((u) => !u.exempt);
   if (!live.length) return false;
+  const joined = live.map((u) => u.digits).join("");
+  // Sums and equations (12345 + 67890 = 80235, 98 × 76): maths, unless the numbers before the "=" (or all of
+  // them, "9*8*7*6*5*4*3*2*1*0") are a mobile number written as a sum.
+  if (units.slice(1).some((u) => /[=×÷*^]/.test(u.sep))) {
+    const eq = units.findIndex((u, k) => k > 0 && u.sep.includes("="));
+    const before = (eq > 0 ? units.slice(0, eq) : units).filter((u) => !u.exempt).map((u) => u.digits).join("");
+    return mobileLike(before) || mobileLike(joined);
+  }
+  // A labelled school number (roll no 2104567890, page 345, PNR 4512345678) that isn't a mobile number.
+  if (SCHOOL_LABEL.test(units[0].gap.slice(-40)) && !mobileLike(joined) && !/\+/.test(units[0].sep)) return false;
+  // A round number (1400000000) or one starting with 1 (no phone number's ten digits do) isn't a phone number.
+  if (live.length === 1 && (/0{5,}$/.test(joined) || (joined.length === 10 && joined[0] === "1"))) return false;
   // Shaped like a phone number: 917-555-0123, +1 917 555 0123, 98765 43210.
   const shaped = shapeAt(units.map((u) => u.digits.length), PHONE_SHAPES);
   if (shaped) {
@@ -445,8 +473,6 @@ function runIsPhone(all: Unit[], mode: ScanMode): boolean {
   // One long number: 9175550123, +919876543210.
   if (live.some((u) => u.digits.length >= 10 && u.digits.length <= 15)) return true;
   const isList = live.length > 1 && live.slice(1).every((u) => listSep(u.sep));
-  // Sums and equations: 1234 + 5678 = 6912.
-  if (units.some((u) => /[=×÷*^]/.test(u.sep))) return false;
   if (mode === "file") {
     // Worksheets are full of numbers: only groups that look like a phone number's parts count.
     const total = sum(live);
@@ -1004,30 +1030,59 @@ export function fileNameContact(name: string): ContactScan {
  * adds. Dates, times and prices don't count. Null for anything else ("ok", "see you at 5").
  */
 export function numberPiece(text: string): { digits: number } | null {
+  const p = pieceDigits(text);
+  return p === null ? null : { digits: p.length };
+}
+
+/** The digits a short message adds when it's only a piece of a number ("#" for a letter-coded digit). */
+export function pieceDigits(text: string): string | null {
   if (!text.trim() || text.length > 40) return null;
   const v = normalize(text);
   const exempt = new Uint8Array(v.s.length + 1);
   for (const [a, b] of exemptSpans(v.s)) exempt.fill(1, a, b);
-  let digits = 0;
+  let digits = "";
   let any = false;
   for (const t of v.s.matchAll(/[\p{L}\d]+|[^\p{L}\d]+/gu)) {
     const w = t[0];
     if (!/[\p{L}\d]/u.test(w)) continue;
     if ((w.length === 1 && FIRST_LETTERS.has(w)) || w === "oh") {
-      digits += 1;
+      digits += w === "o" || w === "oh" ? "0" : CODE_DIGIT;
       any = true;
       continue;
     }
     const d = chunkDigits(w) ?? (isLetterCode(w) ? { digits: CODE_DIGIT.repeat(w.length) } : null);
     if (d) {
       any = true;
-      if (!exempt[t.index!]) digits += d.digits.length;
+      // A year on its own ("2024") is a date, not part of a number.
+      if (!exempt[t.index!] && !isYear(d.digits)) digits += d.digits;
       continue;
     }
     if (GLUE.has(w) || w in REPEAT) continue;
     return null;
   }
-  return any ? { digits } : null;
+  return any ? digits : null;
+}
+
+/**
+ * A mobile number sent in pieces between the other person's replies ("987" … "ok" … "654" … "3210"):
+ * `own` are this person's recent messages in the conversation (oldest first, the other side's left out),
+ * `next` the one being sent. Only a real mobile number counts here, so quiz answers sent one by one don't.
+ */
+export function splitAcrossReplies(own: string[], next: string): { found: boolean; pieces: number[] } {
+  const none = { found: false, pieces: [] as number[] };
+  const last = pieceDigits(next);
+  if (!last) return none;
+  let digits = last;
+  const pieces: number[] = [];
+  for (let i = own.length - 1; i >= 0 && pieces.length < 12 && digits.length < 13; i--) {
+    const p = pieceDigits(own[i]);
+    if (p === null) continue; // other short messages of theirs don't break it
+    if (!p) continue;
+    digits = p + digits;
+    pieces.unshift(i);
+    for (const n of [10, 11, 12, 13]) if (digits.length >= n && mobileLike(digits.slice(-n))) return { found: true, pieces };
+  }
+  return none;
 }
 
 /**
@@ -1043,13 +1098,22 @@ export function scanSplitMessages(previous: string[], next: string): { found: bo
   if (last) {
     let digits = last.digits;
     const pieces: number[] = [];
+    let skipped = 0;
     for (let i = previous.length - 1; i >= 0; i--) {
       const p = numberPiece(previous[i]);
-      if (!p) break;
+      if (!p) {
+        // A short filler message between the pieces ("ok?", "wait") doesn't break them (two at most).
+        if (skipped < 2 && previous[i].trim().length <= 20) {
+          skipped++;
+          continue;
+        }
+        break;
+      }
       digits += p.digits;
       pieces.unshift(i);
     }
-    if (pieces.length && digits >= 5) return { found: true, kinds: ["phone"], pieces };
+    // Five digits in a row of pieces is already too many; with filler in between, eight.
+    if (pieces.length && digits >= (skipped ? 8 : 5)) return { found: true, kinds: ["phone"], pieces };
   }
   // Spelled out across short messages: "j", "o", "h", "n", "@", "g" … or "john", "at", "gmail", "dot", "com".
   if (isShortPiece(next)) {

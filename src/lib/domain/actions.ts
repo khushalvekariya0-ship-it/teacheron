@@ -26,7 +26,7 @@ import { parseIntroVideo } from "@/lib/video";
 import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/postal";
 import { isCountryCode } from "@/lib/location";
 import { DAY_MS, payoutBalances } from "@/lib/earnings";
-import { setContactRules, blockedMessage, contactIn, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, type ContactKind } from "./contact";
+import { setContactRules, blockedMessage, contactIn, contactRules, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, splitAcrossReplies, type ContactKind } from "./contact";
 import {
   DEFAULT_NOTIFICATION_PREFS, emptyStudentProfile, fail, maskContactInfo, ok, resolveTutor,
   type BlogPostItem, type CreateBookingInput, type Data, type FaqItem, type Result, type TestimonialItem,
@@ -1236,13 +1236,26 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       // A number sent a piece at a time ("9", "1", "7" …, or "my number is 917" then "555 0123"): this person's
       // latest short messages (no reply in between, last 30 minutes) are read together with this one.
       const thread = get().messages.filter((m) => m.conversationId === c.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const windowMs = contactRules().splitWindowMinutes * 60_000;
       const recent: Message[] = [];
       for (let i = thread.length - 1; i >= 0 && recent.length < 40; i--) {
         const m = thread[i];
-        if (m.senderId !== senderId || Date.now() - new Date(m.createdAt).getTime() > 30 * 60_000 || m.body.length > 60 || m.moderation) break;
+        if (m.senderId !== senderId || Date.now() - new Date(m.createdAt).getTime() > windowMs || m.body.length > 60 || m.moderation) break;
         recent.unshift(m);
       }
-      const split = trimmed ? scanSplitMessages(recent.map((m) => m.body), trimmed) : null;
+      let split = trimmed ? scanSplitMessages(recent.map((m) => m.body), trimmed) : null;
+      // Pieces sent between the other person's replies ("987" … "ok" … "654" … "3210"): only this person's own
+      // messages in this conversation are read, and only a whole mobile number counts.
+      if (trimmed && !split?.found) {
+        const own = thread.filter((m) => m.senderId === senderId && !m.moderation && m.body.length <= 60 && Date.now() - new Date(m.createdAt).getTime() <= windowMs).slice(-12);
+        const across = splitAcrossReplies(own.map((m) => m.body), trimmed);
+        if (across.found) {
+          const idx = new Map(recent.map((m, i) => [m.id, i]));
+          recent.push(...own.filter((m) => !idx.has(m.id)));
+          const at = new Map(recent.map((m, i) => [m.id, i]));
+          split = { found: true, kinds: ["phone"], pieces: across.pieces.map((i) => at.get(own[i].id)!).filter((i) => i !== undefined) };
+        }
+      }
       if (split?.found) {
         // The earlier pieces were already delivered, so they're hidden now as well.
         const hide = new Set(split.pieces.map((i) => recent[i].id));

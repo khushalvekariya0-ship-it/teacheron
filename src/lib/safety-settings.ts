@@ -40,6 +40,8 @@ export interface ContactSafety {
   allow: string[];
   /** Catches, restrictions and decided appeals older than this are deleted. */
   retentionDays: number;
+  /** One person's short messages read together for a number sent in pieces: how far back (minutes). */
+  splitWindowMinutes: number;
 }
 
 export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
@@ -61,6 +63,7 @@ export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
   block: [],
   allow: [],
   retentionDays: 180,
+  splitWindowMinutes: 30,
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => {
@@ -96,11 +99,12 @@ export function readContactSafety(raw: unknown): ContactSafety {
     block: phrases(r.block),
     allow: phrases(r.allow),
     retentionDays: int(r.retentionDays, 30, 3650, d.retentionDays),
+    splitWindowMinutes: int(r.splitWindowMinutes, 5, 240, d.splitWindowMinutes),
   };
 }
 
 /** What the contact-detail rules need from the settings. */
-export const rulesOf = (s: ContactSafety): Partial<ContactRules> => ({ chat: s.chat, sensitivity: s.sensitivity, requests: s.requests, block: s.block, allow: s.allow });
+export const rulesOf = (s: ContactSafety): Partial<ContactRules> => ({ chat: s.chat, sensitivity: s.sensitivity, requests: s.requests, block: s.block, allow: s.allow, splitWindowMinutes: s.splitWindowMinutes });
 
 /** The settings as members see them (the phrase lists are only for staff). */
 export const publicContactSafety = (s: ContactSafety): ContactSafety => ({ ...s, block: [], allow: [] });
