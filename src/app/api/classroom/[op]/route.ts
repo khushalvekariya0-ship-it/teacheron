@@ -3,7 +3,7 @@ import { z } from "zod";
 import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
-  acceptPush, appealFromClass, checkClassImage, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
+  acceptPush, appealFromClass, boardMaybeShown, checkClassImage, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
   pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
   validPushCode, type Lesson,
 } from "@/server/classroom";
@@ -180,8 +180,8 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const stop = limited(`class-safety-${v.data.source}:${user.id}`, v.data.source === "board" ? 600 : 150, 10);
         if (stop) return stop;
         if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
-        // A handwritten number the person's own browser read on their drawing (board only): the site's rules decide.
-        const handwriting = v.data.source === "board" ? (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40) : "";
+        // A handwritten number the person's own browser read (on their drawing or shared screen): the site's rules decide.
+        const handwriting = (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40);
         return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting)) });
       }
       case "unpause": {
@@ -190,6 +190,16 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const v = z.object({ id }).safeParse(body);
         if (!v.success) return json({ ok: false, error: "Which lesson?" }, { status: 400 });
         return json({ ok: true, ...(await endOwnPause(user, await lessonOf(v.data.id))) });
+      }
+      case "board-maybe": {
+        // A long handwritten number the writer said was maths and showed: a note for the moderators.
+        const user = await signedIn();
+        const stop = limited(`class-board-maybe:${user.id}`, 20, 10);
+        if (stop) return stop;
+        const v = z.object({ id, digits: z.string().max(40) }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "That request wasn't valid." }, { status: 400 });
+        await boardMaybeShown(user, await lessonOf(v.data.id), v.data.digits.replace(/[^0-9?]/g, ""));
+        return json({ ok: true });
       }
       case "appeal": {
         // "Ask for a review" in the class: the audio pause was a mistake.

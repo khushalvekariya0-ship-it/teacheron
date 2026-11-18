@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { readMeta, TOPIC } from "@/lib/classroom";
 import { scanContact } from "@/lib/domain/contact";
-import { handwrittenNumbers, MIN_DIGITS } from "@/lib/handwriting/digits";
+import { handwrittenNumbers, judge } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 import { BoardSnip } from "./BoardSnip";
 import { sendSafety, type SafetyResult } from "./LessonSafety";
@@ -198,6 +198,9 @@ export function MeetingWhiteboard({
   // This person's drawings still being checked: on their own screen only (see "Check before showing").
   const heldRef = React.useRef(new Set<string>());
   const [holding, setHolding] = React.useState(false);
+  // A long handwritten number that may be maths: held until the writer says what it is.
+  const [maybe, setMaybe] = React.useState<{ ids: string[]; digits: string } | null>(null);
+  const maybeRef = React.useRef<{ ids: string[]; digits: string } | null>(null);
 
   const myId = room.localParticipant.identity;
   const canDraw = isHost || editors.includes(myId);
@@ -423,6 +426,8 @@ export function MeetingWhiteboard({
           strokesRef.current = [];
           heldRef.current.clear();
           setHolding(false);
+          maybeRef.current = null;
+          setMaybe(null);
           resetHistory();
           selectImage(null);
           redraw();
@@ -517,7 +522,7 @@ export function MeetingWhiteboard({
 
   const runCheck = React.useCallback(async () => {
     window.clearTimeout(checkTimer.current);
-    if (checkingRef.current) return;
+    if (checkingRef.current || maybeRef.current) return;
     if (drawing.current) {
       checkLater(400);
       return;
@@ -536,6 +541,7 @@ export function MeetingWhiteboard({
       const ink = (list: Stroke[]) => list.filter((s) => s.tool === "pen" || s.tool === "line").map((s) => ({ pts: s.pts ?? [] }));
       // A handwritten phone number this drawing adds (one already on the board before doesn't count again).
       let local: string | null = null;
+      let unsure: string | null = null;
       let growing = false;
       try {
         const [after, before] = await Promise.all([
@@ -544,8 +550,9 @@ export function MeetingWhiteboard({
         ]);
         const known = new Set(before.map((n) => n.digits));
         const fresh = after.filter((n) => !known.has(n.digits));
-        local = fresh.find((n) => n.count >= MIN_DIGITS)?.digits ?? null;
-        growing = !local && fresh.length > 0;
+        local = fresh.find((n) => judge(n) === "phone")?.digits ?? null;
+        unsure = local ? null : (fresh.find((n) => judge(n) === "maybe")?.digits ?? null);
+        growing = !local && !unsure && fresh.length > 0;
       } catch (e) {
         console.warn("[whiteboard] handwriting check", e);
       }
@@ -557,7 +564,13 @@ export function MeetingWhiteboard({
         return;
       }
       heldSince.current = 0;
-      let res: SafetyResult | null = null;
+      // Ten or so digits that may be maths (counting, a list, a long answer): nobody else sees them until the
+      // writer says what they are.
+      if (unsure) {
+        maybeRef.current = { ids: [...batch], digits: unsure };
+        setMaybe(maybeRef.current);
+        return;
+      }
       const c = document.createElement("canvas");
       c.width = 1280;
       c.height = 800;
@@ -566,37 +579,80 @@ export function MeetingWhiteboard({
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, c.width, c.height);
         for (const s of mine) drawStroke(ctx, { ...s, color: "#000000", size: Math.max(3, s.size ?? 4) });
-        res = await sendSafety(bookingId, { source: "board", image: c.toDataURL("image/png"), ...(local ? { kinds: ["phone" as const], excerpt: local } : {}) }, 8000);
       }
-      if (res?.found || local) {
+      const image = ctx ? c.toDataURL("image/png") : "";
+      const removeBatch = () => {
         strokesRef.current = strokesRef.current.filter((s) => !batch.has(s.id));
         rebaseHistory((list) => list.filter((s) => !batch.has(s.id)));
         redraw();
         setPasteMsg("Contact details can't be written on the whiteboard: your drawing wasn't shown to anyone and was removed.");
         window.setTimeout(() => setPasteMsg(""), 7000);
-        if (res?.found) onCaughtRef.current?.(res);
+      };
+      if (local) {
+        // Read here as a phone number: removed at once; the server records it and sends the class warning.
+        removeBatch();
+        if (image) void sendSafety(bookingId, { source: "board", image, kinds: ["phone"], excerpt: local }, 20_000).then((res) => res?.found && onCaughtRef.current?.(res));
       } else {
-        for (const s of strokesRef.current) if (batch.has(s.id)) broadcastStroke(s);
+        // Printed text, QR codes and (when on) AI reading on the server; if it can't answer in 5 s the lesson goes on.
+        const res: SafetyResult | null = image ? await sendSafety(bookingId, { source: "board", image }, 5000) : null;
+        if (res?.found) {
+          removeBatch();
+          onCaughtRef.current?.(res);
+        } else {
+          for (const s of strokesRef.current) if (batch.has(s.id)) broadcastStroke(s);
+        }
       }
       for (const id of batch) heldRef.current.delete(id);
     } finally {
       checkingRef.current = false;
       setHolding(heldRef.current.size > 0);
-      if (heldRef.current.size) checkLater(waitMore || 300);
+      if (heldRef.current.size && !maybeRef.current) checkLater(waitMore || 300);
     }
   }, [myId, bookingId, drawStroke, rebaseHistory, redraw, broadcastStroke, checkLater]);
+
+  /** "It's maths": the held drawing goes to everyone, and moderators get a note (the number masked). */
+  const showMaybe = React.useCallback(() => {
+    const m = maybeRef.current;
+    if (!m) return;
+    maybeRef.current = null;
+    setMaybe(null);
+    const ids = new Set(m.ids);
+    for (const s of strokesRef.current) if (ids.has(s.id)) broadcastStroke(s);
+    for (const id of ids) heldRef.current.delete(id);
+    setHolding(heldRef.current.size > 0);
+    void fetch("/api/classroom/board-maybe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, digits: m.digits }) }).catch(() => {});
+    if (heldRef.current.size) checkLater(300);
+  }, [bookingId, broadcastStroke, checkLater]);
+
+  /** "Remove it": the held drawing is deleted; nobody ever saw it. */
+  const removeMaybe = React.useCallback(() => {
+    const m = maybeRef.current;
+    if (!m) return;
+    maybeRef.current = null;
+    setMaybe(null);
+    const ids = new Set(m.ids);
+    strokesRef.current = strokesRef.current.filter((s) => !ids.has(s.id));
+    rebaseHistory((list) => list.filter((s) => !ids.has(s.id)));
+    for (const id of ids) heldRef.current.delete(id);
+    redraw();
+    setHolding(heldRef.current.size > 0);
+    if (heldRef.current.size) checkLater(300);
+  }, [rebaseHistory, redraw, checkLater]);
   React.useEffect(() => {
     runCheckRef.current = runCheck;
   }, [runCheck]);
 
-  /** Keeps a new drawing on this screen until it's checked: about a second after the pen stops (4 s at most while writing on). */
+  /**
+   * Keeps a new drawing on this screen until it's checked, about a second after the pen stops. Nothing is sent
+   * while the writer is still writing (half a number must never go out); only after 20 s of non-stop drawing.
+   */
   const hold = React.useCallback(
     (id: string) => {
       heldRef.current.add(id);
       setHolding(true);
       lastPenUp.current = Date.now();
       heldSince.current ||= Date.now();
-      checkLater(Date.now() - heldSince.current > 4000 ? 0 : 900);
+      checkLater(Date.now() - heldSince.current > 20_000 ? 0 : 900);
     },
     [checkLater],
   );
@@ -870,6 +926,8 @@ export function MeetingWhiteboard({
     currentRef.current = null;
     heldRef.current.clear();
     setHolding(false);
+    maybeRef.current = null;
+    setMaybe(null);
     selectImage(null);
     send({ type: TOPIC.clear });
     redraw();
@@ -1347,7 +1405,18 @@ export function MeetingWhiteboard({
             </>
           )}
           {pasteMsg && <span className="max-w-[16rem] truncate text-xs text-live" role="status">{pasteMsg}</span>}
-          {holding && !pasteMsg && (
+          {maybe && (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" role="alert" data-board-maybe>
+              <span className="text-live">This looks like it could be a phone number, so nobody else sees it yet.</span>
+              <button type="button" onClick={showMaybe} className="font-semibold text-ink underline underline-offset-2">
+                It&apos;s maths, show it
+              </button>
+              <button type="button" onClick={removeMaybe} className="font-semibold text-ink underline underline-offset-2">
+                Remove it
+              </button>
+            </span>
+          )}
+          {holding && !pasteMsg && !maybe && (
             <span className="max-w-[16rem] truncate text-xs text-muted" role="status" data-board-checking>
               Checking your drawing before others see it…
             </span>

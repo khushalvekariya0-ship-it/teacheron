@@ -5,6 +5,7 @@ import { Flag, Loader2, ShieldCheck, X } from "lucide-react";
 import { RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import { TOPIC, type SafetyMessage } from "@/lib/classroom";
 import { type ContactKind } from "@/lib/domain/contact";
+import { judge, numbersInPicture } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 
 /*
@@ -417,11 +418,54 @@ export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }:
       busy = false;
       if (res?.found) onFoundRef.current(res);
     };
+    // Handwriting on a shared screen (a drawing app, a photo of a note, another whiteboard): read in this
+    // browser every 3 seconds when the picture changed, so a written phone number stops the share at once.
+    let lastLocal: number[] | null = null;
+    let reading = false;
+    const readHere = async () => {
+      if (source !== "screen" || reading || busy || !video.videoWidth) return;
+      const thumb = document.createElement("canvas");
+      thumb.width = 48;
+      thumb.height = 27;
+      const t = thumb.getContext("2d", { willReadFrequently: true });
+      if (!t) return;
+      t.drawImage(video, 0, 0, 48, 27);
+      const px = t.getImageData(0, 0, 48, 27).data;
+      const grey: number[] = [];
+      for (let i = 0; i < px.length; i += 4) grey.push(((px[i] + px[i + 1] + px[i + 2]) / 3) >> 4);
+      const changed = lastLocal ? grey.filter((g, i) => Math.abs(g - lastLocal![i]) >= 1).length / grey.length : 1;
+      if (changed < 0.01) return;
+      lastLocal = grey;
+      const scale = Math.min(1, 1280 / video.videoWidth);
+      const c = document.createElement("canvas");
+      c.width = Math.round(video.videoWidth * scale);
+      c.height = Math.round(video.videoHeight * scale);
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, c.width, c.height);
+      reading = true;
+      try {
+        const found = await numbersInPicture(ctx.getImageData(0, 0, c.width, c.height));
+        const phone = found.find((n) => judge(n) === "phone");
+        if (phone) {
+          busy = true;
+          const res = await sendSafety(bookingId, { source, image: c.toDataURL("image/jpeg", 0.75), kinds: ["phone"], excerpt: phone.digits });
+          busy = false;
+          if (res?.found) onFoundRef.current(res);
+        }
+      } catch (e) {
+        console.warn("[safety] reading the shared screen", e);
+      } finally {
+        reading = false;
+      }
+    };
     const first = window.setTimeout(() => void tick(), 2500);
     const every = window.setInterval(() => void tick(), everyMs);
+    const here = window.setInterval(() => void readHere(), 3000);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(every);
+      window.clearInterval(here);
       video.srcObject = null;
     };
   }, [room, bookingId, source, on, everyMs]);

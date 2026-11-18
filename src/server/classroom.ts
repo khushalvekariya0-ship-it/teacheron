@@ -504,13 +504,28 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
   if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
   const img = decodeImage(dataUrl, 3 * 1024 * 1024);
   const read = await readClassPicture(img.bytes, img.type, s.aiReading, `${lesson.booking.id}:${source}`);
-  // Digits the person's own browser read in their handwriting (whiteboard): TutorLink's rules decide on them too.
+  // Digits the person's own browser read in their handwriting (whiteboard, shared screen): TutorLink's rules decide on them too.
   const digits = handwriting.replace(/\?/g, "");
-  if (source === "board" && digits.length >= 10) {
+  if (digits.length >= 10) {
     for (const k of scanContact(digits, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
   }
   if (!read.kinds.length) return { found: false as const };
   return { found: true as const, kinds: read.kinds, ...(await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector)) };
+}
+
+/**
+ * A long handwritten number that might have been maths, shown on the whiteboard after the writer said it was:
+ * a note in Admin → Reports with the number masked (first and last two digits), so moderators can look.
+ */
+export async function boardMaybeShown(user: User, lesson: Lesson, digits: string) {
+  requireRole(user, lesson);
+  const d = digits.slice(0, 20);
+  const masked = d.length > 4 ? `${d.slice(0, 2)}${"•".repeat(d.length - 4)}${d.slice(-2)}` : "••••";
+  const who = shortName(user.firstName, user.lastName);
+  await db()`insert into public.reports (id, reporter_id, target_type, target_id, reason, details, status, created_at)
+    values (${`rep_${randomBytes(6).toString("hex")}`}, ${user.id}, 'user', ${user.id}, 'Possible phone number shown on the whiteboard',
+      ${`In the live class of lesson ${lesson.booking.id}, ${who} wrote a long number (${masked}) and chose "It's maths, show it".`}, 'open', now())`;
+  await alertStaff("reports.moderate", { title: `Possible number on the whiteboard: ${who}`, body: `${masked}, shown after they said it was maths.`, href: "/admin/reports" });
 }
 
 export const CLASS_REPORT_REASONS = {
