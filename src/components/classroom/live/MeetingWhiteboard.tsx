@@ -334,19 +334,64 @@ export function MeetingWhiteboard({
 
   /* ── sending ─────────────────────────────────────────────────────────── */
 
+  // Everything this board sends goes out in order through this queue. If the connection drops for a moment
+  // ("could not establish Publisher connection"), what couldn't be sent waits here and goes out once the
+  // connection is back, instead of being lost. (Drawings in it were already checked before being sent.)
+  const unsent = React.useRef<Uint8Array<ArrayBuffer>[]>([]);
+  const flushing = React.useRef(false);
+  const headTries = React.useRef(0);
+  const flush = React.useCallback(async () => {
+    if (flushing.current) return;
+    flushing.current = true;
+    try {
+      while (unsent.current.length && room.state === ConnectionState.Connected) {
+        try {
+          await room.localParticipant.publishData(unsent.current[0], { reliable: true });
+          unsent.current.shift();
+          headTries.current = 0;
+        } catch (e) {
+          // A message that can never go (too large), or one that kept failing for a minute, is skipped so it
+          // can't hold up everything after it; anything else is tried again in 2 s.
+          const never = e instanceof TypeError || /too large/i.test(String((e as Error)?.message ?? e));
+          if (never || ++headTries.current >= 30) {
+            console.warn("[whiteboard] a message couldn't be sent and was skipped", e);
+            unsent.current.shift();
+            headTries.current = 0;
+            continue;
+          }
+          console.warn("[whiteboard] send failed, trying again shortly", e);
+          break;
+        }
+      }
+    } finally {
+      flushing.current = false;
+    }
+  }, [room]);
+  React.useEffect(() => {
+    const retry = window.setInterval(() => void flush(), 2000);
+    const now = () => void flush();
+    room.on(RoomEvent.Connected, now).on(RoomEvent.Reconnected, now);
+    return () => {
+      window.clearInterval(retry);
+      room.off(RoomEvent.Connected, now).off(RoomEvent.Reconnected, now);
+    };
+  }, [room, flush]);
+
   const send = React.useCallback(
     (msg: Record<string, unknown>) => {
-      // Before the room has connected nothing can be sent; the board asks for the current state once it has.
-      if (room.state === ConnectionState.Connecting || room.state === ConnectionState.Disconnected) return;
+      // Before the room has connected a sync request is pointless: the board asks again once it has.
+      if (msg.type === TOPIC.sync && room.state !== ConnectionState.Connected) return;
       try {
         const enc = new TextEncoder().encode(JSON.stringify(msg));
-        if (enc.length < 60_000) room.localParticipant.publishData(enc, { reliable: true }).catch((e: unknown) => console.warn("[whiteboard] send failed", e));
-        else console.warn("[whiteboard] message too large to send:", enc.length);
+        if (enc.length >= 60_000) return void console.warn("[whiteboard] message too large to send:", enc.length);
+        unsent.current.push(enc);
+        if (unsent.current.length > 500) unsent.current.splice(0, unsent.current.length - 500);
+        void flush();
       } catch (e) {
         console.warn("[whiteboard] send failed", e);
       }
     },
-    [room],
+    [room, flush],
   );
 
   const broadcastStroke = React.useCallback((stroke: Stroke) => send({ type: TOPIC.stroke, stroke }), [send]);
@@ -1283,6 +1328,9 @@ export function MeetingWhiteboard({
     }
   };
 
+  // A drawing removed for contact details (or drawing blocked for now): shown in full over the board.
+  const privacyAlert = /^TutorLink Privacy Protection Alert!|^Drawing on the whiteboard is blocked/.test(pasteMsg);
+
   return (
     <div className="relative flex size-full flex-col bg-white">
       {/* ── Snip panel ── */}
@@ -1445,7 +1493,7 @@ export function MeetingWhiteboard({
               </button>
             </>
           )}
-          {pasteMsg && <span className="max-w-[16rem] truncate text-xs text-live" role="status">{pasteMsg}</span>}
+          {pasteMsg && !privacyAlert && <span className="max-w-[16rem] truncate text-xs text-live" role="status">{pasteMsg}</span>}
           {maybe && (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" role="alert" data-board-maybe>
               <span className="text-live">This looks like it could be contact details, so nobody else sees it yet.</span>
@@ -1521,6 +1569,17 @@ export function MeetingWhiteboard({
           onTouchMove={onMove}
           onTouchEnd={onUp}
         />
+
+        {/* The privacy alert in full, at the foot of the board (the toolbar line is too short for it, and the
+            top is where people write). */}
+        {privacyAlert && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3" role="alert" data-board-alert>
+            <div className="max-w-xl bg-danger px-4 py-3 text-sm text-white shadow-2xl">
+              <p className="font-bold">TutorLink Privacy Protection Alert!</p>
+              <p className="mt-0.5">{pasteMsg.replace(/^TutorLink Privacy Protection Alert! /, "")}</p>
+            </div>
+          </div>
+        )}
 
         {/* Handles live in the page, not on the canvas: the canvas is what gets saved and shared. */}
         {canDraw && tool === "select" && selBox && selectedId && (
