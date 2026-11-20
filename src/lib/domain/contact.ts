@@ -16,7 +16,7 @@
  */
 
 /** `request`: asking to talk, meet or pay outside TutorLink ("send me your number", "બહાર વાત કરીએ"). */
-export type ContactKind = "phone" | "email" | "social" | "link" | "request";
+export type ContactKind = "phone" | "email" | "social" | "link" | "request" | "address";
 export type ScanMode = "chat" | "file";
 
 /**
@@ -922,6 +922,42 @@ function findRequests(v: View, text: string): [number, number][] {
   return spans;
 }
 
+/* ─── 5b. Home and postal addresses ──────────────────────────────────────────── */
+
+// Strong signs of an address (not "a block on the floor near the wall" in a physics problem): a PIN code
+// next to address words, a house / flat number next to a street word, or "my address is …".
+const PIN = /(?<![\d.,])[1-9]\d{2}[ \t]?\d{3}(?![\d.,]*\d)/g;
+const PLACE_WORD = String.raw`(?:road|rd|street|lane|marg|nagar|colony|society|soc|layout|sector|phase|apartments?|apts?|residency|enclave|vihar|niwas|nivas|bhavan|bhawan|complex|heights|towers?|chowk|cross|near|opp|opposite|behind|landmark|village|vill|taluka|tehsil|district|dist|mohalla|gali|pol|sheri|faliyu|wadi|chawl|bazaa?r|flat|house|floor|wing|plot|gujarat|maharashtra|delhi|mumbai|pune|ahmedabad|surat|vadodara|rajkot|bangalore|bengaluru|chennai|hyderabad|kolkata|jaipur|lucknow|noida|gurgaon|gurugram|thane|nagpur|indore|bhopal|patna|kochi|goa)`;
+const PLACE = new RegExp(String.raw`\b${PLACE_WORD}\b`, "gi");
+// "Flat 302", "H.No. 12-B", "house no 45", "door # 7"; plot / block / room only with "no." ("plot 3 points" is maths).
+const HOUSE_NO = /\b(?:(?:flat|house|h\.?\s?no|door|apt|apartment|bungalow|bunglow|villa)\s*(?:no\.?|number|#)?|(?:plot|block|room|shop|tower|wing|building|bldg)\s*(?:no\.?|number|#))\s*[:.-]?\s*[a-z]?[-/]?\d{1,5}[a-z]?\b/gi;
+const STREET = /\b(?:road|rd|street|lane|marg|nagar|colony|society|soc|layout|sector|apartments?|residency|enclave|vihar|niwas|nivas|bhavan|bhawan|complex|heights|chowk|near|opp|opposite|landmark|village|taluka|tehsil|district|mohalla|gali|pol|sheri|faliyu|wadi|chawl)\b/i;
+const MY_ADDRESS = [
+  /\b(?:my|our|mine|home|house|residential|postal|permanent|current)\s+address\s*(?:is|:|-|=)/gi,
+  /\b(?:send|share|give|tell|text|dm|need|want)\s+(?:me\s+)?(?:your|ur|u r)\s+(?:home\s+|house\s+)?(?:address|location)\b/gi,
+  /\b(?:mera|meri|maru|maro|mara|apna|apnu|hamara|amaru|tamaru|tumhara|tera|aapka|tharu)\s+(?:ghar\s+(?:ka|nu|no)\s+)?(?:address|addres|pata|saranamu|sarnamu)\b/gi,
+  /\bghar\s+(?:ka|nu|no)\s+(?:address|pata|saranamu)\b/gi,
+  /મારુ(?:ં)?\s*સરનામ|ઘરનુ(?:ં)?\s*સરનામ|સરનામુ(?:ં)?\s*(?:આ|છે)|मेरा\s*पता|घर\s*का\s*पता|मेरे\s*घर\s*का\s*पता/g,
+];
+
+/** Home and postal addresses. */
+function findAddresses(text: string): [number, number][] {
+  const spans: [number, number][] = [];
+  const near = (start: number, end: number, re: RegExp, reach = 60) => re.test(text.slice(Math.max(0, start - reach), Math.min(text.length, end + reach)));
+  // A PIN code with two different address words next to it ("MG Road, Pune 411001"). A PIN code on its own
+  // ("Pin code 380015") is only an area, not an address.
+  for (const m of text.matchAll(PIN)) {
+    const around = text.slice(Math.max(0, m.index! - 60), Math.min(text.length, m.index! + m[0].length + 30));
+    const words = new Set([...around.matchAll(PLACE)].map((w) => w[0].toLowerCase()));
+    if (words.size >= 2) spans.push([Math.max(0, m.index! - 60), m.index! + m[0].length]);
+  }
+  // A house / flat number with a street word next to it: "Flat 302, Shanti Society".
+  for (const m of text.matchAll(HOUSE_NO)) if (near(m.index!, m.index! + m[0].length, STREET, 80)) spans.push([m.index!, Math.min(text.length, m.index! + m[0].length + 80)]);
+  // "My address is …", "send me your address", "mera ghar ka address", "મારું સરનામું".
+  for (const re of MY_ADDRESS) for (const m of text.matchAll(re)) spans.push([m.index!, Math.min(text.length, m.index! + m[0].length + 80)]);
+  return spans;
+}
+
 /* ─── 6. Public API ───────────────────────────────────────────────────────────── */
 
 /** Base64 text that decodes to readable text ("am9obkBnbWFpbC5jb20=" → "john@gmail.com"), else null. */
@@ -963,6 +999,7 @@ function scanCore(text: string, mode: ScanMode, depth: number): ContactScan {
     if (mode === "chat") add("link", rangesOf(w, MEETING_LINK));
   }
   if (mode === "chat" && RULES.requests && depth === 0) add("request", findRequests(v, text));
+  if (depth === 0) add("address", findAddresses(text));
   // Phrases staff marked as fine ("WhatsApp Business case study") don't count as a request or an app
   // mention; real numbers, emails and handles inside them still do.
   if (RULES.allow.length) {
@@ -1000,7 +1037,7 @@ export function scanContact(text: string, mode: ScanMode = "chat"): ContactScan 
   return scanCore(text, mode, 0);
 }
 
-const MASK: Record<ContactKind, string> = { phone: "[phone number hidden]", email: "[email hidden]", social: "[contact details hidden]", link: "[link hidden]", request: "[request to talk outside TutorLink hidden]" };
+const MASK: Record<ContactKind, string> = { phone: "[phone number hidden]", email: "[email hidden]", social: "[contact details hidden]", link: "[link hidden]", request: "[request to talk outside TutorLink hidden]", address: "[address hidden]" };
 
 /** The text with every match replaced by a label (overlapping matches are merged). */
 export function maskMatches(text: string, matches: ContactMatch[], label?: string): string {
@@ -1019,7 +1056,7 @@ export function maskMatches(text: string, matches: ContactMatch[], label?: strin
   return out + text.slice(at);
 }
 
-const KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media, messaging or payment app contact", link: "a link to an outside document, form or file-sharing page", request: "a request to talk, meet or pay outside TutorLink" };
+const KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media, messaging or payment app contact", link: "a link to an outside document, form or file-sharing page", request: "a request to talk, meet or pay outside TutorLink", address: "a home or postal address" };
 
 /** "a phone number and an email address" */
 export function describeKinds(kinds: ContactKind[]): string {
@@ -1185,7 +1222,7 @@ export function scanSplitMessages(previous: string[], next: string): { found: bo
         at += part.length;
       }
       const lastStart = starts[parts.length - 1];
-      const hits = scanContact(parts.join(""), "chat").matches.filter((m) => m.kind !== "phone" && m.end > lastStart);
+      const hits = scanContact(parts.join(""), "chat").matches.filter((m) => m.kind !== "phone" && m.kind !== "address" && m.end > lastStart);
       if (hits.length) {
         const pieces = run.slice(from).filter((_, k) => hits.some((m) => m.start < starts[k] + parts[k].length && m.end > starts[k]));
         return { found: true, kinds: [...new Set(hits.map((m) => m.kind))], pieces: pieces.length ? pieces : run.slice(from) };
@@ -1202,7 +1239,9 @@ export function scanSplitMessages(previous: string[], next: string): { found: bo
   }
   const scan = scanContact(parts.join("\n"), "chat");
   const nextStart = starts[parts.length - 1];
-  const hits = scan.matches.filter((m) => m.end > nextStart);
+  // Addresses are only read within one message: lesson messages read together ("sector …", "floor near …",
+  // "Pin code 380015") would look like one.
+  const hits = scan.matches.filter((m) => m.end > nextStart && m.kind !== "address");
   if (!hits.length) return none;
   const offset = previous.length - (parts.length - 1);
   const pieces = parts.slice(0, -1).map((_, k) => k).filter((k) => hits.some((m) => m.start < starts[k] + parts[k].length && m.end > starts[k])).map((k) => k + offset);

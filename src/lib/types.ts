@@ -705,7 +705,7 @@ export interface ContactFlag {
   contextId?: ID;
   /** The person who would have received it (user id, or tutor id for a tutor). */
   recipientId?: ID;
-  kinds: ("phone" | "email" | "social" | "link" | "request")[];
+  kinds: ("phone" | "email" | "social" | "link" | "request" | "address")[];
   excerpt: string;
   fileName?: string;
   /** How it was found: the built-in rules (text), OCR, a QR code, Gemini, or speech recognition. */

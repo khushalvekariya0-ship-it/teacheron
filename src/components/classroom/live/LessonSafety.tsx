@@ -44,7 +44,7 @@ export async function sendSafety(
 }
 
 const WHERE: Record<SafetyMessage["source"], string> = { speech: "said out loud", board: "written on the whiteboard", screen: "shown on a shared screen", camera: "shown on camera" };
-const WHAT: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or messaging app", link: "an outside link", request: "an invitation to talk or pay outside TutorLink" };
+const WHAT: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or messaging app", link: "an outside link", request: "an invitation to talk or pay outside TutorLink", address: "a home or postal address" };
 
 /**
  * Warnings when contact details are caught in this class. They come from the server, or from a person's

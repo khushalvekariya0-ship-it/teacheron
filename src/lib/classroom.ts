@@ -108,7 +108,7 @@ export interface SafetyMessage {
   name: string;
   identity: string;
   source: "speech" | "board" | "screen" | "camera";
-  kinds: ("phone" | "email" | "social" | "link" | "request")[];
+  kinds: ("phone" | "email" | "social" | "link" | "request" | "address")[];
   /** How many times in this lesson, and where that is on the ladder (Admin → Chat safety → Settings). */
   strikes: number;
   removed: boolean;

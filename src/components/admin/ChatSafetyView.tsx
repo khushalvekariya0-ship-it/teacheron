@@ -35,7 +35,7 @@ import { AppealsPanel, ProtectionOverview, ProtectionSettings, RestrictionsPanel
 type Kind = ContactFlag["kinds"][number];
 type FlagStatus = ContactFlag["status"];
 
-const KIND_LABEL: Record<Kind, string> = { phone: "Phone number", email: "Email", social: "Social / app", link: "Outside link", request: "Asked to talk outside" };
+const KIND_LABEL: Record<Kind, string> = { phone: "Phone number", email: "Email", social: "Social / app", link: "Outside link", request: "Asked to talk outside", address: "Home / postal address" };
 const STATUS_META: Record<FlagStatus, { label: string; tone: "warning" | "success" | "neutral" }> = {
   open: { label: "Needs review", tone: "warning" },
   actioned: { label: "Dealt with", tone: "success" },

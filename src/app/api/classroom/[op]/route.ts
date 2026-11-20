@@ -167,7 +167,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const user = await signedIn();
         const v = z
           .object({
-            id, source: z.enum(["speech", "board", "screen", "camera"]), kinds: z.array(z.enum(["phone", "email", "social", "link", "request"])).max(5).optional(),
+            id, source: z.enum(["speech", "board", "screen", "camera"]), kinds: z.array(z.enum(["phone", "email", "social", "link", "request", "address"])).max(6).optional(),
             excerpt: z.string().max(600).optional(), image: z.string().max(4_500_000).optional(),
           })
           .safeParse(body);

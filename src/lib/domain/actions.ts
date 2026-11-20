@@ -404,7 +404,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   };
   /** Five stopped attempts within an hour pause messaging for an hour (it stops people probing the filter). */
   const AUTO_PAUSE_ATTEMPTS = 5;
-  const CONTACT_KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or app contact", link: "an outside link", request: "a request to talk or pay outside TutorLink" };
+  const CONTACT_KIND_LABEL: Record<ContactKind, string> = { phone: "a phone number", email: "an email address", social: "a social media or app contact", link: "an outside link", request: "a request to talk or pay outside TutorLink", address: "a home or postal address" };
   const FLAG_PLACE: Record<ContactFlag["channel"], string> = { chat: "chat", homework: "homework", lesson: "lesson notes", profile: "their profile" };
   const flagContact = (u: User, f: Omit<ContactFlag, "id" | "userId" | "status" | "createdAt">): boolean => {
     const flag: ContactFlag = { detector: f.source === "text" ? "rules" : undefined, ...f, id: uid("cfl"), userId: u.id, status: "open", createdAt: nowIso() };
