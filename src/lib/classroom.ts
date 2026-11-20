@@ -73,6 +73,8 @@ export function readMeta(metadata: string | undefined | null): ParticipantMeta |
 export interface JoinTicket {
   /** Set when this person's audio is paused in this class (contact details were shared): until when, in ms. */
   audioPausedUntil?: number;
+  /** Set when this person's camera is off in this class (contact details were shown on it): until when, in ms. */
+  cameraOffUntil?: number;
   token: string;
   wsUrl: string;
   room: string;

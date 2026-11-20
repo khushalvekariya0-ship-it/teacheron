@@ -350,10 +350,10 @@ export function MeetingWhiteboard({
           unsent.current.shift();
           headTries.current = 0;
         } catch (e) {
-          // A message that can never go (too large), or one that kept failing for a minute, is skipped so it
+          // A message that can never go (too large), or one that kept failing for 5 minutes, is skipped so it
           // can't hold up everything after it; anything else is tried again in 2 s.
           const never = e instanceof TypeError || /too large/i.test(String((e as Error)?.message ?? e));
-          if (never || ++headTries.current >= 30) {
+          if (never || ++headTries.current >= 150) {
             console.warn("[whiteboard] a message couldn't be sent and was skipped", e);
             unsent.current.shift();
             headTries.current = 0;

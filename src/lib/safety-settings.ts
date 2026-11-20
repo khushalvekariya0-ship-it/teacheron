@@ -49,6 +49,8 @@ export interface ContactSafety {
   /** In one lesson: from this catch on a shared screen / whiteboard, that sharing is blocked for the person for shareBlockMinutes (0 = never). */
   shareBlockAt: number;
   shareBlockMinutes: number;
+  /** Contact details shown on a camera: the camera is turned off and stays off this long (0 = only turned off). */
+  cameraBlockMinutes: number;
 }
 
 export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
@@ -75,6 +77,7 @@ export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
   whiteboard: true,
   shareBlockAt: 2,
   shareBlockMinutes: 10,
+  cameraBlockMinutes: 5,
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => {
@@ -115,6 +118,7 @@ export function readContactSafety(raw: unknown): ContactSafety {
     whiteboard: bool("whiteboard"),
     shareBlockAt: int(r.shareBlockAt, 0, 20, d.shareBlockAt),
     shareBlockMinutes: int(r.shareBlockMinutes, 1, 120, d.shareBlockMinutes),
+    cameraBlockMinutes: int(r.cameraBlockMinutes, 0, 120, d.cameraBlockMinutes),
   };
 }
 

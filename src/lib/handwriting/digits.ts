@@ -374,13 +374,25 @@ type Reading = { digits: string; count: number; length: number; groups: number[]
  */
 async function readInOrder(list: Glyph[]): Promise<Reading> {
   const size = list.map((g) => h(g)).sort((a, b) => a - b)[Math.floor(list.length / 2)] || 1;
+  const mid = (g: Glyph) => (g.y0 + g.y1) / 2;
+  // A line follows the writing from left to right (each character against the one before it), so a line
+  // written at a slant, or on paper held up to a camera at a tilt, stays one line.
   const lines: Glyph[][] = [];
-  for (const g of [...list].sort((a, b) => (a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2)) {
-    const mid = (g.y0 + g.y1) / 2;
-    const line = lines.find((l) => Math.abs((l[0].y0 + l[0].y1) / 2 - mid) < 0.6 * size);
+  for (const g of [...list].sort((a, b) => a.x0 - b.x0)) {
+    let line: Glyph[] | null = null, bestDy = Infinity;
+    for (const l of lines) {
+      const last = l[l.length - 1];
+      const dy = Math.abs(mid(last) - mid(g));
+      if (g.x0 >= last.x0 + 0.3 * w(last) && dy < 0.6 * size && dy < bestDy) {
+        line = l;
+        bestDy = dy;
+      }
+    }
     if (line) line.push(g);
     else lines.push([g]);
   }
+  const avg = (l: Glyph[]) => l.reduce((s, g) => s + mid(g), 0) / l.length;
+  lines.sort((a, b) => avg(a) - avg(b));
   let digits = "", count = 0, length = 0, listy = false;
   const groups: number[] = [];
   for (const line of lines) {
@@ -417,10 +429,17 @@ async function readInOrder(list: Glyph[]): Promise<Reading> {
 async function numbersIn(glyphs: Glyph[], min: number): Promise<HandwrittenNumber[]> {
   // Specks (much smaller than the writing around them) are dots; much bigger shapes are frames, circles or
   // underlines drawn around the writing. Neither is a character.
+  // Tall thin lines much taller than the writing (the edges of a sheet of paper held up to a camera) aren't
+  // a "1" either.
   const keep = (list: Glyph[]) => {
     const sizes = list.map((c) => Math.max(w(c), h(c))).sort((a, b) => a - b);
     const typical = sizes[Math.floor(sizes.length / 2)] ?? 0;
-    return { typical, chars: list.filter((c) => Math.max(w(c), h(c)) >= 0.2 * typical && (c.kind !== "ink" || Math.max(w(c), h(c)) <= 3 * typical)) };
+    const heights = list.map((c) => h(c)).sort((a, b) => a - b);
+    const tall = heights[Math.floor(heights.length / 2)] ?? 0;
+    return {
+      typical,
+      chars: list.filter((c) => Math.max(w(c), h(c)) >= 0.2 * typical && (c.kind !== "ink" || (Math.max(w(c), h(c)) <= 3 * typical && !(h(c) > 2.2 * tall && h(c) > 6 * w(c))))),
+    };
   };
   const { chars } = keep(glyphs.flatMap((g) => splitWide(g)));
   const found: HandwrittenNumber[] = [];
@@ -449,6 +468,19 @@ async function numbersIn(glyphs: Glyph[], min: number): Promise<HandwrittenNumbe
       const size = Math.max(a.size, b.size);
       const startsUnder = b.box.x0 >= a.box.x0 - size && b.box.x0 <= a.box.x1 + 0.5 * size;
       if (b.box.y0 > (a.box.y0 + a.box.y1) / 2 && b.box.y0 - a.box.y1 <= 1.2 * size && startsUnder) {
+        add({ digits: a.text.digits + b.text.digits, count: a.text.count + b.text.count, length: a.text.length + b.text.length, groups: [...a.text.groups, ...b.text.groups], listy: a.text.listy || b.text.listy, joined: true });
+      }
+    }
+  }
+  // A number broken in two along one line (a wider gap, or paper held up at a slight tilt, where the right-hand
+  // part sits a little higher): read left to right, not top to bottom.
+  for (const a of plain) {
+    for (const b of plain) {
+      if (a === b) continue;
+      const size = Math.max(a.size, b.size);
+      const gap = b.box.x0 - a.box.x1;
+      const dy = Math.abs((a.box.y0 + a.box.y1) / 2 - (b.box.y0 + b.box.y1) / 2);
+      if (gap >= -0.3 * size && gap <= 2 * size && dy <= 0.8 * size) {
         add({ digits: a.text.digits + b.text.digits, count: a.text.count + b.text.count, length: a.text.length + b.text.length, groups: [...a.text.groups, ...b.text.groups], listy: a.text.listy || b.text.listy, joined: true });
       }
     }
@@ -646,8 +678,9 @@ function components(ink: Uint8Array, W: number, H: number, minCharPx: number): G
       }
     }
     const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
-    // Writing: tall enough, not a frame or a panel edge, not a filled block.
-    if (bh < minCharPx || bh > 0.6 * H || bw > 6 * bh || area < 20 || area > 0.6 * bw * bh) continue;
+    // Writing: tall enough, not a frame or a panel edge, not a filled block (a straight "1" fills its thin box,
+    // so only wider shapes count as blocks).
+    if (bh < minCharPx || bh > 0.6 * H || bw > 6 * bh || area < 20 || (area > 0.6 * bw * bh && bw > 0.25 * bh)) continue;
     const data = new Uint8Array(bw * bh);
     for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) data[y * bw + x] = label[(y + y0) * W + x + x0] === next ? 1 : 0;
     out.push({ x0, y0, x1: x1 + 1, y1: y1 + 1, kind: "ink", mask: { w: bw, h: bh, data }, s: 1, ox: 0, oy: 0 });
@@ -927,8 +960,11 @@ export async function handwrittenContacts(strokes: InkStroke[], width: number, h
   return found;
 }
 
-/** Emails and usernames written by hand in a picture (a shared screen): dark on light and light on dark. */
-export async function handwrittenContactsInPicture(frame: Frame, minCharPx = 22): Promise<HandwrittenContact[]> {
+/**
+ * Emails and usernames written by hand in a picture (a shared screen, a camera): dark on light and light on
+ * dark. `lines`, when given, gets every line of writing read (so the caller knows writing is there at all).
+ */
+export async function handwrittenContactsInPicture(frame: Frame, minCharPx = 22, lines?: string[]): Promise<HandwrittenContact[]> {
   const W = frame.width, H = frame.height;
   if (W < 32 || H < 32) return [];
   const g = new Uint8Array(W * H);
@@ -961,6 +997,7 @@ export async function handwrittenContactsInPicture(frame: Frame, minCharPx = 22)
     const pieces = components(ink, W, H, minCharPx);
     if (pieces.length < 3 || pieces.length > 600) continue;
     for (const words of await linesOfText(groupBoxes(pieces).map((ids) => mergePieces(ids.map((i) => pieces[i]))))) {
+      lines?.push(words.join(" "));
       const c = contactInLine(words);
       if (c && !found.some((f) => f.text === c.text)) found.push(c);
     }

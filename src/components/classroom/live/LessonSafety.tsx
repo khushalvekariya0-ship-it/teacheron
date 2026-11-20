@@ -5,7 +5,7 @@ import { Flag, Loader2, ShieldCheck, X } from "lucide-react";
 import { RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import { TOPIC, type SafetyMessage } from "@/lib/classroom";
 import { type ContactKind } from "@/lib/domain/contact";
-import { judge, numbersInPicture } from "@/lib/handwriting/digits";
+import { handwrittenContactsInPicture, judge, numbersInPicture } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 
 /*
@@ -377,11 +377,21 @@ export function ReportDialog({ bookingId, open, onClose, onSent }: { bookingId: 
  * seconds, only when the picture changed enough (a camera always changes a little). Contact details on it
  * stop the share / turn the camera off (`onFound`).
  */
-export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }: { room: Room; bookingId: string; source: "screen" | "camera"; on: boolean; everyMs: number; onFound: (res: SafetyResult) => void }) {
+export function useVideoCheck({
+  room, bookingId, source, on, everyMs, onFound, onSpotted, localEveryMs = 3000,
+}: {
+  room: Room; bookingId: string; source: "screen" | "camera"; on: boolean; everyMs: number; onFound: (res: SafetyResult) => void;
+  /** This browser read contact details on the picture itself: called at once, before the server answers. */
+  onSpotted?: (kinds: ContactKind[]) => void;
+  /** How often this browser reads the picture itself (handwritten and printed numbers, emails, usernames). */
+  localEveryMs?: number;
+}) {
   const onFoundRef = React.useRef(onFound);
+  const onSpottedRef = React.useRef(onSpotted);
   React.useEffect(() => {
     onFoundRef.current = onFound;
-  }, [onFound]);
+    onSpottedRef.current = onSpotted;
+  }, [onFound, onSpotted]);
   React.useEffect(() => {
     if (!on) return;
     const track = room.localParticipant.getTrackPublication(source === "screen" ? Track.Source.ScreenShare : Track.Source.Camera)?.track?.mediaStreamTrack;
@@ -418,12 +428,14 @@ export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }:
       busy = false;
       if (res?.found) onFoundRef.current(res);
     };
-    // Handwriting on a shared screen (a drawing app, a photo of a note, another whiteboard): read in this
-    // browser every 3 seconds when the picture changed, so a written phone number stops the share at once.
+    // Read in this browser every few seconds when the picture changed: a number or an email written on paper
+    // or shown on a phone held up to the camera (or on a shared screen) is caught within seconds.
     let lastLocal: number[] | null = null;
     let reading = false;
+    let lastTextKey = "";
+    let lastTextCheck = 0;
     const readHere = async () => {
-      if (source !== "screen" || reading || busy || !video.videoWidth) return;
+      if (reading || busy || !video.videoWidth) return;
       const thumb = document.createElement("canvas");
       thumb.width = 48;
       thumb.height = 27;
@@ -436,7 +448,7 @@ export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }:
       const changed = lastLocal ? grey.filter((g, i) => Math.abs(g - lastLocal![i]) >= 1).length / grey.length : 1;
       if (changed < 0.01) return;
       lastLocal = grey;
-      const scale = Math.min(1, 1280 / video.videoWidth);
+      const scale = Math.min(1, (source === "camera" ? 960 : 1280) / video.videoWidth);
       const c = document.createElement("canvas");
       c.width = Math.round(video.videoWidth * scale);
       c.height = Math.round(video.videoHeight * scale);
@@ -445,11 +457,31 @@ export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }:
       ctx.drawImage(video, 0, 0, c.width, c.height);
       reading = true;
       try {
-        const found = await numbersInPicture(ctx.getImageData(0, 0, c.width, c.height));
-        const phone = found.find((n) => judge(n) === "phone");
-        if (phone) {
+        const frame = ctx.getImageData(0, 0, c.width, c.height);
+        const phone = (await numbersInPicture(frame)).find((n) => judge(n) === "phone");
+        // Emails and usernames too (written or printed): "riley@gmail.com", "insta riley_draws".
+        const lines: string[] = [];
+        const written = phone ? [] : (await handwrittenContactsInPicture(frame, 22, lines)).filter((x) => x.verdict === "contact");
+        // Printed writing held up to the camera (a phone screen, a printout) is read best by the server's OCR:
+        // when a new line of writing appears, that picture goes to the server at once (not only every 20 s).
+        const textKey = lines.map((l) => l.replace(/\s/g, "").length).filter((n) => n >= 5).map((n) => Math.round(n / 4)).sort().join(",");
+        if (!phone && !written.length && source === "camera" && textKey && textKey !== lastTextKey && Date.now() - lastTextCheck > 4000) {
+          lastTextKey = textKey;
+          lastTextCheck = Date.now();
           busy = true;
-          const res = await sendSafety(bookingId, { source, image: c.toDataURL("image/jpeg", 0.75), kinds: ["phone"], excerpt: phone.digits });
+          const res = await sendSafety(bookingId, { source, image: c.toDataURL("image/jpeg", 0.85) });
+          busy = false;
+          if (res?.found) onFoundRef.current(res);
+          return;
+        }
+        if (!textKey) lastTextKey = "";
+        if (phone || written.length) {
+          const kinds: ContactKind[] = phone ? ["phone"] : [...new Set(written.map((x) => x.kind))];
+          const image = c.toDataURL("image/jpeg", 0.75);
+          // Acted on at once (the camera goes off); the server records it and tells the class.
+          onSpottedRef.current?.(kinds);
+          busy = true;
+          const res = await sendSafety(bookingId, { source, image, kinds, ...(phone ? { excerpt: phone.digits } : {}) });
           busy = false;
           if (res?.found) onFoundRef.current(res);
         }
@@ -461,12 +493,12 @@ export function useVideoCheck({ room, bookingId, source, on, everyMs, onFound }:
     };
     const first = window.setTimeout(() => void tick(), 2500);
     const every = window.setInterval(() => void tick(), everyMs);
-    const here = window.setInterval(() => void readHere(), 3000);
+    const here = window.setInterval(() => void readHere(), localEveryMs);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(every);
       window.clearInterval(here);
       video.srcObject = null;
     };
-  }, [room, bookingId, source, on, everyMs]);
+  }, [room, bookingId, source, on, everyMs, localEveryMs]);
 }

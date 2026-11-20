@@ -9,7 +9,7 @@ import type { Booking, User } from "@/lib/types";
 import { auditDirect, notifyDirect } from "./auth";
 import { db } from "./db";
 import { env, liveVideoReady } from "./env";
-import { broadcastToRoom, closeRoom, mintToken, removeFromRoom, setAudioAllowed } from "./livekit";
+import { broadcastToRoom, closeRoom, mintToken, removeFromRoom, setPublishAllowed } from "./livekit";
 import { contactSafety } from "./safety-settings";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
 import { checkImageBytes, checkScreenFrame } from "./scan";
@@ -121,6 +121,8 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   }
   // A paused person who rejoins gets a pass without the microphone, so leaving doesn't undo the pause.
   const paused = role !== "staff" ? await activeRestriction(user.id, lesson.booking.id) : null;
+  // Same for a camera turned off after contact details were shown on it.
+  const cameraOff = role !== "staff" ? await cameraBlockedUntil(user.id, lesson.booking.id) : null;
   const meta = metaFor(user, lesson, role);
   const room = roomFor(lesson.booking.id);
   if (meta.isHost) {
@@ -132,8 +134,9 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   const ttl = Math.ceil((w.closesAt - Date.now()) / 1000) + 600;
   const identity = `u-${user.id}`;
   return {
-    token: await mintToken({ room, identity, meta, ttlSeconds: ttl, noMicrophone: !!paused }), wsUrl: env.livekitWsUrl, room, identity, me: meta, startMuted: false, closesAt: w.closesAt,
+    token: await mintToken({ room, identity, meta, ttlSeconds: ttl, noMicrophone: !!paused, noCamera: !!cameraOff }), wsUrl: env.livekitWsUrl, room, identity, me: meta, startMuted: false, closesAt: w.closesAt,
     ...(paused ? { audioPausedUntil: Date.parse(paused.endsAt) } : {}),
+    ...(cameraOff ? { cameraOffUntil: Date.parse(cameraOff) } : {}),
   };
 }
 
@@ -312,6 +315,35 @@ export async function sharingBlockedUntil(userId: string, bookingId: string, sou
   return until.getTime() > Date.now() ? until.toISOString() : null;
 }
 
+/**
+ * Until when this person's camera stays off in this lesson: cameraBlockMinutes after their last catch on
+ * camera (Admin → Chat safety → Settings). Worked out from the catches, so dismissing a wrong one lifts it.
+ */
+export async function cameraBlockedUntil(userId: string, bookingId: string): Promise<string | null> {
+  const s = await contactSafety();
+  if (!s.cameraBlockMinutes) return null;
+  const [r] = await db()`select max(created_at) last from public.contact_flags
+    where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source = 'camera' and status <> 'dismissed'`;
+  if (!r?.last) return null;
+  const until = new Date(new Date(r.last as string).getTime() + s.cameraBlockMinutes * 60_000);
+  return until.getTime() > Date.now() ? until.toISOString() : null;
+}
+
+/** Tells LiveKit what this person may send now: no microphone during an audio pause, no camera while it's off. */
+async function syncPublishRights(userId: string, bookingId: string): Promise<boolean> {
+  const [paused, cameraOff] = await Promise.all([activeRestriction(userId, bookingId), cameraBlockedUntil(userId, bookingId)]);
+  return setPublishAllowed(roomFor(bookingId), `u-${userId}`, { microphone: !paused, camera: !cameraOff });
+}
+
+/** The person's own page when their camera's time off is over: the camera may be turned on again. */
+export async function cameraBack(user: User, lesson: Lesson) {
+  requireRole(user, lesson);
+  const until = await cameraBlockedUntil(user.id, lesson.booking.id);
+  if (until) return { blocked: true as const, until };
+  after(() => syncPublishRights(user.id, lesson.booking.id));
+  return { blocked: false as const };
+}
+
 /** This person's current audio pause in this lesson, if any. */
 export async function activeRestriction(userId: string, bookingId: string): Promise<{ id: string; endsAt: string } | null> {
   const [r] = await db()`select id, ends_at from public.class_restrictions
@@ -368,7 +400,8 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
   // from the answer and tells the others itself straight away.
   after(async () => {
     await broadcastToRoom(room, message);
-    if (level === "muted") await setAudioAllowed(room, identity, false);
+    // An audio pause, and a camera turned off after contact details were shown on it: LiveKit enforces both.
+    if (level === "muted" || (source === "camera" && s.cameraBlockMinutes > 0)) await syncPublishRights(user.id, lesson.booking.id);
     if (!removed) return;
     // Their own page leaves by itself 1.5 s after the answer and shows why; this is for a page that doesn't.
     await new Promise((done) => setTimeout(done, 3000));
@@ -446,8 +479,7 @@ export async function endOwnPause(user: User, lesson: Lesson) {
   const [r] = await db()`select id, ends_at from public.class_restrictions where booking_id = ${lesson.booking.id} and user_id = ${user.id} and lifted_at is null order by ends_at desc limit 1`;
   if (r && new Date(r.ends_at as string).getTime() > Date.now()) return { paused: true as const, until: new Date(r.ends_at as string).toISOString() };
   if (r) await db()`update public.class_restrictions set lifted_at = now(), lifted_by = 'system' where id = ${r.id} and lifted_at is null`;
-  const room = roomFor(lesson.booking.id);
-  after(() => setAudioAllowed(room, `u-${user.id}`, true));
+  after(() => syncPublishRights(user.id, lesson.booking.id));
   return { paused: false as const };
 }
 
@@ -457,7 +489,7 @@ export async function liftRestriction(staff: User, restrictionId: string, note: 
   const [r] = await db()`update public.class_restrictions set lifted_at = now(), lifted_by = ${staff.id} where id = ${restrictionId} and lifted_at is null returning booking_id, user_id`;
   if (!r) throw new ClassError("That restriction has already ended.", 404);
   const bookingId = String(r.booking_id), userId = String(r.user_id);
-  after(() => setAudioAllowed(roomFor(bookingId), `u-${userId}`, true));
+  after(() => syncPublishRights(userId, bookingId));
   const clean = maskText(note.trim()).slice(0, 500);
   await db()`update public.safety_appeals set status = 'accepted', decided_by = ${staff.id}, decided_at = now(), decision_note = ${clean || null} where restriction_id = ${restrictionId} and status = 'open'`;
   await auditDirect(staff.id, "classroom.restriction_lift", "user", userId, { restrictionId, ...(clean ? { note: clean } : {}) });
@@ -467,7 +499,7 @@ export async function liftRestriction(staff: User, restrictionId: string, note: 
 /** Pauses whose time is up (the scheduler; the person's own page normally lifts its pause first). */
 export async function liftExpiredRestrictions(): Promise<number> {
   const rows = await db()`update public.class_restrictions set lifted_at = now(), lifted_by = 'system' where lifted_at is null and ends_at <= now() returning booking_id, user_id`;
-  for (const r of rows) await setAudioAllowed(roomFor(String(r.booking_id)), `u-${r.user_id}`, true);
+  for (const r of rows) await syncPublishRights(String(r.user_id), String(r.booking_id));
   return rows.length;
 }
 
@@ -533,7 +565,7 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
   }
   if (!read.kinds.length) return { found: false as const };
   const caught = await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector);
-  const blockedUntil = source === "board" ? await sharingBlockedUntil(user.id, lesson.booking.id, "board") : null;
+  const blockedUntil = source === "board" ? await sharingBlockedUntil(user.id, lesson.booking.id, "board") : source === "camera" ? await cameraBlockedUntil(user.id, lesson.booking.id) : null;
   return { found: true as const, kinds: read.kinds, ...caught, ...(blockedUntil ? { blockedUntil } : {}) };
 }
 

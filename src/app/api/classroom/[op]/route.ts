@@ -3,7 +3,7 @@ import { z } from "zod";
 import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
-  acceptPush, appealFromClass, boardMaybeShown, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
+  acceptPush, appealFromClass, boardMaybeShown, cameraBack, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
   pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
   validPushCode, type Lesson,
 } from "@/server/classroom";
@@ -198,6 +198,13 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         if (!v.success) return json({ ok: false, error: "That frame wasn't valid." }, { status: 400 });
         const handwriting = (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40);
         return json({ ok: true, ...(await checkSharedScreenFrame(user, await lessonOf(v.data.id), v.data.image, siteOrigin(request), !!v.data.record, handwriting)) });
+      }
+      case "camera-back": {
+        // The person's own page when their camera's time off is over (the server checks the time).
+        const user = await signedIn();
+        const v = z.object({ id }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "Which lesson?" }, { status: 400 });
+        return json({ ok: true, ...(await cameraBack(user, await lessonOf(v.data.id))) });
       }
       case "unpause": {
         // The person's own page when their audio pause is over (the server checks the time).

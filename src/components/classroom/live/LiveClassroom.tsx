@@ -385,18 +385,56 @@ function MeetingRoom({
   // After repeated catches on this person's screen, sharing is blocked for a while (the server decides).
   const [screenBlockedUntil, setScreenBlockedUntil] = React.useState<number | null>(null);
   React.useEffect(() => () => void guardRef.current?.stop(), []);
-  // Paper held up to the camera: a frame is read every 20 seconds when the picture changed.
+  // Paper or a phone held up to the camera: this browser reads the picture every 2 seconds (numbers, emails,
+  // usernames; written or printed) and the server reads printed text every 20 seconds. Caught: the camera
+  // turns off at once with a warning, and stays off for a few minutes (LiveKit enforces it; Admin setting).
+  const [cameraOffUntil, setCameraOffUntil] = React.useState<number | null>(ticket.cameraOffUntil ?? null);
+  const [cameraAlert, setCameraAlert] = React.useState<string | null>(null);
+  const cameraCaught = React.useCallback(
+    (until: number | null) => {
+      void localParticipant.setCameraEnabled(false).catch(() => {});
+      if (until) setCameraOffUntil((u) => Math.max(u ?? 0, until));
+      const time = until ? new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      setCameraAlert(until ? `Personal information was detected on your camera, so your camera was turned off until ${time}.` : "Personal information was detected on your camera, so your camera was turned off.");
+      window.setTimeout(() => setCameraAlert(null), 10_000);
+    },
+    [localParticipant],
+  );
   useVideoCheck({
     room,
     bookingId,
     source: "camera",
     on: isCameraEnabled && !guest && safety.camera,
     everyMs: 20_000,
+    localEveryMs: 2000,
+    onSpotted: () => cameraCaught(safety.cameraBlockMinutes ? Date.now() + safety.cameraBlockMinutes * 60_000 : null),
     onFound: (res) => {
-      void localParticipant.setCameraEnabled(false).catch(() => {});
+      cameraCaught(res.blockedUntil ? Date.parse(res.blockedUntil) : null);
       caught("camera", res);
     },
   });
+  // When the time off is over, the server lets the camera back (LiveKit) and the button works again.
+  React.useEffect(() => {
+    if (!cameraOffUntil) return;
+    let stop = false;
+    const back = async () => {
+      try {
+        const res = await fetch("/api/classroom/camera-back", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId }) });
+        const data = (await res.json().catch(() => ({}))) as { blocked?: boolean; until?: string };
+        if (stop) return;
+        if (data.blocked && data.until) return setCameraOffUntil(Date.parse(data.until));
+        if (res.ok) setCameraOffUntil(null);
+        else window.setTimeout(() => void back(), 15_000);
+      } catch {
+        if (!stop) window.setTimeout(() => void back(), 15_000);
+      }
+    };
+    const t = window.setTimeout(() => void back(), Math.max(0, cameraOffUntil - Date.now()) + 500);
+    return () => {
+      stop = true;
+      window.clearTimeout(t);
+    };
+  }, [cameraOffUntil, bookingId]);
 
   const say = React.useCallback((msg: string, ms = 4000) => {
     setNotice(msg);
@@ -679,7 +717,12 @@ function MeetingRoom({
         micWanted.current = !isMicrophoneEnabled;
         await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
       }
-      else if (what === "cam") await localParticipant.setCameraEnabled(!isCameraEnabled);
+      else if (what === "cam") {
+        if (!isCameraEnabled && cameraOffUntil && cameraOffUntil > Date.now()) {
+          return say(`Your camera is off until ${new Date(cameraOffUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: personal information was shown on it.`, 6000);
+        }
+        await localParticipant.setCameraEnabled(!isCameraEnabled);
+      }
       else if (guardRef.current) {
         const g = guardRef.current;
         guardRef.current = null;
@@ -1061,6 +1104,14 @@ function MeetingRoom({
       )}
 
       <SafetyAlert alert={safetyAlert} onDismiss={dismissSafety} />
+      {cameraAlert && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-44 z-[57] flex justify-center px-3" data-camera-alert>
+          <div className="max-w-xl bg-danger px-4 py-3 text-sm text-white shadow-2xl" role="alert">
+            <p className="font-bold">{GUARD_TEXT.title}</p>
+            <p className="mt-0.5">{cameraAlert}</p>
+          </div>
+        </div>
+      )}
       {guard && (
         <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[56] flex justify-center px-3" data-screen-guard={guard.state}>
           {guard.state === "hidden" || (guard.state === "paused" && guard.found) ? (
@@ -1094,7 +1145,13 @@ function MeetingRoom({
           <button type="button" onClick={() => void toggle("mic")} disabled={!!pausedUntil && pausedUntil > now} className={cn(control(false, !isMicrophoneEnabled), "disabled:opacity-50")} aria-label={pausedUntil && pausedUntil > now ? "Audio paused" : isMicrophoneEnabled ? "Mute" : "Unmute"} title={pausedUntil && pausedUntil > now ? "Your audio is paused for the others for now" : isMicrophoneEnabled ? "Mute" : "Unmute"}>
             {isMicrophoneEnabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
           </button>
-          <button type="button" onClick={() => void toggle("cam")} className={control(false, !isCameraEnabled)} aria-label={isCameraEnabled ? "Turn off camera" : "Turn on camera"} title={isCameraEnabled ? "Turn off camera" : "Turn on camera"}>
+          <button
+            type="button"
+            onClick={() => void toggle("cam")}
+            className={cn(control(false, !isCameraEnabled), !!cameraOffUntil && cameraOffUntil > now && "opacity-50")}
+            aria-label={isCameraEnabled ? "Turn off camera" : "Turn on camera"}
+            title={cameraOffUntil && cameraOffUntil > now ? "Your camera is off for a few minutes: personal information was shown on it" : isCameraEnabled ? "Turn off camera" : "Turn on camera"}
+          >
             {isCameraEnabled ? <Video className="size-5" /> : <VideoOff className="size-5" />}
           </button>
           {/* Phone browsers can't share their screen: no button there rather than one that only fails. */}
