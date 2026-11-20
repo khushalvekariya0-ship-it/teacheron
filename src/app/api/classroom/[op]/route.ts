@@ -3,7 +3,7 @@ import { z } from "zod";
 import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
-  acceptPush, appealFromClass, boardMaybeShown, checkClassImage, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
+  acceptPush, appealFromClass, boardMaybeShown, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
   pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
   validPushCode, type Lesson,
 } from "@/server/classroom";
@@ -25,6 +25,8 @@ import type { User } from "@/lib/types";
  *   GET  /api/classroom/guest?claim=     guest polls: a token only once the host admitted them
  *   GET  /api/classroom/guests?id=       host: people waiting
  *   POST /api/classroom/decide           { id, guestId, admit }  host
+ *   POST /api/classroom/screen-frame     { id, image, record?, excerpt? }  a shared-screen frame, checked before
+ *                                        others see it → { checked, found, kinds, boxes, maskable }
  *   POST /api/classroom/board-image      { id, image }  host: a picture for the whiteboard (checked) → { url }
  *   POST /api/classroom/share-board      { id, title, image, recipients }  host: save + share the board
  *   GET  /api/classroom/boards?id=       boards shared from this lesson
@@ -185,6 +187,17 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         // An email or a username the browser read in the person's handwriting (it can only make things stricter).
         const written = (v.data.kinds ?? []).filter((k): k is "email" | "social" => k === "email" || k === "social");
         return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting, written)) });
+      }
+      case "screen-frame": {
+        // One frame of the person's shared screen, checked before the others see it (the page sends out only
+        // frames this says are clean, or with the contact details blacked out and checked again).
+        const user = await signedIn();
+        const stop = limited(`class-screen-frame:${user.id}`, 1500, 10);
+        if (stop) return stop;
+        const v = z.object({ id, image: z.string().max(5_600_000), record: z.boolean().optional(), excerpt: z.string().max(80).optional() }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "That frame wasn't valid." }, { status: 400 });
+        const handwriting = (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40);
+        return json({ ok: true, ...(await checkSharedScreenFrame(user, await lessonOf(v.data.id), v.data.image, siteOrigin(request), !!v.data.record, handwriting)) });
       }
       case "unpause": {
         // The person's own page when their audio pause is over (the server checks the time).

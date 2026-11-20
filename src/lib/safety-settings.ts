@@ -42,6 +42,13 @@ export interface ContactSafety {
   retentionDays: number;
   /** One person's short messages read together for a number sent in pieces: how far back (minutes). */
   splitWindowMinutes: number;
+  /** Shared screens are checked before the others see them (needs `images`). */
+  screenShare: boolean;
+  /** Whiteboard drawings are checked before the others see them (needs `images`). */
+  whiteboard: boolean;
+  /** In one lesson: from this catch on a shared screen / whiteboard, that sharing is blocked for the person for shareBlockMinutes (0 = never). */
+  shareBlockAt: number;
+  shareBlockMinutes: number;
 }
 
 export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
@@ -64,6 +71,10 @@ export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
   allow: [],
   retentionDays: 180,
   splitWindowMinutes: 30,
+  screenShare: true,
+  whiteboard: true,
+  shareBlockAt: 2,
+  shareBlockMinutes: 10,
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => {
@@ -100,6 +111,10 @@ export function readContactSafety(raw: unknown): ContactSafety {
     allow: phrases(r.allow),
     retentionDays: int(r.retentionDays, 30, 3650, d.retentionDays),
     splitWindowMinutes: int(r.splitWindowMinutes, 5, 240, d.splitWindowMinutes),
+    screenShare: bool("screenShare"),
+    whiteboard: bool("whiteboard"),
+    shareBlockAt: int(r.shareBlockAt, 0, 20, d.shareBlockAt),
+    shareBlockMinutes: int(r.shareBlockMinutes, 1, 120, d.shareBlockMinutes),
   };
 }
 

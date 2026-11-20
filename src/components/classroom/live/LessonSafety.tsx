@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
  *  - a banner says so, and Report sends the other side of the lesson to Admin → Reports.
  */
 
-export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean; suspended?: boolean; level?: SafetyMessage["level"]; mutedUntil?: string };
+export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean; suspended?: boolean; level?: SafetyMessage["level"]; mutedUntil?: string; blockedUntil?: string };
 
 /** Sends one safety check to the server. Guests (no account) and network trouble return null. */
 export async function sendSafety(

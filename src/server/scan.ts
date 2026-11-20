@@ -93,7 +93,9 @@ async function qrTexts(open: () => ReturnType<typeof sharp>): Promise<string[]> 
 
 /* ─── OCR ───────────────────────────────────────────────────────────────────── */
 
-type OcrWorker = { recognize(image: Buffer): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> };
+type OcrBox = { x0: number; y0: number; x1: number; y1: number };
+type OcrPage = { text: string; blocks?: { paragraphs?: { lines?: { text?: string; bbox: OcrBox }[] }[] }[] | null };
+type OcrWorker = { recognize(image: Buffer, options?: object, output?: { text?: boolean; blocks?: boolean }): Promise<{ data: OcrPage }>; terminate(): Promise<unknown> };
 let worker: Promise<OcrWorker> | null = null;
 
 function ocrWorker(): Promise<OcrWorker> {
@@ -340,6 +342,96 @@ export async function readPictureForSelfTest(bytes: Buffer): Promise<{ text: str
   const ctx: ReadCtx = { qr: true, qrKinds: new Set() };
   const text = await withTimeout(imageText(bytes, ctx), 45_000);
   return { text: text.trim().slice(0, 200), qrKinds: [...ctx.qrKinds] };
+}
+
+/* ─── Shared-screen frames ──────────────────────────────────────────────────── */
+
+/** Where something is on a frame: x, y, width, height as fractions of the frame. */
+export type FrameBox = [number, number, number, number];
+
+/** Printed lines (with where each is) and QR codes on one frame of a shared screen. */
+async function readScreenFrame(bytes: Buffer, withQr: boolean): Promise<{ lines: { text: string; box: FrameBox }[]; codes: { text: string; box: FrameBox }[] }> {
+  const open = () => sharp(bytes, { limitInputPixels: 20_000_000, failOn: "error" });
+  const meta = await open().metadata();
+  const W = meta.width ?? 0, H = meta.height ?? 0;
+  if (W < 24 || H < 24) return { lines: [], codes: [] };
+  // Screen text is small: narrower frames are read at twice the size.
+  const scale = W < 1400 ? 2 : 1;
+  const base = () => open().flatten({ background: "#ffffff" }).grayscale().resize({ width: Math.round(W * scale) });
+  const ocr = await ocrWorker();
+  const read = async (img: ReturnType<typeof sharp>) => {
+    const { data } = await ocr.recognize(await img.normalise().png().toBuffer(), {}, { text: true, blocks: true });
+    const out: { text: string; box: FrameBox }[] = [];
+    for (const b of data.blocks ?? []) {
+      for (const p of b.paragraphs ?? []) {
+        for (const l of p.lines ?? []) {
+          const text = (l.text ?? "").trim();
+          if (!text) continue;
+          const { x0, y0, x1, y1 } = l.bbox;
+          out.push({ text, box: [x0 / scale / W, y0 / scale / H, (x1 - x0) / scale / W, (y1 - y0) / scale / H] });
+        }
+      }
+    }
+    return out;
+  };
+  // Dark text on light is read as it is, light on dark turned round first; a screen with both (a dark menu
+  // bar on a white page) is read both ways.
+  const thumb = await base().resize({ width: 96 }).raw().toBuffer();
+  let darkPx = 0;
+  for (const v of thumb) if (v < 100) darkPx++;
+  const darkShare = darkPx / Math.max(1, thumb.length);
+  const dark = darkShare > 0.5;
+  let lines = await read(dark ? base().negate({ alpha: false }) : base());
+  const little = lines.map((l) => l.text).join("").replace(/[^a-z0-9]/gi, "").length < 20;
+  if (little || (darkShare > 0.12 && darkShare < 0.88)) lines = lines.concat(await read(dark ? base() : base().negate({ alpha: false })));
+  const codes: { text: string; box: FrameBox }[] = [];
+  if (withQr) {
+    try {
+      const { data, info } = await open().flatten({ background: "#ffffff" }).resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const code = jsQR(new Uint8ClampedArray(data.buffer, data.byteOffset, data.length), info.width, info.height);
+      if (code?.data) {
+        const c = code.location;
+        const xs = [c.topLeftCorner.x, c.topRightCorner.x, c.bottomLeftCorner.x, c.bottomRightCorner.x], ys = [c.topLeftCorner.y, c.topRightCorner.y, c.bottomLeftCorner.y, c.bottomRightCorner.y];
+        const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys);
+        codes.push({ text: code.data, box: [x0 / info.width, y0 / info.height, (x1 - x0) / info.width, (y1 - y0) / info.height] });
+      }
+    } catch {
+      // no readable code
+    }
+  }
+  return { lines, codes };
+}
+
+/**
+ * Contact details on one frame of a shared screen, and where they are so only those lines can be hidden
+ * (`maskable`: once those lines are hidden, nothing else on the frame counts). Read here on the server
+ * (Tesseract, jsQR); nothing read is stored or logged.
+ */
+export async function checkScreenFrame(bytes: Buffer, withQr: boolean): Promise<{ kinds: ContactKind[]; boxes: FrameBox[]; maskable: boolean }> {
+  const { lines, codes } = await withTimeout(readScreenFrame(bytes, withQr), 12_000);
+  const texts = lines.map((l) => l.text);
+  // A margin round each line (a third of its height), so tall or wobbly handwriting is covered too.
+  const pad = (b: FrameBox): FrameBox => {
+    const py = Math.max(0.006, b[3] * 0.35), px = Math.max(0.005, b[3] * 0.3);
+    const x = Math.max(0, b[0] - px), y = Math.max(0, b[1] - py);
+    return [x, y, Math.min(1 - x, b[2] + 2 * px), Math.min(1 - y, b[3] + 2 * py)];
+  };
+  // A phone number being typed digit by digit: from seven digits it's hidden (not counted as a catch), so the
+  // others never see most of a number before the last digit makes it one.
+  const growing = texts.flatMap((t, i) => (/(?<![\d.,])[6-9](?:[\s.-]?\d){6,8}(?![\d.,]*\d)/.test(t) ? [i] : []));
+  const kinds = new Set<ContactKind>(scanContact(texts.join("\n"), "file").kinds);
+  const codeHits = codes.filter((c) => qrKinds(c.text).length);
+  for (const c of codeHits) for (const k of qrKinds(c.text)) kinds.add(k);
+  if (!kinds.size) return { kinds: [], boxes: growing.map((i) => pad(lines[i].box)), maskable: true };
+  // The lines that hold it: one line, or a number split over two or three lines.
+  const hit = new Set<number>(growing);
+  const found = (t: string) => scanContact(t, "file").found;
+  texts.forEach((t, i) => found(t) && hit.add(i));
+  for (let i = 0; i + 1 < texts.length; i++) if (!hit.has(i) && !hit.has(i + 1) && found(`${texts[i]} ${texts[i + 1]}`)) [i, i + 1].forEach((k) => hit.add(k));
+  for (let i = 0; i + 2 < texts.length; i++) if (![i, i + 1, i + 2].some((k) => hit.has(k)) && found(`${texts[i]} ${texts[i + 1]} ${texts[i + 2]}`)) [i, i + 1, i + 2].forEach((k) => hit.add(k));
+  const rest = texts.filter((_, i) => !hit.has(i)).join("\n");
+  const boxes = [...[...hit].map((i) => pad(lines[i].box)), ...codeHits.map((c) => pad(c.box))];
+  return { kinds: [...kinds], boxes, maskable: boxes.length > 0 && !found(rest) };
 }
 
 /** Checks an image that's already on the server (a profile photo) for contact details. */

@@ -296,16 +296,20 @@ const SWITCHES: { key: keyof ContactSafety; label: string; hint: string }[] = [
   { key: "voice", label: "Check speech in class", hint: "Each person's own browser (Chrome / Edge send the audio to Google / Microsoft to recognise it)." },
   { key: "voiceOnPhones", label: "Also check speech on phones", hint: "Phones may beep when listening restarts and can lose the call's microphone." },
   { key: "images", label: "Read pictures", hint: "Chat and homework images, whiteboard pictures and drawings, shared screens." },
+  { key: "screenShare", label: "Protect screen sharing", hint: "A shared screen is checked before the others see it: contact details are blacked out, or the share pauses. Needs “Read pictures”." },
+  { key: "whiteboard", label: "Protect the whiteboard", hint: "Drawings and handwriting are checked before the others see them; contact details are removed. Needs “Read pictures”." },
   { key: "camera", label: "Read the camera in class", hint: "Paper or a poster held up to the camera." },
   { key: "documents", label: "Read PDF, Word and text files", hint: "Including scanned pages." },
   { key: "qr", label: "Read QR codes", hint: "In pictures and documents: phone, email, WhatsApp, social or UPI codes." },
   { key: "aiReading", label: "Use Gemini to read class pictures", hint: "Better with handwriting and Gujarati / Hindi digits. Sends the pictures to Google; needs GEMINI_API_KEY." },
 ];
 
-const NUMBERS: { key: "strongWarningAt" | "muteAt" | "muteMinutes" | "removeAt" | "pauseAccountAfterRemovals" | "retentionDays" | "splitWindowMinutes"; label: string; hint: string; min: number; max: number }[] = [
+const NUMBERS: { key: "strongWarningAt" | "muteAt" | "muteMinutes" | "removeAt" | "pauseAccountAfterRemovals" | "retentionDays" | "splitWindowMinutes" | "shareBlockAt" | "shareBlockMinutes"; label: string; hint: string; min: number; max: number }[] = [
   { key: "strongWarningAt", label: "Stronger warning from catch", hint: "In one lesson; moderators are told.", min: 1, max: 20 },
   { key: "muteAt", label: "Pause audio from catch", hint: "In one lesson. 0 = never.", min: 0, max: 20 },
   { key: "muteMinutes", label: "Audio pause (minutes)", hint: "Each further catch starts it again.", min: 1, max: 120 },
+  { key: "shareBlockAt", label: "Block screen share / whiteboard from catch", hint: "In one lesson, counted separately for each. 0 = never.", min: 0, max: 20 },
+  { key: "shareBlockMinutes", label: "Sharing block (minutes)", hint: "Dismissing a catch in Chat safety lifts it.", min: 1, max: 120 },
   { key: "removeAt", label: "Remove from the class at catch", hint: "0 = never (recommended).", min: 0, max: 20 },
   { key: "pauseAccountAfterRemovals", label: "Pause the account after removals", hint: "Within 90 days, for review. 0 = never.", min: 0, max: 10 },
   { key: "retentionDays", label: "Keep records (days)", hint: "Reviewed catches, ended pauses and decided appeals are deleted after this.", min: 30, max: 3650 },

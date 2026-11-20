@@ -12,7 +12,7 @@ import { env, liveVideoReady } from "./env";
 import { broadcastToRoom, closeRoom, mintToken, removeFromRoom, setAudioAllowed } from "./livekit";
 import { contactSafety } from "./safety-settings";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
-import { checkImageBytes } from "./scan";
+import { checkImageBytes, checkScreenFrame } from "./scan";
 import { readTextWithAI } from "./ai-read";
 import { emailReady, escapeHtml, sendEmail } from "./email";
 import { alertStaff, shortName } from "./staff-alerts";
@@ -297,6 +297,21 @@ export async function liveStrikes(userId: string, bookingId: string): Promise<nu
   return Number(n);
 }
 
+/**
+ * Until when this person can't share their screen / draw on the whiteboard in this lesson: from the
+ * shareBlockAt-th catch there, for shareBlockMinutes after the last one (Admin → Chat safety → Settings).
+ * Worked out from the catches, so dismissing a wrong catch in Chat safety lifts it.
+ */
+export async function sharingBlockedUntil(userId: string, bookingId: string, source: "screen" | "board"): Promise<string | null> {
+  const s = await contactSafety();
+  if (!s.shareBlockAt) return null;
+  const [r] = await db()`select count(*)::int n, max(created_at) last from public.contact_flags
+    where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source = ${source} and status <> 'dismissed'`;
+  if (!r || Number(r.n) < s.shareBlockAt || !r.last) return null;
+  const until = new Date(new Date(r.last as string).getTime() + s.shareBlockMinutes * 60_000);
+  return until.getTime() > Date.now() ? until.toISOString() : null;
+}
+
 /** This person's current audio pause in this lesson, if any. */
 export async function activeRestriction(userId: string, bookingId: string): Promise<{ id: string; endsAt: string } | null> {
   const [r] = await db()`select id, ends_at from public.class_restrictions
@@ -502,6 +517,12 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
   const s = await contactSafety();
   if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
+  if (source === "board" && !s.whiteboard) return { found: false as const };
+  // Drawing is blocked for now after repeated catches on the whiteboard: the drawing isn't shown.
+  if (source === "board") {
+    const blockedUntil = await sharingBlockedUntil(user.id, lesson.booking.id, "board");
+    if (blockedUntil) return { found: false as const, blockedUntil };
+  }
   const img = decodeImage(dataUrl, 3 * 1024 * 1024);
   const read = await readClassPicture(img.bytes, img.type, s.aiReading, `${lesson.booking.id}:${source}`);
   // Digits the person's own browser read in their handwriting (whiteboard, shared screen): TutorLink's rules decide on them too.
@@ -511,7 +532,42 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
     for (const k of scanContact(digits, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
   }
   if (!read.kinds.length) return { found: false as const };
-  return { found: true as const, kinds: read.kinds, ...(await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector)) };
+  const caught = await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector);
+  const blockedUntil = source === "board" ? await sharingBlockedUntil(user.id, lesson.booking.id, "board") : null;
+  return { found: true as const, kinds: read.kinds, ...caught, ...(blockedUntil ? { blockedUntil } : {}) };
+}
+
+/**
+ * One frame of a shared screen, checked BEFORE anyone else sees it: the sharer's page sends out only frames
+ * this says are clean, or frames whose contact details it blacked out at `boxes` and had checked again.
+ * Digits the sharer's own browser read in handwriting on the frame count too; they have no place to black
+ * out, so the page pauses the share instead (`maskable` false). `record`: the first catch while sharing is
+ * recorded like any other catch (warnings, the ladder); the frames after it aren't counted again.
+ * Nothing read from the frame is stored.
+ */
+export async function checkSharedScreenFrame(user: User, lesson: Lesson, dataUrl: string, origin: string, record: boolean, handwriting = "") {
+  requireRole(user, lesson);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  const s = await contactSafety();
+  if (!s.images || !s.screenShare) return { checked: false as const, found: false as const };
+  // Sharing is blocked for now after repeated catches on this person's screen: the page stops the share.
+  const blocked = await sharingBlockedUntil(user.id, lesson.booking.id, "screen");
+  if (blocked) return { checked: true as const, found: false as const, blockedUntil: blocked };
+  const img = decodeImage(dataUrl, 4 * 1024 * 1024);
+  const frame = await checkScreenFrame(img.bytes, s.qr);
+  const kinds = new Set<ContactKind>(frame.kinds);
+  let maskable = frame.maskable;
+  const digits = handwriting.replace(/\?/g, "");
+  if (digits.length >= 10) {
+    const written = scanContact(digits, "file").kinds;
+    for (const k of written) kinds.add(k);
+    if (written.length) maskable = false;
+  }
+  // Nothing found, though a long number may still need hiding while it's typed (not a catch).
+  if (!kinds.size) return { checked: true as const, found: false as const, boxes: frame.boxes, maskable: true };
+  const caught = record ? await caughtInClass(user, lesson, "screen", [...kinds], `[${LIVE_WHERE.screen}]`, origin, "ocr") : {};
+  const blockedUntil = record ? await sharingBlockedUntil(user.id, lesson.booking.id, "screen") : null;
+  return { checked: true as const, found: true as const, kinds: [...kinds], boxes: frame.boxes, maskable, ...caught, ...(blockedUntil ? { blockedUntil } : {}) };
 }
 
 /**

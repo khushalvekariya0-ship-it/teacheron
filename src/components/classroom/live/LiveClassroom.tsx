@@ -16,6 +16,7 @@ import { currentZoneName } from "@/lib/timezones";
 import { ChatPanel, type ChatLine } from "../ChatPanel";
 import { MeetingWhiteboard } from "./MeetingWhiteboard";
 import { AudioPausedBar, ReportDialog, SafetyAlert, SafetyBanner, SafetyStatus, sendSafety, useSafetyAlerts, useVideoCheck, type SpeechState } from "./LessonSafety";
+import { GUARD_TEXT, startScreenGuard, type GuardState, type ScreenGuard } from "./ScreenGuard";
 import { useApp } from "@/lib/store";
 import { downloadTranscriptPdf, type Snapshot } from "./transcriptPdf";
 
@@ -376,17 +377,14 @@ function MeetingRoom({
   React.useEffect(() => {
     caughtRef.current = caught;
   }, [caught]);
-  useVideoCheck({
-    room,
-    bookingId,
-    source: "screen",
-    on: isScreenShareEnabled && !guest && safety.images,
-    everyMs: 12_000,
-    onFound: (res) => {
-      void localParticipant.setScreenShareEnabled(false).catch(() => {});
-      caught("screen", res);
-    },
-  });
+  // A shared screen is checked BEFORE the others see it (ScreenGuard): they get only checked pictures, with
+  // contact details blacked out, or a "paused" card. (Guests aren't checked.)
+  const protectScreen = !guest && safety.images && safety.screenShare;
+  const guardRef = React.useRef<ScreenGuard | null>(null);
+  const [guard, setGuard] = React.useState<{ state: GuardState; found: boolean } | null>(null);
+  // After repeated catches on this person's screen, sharing is blocked for a while (the server decides).
+  const [screenBlockedUntil, setScreenBlockedUntil] = React.useState<number | null>(null);
+  React.useEffect(() => () => void guardRef.current?.stop(), []);
   // Paper held up to the camera: a frame is read every 20 seconds when the picture changed.
   useVideoCheck({
     room,
@@ -682,7 +680,32 @@ function MeetingRoom({
         await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
       }
       else if (what === "cam") await localParticipant.setCameraEnabled(!isCameraEnabled);
-      else await localParticipant.setScreenShareEnabled(!isScreenShareEnabled, { audio: false });
+      else if (guardRef.current) {
+        const g = guardRef.current;
+        guardRef.current = null;
+        setGuard(null);
+        await g.stop();
+      } else if (protectScreen && !isScreenShareEnabled) {
+        if (screenBlockedUntil && screenBlockedUntil > Date.now()) {
+          return say(`Screen sharing is blocked for you until ${new Date(screenBlockedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: personal information was shown again.`, 6000);
+        }
+        guardRef.current = await startScreenGuard({
+          room,
+          bookingId,
+          onState: (state, kinds) => setGuard({ state, found: !!kinds?.length }),
+          onCaught: (res) => caughtRef.current("screen", res),
+          onEnded: () => {
+            guardRef.current = null;
+            setGuard(null);
+          },
+          onBlocked: (until) => {
+            guardRef.current = null;
+            setGuard(null);
+            setScreenBlockedUntil(Date.parse(until));
+            say(`${GUARD_TEXT.title} Screen sharing is blocked for you until ${new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: personal information was shown again.`, 9000);
+          },
+        });
+      } else await localParticipant.setScreenShareEnabled(!isScreenShareEnabled, { audio: false });
     } catch (e) {
       const name = (e as DOMException)?.name;
       if (what === "screen" && name === "NotAllowedError") return; // the picker was cancelled
@@ -919,7 +942,7 @@ function MeetingRoom({
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} checkDrawings={!guest && safety.images} />
+            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} checkDrawings={!guest && safety.images && safety.whiteboard} />
           </div>
         </div>
 
@@ -1038,6 +1061,22 @@ function MeetingRoom({
       )}
 
       <SafetyAlert alert={safetyAlert} onDismiss={dismissSafety} />
+      {guard && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[56] flex justify-center px-3" data-screen-guard={guard.state}>
+          {guard.state === "hidden" || (guard.state === "paused" && guard.found) ? (
+            <div className="max-w-xl bg-danger px-4 py-3 text-sm text-white shadow-2xl" role="alert">
+              <p className="font-bold">{GUARD_TEXT.title}</p>
+              <p className="mt-0.5">{guard.state === "hidden" ? GUARD_TEXT.hidden : GUARD_TEXT.paused}</p>
+            </div>
+          ) : guard.state === "paused" ? (
+            <p className="bg-warning px-4 py-2 text-sm font-medium text-black shadow-xl" role="status">{GUARD_TEXT.unchecked}</p>
+          ) : (
+            <p className="bg-night/90 px-3 py-1.5 text-xs text-white shadow-xl" role="status">
+              {guard.state === "checking" ? "Checking your screen before the others see it…" : "Your screen is checked before the others see it (they see it about a second later)."}
+            </p>
+          )}
+        </div>
+      )}
       <ReportDialog bookingId={bookingId} open={reportOpen} onClose={() => setReportOpen(false)} onSent={(msg) => say(msg, 5000)} />
 
       {notice && (

@@ -514,6 +514,8 @@ export function MeetingWhiteboard({
   const checkingRef = React.useRef(false);
   const heldSince = React.useRef(0);
   const lastPenUp = React.useRef(0);
+  // After repeated catches on the whiteboard, this person's drawings aren't shown until then (the server decides).
+  const boardBlockedUntil = React.useRef(0);
   const runCheckRef = React.useRef<() => Promise<void>>(async () => {});
   const checkLater = React.useCallback((ms: number) => {
     window.clearTimeout(checkTimer.current);
@@ -600,25 +602,43 @@ export function MeetingWhiteboard({
         for (const s of mine) drawStroke(ctx, { ...s, color: "#000000", size: Math.max(3, s.size ?? 4) });
       }
       const image = ctx ? c.toDataURL("image/png") : "";
-      const removeBatch = () => {
+      const removeBatch = (why: "caught" | "blocked" = "caught") => {
         strokesRef.current = strokesRef.current.filter((s) => !batch.has(s.id));
         rebaseHistory((list) => list.filter((s) => !batch.has(s.id)));
         redraw();
-        setPasteMsg("Contact details can't be written on the whiteboard: your drawing wasn't shown to anyone and was removed.");
-        window.setTimeout(() => setPasteMsg(""), 7000);
+        const until = new Date(boardBlockedUntil.current).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        setPasteMsg(
+          why === "blocked"
+            ? `Drawing on the whiteboard is blocked for you until ${until}: personal information was written again. Your drawing wasn't shown to anyone.`
+            : "TutorLink Privacy Protection Alert! Personal information has been detected. Your content has been automatically hidden to protect your privacy. Your drawing wasn't shown to anyone.",
+        );
+        window.setTimeout(() => setPasteMsg(""), 8000);
       };
-      if (local || written) {
+      const noteBlock = (res: SafetyResult | null) => {
+        if (res?.blockedUntil) boardBlockedUntil.current = Date.parse(res.blockedUntil);
+      };
+      if (boardBlockedUntil.current > Date.now()) {
+        // Blocked for now after repeated catches (the server decided): nothing drawn is shown.
+        removeBatch("blocked");
+      } else if (local || written) {
         // Read here as a phone number, an email or a username: removed at once; the server records it and
         // sends the class warning.
         removeBatch();
         const body = local ? { kinds: ["phone" as const], excerpt: local } : { kinds: [written!] };
-        if (image) void sendSafety(bookingId, { source: "board", image, ...body }, 20_000).then((res) => res?.found && onCaughtRef.current?.(res));
+        if (image)
+          void sendSafety(bookingId, { source: "board", image, ...body }, 20_000).then((res) => {
+            noteBlock(res);
+            if (res?.found) onCaughtRef.current?.(res);
+          });
       } else {
         // Printed text, QR codes and (when on) AI reading on the server; if it can't answer in 5 s the lesson goes on.
         const res: SafetyResult | null = image ? await sendSafety(bookingId, { source: "board", image }, 5000) : null;
+        noteBlock(res);
         if (res?.found) {
           removeBatch();
           onCaughtRef.current?.(res);
+        } else if (res?.blockedUntil) {
+          removeBatch("blocked");
         } else {
           for (const s of strokesRef.current) if (batch.has(s.id)) broadcastStroke(s);
         }
