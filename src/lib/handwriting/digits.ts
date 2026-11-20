@@ -312,8 +312,31 @@ function rows<T extends Box>(chars: T[]): T[][] {
   return out;
 }
 
+/*
+ * Readings are remembered by the character's ink (a hash of its pixels), so a board's unchanged writing isn't
+ * read again on every check, and the "before" and "after" readings of one check share their work.
+ */
+const remembered = new Map<string, unknown>();
+function inkKey(kind: string, m: Mask): string {
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (let i = 0; i < m.data.length; i++) {
+    if (!m.data[i]) continue;
+    a = Math.imul(a ^ i, 0x01000193);
+    b = Math.imul(b ^ (i >>> 3), 0x85ebca6b);
+  }
+  return `${kind}:${m.w}x${m.h}:${a >>> 0}:${b >>> 0}`;
+}
+async function rememberedRead<T>(kind: string, m: Mask, read: () => Promise<T>): Promise<T> {
+  const key = inkKey(kind, m);
+  if (remembered.has(key)) return remembered.get(key) as T;
+  const value = await read();
+  if (remembered.size > 6000) remembered.clear();
+  remembered.set(key, value);
+  return value;
+}
+
 async function readGlyph(g: Glyph): Promise<number[]> {
-  g.read ??= await readDigit(mnistPixels(g.mask));
+  g.read ??= await rememberedRead("digit", g.mask, () => readDigit(mnistPixels(g.mask)));
   return g.read;
 }
 
@@ -520,6 +543,27 @@ async function everyWayRound(pieces: number, read: (turns: number) => Promise<Ha
   return out;
 }
 
+/**
+ * The writing near new strokes: a number or an address that the new strokes are part of sits on their line,
+ * the lines just above and below, and up to a dozen characters either side. Only that part of a busy board is
+ * read, so a check stays quick however much is written elsewhere. `width` / `height` as for the strokes.
+ */
+export function nearNew<T extends { pts?: { x: number; y: number }[] }>(all: T[], isNew: (s: T) => boolean, width: number, height: number): T[] {
+  const box = (s: T) => boxOf((s.pts ?? []).map((p) => ({ x: p.x * width, y: p.y * height })));
+  const fresh = all.filter(isNew).filter((s) => (s.pts ?? []).length);
+  if (!fresh.length) return [];
+  const boxes = fresh.map(box);
+  const heights = boxes.map((b) => h(b)).sort((a, b) => a - b);
+  const size = Math.min(300, Math.max(20, heights[Math.floor(heights.length / 2)]));
+  const area = boxes.reduce(join);
+  const reach = { x0: area.x0 - 12 * size, x1: area.x1 + 12 * size, y0: area.y0 - 3 * size, y1: area.y1 + 3 * size };
+  return all.filter((s) => {
+    if (!(s.pts ?? []).length) return false;
+    const b = box(s);
+    return b.x1 >= reach.x0 && b.x0 <= reach.x1 && b.y1 >= reach.y0 && b.y0 <= reach.y1;
+  });
+}
+
 /* ─── from a picture (a shared screen) ────────────────────────────────────── */
 
 /**
@@ -693,15 +737,249 @@ function dense(input: Float32Array, wt: Float32Array, bias: Float32Array, outN: 
   return out;
 }
 
+function softmax(z: Float32Array): number[] {
+  const top = Math.max(...z);
+  const e = Array.from(z, (v) => Math.exp(v - top));
+  const sum = e.reduce((s, v) => s + v, 0);
+  return e.map((v) => v / sum);
+}
+
 /** Chances for 0–9 of one 28×28 picture (0 = paper, 1 = ink). */
 export async function readDigit(pixels: Float32Array): Promise<number[]> {
   const m = await loadWeights();
   const a = convBlock(pixels, 1, 28, m.c1w, m.c1b, 16);
   const b = convBlock(a, 16, 14, m.c2w, m.c2b, 32);
   const c = dense(b, m.f1w, m.f1b, 64, true);
-  const z = dense(c, m.f2w, m.f2b, 10, false);
-  const top = Math.max(...z);
-  const e = Array.from(z, (v) => Math.exp(v - top));
-  const sum = e.reduce((s, v) => s + v, 0);
-  return e.map((v) => v / sum);
+  return softmax(dense(c, m.f2w, m.f2b, 10, false));
+}
+
+let letterWeights: Promise<Weights & { labels: string }> | null = null;
+function loadLetterWeights() {
+  letterWeights ??= import("./letter-model").then(({ LETTER_MODEL: m, LETTER_LABELS }) => ({
+    c1w: decode(m["c1.weight"]), c1b: decode(m["c1.bias"]), c2w: decode(m["c2.weight"]), c2b: decode(m["c2.bias"]),
+    f1w: decode(m["f1.weight"]), f1b: decode(m["f1.bias"]), f2w: decode(m["f2.weight"]), f2b: decode(m["f2.bias"]), labels: LETTER_LABELS,
+  }));
+  return letterWeights;
+}
+
+/** The most likely character (0–9, a letter, or "@") of one 28×28 picture, and how sure the reading is. */
+export async function readCharacter(pixels: Float32Array): Promise<{ char: string; p: number; chances: number[] }> {
+  const m = await loadLetterWeights();
+  const a = convBlock(pixels, 1, 28, m.c1w, m.c1b, 16);
+  const b = convBlock(a, 16, 14, m.c2w, m.c2b, 32);
+  const c = dense(b, m.f1w, m.f1b, 96, true);
+  const chances = softmax(dense(c, m.f2w, m.f2b, m.labels.length, false));
+  const best = chances.indexOf(Math.max(...chances));
+  return { char: m.labels[best], p: chances[best], chances };
+}
+
+/* ─── handwritten emails and usernames ─────────────────────────────────────── */
+
+export interface HandwrittenContact {
+  kind: "email" | "social";
+  /** "contact": block it; "maybe": hold it until the writer says what it is (an app name on its own). */
+  verdict: "contact" | "maybe";
+  /** What was read (letters and digits, lower case; "?" for an unclear character). */
+  text: string;
+}
+
+// Mail providers whose names aren't ordinary words: a username written before one is an address ("riley gmail").
+const PROVIDERS = ["gmail", "googlemail", "yahoo", "hotmail", "icloud", "rediff", "rediffmail", "protonmail", "yandex"];
+// Names that are also ordinary words ("my mail", "the outlook", "a proton"): an address only after an "@",
+// or with an ending written straight after them ("riley outlook com").
+const WORDLIKE_PROVIDERS = ["ymail", "outlook", "proton", "zoho"];
+// Ordinary words (snap, signal, discord, instant) aren't on the list; "insta" is.
+const APPS = ["instagram", "insta", "snapchat", "telegram", "whatsapp", "facebook", "twitter", "wechat", "tiktok"];
+/** Characters the reader mixes up in handwriting, so "gmai1", "9mail" and "whqtsapp" still read right. */
+const ALIKE = ["aq4", "gq9", "il1", "lf", "o0", "s5", "b6", "b8", "t7", "tf", "e3", "z2", "uv"];
+const same = (c: string, t: string) => c === t || c === "?" || ALIKE.some((k) => k.includes(c) && k.includes(t));
+const LOOKALIKE: Record<string, string> = { "0": "o", "1": "l", i: "l", "5": "s", "2": "z", "4": "a", "7": "t", "3": "e" };
+const plain = (s: string) => [...s].map((c) => LOOKALIKE[c] ?? c).join("");
+
+/** Whether `word` holds `target` (as `foundAt` reads it). */
+function holds(word: string, target: string): boolean {
+  return foundAt(word, target) >= 0;
+}
+
+/** Fewest changes (a letter wrong, missing or extra) that turn the start of `text` into `target`. */
+function changesFrom(text: string, target: string): number {
+  let prev = Array.from({ length: text.length + 1 }, (_, j) => j);
+  for (let a = 1; a <= target.length; a++) {
+    const cur = [a];
+    for (let b = 1; b <= text.length; b++) cur[b] = Math.min(prev[b] + 1, cur[b - 1] + 1, prev[b - 1] + (same(text[b - 1], target[a - 1]) ? 0 : 1));
+    prev = cur;
+  }
+  return Math.min(...prev);
+}
+
+/**
+ * Where `target` starts in `word`, or -1. Look-alike characters count as the same, and the first letter must
+ * match ("email" isn't "gmail"). Names of five or six letters may have one letter wrong; seven or eight, one
+ * letter wrong, missing or extra; nine or more, two.
+ */
+function foundAt(word: string, target: string): number {
+  const allowed = target.length >= 9 ? 2 : target.length >= 5 ? 1 : 0;
+  for (let i = 0; i < word.length; i++) {
+    if (word[i] === "?" || !same(word[i], target[0])) continue;
+    if (target.length >= 7) {
+      if (changesFrom(word.slice(i, i + target.length + allowed), target) <= allowed) return i;
+      continue;
+    }
+    if (i + target.length > word.length) break;
+    let wrong = 0;
+    for (let k = 1; k < target.length; k++) if (!same(word[i + k], target[k])) wrong++;
+    if (wrong <= allowed) return i;
+  }
+  return -1;
+}
+
+/** An ending like com / in / co / net / org at the end of `rest`. */
+const ENDING = /(?:c[o0]m|[i1l]n|c[o0]|net|[o0]rg|edu)$/;
+/** What follows an "@" in an address: a mail provider's name, or an ending like com / in / co / net / org. */
+const domainLike = (rest: string) => [...PROVIDERS, ...WORDLIKE_PROVIDERS].some((p) => holds(rest, p)) || ENDING.test(plain(rest).replace(/\?/g, ""));
+
+/** Contact details in one written line: words split where the writer left a gap. */
+function contactInLine(words: string[]): HandwrittenContact | null {
+  const text = words.join(" ");
+  const flat = words.join("");
+  // An "@" with a name before it and an address after it: riley@gmail.com, r@yahoo.in.
+  const at = flat.indexOf("@");
+  if (at >= 2 && flat.length - at - 1 >= 3 && domainLike(flat.slice(at + 1))) return { kind: "email", verdict: "contact", text };
+  // A mail provider's name with a username written before it: "riley gmail com", "rileygmail" (not "email address").
+  for (const p of PROVIDERS) if (foundAt(flat, p) >= 3) return { kind: "email", verdict: "contact", text };
+  for (const p of WORDLIKE_PROVIDERS) {
+    const i = foundAt(flat, p);
+    if (i >= 3 && /^(?:c[o0]m|[i1l]n|c[o0])/.test(plain(flat.slice(i + p.length)))) return { kind: "email", verdict: "contact", text };
+  }
+  // An app's name with a username next to it ("insta riley_draws", "whatsapp riley", "telegramriley"); on its
+  // own, maybe.
+  for (let i = 0; i < words.length; i++) {
+    const app = APPS.find((a) => foundAt(words[i], a) === 0);
+    if (!app) continue;
+    const rest = words[i].slice(app.length).replace(/\?/g, "");
+    // "instant", "install", "instance" are words, not "insta".
+    if (app === "insta" && /^[nlbm1ic]/.test(rest)) continue;
+    // Written straight after a long name: "whatsappriley" (not "insta…": "instant" misread is too likely).
+    if (rest.length >= 3) {
+      if (app.length >= 7) return { kind: "social", verdict: "contact", text };
+      continue;
+    }
+    if (rest.length === 2 && app.length < 7) continue;
+    // The username after it, which the reader may have cut into pieces ("whatsapp r 1ey").
+    const next = words.slice(i + 1, i + 4).join("").replace(/\?/g, "");
+    // "insta nt", "insta ll": "instant" and "install" with a gap in them.
+    if (app === "insta" && /^[nlbm1ic]/.test(next)) continue;
+    if (next.length >= 3) return { kind: "social", verdict: "contact", text };
+    return { kind: "social", verdict: "maybe", text };
+  }
+  return null;
+}
+
+/** Each written line read as letters and digits (words split at the writer's gaps). */
+async function linesOfText(glyphs: Glyph[]): Promise<string[][]> {
+  // Letters aren't split like touching digits: "m" and "w" are wide on their own.
+  const split = glyphs;
+  const sizes = split.map((c) => Math.max(w(c), h(c))).sort((a, b) => a - b);
+  const typical = sizes[Math.floor(sizes.length / 2)] ?? 0;
+  const chars = split.filter((c) => Math.max(w(c), h(c)) >= 0.2 * typical && Math.max(w(c), h(c)) <= 3 * typical);
+  const out: string[][] = [];
+  for (const row of rows(chars)) {
+    if (row.length < 3) continue;
+    const size = row.map((c) => h(c)).sort((a, b) => a - b)[Math.floor(row.length / 2)] || 1;
+    const words: string[] = [];
+    let word = "";
+    for (let i = 0; i < row.length; i++) {
+      const c = row[i];
+      if (i > 0 && c.x0 - row[i - 1].x1 > 0.6 * size && word) {
+        words.push(word);
+        word = "";
+      }
+      if (c.kind !== "ink") continue;
+      const r = await rememberedRead("char", c.mask, () => readCharacter(mnistPixels(c.mask)));
+      // An "@" only when the reading is sure: a quick "a" can look like one.
+      const ch = r.char === "@" && r.p < 0.8 ? "a" : r.char;
+      word += r.p >= 0.35 ? ch.toLowerCase() : "?";
+    }
+    if (word) words.push(word);
+    out.push(words);
+  }
+  return out;
+}
+
+/**
+ * Emails and usernames written by hand: "riley@gmail.com", "riley gmail", "insta riley_draws". `width` /
+ * `height` are the board's size on screen (strokes are fractions of it).
+ */
+export async function handwrittenContacts(strokes: InkStroke[], width: number, height: number): Promise<HandwrittenContact[]> {
+  const ink = strokes.map((s) => s.pts.map((p) => ({ x: p.x * width, y: p.y * height }))).filter((pts) => pts.length > 0);
+  if (ink.length < 3) return [];
+  const boxes = ink.map(boxOf);
+  const glyphs = groupBoxes(boxes).map((ids) => {
+    const list = ids.map((i) => ink[i]);
+    const box = ids.map((i) => boxes[i]).reduce(join);
+    return strokeGlyph(list, box, symbolOf(list, box));
+  });
+  const found: HandwrittenContact[] = [];
+  for (const words of await linesOfText(glyphs)) {
+    const c = contactInLine(words);
+    if (c && !found.some((f) => f.text === c.text)) found.push(c);
+  }
+  return found;
+}
+
+/** Emails and usernames written by hand in a picture (a shared screen): dark on light and light on dark. */
+export async function handwrittenContactsInPicture(frame: Frame, minCharPx = 22): Promise<HandwrittenContact[]> {
+  const W = frame.width, H = frame.height;
+  if (W < 32 || H < 32) return [];
+  const g = new Uint8Array(W * H);
+  for (let i = 0, p = 0; i < W * H; i++, p += 4) g[i] = (frame.data[p] * 299 + frame.data[p + 1] * 587 + frame.data[p + 2] * 114) / 1000;
+  const I = new Float64Array((W + 1) * (H + 1));
+  for (let y = 0; y < H; y++) {
+    let row = 0;
+    for (let x = 0; x < W; x++) {
+      row += g[y * W + x];
+      I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row;
+    }
+  }
+  const R = 20;
+  const mean = (x: number, y: number) => {
+    const xa = Math.max(0, x - R), xb = Math.min(W, x + R + 1), ya = Math.max(0, y - R), yb = Math.min(H, y + R + 1);
+    return (I[yb * (W + 1) + xb] - I[ya * (W + 1) + xb] - I[yb * (W + 1) + xa] + I[ya * (W + 1) + xa]) / ((xb - xa) * (yb - ya));
+  };
+  const dark = new Uint8Array(W * H), light = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const v = g[y * W + x], m = mean(x, y);
+      // Dark writing only on a light background and light writing only on a dark one: the white page
+      // around dark letters (and inside their loops) isn't writing.
+      if (v < m - 30 && v < 150 && m > 100) dark[y * W + x] = 1;
+      else if (v > m + 30 && v > 110 && m < 150) light[y * W + x] = 1;
+    }
+  }
+  const found: HandwrittenContact[] = [];
+  for (const ink of [dark, light]) {
+    const pieces = components(ink, W, H, minCharPx);
+    if (pieces.length < 3 || pieces.length > 600) continue;
+    for (const words of await linesOfText(groupBoxes(pieces).map((ids) => mergePieces(ids.map((i) => pieces[i]))))) {
+      const c = contactInLine(words);
+      if (c && !found.some((f) => f.text === c.text)) found.push(c);
+    }
+  }
+  return found;
+}
+
+/** For tests: what each written line in a picture reads as. */
+export async function debugPictureLines(frame: Frame, minCharPx = 22): Promise<string[][]> {
+  const W = frame.width, H = frame.height;
+  const ink = new Uint8Array(W * H);
+  for (let i = 0, p = 0; i < W * H; i++, p += 4) ink[i] = (frame.data[p] * 299 + frame.data[p + 1] * 587 + frame.data[p + 2] * 114) / 1000 < 128 ? 1 : 0;
+  const pieces = components(ink, W, H, minCharPx);
+  return linesOfText(groupBoxes(pieces).map((ids) => mergePieces(ids.map((i) => pieces[i]))));
+}
+
+/** For tests: what each written line reads as. */
+export async function debugLines(strokes: InkStroke[], width: number, height: number): Promise<string[][]> {
+  const ink = strokes.map((s) => s.pts.map((p) => ({ x: p.x * width, y: p.y * height }))).filter((pts) => pts.length > 0);
+  const boxes = ink.map(boxOf);
+  return linesOfText(groupBoxes(boxes).map((ids) => { const list = ids.map((i) => ink[i]); const box = ids.map((i) => boxes[i]).reduce(join); return strokeGlyph(list, box, symbolOf(list, box)); }));
 }

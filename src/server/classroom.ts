@@ -497,7 +497,7 @@ async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: bool
 }
 
 /** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
-export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "") {
+export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "", written: ("email" | "social")[] = []) {
   requireRole(user, lesson);
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
   const s = await contactSafety();
@@ -506,6 +506,7 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
   const read = await readClassPicture(img.bytes, img.type, s.aiReading, `${lesson.booking.id}:${source}`);
   // Digits the person's own browser read in their handwriting (whiteboard, shared screen): TutorLink's rules decide on them too.
   const digits = handwriting.replace(/\?/g, "");
+  for (const k of written) if (!read.kinds.includes(k)) read.kinds.push(k);
   if (digits.length >= 10) {
     for (const k of scanContact(digits, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
   }
@@ -523,9 +524,9 @@ export async function boardMaybeShown(user: User, lesson: Lesson, digits: string
   const masked = d.length > 4 ? `${d.slice(0, 2)}${"•".repeat(d.length - 4)}${d.slice(-2)}` : "••••";
   const who = shortName(user.firstName, user.lastName);
   await db()`insert into public.reports (id, reporter_id, target_type, target_id, reason, details, status, created_at)
-    values (${`rep_${randomBytes(6).toString("hex")}`}, ${user.id}, 'user', ${user.id}, 'Possible phone number shown on the whiteboard',
-      ${`In the live class of lesson ${lesson.booking.id}, ${who} wrote a long number (${masked}) and chose "It's maths, show it".`}, 'open', now())`;
-  await alertStaff("reports.moderate", { title: `Possible number on the whiteboard: ${who}`, body: `${masked}, shown after they said it was maths.`, href: "/admin/reports" });
+    values (${`rep_${randomBytes(6).toString("hex")}`}, ${user.id}, 'user', ${user.id}, 'Possible contact details shown on the whiteboard',
+      ${`In the live class of lesson ${lesson.booking.id}, ${who} wrote something that looked like contact details (${masked}) and chose "It's fine, show it".`}, 'open', now())`;
+  await alertStaff("reports.moderate", { title: `Possible contact details on the whiteboard: ${who}`, body: `${masked}, shown after they said it was fine.`, href: "/admin/reports" });
 }
 
 export const CLASS_REPORT_REASONS = {

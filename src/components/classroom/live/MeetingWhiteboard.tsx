@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { readMeta, TOPIC } from "@/lib/classroom";
 import { scanContact } from "@/lib/domain/contact";
-import { handwrittenNumbers, judge } from "@/lib/handwriting/digits";
+import { handwrittenContacts, handwrittenNumbers, judge, nearNew } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 import { BoardSnip } from "./BoardSnip";
 import { sendSafety, type SafetyResult } from "./LessonSafety";
@@ -539,27 +539,46 @@ export function MeetingWhiteboard({
       const mine = strokesRef.current.filter((s) => s.id.startsWith(`${myId}-`) && (s.tool === "pen" || s.tool === "line" || s.tool === "rect" || s.tool === "circle"));
       const canvas = canvasRef.current;
       const ink = (list: Stroke[]) => list.filter((s) => s.tool === "pen" || s.tool === "line").map((s) => ({ pts: s.pts ?? [] }));
+      // Only the writing near the new strokes is read (a busy board stays quick to check).
+      const near = nearNew(mine, (s) => batch.has(s.id), canvas?.width || 1280, canvas?.height || 800);
       // A handwritten phone number this drawing adds (one already on the board before doesn't count again).
       let local: string | null = null;
+      let written: "email" | "social" | null = null;
       let unsure: string | null = null;
       let growing = false;
       try {
         const [after, before] = await Promise.all([
-          handwrittenNumbers(ink(mine), canvas?.width || 1280, canvas?.height || 800, 5),
-          handwrittenNumbers(ink(mine.filter((s) => !batch.has(s.id))), canvas?.width || 1280, canvas?.height || 800, 5),
+          handwrittenNumbers(ink(near), canvas?.width || 1280, canvas?.height || 800, 5),
+          handwrittenNumbers(ink(near.filter((s) => !batch.has(s.id))), canvas?.width || 1280, canvas?.height || 800, 5),
         ]);
         const known = new Set(before.map((n) => n.digits));
         const fresh = after.filter((n) => !known.has(n.digits));
         local = fresh.find((n) => judge(n) === "phone")?.digits ?? null;
         unsure = local ? null : (fresh.find((n) => judge(n) === "maybe")?.digits ?? null);
         growing = !local && !unsure && fresh.length > 0;
+        // Emails and usernames written by hand ("riley@gmail.com", "riley gmail", "whatsapp riley").
+        if (!local) {
+          const [cAfter, cBefore] = await Promise.all([
+            handwrittenContacts(ink(near), canvas?.width || 1280, canvas?.height || 800),
+            handwrittenContacts(ink(near.filter((s) => !batch.has(s.id))), canvas?.width || 1280, canvas?.height || 800),
+          ]);
+          const seen = new Set(cBefore.map((c) => c.text));
+          const freshContacts = cAfter.filter((c) => !seen.has(c.text));
+          const sure = freshContacts.find((c) => c.verdict === "contact");
+          if (sure) {
+            written = sure.kind;
+            unsure = null;
+            growing = false;
+          } else if (!unsure) unsure = freshContacts.find((c) => c.verdict === "maybe")?.text ?? null;
+        }
       } catch (e) {
         console.warn("[whiteboard] handwriting check", e);
       }
       // A new row of 5+ digits may be a phone number still being written: nothing is shown until the pen has
-      // rested for 2.5 s (10 s at most), so a number can't leak out half-written.
+      // rested for 2.5 s (30 s at most: writing a number slowly with a mouse can take 15 s), so a number can't
+      // leak out half-written.
       const rested = Date.now() - lastPenUp.current;
-      if (growing && rested < 2500 && Date.now() - heldSince.current < 10_000) {
+      if (growing && rested < 2500 && Date.now() - heldSince.current < 30_000) {
         waitMore = 2500 - rested;
         return;
       }
@@ -588,10 +607,12 @@ export function MeetingWhiteboard({
         setPasteMsg("Contact details can't be written on the whiteboard: your drawing wasn't shown to anyone and was removed.");
         window.setTimeout(() => setPasteMsg(""), 7000);
       };
-      if (local) {
-        // Read here as a phone number: removed at once; the server records it and sends the class warning.
+      if (local || written) {
+        // Read here as a phone number, an email or a username: removed at once; the server records it and
+        // sends the class warning.
         removeBatch();
-        if (image) void sendSafety(bookingId, { source: "board", image, kinds: ["phone"], excerpt: local }, 20_000).then((res) => res?.found && onCaughtRef.current?.(res));
+        const body = local ? { kinds: ["phone" as const], excerpt: local } : { kinds: [written!] };
+        if (image) void sendSafety(bookingId, { source: "board", image, ...body }, 20_000).then((res) => res?.found && onCaughtRef.current?.(res));
       } else {
         // Printed text, QR codes and (when on) AI reading on the server; if it can't answer in 5 s the lesson goes on.
         const res: SafetyResult | null = image ? await sendSafety(bookingId, { source: "board", image }, 5000) : null;
@@ -610,7 +631,7 @@ export function MeetingWhiteboard({
     }
   }, [myId, bookingId, drawStroke, rebaseHistory, redraw, broadcastStroke, checkLater]);
 
-  /** "It's maths": the held drawing goes to everyone, and moderators get a note (the number masked). */
+  /** "It's fine": the held drawing goes to everyone, and moderators get a note (what was read, masked). */
   const showMaybe = React.useCallback(() => {
     const m = maybeRef.current;
     if (!m) return;
@@ -1407,9 +1428,9 @@ export function MeetingWhiteboard({
           {pasteMsg && <span className="max-w-[16rem] truncate text-xs text-live" role="status">{pasteMsg}</span>}
           {maybe && (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" role="alert" data-board-maybe>
-              <span className="text-live">This looks like it could be a phone number, so nobody else sees it yet.</span>
+              <span className="text-live">This looks like it could be contact details, so nobody else sees it yet.</span>
               <button type="button" onClick={showMaybe} className="font-semibold text-ink underline underline-offset-2">
-                It&apos;s maths, show it
+                It&apos;s fine, show it
               </button>
               <button type="button" onClick={removeMaybe} className="font-semibold text-ink underline underline-offset-2">
                 Remove it

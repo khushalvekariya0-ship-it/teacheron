@@ -182,7 +182,9 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
         // A handwritten number the person's own browser read (on their drawing or shared screen): the site's rules decide.
         const handwriting = (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40);
-        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting)) });
+        // An email or a username the browser read in the person's handwriting (it can only make things stricter).
+        const written = (v.data.kinds ?? []).filter((k): k is "email" | "social" => k === "email" || k === "social");
+        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting, written)) });
       }
       case "unpause": {
         // The person's own page when their audio pause is over (the server checks the time).
@@ -198,7 +200,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         if (stop) return stop;
         const v = z.object({ id, digits: z.string().max(40) }).safeParse(body);
         if (!v.success) return json({ ok: false, error: "That request wasn't valid." }, { status: 400 });
-        await boardMaybeShown(user, await lessonOf(v.data.id), v.data.digits.replace(/[^0-9?]/g, ""));
+        await boardMaybeShown(user, await lessonOf(v.data.id), v.data.digits.replace(/[^0-9a-z?@ ]/gi, ""));
         return json({ ok: true });
       }
       case "appeal": {
