@@ -3,7 +3,7 @@ import { env, liveVideoReady } from "@/server/env";
 import { json } from "@/server/http";
 import { livekitReachable } from "@/server/livekit";
 import { scanContact } from "@/lib/domain/contact";
-import { checkImageBytes, fileText, readPictureForSelfTest } from "@/server/scan";
+import { checkImageBytes, checkScreenFrame, fileText, readPictureForSelfTest } from "@/server/scan";
 
 /*
  * GET /api/health/deep — for the owner only (Authorization: Bearer <CRON_SECRET>): proves on THIS server
@@ -61,6 +61,11 @@ export async function GET(request: Request) {
     }
     return { ok: Object.values(files).every((x) => x.ok), files };
   });
+  // Shared-screen frames: read line by line, with where the contact details are (so they can be blacked out).
+  const screenReading = await timed(async () => {
+    const r = await checkScreenFrame(Buffer.from(TEXT_PICTURE, "base64"), true);
+    return { ok: r.kinds.includes("phone") && r.boxes.length > 0 && r.maskable, kinds: r.kinds, boxes: r.boxes.length, maskable: r.maskable };
+  });
   const videoClasses = liveVideoReady() ? await timed(async () => await livekitReachable()) : { ok: false, error: "LiveKit isn't set up on this server." };
-  return json({ ok: textReading.ok && qrReading.ok && documents.ok && videoClasses.ok, textReading, qrReading, rawReading, documents, videoClasses });
+  return json({ ok: textReading.ok && qrReading.ok && documents.ok && screenReading.ok && videoClasses.ok, textReading, qrReading, rawReading, documents, screenReading, videoClasses });
 }
