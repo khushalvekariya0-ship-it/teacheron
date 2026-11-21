@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Check, CalendarClock, CalendarPlus, CircleX, CreditCard, Download, Flag, Play, CircleCheck, Star, UserX, Video, ChevronDown } from "lucide-react";
 import type { Booking, BookingStatus } from "@/lib/types";
 import type { Actor } from "@/lib/booking";
-import { ACTION_LABEL, TRANSITIONS, availableTransitions, canTransition, meetingLinkVisible, policySummary, startMs } from "@/lib/booking";
+import { ACTION_LABEL, TRANSITIONS, askToRescheduleProblem, availableTransitions, canTransition, lateToReschedule, meetingLinkVisible, openRescheduleRequest, policySummary, startMs } from "@/lib/booking";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { cn } from "@/lib/utils";
 import { downloadIcs, googleCalendarUrl, type CalendarEvent } from "@/lib/calendar";
@@ -54,10 +54,22 @@ export function buildLessonActions(
   now: number,
   policy: BookingPolicy,
   /** onPayAgain: a failed card / UPI payment is paid again through Razorpay (the plain transition is refused). */
-  opts: { onAccept: () => void; onReview: () => void; onPayAgain?: () => void; paying?: boolean },
+  // onAnswerRequest: the tutor accepts (true) or keeps the current time (false) of an open request for a new
+  // time; the person who asked withdraws it (false).
+  opts: { onAccept: () => void; onReview: () => void; onPayAgain?: () => void; paying?: boolean; onAnswerRequest?: (accept: boolean) => void },
 ): { primary: LessonAction | null; items: LessonAction[] } {
   const allowed = availableTransitions(b, actor, now, policy);
   const items: LessonAction[] = [];
+  // An open request for a new time (asked inside the late window): answered here; it replaces "Reschedule".
+  const request = openRescheduleRequest(b, now);
+  if (request && opts.onAnswerRequest) {
+    if (actor === "tutor") {
+      items.push({ key: "accept-new-time", label: "Accept new time", icon: CalendarClock, onSelect: () => opts.onAnswerRequest?.(true), tone: "primary" });
+      items.push({ key: "keep-time", label: "Keep current time", icon: CircleX, onSelect: () => opts.onAnswerRequest?.(false) });
+    } else if (actor === "booker") {
+      items.push({ key: "withdraw-request", label: "Withdraw new-time request", icon: CircleX, onSelect: () => opts.onAnswerRequest?.(false) });
+    }
+  }
   const add = (to: BookingStatus, extra: Partial<LessonAction> = {}) =>
     items.push({ key: to, label: ACTION_LABEL[to] ?? to, icon: ICONS[to] ?? Check, ...extra });
 
@@ -68,7 +80,11 @@ export function buildLessonActions(
   // Starting a lesson whose time has fully passed isn't useful — wrap it up instead.
   if (allowed.includes("in_progress") && now < startMs(b) + b.durationMin * 60_000) add("in_progress", { dialog: "in_progress" });
   if (allowed.includes("completed")) add("completed", { dialog: "completed" });
-  if (allowed.includes("rescheduled")) add("rescheduled", { dialog: "reschedule" });
+  if (allowed.includes("rescheduled") && !(request && actor === "booker")) add("rescheduled", { dialog: "reschedule" });
+  // Inside the late window the person who booked can still ask the tutor for a new time.
+  else if (actor === "booker" && !request && lateToReschedule(b, now, policy) && !askToRescheduleProblem(b, actor, now, policy)) {
+    add("rescheduled", { label: "Ask to reschedule", dialog: "reschedule" });
+  }
   if (allowed.includes(cancelTo)) {
     if (actor === "tutor" && b.status === "pending") add(cancelTo, { label: "Decline request", dialog: "decline", tone: "danger" });
     else add(cancelTo, { dialog: "cancel", tone: "danger" });
@@ -87,7 +103,7 @@ export function buildLessonActions(
     const check = canTransition(b, to, actor, now, policy);
     if (!check.ok) add(to, { disabledReason: check.reason, tone: to === cancelTo ? "danger" : "default" });
   };
-  explain("rescheduled");
+  if (!(request && actor === "booker")) explain("rescheduled");
   explain(cancelTo);
   explain(actor === "tutor" ? "no_show_student" : "no_show_tutor", true);
 
@@ -96,6 +112,7 @@ export function buildLessonActions(
   if (videoJoinable(b, now)) primary = { key: "join", label: `Join ${videoLabel(b)}`, icon: Video, href: b.videoLink, external: true, tone: "primary" };
   else if (meetingLinkVisible(b, now, policy) && b.meetingUrl) primary = { key: "join", label: "Join lesson", icon: Video, href: `/classroom/${b.id}`, tone: "primary" };
   else primary =
+    items.find((i) => i.key === "accept-new-time") ??
     items.find((i) => i.key === "confirmed" && !i.disabledReason) ??
     items.find((i) => i.key === "pending" && !i.disabledReason) ??
     items.find((i) => i.key === "completed" && !i.disabledReason && (b.status === "in_progress" || now >= startMs(b) + b.durationMin * 60_000)) ??

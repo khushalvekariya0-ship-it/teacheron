@@ -402,6 +402,13 @@ export interface BookingEvent {
   from: BookingStatus | null;
   to: BookingStatus;
   note?: string;
+  /**
+   * A request to move the lesson, made inside the late window (the tutor accepts or keeps the current time):
+   * "asked" carries the proposed start; "accepted" / "declined" / "withdrawn" close it. The lesson's own
+   * status doesn't change while it's open.
+   */
+  proposal?: "asked" | "accepted" | "declined" | "withdrawn";
+  proposedStartUtc?: ISODate;
 }
 
 export interface Booking {

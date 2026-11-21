@@ -164,6 +164,8 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   })),
   transitionBooking: t(id, BOOKING_STATUS, text(500).optional()),
   rescheduleBooking: t(id, iso),
+  requestReschedule: t(id, iso),
+  answerRescheduleRequest: t(id, z.boolean()),
   setLessonVideo: t(id, z.object({ link: text(500), passcode: text(20).optional(), applyToUpcoming: z.boolean().optional() })),
   removeLessonVideo: t(id),
   setLessonRecording: t(id, text(500)),

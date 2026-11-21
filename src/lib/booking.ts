@@ -30,6 +30,34 @@ const canReschedule: Rule["guard"] = (b, now, p, actor) => {
   return (b.rescheduleCount ?? 0) >= p.maxReschedulesPerBooking ? "This lesson has reached the reschedule limit." : null;
 };
 
+/** Inside the platform's notice the person who booked can no longer move the lesson themselves. */
+export const lateToReschedule = (b: Booking, now: number, p: BookingPolicy) => now >= startMs(b) - p.rescheduleMinHours * 3_600_000;
+
+/** The open request to move this lesson (asked inside the late window), or null. It lapses when the lesson starts. */
+export function openRescheduleRequest(b: Booking, now = Date.now()): { startUtc: string; at: string; by: string } | null {
+  for (let i = b.history.length - 1; i >= 0; i--) {
+    const e = b.history[i];
+    if (!e.proposal) continue;
+    if (e.proposal !== "asked" || !e.proposedStartUtc) return null;
+    if (!["pending", "confirmed"].includes(b.status) || now >= startMs(b)) return null;
+    return { startUtc: e.proposedStartUtc, at: e.at, by: String(e.by) };
+  }
+  return null;
+}
+
+/**
+ * Whether the person who booked can ask the tutor for a new time inside the late window (null) or why not.
+ * Before the window they move it themselves; the tutor can always move it until it starts.
+ */
+export function askToRescheduleProblem(b: Booking, actor: Actor, now: number, p: BookingPolicy): string | null {
+  if (actor !== "booker") return "Only the student or parent who booked can ask for a new time.";
+  if (!["pending", "confirmed"].includes(b.status)) return "This lesson can't be moved.";
+  if (now >= startMs(b)) return "This lesson has already started, so it can't be moved.";
+  if ((b.rescheduleCount ?? 0) >= p.maxReschedulesPerBooking) return "This lesson has reached the reschedule limit.";
+  if (openRescheduleRequest(b, now)) return "You've already asked for a new time: wait for the tutor's answer, or withdraw it first.";
+  return null;
+}
+
 export const TRANSITIONS: Record<BookingStatus, Partial<Record<BookingStatus, Rule>>> = {
   pending: {
     confirmed: { actors: ["tutor", "system", "admin"], guard: beforeStart },

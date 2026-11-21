@@ -95,6 +95,8 @@ export const PLANS: Record<ActionName, Plan> = {
   transitionBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
   markPaymentFailed: (L, me, [id]) => L.bookingParticipants(str(id), me),
   rescheduleBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  requestReschedule: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  answerRescheduleRequest: (L, me, [id]) => L.bookingParticipants(str(id), me),
   // The tutor's world holds their other upcoming lessons (for "use this link for my other lessons").
   setLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
   removeLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),

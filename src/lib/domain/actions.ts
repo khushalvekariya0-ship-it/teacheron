@@ -1,5 +1,5 @@
 import type {
-  AlertFrequency, Application, ApplicationStatus, AppNotification, AuditLog, AvailabilityException, Booking, BookingRules, BookingStatus, Child,
+  AlertFrequency, Application, ApplicationStatus, AppNotification, AuditLog, AvailabilityException, Booking, BookingEvent, BookingRules, BookingStatus, Child,
   ContactFlag, Conversation, Coupon, Dispute, DisputeStatus, FeatureFlag, Homework, LeadTransaction, LearningGoal, Message, NotificationPrefs, PayMethod,
   Payment, Payout, PayoutAccount, PayoutMethod, Permission, SafetyAppeal, ProgressNote, Report, Requirement, RequirementStatus, Review, Role, SavedSearch, StudentProfile, Subject, SubjectCategory,
   Subscription, TeachingMode, TrialConfig, Tutor, User, VerificationKind, VerificationRequest, VerificationStatus, WalletTransaction,
@@ -17,7 +17,7 @@ import { isFlagOn } from "@/lib/flags";
 import { inSection, notePath } from "@/lib/nav-sections";
 import { readContactSafety, rulesOf, type ContactSafety } from "@/lib/safety-settings";
 import { resolveLocation } from "@/lib/data/geo";
-import { canTransition, cancellationRefund, endMs, startMs, STATUS_META } from "@/lib/booking";
+import { askToRescheduleProblem, canTransition, cancellationRefund, endMs, lateToReschedule, openRescheduleRequest, startMs, STATUS_META, type Actor } from "@/lib/booking";
 import { checkPasscode, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL } from "@/lib/video-link";
 import { actorFor, hasPermission } from "@/lib/permissions";
 import { STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, slugify, subjectName } from "@/lib/data/catalog";
@@ -144,6 +144,10 @@ export interface DomainActions {
   createBooking(input: CreateBookingInput): Result<Booking>;
   transitionBooking(id: string, to: BookingStatus, note?: string): Result<Booking>;
   rescheduleBooking(id: string, newStartUtc: string): Result<Booking>;
+  /** The person who booked, inside the late window: asks the tutor for a new time (the lesson stays until accepted). */
+  requestReschedule(id: string, newStartUtc: string): Result<Booking>;
+  /** The tutor accepts (the lesson moves) or keeps the current time; the person who asked can withdraw (false). */
+  answerRescheduleRequest(id: string, accept: boolean): Result<Booking>;
   /**
    * The tutor (or staff who manage bookings) sets the Zoom / Google Meet invite link of an online lesson.
    * With applyToUpcoming, the tutor's other upcoming online lessons that have no link get it too.
@@ -587,18 +591,38 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     return get().bookings.some((b) => b.id !== ignoreId && b.tutorId === tutorId && BLOCKING_STATUSES.includes(b.status) && overlaps(s, e, new Date(b.startUtc).getTime() - buffer, new Date(b.startUtc).getTime() + b.durationMin * 60_000 + buffer));
   };
 
-  const withinAvailability = (tutor: Tutor, startUtc: string, durationMin: number): string | null => {
+  // keepLength: a lesson being moved keeps its length, even if the tutor has changed their session lengths since.
+  const withinAvailability = (tutor: Tutor, startUtc: string, durationMin: number, keepLength = false): string | null => {
     const now = Date.now();
     const s = new Date(startUtc).getTime();
     if (Number.isNaN(s)) return "Choose a valid time.";
     if (s < now + tutor.rules.minNoticeHours * 3_600_000) return `This tutor needs at least ${tutor.rules.minNoticeHours} hours' notice.`;
     if (s > now + tutor.rules.maxAdvanceDays * 86_400_000) return `This tutor accepts bookings up to ${tutor.rules.maxAdvanceDays} days ahead.`;
-    if (!tutor.rules.sessionLengths.includes(durationMin) && durationMin !== tutor.trial.durationMin) return "Choose one of the tutor's session lengths.";
+    if (!keepLength && !tutor.rules.sessionLengths.includes(durationMin) && durationMin !== tutor.trial.durationMin) return "Choose one of the tutor's session lengths.";
     // The start must be a real opening in the tutor's weekly hours (and not on a blocked date).
     // Conflicts with other bookings are checked separately so the error message can be specific.
     const open = generateSlots(tutor, { durationMin, viewerTz: tutor.timezone, bookings: [], now, days: tutor.rules.maxAdvanceDays });
     if (!open.some((slot) => slot.startUtc === new Date(s).toISOString())) return "That time is outside this tutor's available hours. Please choose one of the listed times.";
     return null;
+  };
+
+  /**
+   * Moves a lesson to a new time: a new booking (same price, length, payment and notes) and the old one marked
+   * as moved. `confirmed`: the new time is confirmed at once (otherwise it waits for the tutor, like a request).
+   */
+  const moveLesson = (b: Booking, start: string, by: string, confirmed: boolean): Booking => {
+    const newId = uid("bk");
+    const next: Booking = {
+      ...b, id: newId, startUtc: start, status: confirmed ? "confirmed" : "pending", rescheduledFromId: b.id, rescheduleCount: (b.rescheduleCount ?? 0) + 1, reviewId: undefined,
+      meetingUrl: b.mode === "online" ? `/classroom/${newId}` : undefined, recordingUrl: undefined, idempotencyKey: `${b.idempotencyKey}_r${b.history.length}`,
+      history: [{ at: nowIso(), by, from: null, to: confirmed ? "confirmed" : "pending", note: `Rescheduled from ${formatDateTime(b.startUtc, tzOf(by))}` }], createdAt: nowIso(),
+    };
+    set((s) => ({
+      bookings: [next, ...s.bookings.map((x) => (x.id === b.id ? { ...x, status: "rescheduled" as const, history: [...x.history, { at: nowIso(), by, from: x.status, to: "rescheduled" as const, note: `Moved to ${formatDateTime(start, tzOf(by))}` }] } : x))],
+      payments: s.payments.map((p) => (p.bookingId === b.id ? { ...p, bookingId: newId } : p)),
+      walletTransactions: s.walletTransactions.map((t) => (t.bookingId === b.id ? { ...t, bookingId: newId } : t)),
+    }));
+    return next;
   };
 
   /** A time the tutor picks for their own lesson: not past, within their advance window (clashes are checked apart). */
@@ -1051,23 +1075,71 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const tutor = resolveTutor(get(), b.tutorId)!;
       const start = new Date(newStartUtc).toISOString();
       // The tutor's weekly hours and notice are rules for students: moving their own lesson, any free time works.
-      const availErr = actor === "tutor" ? ownTimeProblem(tutor, start) : withinAvailability(tutor, start, b.durationMin);
+      // The lesson keeps its length, even if the tutor's session lengths have changed since it was booked.
+      const availErr = actor === "tutor" ? ownTimeProblem(tutor, start) : withinAvailability(tutor, start, b.durationMin, true);
       if (availErr) return fail(availErr);
       if (slotConflict(b.tutorId, start, b.durationMin, b.id)) return fail("That time isn't available. Please choose another slot.");
-      const newId = uid("bk");
-      const instant = actor === "tutor" || b.status === "confirmed";
-      const next: Booking = {
-        ...b, id: newId, startUtc: start, status: instant ? "confirmed" : "pending", rescheduledFromId: b.id, rescheduleCount: (b.rescheduleCount ?? 0) + 1, reviewId: undefined,
-        meetingUrl: b.mode === "online" ? `/classroom/${newId}` : undefined, recordingUrl: undefined, idempotencyKey: `${b.idempotencyKey}_r${b.history.length}`,
-        history: [{ at: nowIso(), by: r.data.id, from: null, to: instant ? "confirmed" : "pending", note: `Rescheduled from ${formatDateTime(b.startUtc, tzOf(r.data.id))}` }], createdAt: nowIso(),
-      };
-      set((s) => ({
-        bookings: [next, ...s.bookings.map((x) => (x.id === id ? { ...x, status: "rescheduled" as const, history: [...x.history, { at: nowIso(), by: r.data.id, from: x.status, to: "rescheduled" as const, note: `Moved to ${formatDateTime(start, tzOf(r.data.id))}` }] } : x))],
-        payments: s.payments.map((p) => (p.bookingId === id ? { ...p, bookingId: newId } : p)),
-        walletTransactions: s.walletTransactions.map((t) => (t.bookingId === id ? { ...t, bookingId: newId } : t)),
-      }));
+      const next = moveLesson(b, start, r.data.id, actor === "tutor" || b.status === "confirmed");
       const other = actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId;
-      notify(other, { type: "booking_rescheduled", title: "Lesson rescheduled", body: `${subjectName(b.subject)} moved to ${formatDateTime(start, tzOf(other))}`, href: `/dashboard/bookings/${newId}` });
+      notify(other, { type: "booking_rescheduled", title: "Lesson rescheduled", body: `${subjectName(b.subject)} moved to ${formatDateTime(start, tzOf(other))}`, href: `/dashboard/bookings/${next.id}` });
+      return ok(next);
+    },
+    requestReschedule(id, newStartUtc) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      const b = get().bookings.find((x) => x.id === id);
+      if (!b) return fail("Booking not found.");
+      const actor = actorFor(r.data, b) as Actor;
+      const problem = askToRescheduleProblem(b, actor, Date.now(), get().policy);
+      if (problem) return fail(problem);
+      // Before the late window the person who booked moves it themselves, straight away.
+      if (!lateToReschedule(b, Date.now(), get().policy)) return actions.rescheduleBooking(id, newStartUtc);
+      const tutor = resolveTutor(get(), b.tutorId)!;
+      const start = new Date(newStartUtc).toISOString();
+      if (start === new Date(b.startUtc).toISOString()) return fail("Choose a different time from the current one.");
+      const availErr = withinAvailability(tutor, start, b.durationMin, true);
+      if (availErr) return fail(availErr);
+      if (slotConflict(b.tutorId, start, b.durationMin, b.id)) return fail("That time isn't available. Please choose another slot.");
+      const event: BookingEvent = { at: nowIso(), by: r.data.id, from: b.status, to: b.status, note: `Asked to move it to ${formatDateTime(start, tzOf(r.data.id))}`, proposal: "asked", proposedStartUtc: start };
+      const updated: Booking = { ...b, history: [...b.history, event] };
+      set((s) => ({ bookings: s.bookings.map((x) => (x.id === id ? updated : x)) }));
+      const tutorUser = tutorUserId(b.tutorId);
+      notify(tutorUser, { type: "booking_rescheduled", title: "New time requested", body: `${subjectName(b.subject)}: asks to move ${formatDateTime(b.startUtc, tzOf(tutorUser))} to ${formatDateTime(start, tzOf(tutorUser))}. Accept or keep the current time.`, href: `/dashboard/bookings/${id}` });
+      return ok(updated);
+    },
+    answerRescheduleRequest(id, accept) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      const b = get().bookings.find((x) => x.id === id);
+      if (!b) return fail("Booking not found.");
+      const actor = actorFor(r.data, b);
+      const req = openRescheduleRequest(b);
+      if (!req) return fail("There's no open request for a new time on this lesson.");
+      const close = (proposal: "accepted" | "declined" | "withdrawn", note: string): Booking => {
+        const closed: Booking = { ...b, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to: b.status, note, proposal }] };
+        set((s) => ({ bookings: s.bookings.map((x) => (x.id === id ? closed : x)) }));
+        return closed;
+      };
+      const tutorUser = tutorUserId(b.tutorId);
+      if (actor === "booker") {
+        if (accept) return fail("Only the tutor can accept the new time.");
+        const kept = close("withdrawn", "Withdrew the request for a new time");
+        notify(tutorUser, { type: "booking_rescheduled", title: "Request withdrawn", body: `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(tutorUser))}.`, href: `/dashboard/bookings/${id}` });
+        return ok(kept);
+      }
+      if (actor !== "tutor") return fail("Only the tutor can answer a request for a new time.");
+      if (!accept) {
+        const kept = close("declined", "Kept the current time");
+        notify(b.bookerId, { type: "booking_rescheduled", title: "Current time kept", body: `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(b.bookerId))}. Message your tutor to find another time.`, href: `/dashboard/bookings/${id}` });
+        return ok(kept);
+      }
+      const check = canTransition(b, "rescheduled", "tutor", Date.now(), get().policy);
+      if (!check.ok) return fail(check.reason);
+      if (new Date(req.startUtc).getTime() <= Date.now()) return fail("That time has already passed. Keep the current time, or move the lesson yourself.");
+      if (slotConflict(b.tutorId, req.startUtc, b.durationMin, b.id)) return fail("That time isn't free any more. Keep the current time, or move the lesson to another time yourself.");
+      const accepted = close("accepted", "Accepted the new time");
+      const next = moveLesson(accepted, req.startUtc, r.data.id, true);
+      notify(b.bookerId, { type: "booking_rescheduled", title: "New time accepted", body: `${subjectName(b.subject)} moved to ${formatDateTime(req.startUtc, tzOf(b.bookerId))}.`, href: `/dashboard/bookings/${next.id}` });
       return ok(next);
     },
     setLessonVideo(bookingId, input) {

@@ -69,7 +69,13 @@ async function persist(tx: Tx, before: Snapshot, data: Data) {
   }
   for (const spec of specs) {
     const prev = before.get(spec)!;
-    const changed = [...after.rows.get(spec)!.entries()].filter(([k]) => prev.get(k) !== after.json.get(spec)!.get(k)).map(([, row]) => row);
+    // Rows that already exist are written before new ones: a unique rule is checked row by row, so a lesson
+    // moved to a new time (the old row marked moved, a new row added) must free its place first (one trial
+    // per student, for instance).
+    const changed = [...after.rows.get(spec)!.entries()]
+      .filter(([k]) => prev.get(k) !== after.json.get(spec)!.get(k))
+      .sort(([a], [b]) => Number(!prev.has(a)) - Number(!prev.has(b)))
+      .map(([, row]) => row);
     if (!changed.length) continue;
     const cols = Object.keys(changed[0]);
     const updatable = cols.filter((c) => !spec.key.includes(c) && !spec.insertOnly?.includes(c));

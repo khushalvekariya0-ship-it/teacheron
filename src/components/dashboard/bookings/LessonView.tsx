@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarX2, Lock, MessageSquare } from "lucide-react";
 import type { Booking, User } from "@/lib/types";
-import { availableTransitions, startMs, STATUS_META } from "@/lib/booking";
+import { availableTransitions, openRescheduleRequest, startMs, STATUS_META } from "@/lib/booking";
 import { actorFor, canViewBooking } from "@/lib/permissions";
 import { useApp } from "@/lib/store";
 import { useNow, useSession, useViewerTimezone } from "@/lib/store/hooks";
@@ -80,6 +80,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
   const users = useApp((s) => s.users);
   const conversations = useApp((s) => s.conversations);
   const transition = useApp((s) => s.transitionBooking);
+  const answerRequest = useApp((s) => s.answerRescheduleRequest);
   const startConversation = useApp((s) => s.startConversation);
   const contactLearner = useApp((s) => s.contactLearner);
   const payOnline = useApp((s) => s.payOnline);
@@ -136,7 +137,19 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     router.push(`/dashboard/messages?c=${res.data.id}`);
   };
 
-  const { primary, items } = buildLessonActions(b, actor, now, policy, { onAccept: accept, onReview: goToReview, onPayAgain: canPayAgain ? payAgain : undefined, paying });
+  // A request for a new time, asked inside the late window: the tutor accepts or keeps the current time, and
+  // the person who asked can withdraw it.
+  const request = openRescheduleRequest(b, now);
+  const answer = async (yes: boolean) => {
+    const res = await answerRequest(b.id, yes);
+    if (!res.ok) return void toast.error(res.error);
+    if (yes && res.data.id !== b.id) {
+      toast.success("New time accepted", { description: `${formatDateTime(res.data.startUtc, tz)} · ${people.counterpart} has been notified.` });
+      router.push(`/dashboard/bookings/${res.data.id}`);
+    } else toast.success(isTutor ? "Current time kept" : "Request withdrawn", { description: `${people.counterpart} has been notified.` });
+  };
+
+  const { primary, items } = buildLessonActions(b, actor, now, policy, { onAccept: accept, onReview: goToReview, onPayAgain: canPayAgain ? payAgain : undefined, paying, onAnswerRequest: answer });
 
   const statusNote = (() => {
     switch (b.status) {
@@ -211,6 +224,33 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
           }
         >
           This booking was rescheduled. Payment and notes moved with it.
+        </InlineAlert>
+      )}
+
+      {request && (
+        <InlineAlert
+          className="mb-6"
+          title={isTutor ? `${people.counterpart} asked to move this lesson to ${formatDateTime(request.startUtc, tz)}` : `You asked to move this lesson to ${formatDateTime(request.startUtc, tz)}`}
+          action={
+            isTutor ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => void answer(true)} data-accept-new-time>
+                  Accept new time
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => void answer(false)}>
+                  Keep current time
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => void answer(false)}>
+                Withdraw request
+              </Button>
+            )
+          }
+        >
+          {isTutor
+            ? "The lesson stays at the current time until you answer. If you accept, it moves and they're told."
+            : `Waiting for ${tutorFirst}. Your lesson stays at the current time until they accept.`}
         </InlineAlert>
       )}
 
