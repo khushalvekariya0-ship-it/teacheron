@@ -6,6 +6,7 @@ import { inflateRawSync } from "node:zlib";
 import sharp from "sharp";
 import jsQR from "jsqr";
 import { scanContact, type ContactKind } from "@/lib/domain/contact";
+import { qrKinds } from "@/lib/domain/qr";
 import { PRIVATE_BUCKET, signedDownload } from "./media";
 import { supabaseAdmin } from "./supabase";
 import { db } from "./db";
@@ -67,18 +68,8 @@ type ReadCtx = { qr: boolean; qrKinds: Set<ContactKind> };
 
 /* ─── QR codes ──────────────────────────────────────────────────────────────── */
 
-// Links that open a call, message, email, chat app or payment straight away.
-const CONTACT_SCHEME = /^(?:whatsapp|tg|telegram|instagram|fb|fb-messenger|skype|viber|weixin|line|imo|upi|paytmmp|phonepe|gpay|tez):/i;
-
-/** Contact details in what a QR code holds. */
-export function qrKinds(payload: string): ContactKind[] {
-  const kinds = new Set<ContactKind>(scanContact(payload, "file").kinds);
-  if (/^(?:tel|sms|smsto|mms|facetime):/i.test(payload)) kinds.add("phone");
-  if (/^(?:mailto|matmsg):/i.test(payload)) kinds.add("email");
-  if (CONTACT_SCHEME.test(payload)) kinds.add("social");
-  if (/^(?:BEGIN:VCARD|MECARD:)/i.test(payload) && /\b(?:TEL|EMAIL|N|FN)[;:]/i.test(payload) && !kinds.size) kinds.add("social");
-  return [...kinds];
-}
+// What a QR code holds is judged by the shared rules (src/lib/domain/qr.ts; the browser uses them too).
+export { qrKinds };
 
 /** The texts of QR codes in an image (one pass at a size jsQR handles well). */
 async function qrTexts(open: () => ReturnType<typeof sharp>): Promise<string[]> {

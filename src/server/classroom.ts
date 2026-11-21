@@ -13,6 +13,7 @@ import { broadcastToRoom, closeRoom, mintToken, removeFromRoom, setPublishAllowe
 import { contactSafety } from "./safety-settings";
 import { fileStamp, signedDownload, storePrivateBytes } from "./media";
 import { checkImageBytes, checkScreenFrame } from "./scan";
+import { qrKinds } from "@/lib/domain/qr";
 import { readTextWithAI } from "./ai-read";
 import { emailReady, escapeHtml, sendEmail } from "./email";
 import { alertStaff, shortName } from "./staff-alerts";
@@ -375,7 +376,7 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
     s.removeAt > 0 && strikes >= s.removeAt ? "removed" : s.muteAt > 0 && strikes >= s.muteAt ? "muted" : strikes >= s.strongWarningAt ? "strong" : "warning";
   const removed = level === "removed";
   // For the server log (no names or words): which check caught what, and where the ladder is.
-  console.info(`[class-safety] ${source} caught ${kinds.join("+")} · ${strikes} (${level}) · ${lesson.booking.id}`);
+  console.info(`[class-safety] ${source} caught ${kinds.join("+")} · ${roleOf(user, lesson) ?? "?"} · ${strikes} (${level}) · ${lesson.booking.id}`);
   const role = roleOf(user, lesson);
   const name = role ? metaFor(user, lesson, role).name : user.firstName;
   const identity = `u-${user.id}`;
@@ -544,7 +545,7 @@ async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: bool
 }
 
 /** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
-export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "", written: ("email" | "social")[] = []) {
+export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "", written: ("email" | "social" | "link")[] = [], qrText = "", seenText = "") {
   requireRole(user, lesson);
   if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
   const s = await contactSafety();
@@ -560,6 +561,10 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
   // Digits the person's own browser read in their handwriting (whiteboard, shared screen): TutorLink's rules decide on them too.
   const digits = handwriting.replace(/\?/g, "");
   for (const k of written) if (!read.kinds.includes(k)) read.kinds.push(k);
+  // A QR code the person's own browser read on their camera (a WhatsApp, UPI or contact code): what it holds.
+  if (qrText && s.qr) for (const k of qrKinds(qrText)) if (!read.kinds.includes(k)) read.kinds.push(k);
+  // Printed text the person's own browser read on their camera (a phone screen, a printout): the site's rules.
+  if (seenText) for (const k of scanContact(seenText, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
   if (digits.length >= 10) {
     for (const k of scanContact(digits, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
   }

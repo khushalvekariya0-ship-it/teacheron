@@ -4,7 +4,10 @@ import * as React from "react";
 import { Flag, Loader2, ShieldCheck, X } from "lucide-react";
 import { RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import { TOPIC, type SafetyMessage } from "@/lib/classroom";
-import { type ContactKind } from "@/lib/domain/contact";
+import jsQR from "jsqr";
+import { scanContact, type ContactKind } from "@/lib/domain/contact";
+import { qrKinds } from "@/lib/domain/qr";
+import { readTextHere, warmLocalOcr } from "./localOcr";
 import { handwrittenContactsInPicture, judge, numbersInPicture } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +30,7 @@ export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: nu
 /** Sends one safety check to the server. Guests (no account) and network trouble return null. */
 export async function sendSafety(
   bookingId: string,
-  body: { source: SafetyMessage["source"]; kinds?: ContactKind[]; excerpt?: string; image?: string },
+  body: { source: SafetyMessage["source"]; kinds?: ContactKind[]; excerpt?: string; image?: string; qr?: string; text?: string },
   timeoutMs = 30_000,
 ): Promise<SafetyResult | null> {
   const stop = new AbortController();
@@ -434,8 +437,13 @@ export function useVideoCheck({
     let reading = false;
     let lastTextKey = "";
     let lastTextCheck = 0;
+    // Once something was spotted here the camera is going off: nothing more to read.
+    let spotted = false;
+    // The in-browser text reader is loaded as soon as the camera is on, so it's ready when needed.
+    if (source === "camera") void warmLocalOcr();
     const readHere = async () => {
-      if (reading || busy || !video.videoWidth) return;
+      // (Independent of the 20-second server check: a slow server answer never pauses this one.)
+      if (reading || spotted || !video.videoWidth) return;
       const thumb = document.createElement("canvas");
       thumb.width = 48;
       thumb.height = 27;
@@ -458,31 +466,43 @@ export function useVideoCheck({
       reading = true;
       try {
         const frame = ctx.getImageData(0, 0, c.width, c.height);
-        const phone = (await numbersInPicture(frame)).find((n) => judge(n) === "phone");
-        // Emails and usernames too (written or printed): "riley@gmail.com", "insta riley_draws".
-        const lines: string[] = [];
-        const written = phone ? [] : (await handwrittenContactsInPicture(frame, 22, lines)).filter((x) => x.verdict === "contact");
-        // Printed writing held up to the camera (a phone screen, a printout) is read best by the server's OCR:
-        // when a new line of writing appears, that picture goes to the server at once (not only every 20 s).
-        const textKey = lines.map((l) => l.replace(/\s/g, "").length).filter((n) => n >= 5).map((n) => Math.round(n / 4)).sort().join(",");
-        if (!phone && !written.length && source === "camera" && textKey && textKey !== lastTextKey && Date.now() - lastTextCheck > 4000) {
-          lastTextKey = textKey;
-          lastTextCheck = Date.now();
-          busy = true;
-          const res = await sendSafety(bookingId, { source, image: c.toDataURL("image/jpeg", 0.85) });
-          busy = false;
+        // A QR code held up to the camera (a WhatsApp, UPI or contact code on a phone): what it holds.
+        const code = source === "camera" ? jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" }) : null;
+        const qrHit = code?.data ? qrKinds(code.data) : [];
+        // Acted on at once (the camera goes off); the server records it (its own rules decide on what was
+        // read here) and tells the class.
+        const report = async (kinds: ContactKind[], extra: { excerpt?: string; qr?: string; text?: string }) => {
+          spotted = true;
+          const image = c.toDataURL("image/jpeg", 0.75);
+          onSpottedRef.current?.(kinds);
+          const res = await sendSafety(bookingId, { source, image, kinds, ...extra });
           if (res?.found) onFoundRef.current(res);
+        };
+        if (code?.data && qrHit.length) return void (await report(qrHit, { qr: code.data.slice(0, 2000) }));
+        const phone = (await numbersInPicture(frame)).find((n) => judge(n) === "phone");
+        if (phone) return void (await report(["phone"], { excerpt: phone.digits }));
+        // Emails, usernames, UPI IDs and links written by hand: "riley@gmail.com", "insta riley_draws".
+        const lines: string[] = [];
+        const written = (await handwrittenContactsInPicture(frame, 22, lines)).filter((x) => x.verdict === "contact");
+        if (written.length) return void (await report([...new Set(written.map((x) => x.kind))], {}));
+        // Printed writing held up to the camera (a phone screen, a printout): read here by the in-browser text
+        // reader with the same rules as chat (WhatsApp / Instagram / Facebook IDs, links, UPI, emails, numbers).
+        const textKey = lines.map((l) => l.replace(/\s/g, "").length).filter((n) => n >= 5).map((n) => Math.round(n / 4)).sort().join(",");
+        if (source !== "camera" || !textKey) {
+          lastTextKey = "";
           return;
         }
-        if (!textKey) lastTextKey = "";
-        if (phone || written.length) {
-          const kinds: ContactKind[] = phone ? ["phone"] : [...new Set(written.map((x) => x.kind))];
-          const image = c.toDataURL("image/jpeg", 0.75);
-          // Acted on at once (the camera goes off); the server records it and tells the class.
-          onSpottedRef.current?.(kinds);
-          busy = true;
-          const res = await sendSafety(bookingId, { source, image, kinds, ...(phone ? { excerpt: phone.digits } : {}) });
-          busy = false;
+        const text = await readTextHere(c);
+        if (text !== null) {
+          const kinds = scanContact(text, "file").kinds;
+          if (kinds.length) await report(kinds, { text: text.slice(0, 2000) });
+          return;
+        }
+        // The in-browser reader couldn't load: the server reads the picture as soon as new writing appears.
+        if (textKey !== lastTextKey && Date.now() - lastTextCheck > 4000) {
+          lastTextKey = textKey;
+          lastTextCheck = Date.now();
+          const res = await sendSafety(bookingId, { source, image: c.toDataURL("image/jpeg", 0.85) });
           if (res?.found) onFoundRef.current(res);
         }
       } catch (e) {

@@ -392,6 +392,9 @@ function MeetingRoom({
   const [cameraAlert, setCameraAlert] = React.useState<string | null>(null);
   const cameraCaught = React.useCallback(
     (until: number | null) => {
+      // Black at once (the others' screens would otherwise keep the last picture for a moment), then off.
+      const cam = localParticipant.getTrackPublication(Track.Source.Camera)?.track?.mediaStreamTrack;
+      if (cam) cam.enabled = false;
       void localParticipant.setCameraEnabled(false).catch(() => {});
       if (until) setCameraOffUntil((u) => Math.max(u ?? 0, until));
       const time = until ? new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";

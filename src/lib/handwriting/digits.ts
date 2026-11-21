@@ -809,9 +809,13 @@ export async function readCharacter(pixels: Float32Array): Promise<{ char: strin
 /* ─── handwritten emails and usernames ─────────────────────────────────────── */
 
 export interface HandwrittenContact {
-  kind: "email" | "social";
-  /** "contact": block it; "maybe": hold it until the writer says what it is (an app name on its own). */
-  verdict: "contact" | "maybe";
+  /** "social" includes payment (UPI) IDs; "link" is a website address. */
+  kind: "email" | "social" | "link";
+  /**
+   * "contact": block it; "maybe": hold it until the writer says what it is (an app name on its own);
+   * "partial": it may still be being written ("snapch…", "riley@…"): wait until the pen rests.
+   */
+  verdict: "contact" | "maybe" | "partial";
   /** What was read (letters and digits, lower case; "?" for an unclear character). */
   text: string;
 }
@@ -824,7 +828,7 @@ const WORDLIKE_PROVIDERS = ["ymail", "outlook", "proton", "zoho"];
 // Ordinary words (snap, signal, discord, instant) aren't on the list; "insta" is.
 const APPS = ["instagram", "insta", "snapchat", "telegram", "whatsapp", "facebook", "twitter", "wechat", "tiktok"];
 /** Characters the reader mixes up in handwriting, so "gmai1", "9mail" and "whqtsapp" still read right. */
-const ALIKE = ["aq4", "gq9", "il1", "lf", "o0", "s5", "b6", "b8", "t7", "tf", "e3", "z2", "uv"];
+const ALIKE = ["aq4", "gq9", "il1", "lf", "ao0", "au", "s5", "b6", "b8", "t7", "tf", "fp", "e3", "z2", "uv"];
 const same = (c: string, t: string) => c === t || c === "?" || ALIKE.some((k) => k.includes(c) && k.includes(t));
 const LOOKALIKE: Record<string, string> = { "0": "o", "1": "l", i: "l", "5": "s", "2": "z", "4": "a", "7": "t", "3": "e" };
 const plain = (s: string) => [...s].map((c) => LOOKALIKE[c] ?? c).join("");
@@ -871,6 +875,24 @@ const ENDING = /(?:c[o0]m|[i1l]n|c[o0]|net|[o0]rg|edu)$/;
 /** What follows an "@" in an address: a mail provider's name, or an ending like com / in / co / net / org. */
 const domainLike = (rest: string) => [...PROVIDERS, ...WORDLIKE_PROVIDERS].some((p) => holds(rest, p)) || ENDING.test(plain(rest).replace(/\?/g, ""));
 
+// UPI payment handles (what follows the "@" in a UPI ID: riley@okaxis, 9876543210@ybl).
+const UPI_HANDLES = [
+  "okaxis", "okhdfcbank", "okicici", "oksbi", "ybl", "ibl", "axl", "upi", "paytm", "apl", "yapl", "ptyes", "ptsbi", "pthdfc", "ptaxis", "axisbank", "hdfcbank",
+  "icici", "sbi", "kotak", "kmbl", "idfcbank", "ikwik", "freecharge", "jupiteraxis", "fbl", "abfspay", "rapl", "waicici", "wahdfcbank", "wasbi", "waaxis",
+  "airtel", "jio", "postbank", "barodampay", "indus", "federal", "aubank", "yesbank", "slc", "superyes", "naviaxis", "tapicici",
+];
+// Handles that aren't parts of ordinary words, so they count even without the "@" ("riley okaxis", "riley paytm").
+const UPI_WORDS = ["okaxis", "okhdfcbank", "okicici", "oksbi", "paytm", "ybl"];
+const upiAfterAt = (rest: string) => {
+  const r = plain(rest).replace(/\?/g, "");
+  return UPI_HANDLES.some((u) => (u.length >= 5 ? foundAt(rest, u) === 0 : r.startsWith(plain(u))));
+};
+
+/** Ordinary words that come before "gmail" in a sentence, so they're not a username ("check your gmail"). */
+const NOT_A_NAME = new Set(
+  ["an", "my", "your", "the", "our", "his", "her", "their", "this", "that", "open", "check", "send", "write", "use", "new", "using", "with", "from", "into", "and", "for", "via", "any", "same", "old"].map((x) => plain(x)),
+);
+
 /** Contact details in one written line: words split where the writer left a gap. */
 function contactInLine(words: string[]): HandwrittenContact | null {
   const text = words.join(" ");
@@ -878,33 +900,78 @@ function contactInLine(words: string[]): HandwrittenContact | null {
   // An "@" with a name before it and an address after it: riley@gmail.com, r@yahoo.in.
   const at = flat.indexOf("@");
   if (at >= 2 && flat.length - at - 1 >= 3 && domainLike(flat.slice(at + 1))) return { kind: "email", verdict: "contact", text };
-  // A mail provider's name with a username written before it: "riley gmail com", "rileygmail" (not "email address").
-  for (const p of PROVIDERS) if (foundAt(flat, p) >= 3) return { kind: "email", verdict: "contact", text };
+  // A UPI payment ID: riley@okaxis, 98765@ybl, "riley okaxis".
+  if (at >= 2 && flat.length - at - 1 >= 3 && upiAfterAt(flat.slice(at + 1))) return { kind: "social", verdict: "contact", text };
+  // (Short names exactly: "paytm" one letter off is too easily something else, like "an em…" misread.)
+  for (const u of UPI_WORDS) {
+    const at3 = u.length >= 6 ? foundAt(flat, u) : plain(flat).replace(/\?/g, "").indexOf(plain(u));
+    if (at3 >= 3) return { kind: "social", verdict: "contact", text };
+  }
+  // A website link: "www.riley.com", "https …", "rileytutor.com" (dots aren't read, so "rileytutorcom").
+  for (let i = 0; i < words.length; i++) {
+    const p = plain(words[i]).replace(/\?/g, "");
+    const next = plain(words.slice(i + 1, i + 3).join("")).replace(/\?/g, "");
+    if (/^www/.test(p) && (p.length >= 6 || next.length >= 3)) return { kind: "link", verdict: "contact", text };
+    if (/^https?/.test(p) && (p.length >= 8 || next.length >= 3)) return { kind: "link", verdict: "contact", text };
+  }
+  const pf = plain(flat).replace(/\?/g, "");
+  if (/[a-z0-9]{4,}com$/.test(pf) && !/(?:sitcom|telecom|intercom)$/.test(pf)) return { kind: "link", verdict: "contact", text };
+  // A mail provider's name with a username written before it: "riley gmail com", "rileygmail" (not "email
+  // address", nor "write an email" where the "e" is read as a "g": a short ordinary word before it isn't a username).
+  for (const p of PROVIDERS) {
+    const i = foundAt(flat, p);
+    if (i < 3) continue;
+    let pos = 0, w = 0;
+    while (w < words.length && pos + words[w].length <= i) pos += words[w++].length;
+    // Written straight onto a username of three letters or more ("rileygmail"; "angmail" is "an email" misread).
+    const glued = i - pos >= 3;
+    const ending = /^(?:c[o0]m|[i1l]n|c[o0])/.test(plain(flat.slice(i + p.length)).replace(/\?/g, ""));
+    const before = (words[w - 1] ?? "").replace(/\?/g, "");
+    if (glued || ending) return { kind: "email", verdict: "contact", text };
+    // "riley gmail" with no ".com": could be a username, could be "open gmail" misread: held, and the writer
+    // is asked (nobody else sees it until they say it's fine; moderators get a note if they do).
+    if (before.length >= 3 && !NOT_A_NAME.has(plain(before))) return { kind: "email", verdict: "maybe", text };
+  }
   for (const p of WORDLIKE_PROVIDERS) {
     const i = foundAt(flat, p);
     if (i >= 3 && /^(?:c[o0]m|[i1l]n|c[o0])/.test(plain(flat.slice(i + p.length)))) return { kind: "email", verdict: "contact", text };
   }
   // An app's name with a username next to it ("insta riley_draws", "whatsapp riley", "telegramriley"); on its
-  // own, maybe.
+  // own, maybe. The reader may cut the name itself into pieces ("whq ts ?pp"), so neighbouring pieces are
+  // joined to find it.
   for (let i = 0; i < words.length; i++) {
-    const app = APPS.find((a) => foundAt(words[i], a) === 0);
-    if (!app) continue;
-    const rest = words[i].slice(app.length).replace(/\?/g, "");
-    // "instant", "install", "instance" are words, not "insta".
-    if (app === "insta" && /^[nlbm1ic]/.test(rest)) continue;
-    // Written straight after a long name: "whatsappriley" (not "insta…": "instant" misread is too likely).
-    if (rest.length >= 3) {
-      if (app.length >= 7) return { kind: "social", verdict: "contact", text };
-      continue;
+    let joined = "";
+    for (let j = i; j < Math.min(words.length, i + 5); j++) {
+      joined += words[j];
+      const app = APPS.find((a) => foundAt(joined, a) === 0 && (j === i || joined.replace(/\?/g, "").length <= a.length + 1));
+      if (!app) continue;
+      const rest = joined.slice(app.length).replace(/\?/g, "");
+      // "instant", "install", "instance" are words, not "insta".
+      if (app === "insta" && /^[nlbm1ic]/.test(rest)) break;
+      // Written straight after a long name: "whatsappriley" (not "insta…": "instant" misread is too likely).
+      if (rest.length >= 3) {
+        if (app.length >= 7 && j === i) return { kind: "social", verdict: "contact", text };
+        break;
+      }
+      if (rest.length === 2 && app.length < 7) break;
+      // The username after it, which the reader may have cut into pieces too ("whatsapp r 1ey").
+      const next = words.slice(j + 1, j + 4).join("").replace(/\?/g, "");
+      // "insta nt", "insta ll": "instant" and "install" with a gap in them.
+      if (app === "insta" && /^[nlbm1ic]/.test(next)) break;
+      if (next.length >= 3) return { kind: "social", verdict: "contact", text };
+      return { kind: "social", verdict: "maybe", text };
     }
-    if (rest.length === 2 && app.length < 7) continue;
-    // The username after it, which the reader may have cut into pieces ("whatsapp r 1ey").
-    const next = words.slice(i + 1, i + 4).join("").replace(/\?/g, "");
-    // "insta nt", "insta ll": "instant" and "install" with a gap in them.
-    if (app === "insta" && /^[nlbm1ic]/.test(next)) continue;
-    if (next.length >= 3) return { kind: "social", verdict: "contact", text };
-    return { kind: "social", verdict: "maybe", text };
   }
+  // "fb riley": the short name only as a word of its own, with a username after it.
+  for (let i = 0; i + 1 < words.length; i++) {
+    if (plain(words[i]) === "fb" && words.slice(i + 1, i + 4).join("").replace(/\?/g, "").length >= 3) return { kind: "social", verdict: "contact", text };
+  }
+  // Still being written: the last word could be the start of an app's, a mail provider's or a UPI name, or an
+  // address is being written after an "@". The board waits for the pen to rest before showing it.
+  const last = plain(words[words.length - 1] ?? "").replace(/\?/g, "");
+  const begins = [...APPS, ...PROVIDERS, ...UPI_WORDS, "www", "https"];
+  if (last.length >= 3 && begins.some((t) => last.length < t.length && [...last].every((ch, k) => same(ch, t[k])))) return { kind: "social", verdict: "partial", text };
+  if (/@[a-z0-9?]{0,5}$/.test(flat)) return { kind: "email", verdict: "partial", text };
   return null;
 }
 
@@ -915,8 +982,31 @@ async function linesOfText(glyphs: Glyph[]): Promise<string[][]> {
   const sizes = split.map((c) => Math.max(w(c), h(c))).sort((a, b) => a - b);
   const typical = sizes[Math.floor(sizes.length / 2)] ?? 0;
   const chars = split.filter((c) => Math.max(w(c), h(c)) >= 0.2 * typical && Math.max(w(c), h(c)) <= 3 * typical);
+  // Words on one line are one line ("insta riley"), even where the space between words is wider than rows()
+  // chains letters across: rows side by side on the same line are joined, left to right.
+  const heightOf = (r: Glyph[]) => r.map((c) => h(c)).sort((a, b) => a - b)[Math.floor(r.length / 2)] || 1;
+  const midOf = (b: Box) => (b.y0 + b.y1) / 2;
+  const lines: { chars: Glyph[]; last: Box; size: number }[] = [];
+  for (const row of rows(chars).sort((a, b) => a[0].x0 - b[0].x0)) {
+    const box = row.reduce<Box>((a, c) => join(a, c), row[0]);
+    const size = heightOf(row);
+    let into: (typeof lines)[number] | null = null, best = Infinity;
+    for (const l of lines) {
+      const s = Math.max(size, l.size);
+      const gap = box.x0 - l.last.x1;
+      if (gap >= -0.3 * s && gap <= 4 * s && Math.abs(midOf(box) - midOf(l.last)) <= 0.6 * s && gap < best) {
+        best = gap;
+        into = l;
+      }
+    }
+    if (into) {
+      into.chars.push(...row);
+      into.last = box;
+      into.size = Math.max(into.size, size);
+    } else lines.push({ chars: [...row], last: box, size });
+  }
   const out: string[][] = [];
-  for (const row of rows(chars)) {
+  for (const row of lines.map((l) => l.chars.sort((a, b) => a.x0 - b.x0))) {
     if (row.length < 3) continue;
     const size = row.map((c) => h(c)).sort((a, b) => a - b)[Math.floor(row.length / 2)] || 1;
     const words: string[] = [];
@@ -927,7 +1017,8 @@ async function linesOfText(glyphs: Glyph[]): Promise<string[][]> {
         words.push(word);
         word = "";
       }
-      if (c.kind !== "ink") continue;
+      // In words a cross is a "t" and an "×" an "x", not maths signs; a lone flat line ("-", "_") is skipped.
+      if (c.kind === "dash" || c.kind === "equals") continue;
       const r = await rememberedRead("char", c.mask, () => readCharacter(mnistPixels(c.mask)));
       // An "@" only when the reading is sure: a quick "a" can look like one.
       const ch = r.char === "@" && r.p < 0.8 ? "a" : r.char;

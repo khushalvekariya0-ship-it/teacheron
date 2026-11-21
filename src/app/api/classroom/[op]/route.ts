@@ -168,7 +168,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const v = z
           .object({
             id, source: z.enum(["speech", "board", "screen", "camera"]), kinds: z.array(z.enum(["phone", "email", "social", "link", "request", "address"])).max(6).optional(),
-            excerpt: z.string().max(600).optional(), image: z.string().max(4_500_000).optional(),
+            excerpt: z.string().max(600).optional(), image: z.string().max(4_500_000).optional(), qr: z.string().max(2000).optional(), text: z.string().max(4000).optional(),
           })
           .safeParse(body);
         if (!v.success) return json({ ok: false, error: "That safety check wasn't valid." }, { status: 400 });
@@ -184,9 +184,10 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
         // A handwritten number the person's own browser read (on their drawing or shared screen): the site's rules decide.
         const handwriting = (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40);
-        // An email or a username the browser read in the person's handwriting (it can only make things stricter).
-        const written = (v.data.kinds ?? []).filter((k): k is "email" | "social" => k === "email" || k === "social");
-        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting, written)) });
+        // An email, username or link the browser read in the person's handwriting, and what a QR code the browser
+        // read holds (judged here by the site's own rules): they can only make things stricter.
+        const written = (v.data.kinds ?? []).filter((k): k is "email" | "social" | "link" => k === "email" || k === "social" || k === "link");
+        return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting, written, v.data.qr ?? "", v.data.text ?? "")) });
       }
       case "screen-frame": {
         // One frame of the person's shared screen, checked before the others see it (the page sends out only

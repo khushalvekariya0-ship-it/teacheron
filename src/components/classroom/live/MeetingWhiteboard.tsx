@@ -590,7 +590,7 @@ export function MeetingWhiteboard({
       const near = nearNew(mine, (s) => batch.has(s.id), canvas?.width || 1280, canvas?.height || 800);
       // A handwritten phone number this drawing adds (one already on the board before doesn't count again).
       let local: string | null = null;
-      let written: "email" | "social" | null = null;
+      let written: "email" | "social" | "link" | null = null;
       let unsure: string | null = null;
       let growing = false;
       try {
@@ -616,7 +616,11 @@ export function MeetingWhiteboard({
             written = sure.kind;
             unsure = null;
             growing = false;
-          } else if (!unsure) unsure = freshContacts.find((c) => c.verdict === "maybe")?.text ?? null;
+          } else {
+            if (!unsure) unsure = freshContacts.find((c) => c.verdict === "maybe")?.text ?? null;
+            // An app's or an email's name still being written ("snapch…", "riley@…"): wait for the pen to rest.
+            if (!unsure && freshContacts.some((c) => c.verdict === "partial")) growing = true;
+          }
         }
       } catch (e) {
         console.warn("[whiteboard] handwriting check", e);
