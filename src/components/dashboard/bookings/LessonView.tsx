@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarX2, Lock, MessageSquare } from "lucide-react";
 import type { Booking, User } from "@/lib/types";
-import { availableTransitions, openRescheduleRequest, startMs, STATUS_META } from "@/lib/booking";
+import { availableTransitions, openRescheduleRequest, openTutorMove, seriesOf, startMs, STATUS_META } from "@/lib/booking";
 import { actorFor, canViewBooking } from "@/lib/permissions";
 import { useApp } from "@/lib/store";
 import { useNow, useSession, useViewerTimezone } from "@/lib/store/hooks";
@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState, InlineAlert } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { BookingStatusBadge } from "@/components/domain/Badges";
-import { CancelDialog, DeclineDialog, RescheduleDialog, TransitionDialog, type ConfirmableTransition } from "./BookingDialogs";
+import { CancelDialog, DeclineDialog, RefuseMoveDialog, RescheduleDialog, TransitionDialog, type ConfirmableTransition } from "./BookingDialogs";
+import { LessonSeriesCard } from "./LessonSeries";
 import { buildLessonActions, LessonActionsPanel, StickyActionBar, type LessonDialog } from "./LessonActions";
 import { LessonDetails } from "./LessonDetails";
 import { LessonLearning } from "./LessonLearning";
@@ -81,6 +82,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
   const conversations = useApp((s) => s.conversations);
   const transition = useApp((s) => s.transitionBooking);
   const answerRequest = useApp((s) => s.answerRescheduleRequest);
+  const answerMove = useApp((s) => s.answerTutorMove);
   const startConversation = useApp((s) => s.startConversation);
   const contactLearner = useApp((s) => s.contactLearner);
   const payOnline = useApp((s) => s.payOnline);
@@ -137,19 +139,28 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
     router.push(`/dashboard/messages?c=${res.data.id}`);
   };
 
-  // A request for a new time, asked inside the late window: the tutor accepts or keeps the current time, and
-  // the person who asked can withdraw it.
+  // A request for a new time: the student's (asked inside the late window) or the time the tutor suggested back.
+  // The other side accepts or keeps the current time; the side who asked can withdraw it.
   const request = openRescheduleRequest(b, now);
+  const iAsked = !!request && (request.byBooker ? actor === "booker" : isTutor);
   const answer = async (yes: boolean) => {
     const res = await answerRequest(b.id, yes);
     if (!res.ok) return void toast.error(res.error);
     if (yes && res.data.id !== b.id) {
       toast.success("New time accepted", { description: `${formatDateTime(res.data.startUtc, tz)} · ${people.counterpart} has been notified.` });
       router.push(`/dashboard/bookings/${res.data.id}`);
-    } else toast.success(isTutor ? "Current time kept" : "Request withdrawn", { description: `${people.counterpart} has been notified.` });
+    } else toast.success(iAsked ? (isTutor ? "Suggestion withdrawn" : "Request withdrawn") : "Current time kept", { description: `${people.counterpart} has been notified.` });
   };
+  // The tutor moved the lesson on their own: the person who booked says whether the new time works.
+  const tutorMove = actor === "booker" ? openTutorMove(b, now) : null;
+  const moveOk = async () => {
+    const res = await answerMove(b.id, true);
+    if (!res.ok) return void toast.error(res.error);
+    toast.success("Thanks — the new time is confirmed", { description: `${tutorFirst} has been told.` });
+  };
+  const series = seriesOf(b);
 
-  const { primary, items } = buildLessonActions(b, actor, now, policy, { onAccept: accept, onReview: goToReview, onPayAgain: canPayAgain ? payAgain : undefined, paying, onAnswerRequest: answer });
+  const { primary, items } = buildLessonActions(b, actor, now, policy, { onAccept: accept, onReview: goToReview, onPayAgain: canPayAgain ? payAgain : undefined, paying, onAnswerRequest: answer, onMoveOk: moveOk });
 
   const statusNote = (() => {
     switch (b.status) {
@@ -186,6 +197,7 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
           <div className="flex flex-wrap items-center gap-2">
             <BookingStatusBadge status={b.status} />
             {b.type === "trial" && <Badge tone="outline" size="sm">Trial</Badge>}
+            {series && <Badge tone="outline" size="sm">Weekly · {series.n} of {series.of}</Badge>}
             <span className="font-mono text-[11.5px] tracking-wide text-muted">#{bookingRef(b.id)}</span>
           </div>
         }
@@ -230,28 +242,66 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
       {request && (
         <InlineAlert
           className="mb-6"
-          title={isTutor ? `${people.counterpart} asked to move this lesson to ${formatDateTime(request.startUtc, tz)}` : `You asked to move this lesson to ${formatDateTime(request.startUtc, tz)}`}
+          title={
+            request.byBooker
+              ? isTutor ? `${people.counterpart} asked to move this lesson to ${formatDateTime(request.startUtc, tz)}` : `You asked to move this lesson to ${formatDateTime(request.startUtc, tz)}`
+              : isTutor ? `You suggested ${formatDateTime(request.startUtc, tz)} instead` : `${tutorFirst} suggested ${formatDateTime(request.startUtc, tz)} instead`
+          }
           action={
-            isTutor ? (
+            iAsked ? (
+              <Button size="sm" variant="outline" onClick={() => void answer(false)}>
+                {isTutor ? "Withdraw suggestion" : "Withdraw request"}
+              </Button>
+            ) : (
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => void answer(true)} data-accept-new-time>
                   Accept new time
                 </Button>
+                {isTutor && (
+                  <Button size="sm" variant="outline" onClick={() => setDialog("suggest")} data-suggest-time>
+                    Suggest another time
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => void answer(false)}>
                   Keep current time
                 </Button>
               </div>
-            ) : (
-              <Button size="sm" variant="outline" onClick={() => void answer(false)}>
-                Withdraw request
-              </Button>
             )
           }
         >
-          {isTutor
-            ? "The lesson stays at the current time until you answer. If you accept, it moves and they're told."
-            : `Waiting for ${tutorFirst}. Your lesson stays at the current time until they accept.`}
+          {request.byBooker
+            ? isTutor
+              ? "The lesson stays at the current time until you answer. Accept it, suggest a time that suits you better, or keep the current time."
+              : `Waiting for ${tutorFirst}. Your lesson stays at the current time until they accept.`
+            : isTutor
+              ? `Waiting for ${people.counterpart}. The lesson stays at the current time until they accept.`
+              : `${tutorFirst} can't do the time you asked for. Accept this one and the lesson moves; or keep the current time (${formatDateTime(b.startUtc, tz)}).`}
         </InlineAlert>
+      )}
+
+      {tutorMove && (
+        <InlineAlert
+          className="mb-6"
+          tone="warning"
+          title={`${tutorFirst} moved this lesson from ${formatDateTime(tutorMove.fromUtc, tz)} to ${formatDateTime(b.startUtc, tz)}`}
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => void moveOk()} data-move-ok>
+                This time works
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setDialog("refuse-move")} data-refuse-move>
+                It doesn&apos;t work
+              </Button>
+            </div>
+          }
+        >
+          Does the new time work for you? If it doesn&apos;t, you can cancel the lesson and get a full refund.
+        </InlineAlert>
+      )}
+      {isTutor && openTutorMove(b, now) && (
+        <p className="mb-6 rounded-lg border border-line bg-canvas px-4 py-3 text-[13px] text-muted">
+          You moved this lesson. {people.counterpart} is asked to confirm the new time; if it doesn&apos;t work for them, they can cancel it with a full refund.
+        </p>
       )}
 
       {/* Phone: live card → actions → everything else. Desktop: content column + actions/details column. */}
@@ -279,6 +329,12 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
               {review && <ReviewDisplay review={review} isTutor={isTutor} tz={tz} />}
               {dispute && <DisputeCard dispute={dispute} myId={me.id} tz={tz} currency={b.currency} />}
               {canDispute && <ReportProblemCard onReport={() => setDialog("dispute")} policy={policy} />}
+            </div>
+          )}
+
+          {series && (
+            <div className="order-3 min-w-0">
+              <LessonSeriesCard booking={b} isTutor={isTutor} tz={tz} counterpart={people.counterpart} />
             </div>
           )}
 
@@ -343,8 +399,22 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
           tutor={people.tutor}
           open={dialog === "reschedule"}
           onOpenChange={(o) => setDialog(o ? "reschedule" : null)}
-          onDone={(next) => router.push(`/dashboard/bookings/${next.id}`)}
+          onDone={(next) => next.id !== b.id && router.push(`/dashboard/bookings/${next.id}`)}
         />
+      )}
+      {people.tutor && isTutor && request?.byBooker && (
+        <RescheduleDialog
+          booking={b}
+          actor={actor}
+          tutor={people.tutor}
+          open={dialog === "suggest"}
+          onOpenChange={(o) => setDialog(o ? "suggest" : null)}
+          onDone={() => undefined}
+          suggest={{ counterpart: people.counterpart, askedUtc: request.startUtc }}
+        />
+      )}
+      {tutorMove && (
+        <RefuseMoveDialog booking={b} open={dialog === "refuse-move"} onOpenChange={(o) => setDialog(o ? "refuse-move" : null)} tutorName={tutorFirst} fromUtc={tutorMove.fromUtc} />
       )}
       <TransitionDialog booking={b} to={confirmTo} onOpenChange={(o) => !o && setDialog(null)} names={names} />
       <DisputeDialog booking={b} open={dialog === "dispute"} onOpenChange={(o) => setDialog(o ? "dispute" : null)} isTutor={isTutor} />

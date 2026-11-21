@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check, Clock, Video, X } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import type { Actor } from "@/lib/booking";
-import { canTransition, meetingLinkVisible } from "@/lib/booking";
+import { canTransition, meetingLinkVisible, seriesOf } from "@/lib/booking";
 import { useApp } from "@/lib/store";
 import { subjectName, MODE_LABEL } from "@/lib/data/catalog";
 import { formatDuration, formatWeekdayDate } from "@/lib/format";
@@ -34,6 +34,7 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
   const subject = subjectName(b.subject);
   const href = `/dashboard/bookings/${b.id}`;
   const isNew = useFreshLinks().has(href);
+  const series = seriesOf(b);
 
   const accept = async () => {
     const res = await transition(b.id, "confirmed");
@@ -88,6 +89,7 @@ export function BookingRow({ booking: b, people, actor, now, tz }: { booking: Bo
             <p className={cn("truncate text-[15px] font-semibold tracking-tight text-ink", muted && "text-ink-2")}>{subject}</p>
             {isNew && <Badge tone="accent" size="sm">New</Badge>}
             {b.type === "trial" && <Badge tone="outline" size="sm">Trial</Badge>}
+            {series && <Badge tone="outline" size="sm">Weekly {series.n}/{series.of}</Badge>}
             <BookingStatusBadge status={b.status} />
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-muted">

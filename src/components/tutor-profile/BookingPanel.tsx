@@ -175,8 +175,9 @@ export function BookingPanel({
               </Link>
               .
             </p>
-            <Button variant="ghost" className="w-full" onClick={onCheckout} disabled={booking}>
-              Other ways to pay
+            {/* The checkout also books the same time every week (regular lessons). */}
+            <Button variant="ghost" className="w-full" onClick={onCheckout} disabled={booking} data-book-weekly={type === "regular" ? "" : undefined}>
+              {type === "regular" ? "Book weekly, or pay another way" : "Other ways to pay"}
             </Button>
           </>
         ) : (

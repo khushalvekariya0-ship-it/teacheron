@@ -48,6 +48,18 @@ export function zonedToUtc(year: number, month: number, day: number, hour: numbe
   return new Date(ts);
 }
 
+/**
+ * The same wall-clock time in `tz` once a week, `count` times from `startUtc` (included): weekly lessons stay at
+ * the tutor's local time when the clocks change.
+ */
+export function weeklyStarts(startUtc: string, tz: string, count: number): string[] {
+  const p = zonedParts(new Date(startUtc), tz);
+  return Array.from({ length: count }, (_, k) => {
+    const d = new Date(Date.UTC(p.year, p.month - 1, p.day + 7 * k));
+    return zonedToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), p.hour, p.minute, tz).toISOString();
+  });
+}
+
 /** YYYY-MM-DD for a date as seen in `tz`. */
 export function dateKey(date: Date, tz: string): string {
   const p = zonedParts(date, tz);

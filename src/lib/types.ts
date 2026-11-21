@@ -403,12 +403,19 @@ export interface BookingEvent {
   to: BookingStatus;
   note?: string;
   /**
-   * A request to move the lesson, made inside the late window (the tutor accepts or keeps the current time):
-   * "asked" carries the proposed start; "accepted" / "declined" / "withdrawn" close it. The lesson's own
-   * status doesn't change while it's open.
+   * A request to move the lesson: asked by the person who booked inside the late window, or another time the
+   * tutor suggests in reply. "asked" carries the proposed start; "accepted" / "declined" / "withdrawn" close it.
+   * The lesson's own status doesn't change while it's open.
    */
   proposal?: "asked" | "accepted" | "declined" | "withdrawn";
   proposedStartUtc?: ISODate;
+  /** On a lesson's first entry: booked as lesson `n` of `of` weekly lessons (same day and time each week). */
+  series?: { id: ID; n: number; of: number };
+  /** On a lesson's first entry: the tutor moved it on their own, from `previousStartUtc`. */
+  movedByTutor?: boolean;
+  previousStartUtc?: ISODate;
+  /** The person who booked said the tutor's new time works for them. */
+  moveAnswer?: "ok";
 }
 
 export interface Booking {

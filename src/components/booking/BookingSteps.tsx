@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CalendarDays, Clock3, CreditCard, Info, MapPin, Monitor, Smartphone, Tag, UserRound, Users, Video, Wallet, X } from "lucide-react";
+import { CalendarDays, Clock3, CreditCard, Info, MapPin, Monitor, Repeat, Smartphone, Tag, UserRound, Users, Video, Wallet, X } from "lucide-react";
 import type { Booking, BookingType, Child, PayMethod, TeachingMode, Tutor, User } from "@/lib/types";
 import { GRADE_LABEL, subjectName } from "@/lib/data/catalog";
-import { formatDuration, formatTime, formatWeekdayDate, sessionPrice, tzAbbrev } from "@/lib/format";
+import { formatDateTime, formatDuration, formatTime, formatWeekdayDate, sessionPrice, tzAbbrev } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { motion } from "@/components/motion";
@@ -16,6 +16,9 @@ import { InlineAlert } from "@/components/ui/States";
 import { BookingCalendar } from "@/components/domain/BookingCalendar";
 import { PAY_METHOD_LABEL } from "@/lib/data/platform";
 import { useApp } from "@/lib/store";
+import { useNow, useSlotBookings } from "@/lib/store/hooks";
+import { MAX_WEEKLY_LESSONS } from "@/lib/booking";
+import { generateSlots, weeklyStarts } from "@/lib/time";
 
 export const NOTES_MAX = 500;
 
@@ -27,7 +30,37 @@ export interface Draft {
   childId: string;
   notes: string;
   startUtc: string | null;
+  /** Regular lessons: the same day and time this many weeks in a row (1 = just this lesson). */
+  repeatWeeks: number;
 }
+
+export interface WeekOption {
+  startUtc: string;
+  free: boolean;
+  /** Further ahead than the tutor takes bookings. */
+  tooFar: boolean;
+}
+
+/**
+ * The chosen time in each of the next weeks (same day and time in the tutor's time zone) and whether it's free,
+ * with the same checks the booking runs: the tutor's hours, notice, advance window and other lessons.
+ */
+export function useWeeklyPlan(tutor: Tutor, startUtc: string | null, minutes: number): WeekOption[] {
+  const bookings = useSlotBookings();
+  const now = useNow(60_000);
+  return React.useMemo(() => {
+    if (!startUtc) return [];
+    const open = new Set(generateSlots(tutor, { durationMin: minutes, viewerTz: tutor.timezone, bookings, now, days: tutor.rules.maxAdvanceDays }).map((s) => s.startUtc));
+    const latest = now + tutor.rules.maxAdvanceDays * 86_400_000;
+    return weeklyStarts(startUtc, tutor.timezone, MAX_WEEKLY_LESSONS).map((s, k) => ({ startUtc: s, free: k === 0 || open.has(s), tooFar: new Date(s).getTime() > latest }));
+  }, [tutor, startUtc, minutes, bookings, now]);
+}
+
+/** How many weeks in a row, from the chosen one, are free (at least 1). */
+export const freeWeeksInARow = (plan: WeekOption[]) => {
+  const i = plan.findIndex((w) => !w.free);
+  return Math.max(1, i < 0 ? plan.length : i);
+};
 
 export function lessonMinutes(tutor: Tutor, d: Pick<Draft, "type" | "duration">): number {
   return d.type === "trial" ? tutor.trial.durationMin : d.duration;
@@ -265,11 +298,15 @@ export function ReviewStep({
   agree,
   onAgree,
   agreeError,
+  weeks,
+  onWeeks,
+  plan,
 }: {
   tutor: Tutor;
   draft: Draft;
   tz: string;
   learnerName: string;
+  /** Every lesson together (all weeks). */
   subtotal: number;
   discount: number;
   couponCode: string | null;
@@ -287,8 +324,16 @@ export function ReviewStep({
   agree: boolean;
   onAgree: (v: boolean) => void;
   agreeError: boolean;
+  /** Weekly lessons (regular lessons only): how many weeks, and each week's time and whether it's free. */
+  weeks: number;
+  onWeeks: (n: number) => void;
+  plan: WeekOption[];
 }) {
   const paymentsEnabled = useApp((s) => s.config.paymentsEnabled);
+  const canRepeat = draft.type === "regular" && plan.length > 0;
+  const inARow = freeWeeksInARow(plan);
+  const blocked = plan[inARow];
+  const single = lessonPrice(tutor, draft);
   const [code, setCode] = React.useState("");
   const minutes = lessonMinutes(tutor, draft);
   const total = Math.max(0, subtotal - discount);
@@ -313,6 +358,7 @@ export function ReviewStep({
           <span className="block font-normal text-muted">
             {formatTime(start, tz)} – {formatTime(end, tz)} {tzAbbrev(tz, new Date(start))} · {formatDuration(minutes)}
           </span>
+          {weeks > 1 && <span className="block font-normal text-muted">Then every week · {weeks} lessons</span>}
         </SummaryRow>
         <SummaryRow icon={draft.mode === "online" ? <Monitor /> : <MapPin />} label="Format">
           {draft.mode === "online" ? "Online" : "In person"}
@@ -322,6 +368,52 @@ export function ReviewStep({
         </SummaryRow>
       </dl>
 
+      {canRepeat && (
+        <section aria-labelledby="repeat-heading" className="rounded-xl border border-line px-4 py-3.5" data-repeat-weekly>
+          <h3 id="repeat-heading" className="flex items-center gap-2 text-sm font-medium text-ink">
+            <Repeat className="size-4 text-subtle" aria-hidden /> Repeat every week
+          </h3>
+          <p className="mt-0.5 text-[13px] leading-snug text-muted">Book the same day and time for the next weeks in one go. Each lesson can still be moved or cancelled on its own.</p>
+          {inARow > 1 ? (
+            <div role="radiogroup" aria-labelledby="repeat-heading" className="mt-3 flex flex-wrap gap-1.5">
+              {Array.from({ length: inARow }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={weeks === n}
+                  data-weeks={n}
+                  onClick={() => onWeeks(n)}
+                  className={cn(
+                    "h-8 rounded-md border px-3 text-[13px] font-medium transition-colors",
+                    weeks === n ? "border-ink bg-ink text-surface" : "border-line text-ink-2 hover:border-ink hover:text-ink",
+                  )}
+                >
+                  {n === 1 ? "Just this lesson" : `${n} weeks`}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {weeks > 1 && (
+            <ol className="mt-3 grid gap-1 text-[13px] sm:grid-cols-2" aria-label="Your weekly lessons">
+              {plan.slice(0, weeks).map((w, k) => (
+                <li key={w.startUtc} className="flex items-center gap-2 tabular-nums text-ink-2">
+                  <span className="w-5 font-mono text-[11.5px] text-muted">{k + 1}.</span>
+                  {formatDateTime(w.startUtc, tz)}
+                </li>
+              ))}
+            </ol>
+          )}
+          {blocked && (
+            <p className="mt-2.5 text-[12.5px] leading-snug text-muted">
+              {inARow === 1 ? "The same time next week" : `Week ${inARow + 1} (${formatWeekdayDate(blocked.startUtc, tz)})`}{" "}
+              {blocked.tooFar ? `is further ahead than ${tutor.firstName} takes bookings (${tutor.rules.maxAdvanceDays} days)` : "isn't free"}
+              {inARow === 1 ? ", so this time can only be booked once. Pick another time to book weekly lessons." : `, so up to ${inARow} weeks in a row can be booked at this time.`}
+            </p>
+          )}
+        </section>
+      )}
+
       <section aria-labelledby="price-heading" className="rounded-xl border border-line">
         <h3 id="price-heading" className="sr-only">
           Price
@@ -330,13 +422,14 @@ export function ReviewStep({
           <div className="flex justify-between">
             <span className="text-muted">
               {draft.type === "trial" ? `Trial lesson (${formatDuration(minutes)})` : `${formatDuration(minutes)} at ${formatMoney(tutor.hourlyRateCents, tutor.currency)}/hr`}
+              {weeks > 1 && <> · {weeks} lessons × {formatMoney(single, currency)}</>}
             </span>
             <span className="tabular-nums text-ink">{subtotal === 0 ? "Free" : formatMoney(subtotal, currency)}</span>
           </div>
           {discount > 0 && couponCode && (
             <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-success">
-                <Tag className="size-3.5" aria-hidden /> {couponCode}
+                <Tag className="size-3.5" aria-hidden /> {couponCode}{weeks > 1 && <span className="text-muted">(first lesson)</span>}
                 <button type="button" onClick={onRemoveCoupon} className="grid size-5 place-items-center rounded text-muted hover:bg-sunken hover:text-ink" aria-label={`Remove code ${couponCode}`}>
                   <X className="size-3" />
                 </button>
@@ -410,19 +503,21 @@ export function ReviewStep({
             <p className="text-[13px] leading-relaxed text-muted">
               {payWith === "wallet"
                 ? instant
-                  ? "You pay when you confirm, and the lesson is booked right away."
-                  : `Your credits are held now and returned in full if ${tutor.firstName} doesn't accept.`
+                  ? weeks > 1 ? `You pay for all ${weeks} lessons when you confirm, and they're booked right away.` : "You pay when you confirm, and the lesson is booked right away."
+                  : weeks > 1 ? `Your credits for all ${weeks} lessons are held now; any lesson ${tutor.firstName} doesn't accept is returned in full.` : `Your credits are held now and returned in full if ${tutor.firstName} doesn't accept.`
                 : !paymentsEnabled
                   ? "Card and UPI payments aren't available yet."
                   : instant
-                    ? "Paid securely with Razorpay. The lesson is booked as soon as you pay."
-                    : `Paid securely with Razorpay. The payment is held now and taken only when ${tutor.firstName} accepts; if the request isn't accepted, the hold is released.`}
+                    ? weeks > 1 ? `Paid securely with Razorpay: one payment for all ${weeks} lessons, booked as soon as you pay.` : "Paid securely with Razorpay. The lesson is booked as soon as you pay."
+                    : weeks > 1
+                      ? `Paid securely with Razorpay: one payment for all ${weeks} lessons, taken now. Any lesson ${tutor.firstName} doesn't accept is refunded in full.`
+                      : `Paid securely with Razorpay. The payment is held now and taken only when ${tutor.firstName} accepts; if the request isn't accepted, the hold is released.`}
             </p>
           </fieldset>
         )}
         {total === 0 && (
           <p className="border-t border-line bg-canvas/60 px-4 py-3.5 text-[13px] text-muted">
-            No payment needed. {instant ? "Your lesson is confirmed right away." : `${tutor.firstName} confirms the request before it's booked.`}
+            No payment needed. {instant ? (weeks > 1 ? "Your lessons are confirmed right away." : "Your lesson is confirmed right away.") : `${tutor.firstName} confirms the request before it's booked.`}
           </p>
         )}
       </section>
@@ -501,6 +596,8 @@ export function SuccessStep({
   meetingLinkMinutes,
   onMessage,
   messaging,
+  weeks = 1,
+  totalCharge,
 }: {
   tutor: Tutor;
   booking: Booking;
@@ -509,9 +606,15 @@ export function SuccessStep({
   meetingLinkMinutes: number;
   onMessage: () => void;
   messaging: boolean;
+  /** Weekly lessons booked together (the first one is `booking`), and what all of them cost. */
+  weeks?: number;
+  totalCharge?: number;
 }) {
   const confirmed = booking.status === "confirmed";
-  const charge = booking.priceCents - booking.discountCents;
+  const charge = totalCharge ?? booking.priceCents - booking.discountCents;
+  const weekly = weeks > 1;
+  // Weekly lessons paid by card / UPI are taken at once, even while they wait for the tutor.
+  const paidNow = confirmed || booking.paymentStatus === "paid";
   const end = new Date(new Date(booking.startUtc).getTime() + booking.durationMin * 60_000).toISOString();
   return (
     <div className="flex flex-col items-center pt-2 text-center">
@@ -520,12 +623,12 @@ export function SuccessStep({
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25, duration: 0.5 }}>
         <h3 className="mt-5 text-xl font-semibold tracking-tight text-ink" role="status">
-          {confirmed ? "Lesson confirmed" : "Request sent"}
+          {weekly ? (confirmed ? `${weeks} weekly lessons booked` : "Weekly lessons requested") : confirmed ? "Lesson confirmed" : "Request sent"}
         </h3>
         <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
           {confirmed
             ? `You're booked with ${tutor.firstName}. You'll find the details in your bookings and notifications.`
-            : `${tutor.firstName} will review your request${tutor.responseTimeHours != null ? `, usually within ${tutor.responseTimeHours} ${tutor.responseTimeHours === 1 ? "hour" : "hours"}` : ""}. ${charge > 0 ? "You're charged only if it's accepted." : ""}`}
+            : `${tutor.firstName} will review your request${tutor.responseTimeHours != null ? `, usually within ${tutor.responseTimeHours} ${tutor.responseTimeHours === 1 ? "hour" : "hours"}` : ""}. ${charge > 0 ? (paidNow ? "Any lesson that isn't accepted is refunded in full." : "You're charged only if it's accepted.") : ""}`}
         </p>
       </motion.div>
 
@@ -535,6 +638,7 @@ export function SuccessStep({
           <span className="block font-normal text-muted">
             {formatTime(booking.startUtc, tz)} – {formatTime(end, tz)} {tzAbbrev(tz, new Date(booking.startUtc))}
           </span>
+          {weekly && <span className="block font-normal text-muted">Then every week · {weeks} lessons</span>}
         </SummaryRow>
         <SummaryRow icon={<Tag />} label="Lesson">
           {booking.type === "trial" ? "Trial" : "Lesson"} · {subjectName(booking.subject)}
@@ -542,7 +646,7 @@ export function SuccessStep({
         <SummaryRow icon={<Users />} label="Learner">
           {learnerName}
         </SummaryRow>
-        <SummaryRow icon={<CreditCard />} label={charge === 0 ? "Payment" : confirmed ? "Paid" : "Authorized"}>
+        <SummaryRow icon={<CreditCard />} label={charge === 0 ? "Payment" : paidNow ? "Paid" : "Authorized"}>
           {charge === 0 ? "No charge" : formatMoney(charge, booking.currency)}
         </SummaryRow>
       </motion.dl>

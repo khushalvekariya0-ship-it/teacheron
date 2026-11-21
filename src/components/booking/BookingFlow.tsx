@@ -18,7 +18,7 @@ import { toast } from "@/components/ui/Toast";
 import { WalletDrawer } from "@/components/wallet/WalletDrawer";
 import { useIsDesktop } from "./useMediaQuery";
 import { ConsentGate, FlowLoading, RoleGate, SignInGate } from "./BookingGates";
-import { DetailsStep, NOTES_MAX, ReviewStep, SuccessStep, TimeStep, lessonMinutes, lessonPrice, type Draft } from "./BookingSteps";
+import { DetailsStep, NOTES_MAX, ReviewStep, SuccessStep, TimeStep, freeWeeksInARow, lessonMinutes, lessonPrice, useWeeklyPlan, type Draft } from "./BookingSteps";
 
 type Step = "details" | "time" | "review" | "success";
 
@@ -99,6 +99,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
     childId: myChildren.length === 1 ? myChildren[0].id : "",
     notes: "",
     startUtc: null,
+    repeatWeeks: 1,
   });
 
   const [step, setStep] = React.useState<Step>("details");
@@ -112,6 +113,8 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   /** "Payment cancelled…" shown by the pay button (a toast there would cover it). */
   const [payNote, setPayNote] = React.useState<string | null>(null);
   const [booking, setBooking] = React.useState<Booking | null>(null);
+  // What was booked (the weeks booked now block the same time in later weeks, so it's kept from the moment of booking).
+  const [booked, setBooked] = React.useState<{ weeks: number; total: number } | null>(null);
   const [messaging, setMessaging] = React.useState(false);
   // null = not chosen yet: Study Credits when they cover the lesson, otherwise the card.
   const [payChoice, setPayChoice] = React.useState<PayMethod | null>(null);
@@ -152,6 +155,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
       setAgree(false);
       setAgreeError(false);
       setBooking(null);
+      setBooked(null);
       setMessaging(false);
       setPayChoice(null);
       setSession((s) => s + 1);
@@ -173,8 +177,13 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
 
   const trialUsed = trialUsedBy(draft.childId || me?.id);
   const minutes = lessonMinutes(tutor, draft);
-  const subtotal = lessonPrice(tutor, draft);
-  const discount = coupon ? Math.min(coupon.discount, subtotal) : 0;
+  // Weekly lessons: as many weeks in a row as the person chose and are free at this time (never for a trial).
+  const plan = useWeeklyPlan(tutor, draft.type === "regular" ? draft.startUtc : null, minutes);
+  const weeks = draft.type === "regular" ? Math.max(1, Math.min(draft.repeatWeeks, freeWeeksInARow(plan))) : 1;
+  const single = lessonPrice(tutor, draft);
+  const subtotal = single * weeks;
+  // A promo code takes money off the first lesson only.
+  const discount = coupon ? Math.min(coupon.discount, single) : 0;
   const total = subtotal - discount;
   const instant = !tutor.rules.requiresApproval && instantFlag;
   const child = myChildren.find((c) => c.id === draft.childId);
@@ -203,7 +212,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
 
   const toReview = () => {
     if (!draft.startUtc) return;
-    if (coupon && subtotal > 0) void revalidateCoupon(coupon.code, subtotal);
+    if (coupon && single > 0) void revalidateCoupon(coupon.code, single);
     else if (coupon) setCoupon(null);
     setAgreeError(false);
     go("review");
@@ -230,6 +239,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
       notes: draft.notes.trim() || undefined,
       couponCode: coupon && discount > 0 ? coupon.code : undefined,
       payWith: total > 0 ? payWith : undefined,
+      repeatWeeks: weeks > 1 ? weeks : undefined,
       idempotencyKey: key,
     };
     // UPI / card: Razorpay's window takes the payment (held until the tutor accepts a request), then the
@@ -251,7 +261,11 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
       return;
     }
     setBooking(res.data);
-    toast.success(res.data.status === "confirmed" ? "Lesson confirmed" : "Request sent", { description: `${tutor.firstName} · ${formatDuration(res.data.durationMin)}` });
+    setBooked({ weeks, total });
+    const confirmed = res.data.status === "confirmed";
+    toast.success(weeks > 1 ? (confirmed ? `${weeks} weekly lessons booked` : "Weekly lessons requested") : confirmed ? "Lesson confirmed" : "Request sent", {
+      description: `${tutor.firstName} · ${formatDuration(res.data.durationMin)}${weeks > 1 ? " · every week" : ""}`,
+    });
     go("success");
   };
 
@@ -315,7 +329,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
                   discount={discount}
                   couponCode={coupon?.code ?? null}
                   couponError={couponError}
-                  onApplyCoupon={(code) => revalidateCoupon(code, subtotal)}
+                  onApplyCoupon={(code) => revalidateCoupon(code, single)}
                   onRemoveCoupon={() => {
                     setCoupon(null);
                     setCouponError(null);
@@ -333,10 +347,23 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
                     if (v) setAgreeError(false);
                   }}
                   agreeError={agreeError}
+                  weeks={weeks}
+                  onWeeks={(n) => set({ repeatWeeks: n })}
+                  plan={plan}
                 />
               )}
               {step === "success" && booking && (
-                <SuccessStep tutor={tutor} booking={booking} tz={tz} learnerName={learnerName} meetingLinkMinutes={policy.meetingLinkVisibleMinutesBefore} onMessage={message} messaging={messaging} />
+                <SuccessStep
+                  tutor={tutor}
+                  booking={booking}
+                  tz={tz}
+                  learnerName={learnerName}
+                  meetingLinkMinutes={policy.meetingLinkVisibleMinutesBefore}
+                  onMessage={message}
+                  messaging={messaging}
+                  weeks={booked?.weeks}
+                  totalCharge={booked?.total}
+                />
               )}
             </motion.div>
           </AnimatePresence>
@@ -349,7 +376,7 @@ export function BookingFlow({ tutor, open, onOpenChange, request }: { tutor: Tut
   const summary = (
     <p className="min-w-0 text-[13px] leading-tight text-muted">
       <span className="block text-[15px] font-semibold tabular-nums text-ink">{subtotal === 0 ? "Free" : formatMoney(subtotal, tutor.currency)}</span>
-      {formatDuration(minutes)} · {draft.type === "trial" ? "trial" : "lesson"}
+      {formatDuration(minutes)} · {draft.type === "trial" ? "trial" : weeks > 1 ? `${weeks} weekly lessons` : "lesson"}
     </p>
   );
 

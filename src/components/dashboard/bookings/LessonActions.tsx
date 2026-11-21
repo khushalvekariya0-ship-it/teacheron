@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Check, CalendarClock, CalendarPlus, CircleX, CreditCard, Download, Flag, Play, CircleCheck, Star, UserX, Video, ChevronDown } from "lucide-react";
 import type { Booking, BookingStatus } from "@/lib/types";
 import type { Actor } from "@/lib/booking";
-import { ACTION_LABEL, TRANSITIONS, askToRescheduleProblem, availableTransitions, canTransition, lateToReschedule, meetingLinkVisible, openRescheduleRequest, policySummary, startMs } from "@/lib/booking";
+import { ACTION_LABEL, TRANSITIONS, askToRescheduleProblem, availableTransitions, canTransition, lateToReschedule, meetingLinkVisible, openRescheduleRequest, openTutorMove, policySummary, startMs } from "@/lib/booking";
 import type { BookingPolicy } from "@/lib/data/platform";
 import { cn } from "@/lib/utils";
 import { downloadIcs, googleCalendarUrl, type CalendarEvent } from "@/lib/calendar";
@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import type { ConfirmableTransition } from "./BookingDialogs";
 import { videoJoinable, videoLabel } from "./LessonVideo";
 
-export type LessonDialog = "cancel" | "decline" | "reschedule" | "dispute" | ConfirmableTransition;
+export type LessonDialog = "cancel" | "decline" | "reschedule" | "suggest" | "refuse-move" | "dispute" | ConfirmableTransition;
 
 export interface LessonAction {
   key: string;
@@ -54,21 +54,32 @@ export function buildLessonActions(
   now: number,
   policy: BookingPolicy,
   /** onPayAgain: a failed card / UPI payment is paid again through Razorpay (the plain transition is refused). */
-  // onAnswerRequest: the tutor accepts (true) or keeps the current time (false) of an open request for a new
-  // time; the person who asked withdraws it (false).
-  opts: { onAccept: () => void; onReview: () => void; onPayAgain?: () => void; paying?: boolean; onAnswerRequest?: (accept: boolean) => void },
+  // onAnswerRequest: the other side accepts (true) or keeps the current time (false) of an open request for a new
+  // time; the side who asked withdraws it (false). onMoveOk: the person who booked says the tutor's new time works.
+  opts: { onAccept: () => void; onReview: () => void; onPayAgain?: () => void; paying?: boolean; onAnswerRequest?: (accept: boolean) => void; onMoveOk?: () => void },
 ): { primary: LessonAction | null; items: LessonAction[] } {
   const allowed = availableTransitions(b, actor, now, policy);
   const items: LessonAction[] = [];
-  // An open request for a new time (asked inside the late window): answered here; it replaces "Reschedule".
+  // An open request for a new time (the student's, or the time the tutor suggested back): answered here; it
+  // replaces "Reschedule" for the person who booked.
   const request = openRescheduleRequest(b, now);
   if (request && opts.onAnswerRequest) {
-    if (actor === "tutor") {
+    const answering = request.byBooker ? actor === "tutor" : actor === "booker";
+    const asking = request.byBooker ? actor === "booker" : actor === "tutor";
+    if (answering) {
       items.push({ key: "accept-new-time", label: "Accept new time", icon: CalendarClock, onSelect: () => opts.onAnswerRequest?.(true), tone: "primary" });
+      if (actor === "tutor") items.push({ key: "suggest-time", label: "Suggest another time", icon: CalendarClock, dialog: "suggest" });
       items.push({ key: "keep-time", label: "Keep current time", icon: CircleX, onSelect: () => opts.onAnswerRequest?.(false) });
-    } else if (actor === "booker") {
-      items.push({ key: "withdraw-request", label: "Withdraw new-time request", icon: CircleX, onSelect: () => opts.onAnswerRequest?.(false) });
+    } else if (asking) {
+      items.push({ key: "withdraw-request", label: request.byBooker ? "Withdraw new-time request" : "Withdraw suggested time", icon: CircleX, onSelect: () => opts.onAnswerRequest?.(false) });
     }
+  }
+  // The tutor moved the lesson on their own: the person who booked says whether the new time works (if not, it's
+  // cancelled with a full refund, which replaces the usual cancellation).
+  const tutorMove = actor === "booker" ? openTutorMove(b, now) : null;
+  if (tutorMove) {
+    if (opts.onMoveOk) items.push({ key: "move-ok", label: "New time works", icon: Check, onSelect: opts.onMoveOk });
+    items.push({ key: "refuse-move", label: "New time doesn't work", icon: CircleX, dialog: "refuse-move", tone: "danger" });
   }
   const add = (to: BookingStatus, extra: Partial<LessonAction> = {}) =>
     items.push({ key: to, label: ACTION_LABEL[to] ?? to, icon: ICONS[to] ?? Check, ...extra });
@@ -85,7 +96,7 @@ export function buildLessonActions(
   else if (actor === "booker" && !request && lateToReschedule(b, now, policy) && !askToRescheduleProblem(b, actor, now, policy)) {
     add("rescheduled", { label: "Ask to reschedule", dialog: "reschedule" });
   }
-  if (allowed.includes(cancelTo)) {
+  if (allowed.includes(cancelTo) && !tutorMove) {
     if (actor === "tutor" && b.status === "pending") add(cancelTo, { label: "Decline request", dialog: "decline", tone: "danger" });
     else add(cancelTo, { dialog: "cancel", tone: "danger" });
   }
@@ -104,7 +115,7 @@ export function buildLessonActions(
     if (!check.ok) add(to, { disabledReason: check.reason, tone: to === cancelTo ? "danger" : "default" });
   };
   if (!(request && actor === "booker")) explain("rescheduled");
-  explain(cancelTo);
+  if (!tutorMove) explain(cancelTo);
   explain(actor === "tutor" ? "no_show_student" : "no_show_tutor", true);
 
   // Primary: Join › Accept › Pay again (retry payment) › wrap-up › Start › Review

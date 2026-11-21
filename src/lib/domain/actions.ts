@@ -12,12 +12,12 @@ import {
 import { asCurrency, budgetLimits, currencyForCountry, CURRENCIES, formatMoney, fromDollarSetting, isCurrency, rateProblem, trialPriceMax, type Currency } from "@/lib/money";
 import { SITE } from "@/lib/site";
 import { applyBps, formatDate, formatDateTime, percentOf, sessionPrice } from "@/lib/format";
-import { BLOCKING_STATUSES, generateSlots, overlaps } from "@/lib/time";
+import { BLOCKING_STATUSES, generateSlots, overlaps, weeklyStarts } from "@/lib/time";
 import { isFlagOn } from "@/lib/flags";
 import { inSection, notePath } from "@/lib/nav-sections";
 import { readContactSafety, rulesOf, type ContactSafety } from "@/lib/safety-settings";
 import { resolveLocation } from "@/lib/data/geo";
-import { askToRescheduleProblem, canTransition, cancellationRefund, endMs, lateToReschedule, openRescheduleRequest, startMs, STATUS_META, type Actor } from "@/lib/booking";
+import { askToRescheduleProblem, canTransition, cancellationRefund, endMs, lateToReschedule, MAX_WEEKLY_LESSONS, openRescheduleRequest, openTutorMove, seriesOf, startMs, STATUS_META, type Actor } from "@/lib/booking";
 import { checkPasscode, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL } from "@/lib/video-link";
 import { actorFor, hasPermission } from "@/lib/permissions";
 import { STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, slugify, subjectName } from "@/lib/data/catalog";
@@ -146,8 +146,20 @@ export interface DomainActions {
   rescheduleBooking(id: string, newStartUtc: string): Result<Booking>;
   /** The person who booked, inside the late window: asks the tutor for a new time (the lesson stays until accepted). */
   requestReschedule(id: string, newStartUtc: string): Result<Booking>;
-  /** The tutor accepts (the lesson moves) or keeps the current time; the person who asked can withdraw (false). */
+  /**
+   * Answers the open request for a new time: the other side accepts (the lesson moves) or keeps the current
+   * time; the side who asked can withdraw it (false).
+   */
   answerRescheduleRequest(id: string, accept: boolean): Result<Booking>;
+  /** The tutor, in reply to a request for a new time: suggests another time instead (the person who booked accepts or not). */
+  suggestRescheduleTime(id: string, newStartUtc: string): Result<Booking>;
+  /**
+   * The person who booked, on a lesson the tutor moved on their own: the new time works (true), or it doesn't and
+   * the lesson is cancelled with a full refund (false).
+   */
+  answerTutorMove(id: string, works: boolean): Result<Booking>;
+  /** The tutor accepts every waiting lesson of a set of weekly lessons at once. Returns how many were accepted. */
+  acceptWeeklyLessons(id: string): Result<{ accepted: number }>;
   /**
    * The tutor (or staff who manage bookings) sets the Zoom / Google Meet invite link of an online lesson.
    * With applyToUpcoming, the tutor's other upcoming online lessons that have no link get it too.
@@ -182,7 +194,7 @@ export interface DomainActions {
    */
   markPaymentFailed(bookingId: string, reason: string): Result;
   /** Server only: what a booking would cost (all the booking checks, nothing saved), for checkout. */
-  quoteBooking(input: CreateBookingInput): Result<{ charge: number; currency: Currency; instant: boolean; description: string }>;
+  quoteBooking(input: CreateBookingInput): Result<{ charge: number; currency: Currency; instant: boolean; hold: boolean; description: string }>;
   /** A person whose messaging is paused asks Trust & Safety to unlock it (once per pause). */
   requestChatUnlock(note: string): Result;
   // notifications
@@ -480,8 +492,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     if (p.amount !== amount || p.currency !== currency) return fail("That payment doesn't match the price, so it wasn't used. Please try again.");
     return ok(p);
   };
-  /** The booking's Razorpay charge (positive row), if it was paid online. */
-  const onlineCharge = (bookingId: string) => get().payments.find((p) => p.bookingId === bookingId && p.provider === "razorpay" && p.amountCents > 0 && !!p.providerPaymentId);
+  /**
+   * The booking's Razorpay charge (positive row), if it was paid online. Weekly lessons share one Razorpay
+   * payment: it's named on the first lesson's row (a payment is recorded once), and the other lessons' rows
+   * reach it through the same order.
+   */
+  const onlineCharge = (bookingId: string): Payment | undefined => {
+    const own = get().payments.find((p) => p.bookingId === bookingId && p.provider === "razorpay" && p.amountCents > 0);
+    if (!own || own.providerPaymentId) return own?.providerPaymentId ? own : undefined;
+    const shared = own.providerOrderId ? get().payments.find((p) => p.providerOrderId === own.providerOrderId && p.amountCents > 0 && !!p.providerPaymentId) : undefined;
+    return shared ? { ...own, providerPaymentId: shared.providerPaymentId } : undefined;
+  };
   /** Refunds a booking's online payment through Razorpay (the engine makes the call before saving). */
   const refundOnline = (b: Booking, amount: number, description: string): boolean => {
     const charge = onlineCharge(b.id);
@@ -522,6 +543,17 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     if (availErr) return fail(availErr);
     // Checked inside the transaction (and by a database constraint) so two people can't take the same slot.
     if (slotConflict(tutor.id, input.startUtc, input.durationMin)) return fail("That time was just booked. Please choose another slot.");
+    // Weekly lessons: the same day and time (in the tutor's time zone) each week, and every one has to be free.
+    const weeks = input.repeatWeeks ?? 1;
+    if (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_WEEKLY_LESSONS) return fail(`Choose 2 to ${MAX_WEEKLY_LESSONS} weeks, or just this lesson.`);
+    if (weeks > 1 && input.type === "trial") return fail("A trial is a single lesson. Book it on its own, then weekly lessons.");
+    const starts = weeklyStarts(input.startUtc, tutor.timezone, weeks);
+    starts[0] = new Date(input.startUtc).toISOString();
+    for (let k = 1; k < starts.length; k++) {
+      const when = formatDateTime(starts[k], tzOf(user.id));
+      if (withinAvailability(tutor, starts[k], input.durationMin)) return fail(`Week ${k + 1} (${when}) isn't open for booking any more. Choose fewer weeks.`);
+      if (slotConflict(tutor.id, starts[k], input.durationMin)) return fail(`Week ${k + 1} (${when}) was just taken. Choose fewer weeks.`);
+    }
 
     // Until online payments are connected, trial lessons are free (families see them as free; the tutor's
     // own trial price applies again once payments are on).
@@ -537,12 +569,18 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       couponId = c.data.coupon.id;
     }
     const instant = !tutor.rules.requiresApproval && flag("instant_booking");
+    // A promo code takes money off the first lesson only.
     const charge = priceCents - discountCents;
+    const charges = starts.map((_, k) => (k === 0 ? charge : priceCents));
+    const total = charges.reduce((a, c) => a + c, 0);
     const payWith: PayMethod = input.payWith ?? "card";
     if (!(payWith in PAY_METHOD_LABEL)) return fail("Choose how you'd like to pay.");
-    if (payWith === "upi" && charge > 0 && currency !== "INR") return fail("UPI is for payments in rupees. Pay with a card instead.");
-    if (payWith === "wallet" && charge > walletBalance(user.id, currency)) return fail("You don't have enough Study Credits in this currency for this lesson. Add credits or choose another way to pay.");
-    return ok({ tutor, currency, priceCents, discountCents, couponId, charge, instant, payWith });
+    if (payWith === "upi" && total > 0 && currency !== "INR") return fail("UPI is for payments in rupees. Pay with a card instead.");
+    if (payWith === "wallet" && total > walletBalance(user.id, currency)) return fail(`You don't have enough Study Credits in this currency for ${weeks > 1 ? "these lessons" : "this lesson"}. Add credits or choose another way to pay.`);
+    // A card / UPI payment for a request is held until the tutor accepts. Weekly lessons are paid at once (one
+    // payment can only be taken whole), and any lesson the tutor doesn't accept is refunded in full.
+    const hold = !instant && weeks === 1;
+    return ok({ tutor, currency, priceCents, discountCents, couponId, charge, charges, total, starts, instant, hold, payWith });
   };
   const refundToWallet = (bookingId: string, userId: string, cents: number, description: string) => {
     const b = get().bookings.find((x) => x.id === bookingId);
@@ -609,19 +647,37 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
   /**
    * Moves a lesson to a new time: a new booking (same price, length, payment and notes) and the old one marked
    * as moved. `confirmed`: the new time is confirmed at once (otherwise it waits for the tutor, like a request).
+   * `byTutorAlone`: the tutor moved it without being asked, so the person who booked can still turn the new
+   * time down. A lesson from a set of weekly lessons stays part of it.
    */
-  const moveLesson = (b: Booking, start: string, by: string, confirmed: boolean): Booking => {
+  const moveLesson = (b: Booking, start: string, by: string, confirmed: boolean, byTutorAlone = false): Booking => {
     const newId = uid("bk");
+    const series = seriesOf(b);
     const next: Booking = {
       ...b, id: newId, startUtc: start, status: confirmed ? "confirmed" : "pending", rescheduledFromId: b.id, rescheduleCount: (b.rescheduleCount ?? 0) + 1, reviewId: undefined,
       meetingUrl: b.mode === "online" ? `/classroom/${newId}` : undefined, recordingUrl: undefined, idempotencyKey: `${b.idempotencyKey}_r${b.history.length}`,
-      history: [{ at: nowIso(), by, from: null, to: confirmed ? "confirmed" : "pending", note: `Rescheduled from ${formatDateTime(b.startUtc, tzOf(by))}` }], createdAt: nowIso(),
+      history: [{
+        at: nowIso(), by, from: null, to: confirmed ? "confirmed" : "pending", note: `Rescheduled from ${formatDateTime(b.startUtc, tzOf(by))}`,
+        ...(series ? { series } : {}), ...(byTutorAlone ? { movedByTutor: true, previousStartUtc: b.startUtc } : {}),
+      }],
+      createdAt: nowIso(),
     };
     set((s) => ({
       bookings: [next, ...s.bookings.map((x) => (x.id === b.id ? { ...x, status: "rescheduled" as const, history: [...x.history, { at: nowIso(), by, from: x.status, to: "rescheduled" as const, note: `Moved to ${formatDateTime(start, tzOf(by))}` }] } : x))],
       payments: s.payments.map((p) => (p.bookingId === b.id ? { ...p, bookingId: newId } : p)),
       walletTransactions: s.walletTransactions.map((t) => (t.bookingId === b.id ? { ...t, bookingId: newId } : t)),
     }));
+    // A request confirmed by moving it (the tutor moved it, or a new time was agreed) takes its held payment, as
+    // accepting it would.
+    if (confirmed && b.status === "pending" && b.paymentStatus === "authorized") {
+      const held = onlineCharge(newId);
+      if (held?.providerPaymentId && held.status === "pending") env.providerOps?.push({ kind: "capture", paymentId: held.providerPaymentId, amount: b.priceCents - b.discountCents, currency: asCurrency(b.currency), bookingId: newId });
+      next.paymentStatus = "paid";
+      set((s) => ({
+        bookings: s.bookings.map((x) => (x.id === newId ? { ...x, paymentStatus: "paid" as const } : x)),
+        payments: s.payments.map((p) => (p.bookingId === newId && p.status === "pending" ? { ...p, status: "succeeded" as const } : p)),
+      }));
+    }
     return next;
   };
 
@@ -644,6 +700,83 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     const next = [...list];
     [next[i], next[j]] = [next[j], next[i]];
     return next;
+  };
+
+  /**
+   * One status change of a lesson with its money and notifications (transitionBooking, and the actions built on
+   * it). `fullRefund`: a cancellation refunded in full whatever the timing, with this reason. `quiet`: the caller
+   * tells the other side itself.
+   */
+  const applyTransition = (user: User, b: Booking, actor: Actor, to: BookingStatus, note: string | undefined, opts: { fullRefund?: string; quiet?: boolean } = {}): Result<Booking> => {
+    const id = b.id;
+    const check = canTransition(b, to, actor, Date.now(), get().policy);
+    if (!check.ok) return fail(check.reason);
+
+    const policy = get().policy;
+    const paid = b.priceCents - b.discountCents;
+    const captured = b.paymentStatus === "paid"; // money actually taken (vs. an authorization hold)
+    // Work out any refund first, so staff without refund permission can't move money through a transition.
+    let refund: { cents: number; rule: string } | null = null;
+    if (to === "cancelled_by_student" || to === "cancelled_by_tutor") {
+      const res = opts.fullRefund ? { refundCents: paid, rule: opts.fullRefund } : cancellationRefund(b, actor === "booker" ? "booker" : actor === "tutor" ? "tutor" : "admin", Date.now(), policy);
+      refund = { cents: captured ? res.refundCents : 0, rule: res.rule };
+    } else if (to === "no_show_tutor") {
+      refund = { cents: captured ? percentOf(paid, policy.tutorNoShowRefundPercent) : 0, rule: `Tutor no-show — ${policy.tutorNoShowRefundPercent}% refund` };
+    } else if (to === "no_show_student") {
+      refund = { cents: captured ? percentOf(paid, policy.studentNoShowRefundPercent) : 0, rule: `Student no-show — ${policy.studentNoShowRefundPercent}% refund` };
+    } else if (to === "refunded") {
+      if (b.status === "disputed") return fail("Resolve the dispute to issue a refund — the decision and amount are recorded there.");
+    }
+    if (actor === "admin" && refund && refund.cents > 0 && !hasPermission(user, "payments.refund")) {
+      return fail("This change issues a refund. It needs the payments.refund permission.");
+    }
+    const bookingCurrency = asCurrency(b.currency);
+    // Paying again after a failed payment needs a new card / UPI payment (Study Credits were never taken back).
+    const retryPayment = to === "pending" && b.status === "payment_failed" && paid > 0 && !paidFromWallet(id) ? onlinePayment(paid, bookingCurrency) : ok(null);
+    if (!retryPayment.ok) return retryPayment;
+
+    const safeNote = note ? maskContactInfo(note).text : note;
+    const patch: Partial<Booking> = { status: to, history: [...b.history, { at: nowIso(), by: user.id, from: b.status, to, note: [safeNote, refund?.rule].filter(Boolean).join(" · ") || undefined }] };
+    const tutor = resolveTutor(get(), b.tutorId)!;
+    if (to === "confirmed" && paid > 0) {
+      // The tutor accepted: take the held payment (Razorpay capture, made before this is saved).
+      const held = b.paymentStatus === "authorized" ? onlineCharge(id) : undefined;
+      if (held?.providerPaymentId && held.status === "pending") env.providerOps?.push({ kind: "capture", paymentId: held.providerPaymentId, amount: paid, currency: bookingCurrency, bookingId: id });
+      patch.paymentStatus = "paid";
+      set((s) => ({ payments: s.payments.map((p) => (p.bookingId === id && p.status === "pending" ? { ...p, status: "succeeded" } : p)) }));
+    }
+    if (to === "pending" && b.status === "payment_failed") {
+      // Paying again: a new card / UPI payment, held until the tutor accepts.
+      const p = retryPayment.data;
+      patch.paymentStatus = paid > 0 ? (p?.captured ? "paid" : "authorized") : "unpaid";
+      if (p) addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: paid, currency: bookingCurrency, status: p.captured ? "succeeded" : "pending", description: "Payment for your lesson (paid again)", method: p.method, provider: "razorpay", providerPaymentId: p.paymentId, providerOrderId: p.orderId });
+    }
+    if (b.paymentStatus === "authorized" && (to === "cancelled_by_student" || to === "cancelled_by_tutor")) {
+      patch.paymentStatus = "refunded"; // authorization released, nothing was charged
+      set((s) => ({ payments: s.payments.map((p) => (p.bookingId === id && p.status === "pending" ? { ...p, status: "refunded", description: `${p.description} — authorization released` } : p)) }));
+      refundToWallet(id, b.bookerId, paid, "Request cancelled — credits returned");
+    } else if (refund && refund.cents > 0) {
+      patch.paymentStatus = refund.cents >= paid ? "refunded" : "partially_refunded";
+      // Card / UPI payments are refunded through Razorpay; Study Credits back to the wallet.
+      if (!refundOnline(b, refund.cents, `Refund — ${refund.rule}`)) {
+        addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: -refund.cents, currency: bookingCurrency, status: "refunded", description: `Refund — ${refund.rule}`, method: paidFromWallet(id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
+        refundToWallet(id, b.bookerId, refund.cents, `Refund — ${refund.rule}`);
+      }
+    }
+    patchBooking(id, patch);
+    const noShowCredit = fromDollarSetting(policy.tutorNoShowCreditCents, bookingCurrency);
+    if (to === "no_show_tutor" && noShowCredit > 0) {
+      addWalletTx({ userId: b.bookerId, deltaCents: noShowCredit, currency: bookingCurrency, kind: "credit", description: "Platform credit — tutor didn't show", bookingId: id });
+      notify(b.bookerId, { type: "refund", title: "We're sorry your tutor didn't show", body: `${formatMoney(noShowCredit, bookingCurrency)} platform credit has been added to your account.`, href: `/dashboard/bookings/${id}` });
+    }
+    if (actor === "admin") audit("booking.transition", "booking", id, { from: b.status, to });
+
+    const label = STATUS_META[to].label.toLowerCase();
+    const other = actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId;
+    if (!opts.quiet) notify(other, { type: to.startsWith("cancelled") ? "booking_cancelled" : to === "confirmed" ? "booking_confirmed" : "reminder", title: `Lesson ${label}`, body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(other))}`, href: `/dashboard/bookings/${id}` });
+    if (actor === "admin" && !opts.quiet) notify(tutorUserId(b.tutorId), { type: to.startsWith("cancelled") ? "booking_cancelled" : "reminder", title: `Lesson ${label}`, body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(tutorUserId(b.tutorId)))}`, href: `/dashboard/bookings/${id}` });
+    if (to === "completed") notify(b.bookerId, { type: "review_request", title: `How was your lesson with ${tutor.firstName}?`, body: "Leave a review to help other families.", href: `/dashboard/bookings/${id}` });
+    return ok({ ...b, ...patch } as Booking);
   };
 
   const actions: DomainActions = {
@@ -933,56 +1066,80 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (dupe) return dupe.bookerId === user.id ? ok(dupe) : fail("This booking request was already used. Please try again."); // idempotent retry
       const quote = bookingQuote(user, input);
       if (!quote.ok) return quote;
-      const { tutor, currency, priceCents, discountCents, couponId, charge, instant, payWith } = quote.data;
+      const { tutor, currency, priceCents, discountCents, couponId, charges, total, starts, instant, payWith } = quote.data;
       const status: BookingStatus = instant ? "confirmed" : "pending";
-      // A card / UPI payment the server has checked with Razorpay: held for a request, taken for an instant booking.
-      const online = charge > 0 && payWith !== "wallet" ? onlinePayment(charge, currency) : ok(null);
+      const weekly = starts.length > 1;
+      // A card / UPI payment the server has checked with Razorpay: held for a request, taken for an instant booking
+      // and for weekly lessons (one payment for all of them).
+      const online = total > 0 && payWith !== "wallet" ? onlinePayment(total, currency) : ok(null);
       if (!online.ok) return online;
       const paidOnline = online.data;
       if (couponId) set((s) => ({ coupons: s.coupons.map((x) => (x.id === couponId ? { ...x, redemptions: x.redemptions + 1 } : x)) }));
-      const id = uid("bk");
-      const booking: Booking = {
-        id, tutorId: tutor.id, bookerId: user.id, childId: input.childId, subject: input.subject, type: input.type, status,
-        startUtc: new Date(input.startUtc).toISOString(), durationMin: input.durationMin, mode: input.mode, currency, priceCents, discountCents,
-        platformFeeCents: applyBps(charge, commissionBps(tutor.id)),
-        // Card / UPI payments for a request are held (Razorpay manual capture) and taken when the tutor accepts.
-        paymentStatus: charge === 0 ? "unpaid" : instant || paidOnline?.captured ? "paid" : "authorized",
-        // Online lessons happen in the built-in classroom page.
-        meetingUrl: input.mode === "online" ? `/classroom/${id}` : undefined,
-        locationNote: input.mode === "in_person" ? `Meeting place is agreed in messages. Tutor serves within ${tutor.serviceRadiusMiles} mi of ${tutor.city}.` : undefined,
-        notes: input.notes ? maskContactInfo(input.notes).text : undefined,
-        idempotencyKey: input.idempotencyKey,
-        history: [
-          { at: nowIso(), by: user.id, from: null, to: "pending", note: input.type === "trial" ? "Trial requested" : "Booking requested" },
-          ...(instant ? [{ at: nowIso(), by: "system" as const, from: "pending" as const, to: "confirmed" as const, note: "Instant booking" }] : []),
-        ],
-        createdAt: nowIso(),
-      };
-      set((s) => ({ bookings: [booking, ...s.bookings] }));
-      if (charge > 0) {
-        const description = `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.`;
-        const taken = instant || !!paidOnline?.captured;
-        addPayment({
-          bookingId: id, userId: user.id, kind: "booking", amountCents: charge, currency, status: taken ? "succeeded" : "pending", description,
-          method: paidOnline ? paidOnline.method : PAY_METHOD_LABEL[payWith],
-          ...(paidOnline ? { provider: "razorpay" as const, providerPaymentId: paidOnline.paymentId, providerOrderId: paidOnline.orderId } : {}),
-        });
-        // An instant booking takes a held payment straight away.
-        if (paidOnline && !paidOnline.captured && instant) env.providerOps?.push({ kind: "capture", paymentId: paidOnline.paymentId, amount: charge, currency, bookingId: id });
-        // Credits leave the wallet straight away; a declined or expired request puts them back.
-        if (payWith === "wallet") addWalletTx({ userId: user.id, deltaCents: -charge, currency, kind: "lesson", description, bookingId: id });
-      }
+      const seriesId = weekly ? uid("wk") : null;
+      const description = `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.`;
+      // Card / UPI payments for a single request are held (Razorpay manual capture) and taken when the tutor accepts.
+      const taken = instant || !!paidOnline?.captured || (weekly && !!paidOnline);
+      const created = starts.map((start, k): Booking => {
+        const id = uid("bk");
+        const charge = charges[k];
+        const booking: Booking = {
+          id, tutorId: tutor.id, bookerId: user.id, childId: input.childId, subject: input.subject, type: input.type, status,
+          startUtc: start, durationMin: input.durationMin, mode: input.mode, currency, priceCents, discountCents: k === 0 ? discountCents : 0,
+          platformFeeCents: applyBps(charge, commissionBps(tutor.id)),
+          paymentStatus: charge === 0 ? "unpaid" : taken ? "paid" : "authorized",
+          // Online lessons happen in the built-in classroom page.
+          meetingUrl: input.mode === "online" ? `/classroom/${id}` : undefined,
+          locationNote: input.mode === "in_person" ? `Meeting place is agreed in messages. Tutor serves within ${tutor.serviceRadiusMiles} mi of ${tutor.city}.` : undefined,
+          notes: input.notes ? maskContactInfo(input.notes).text : undefined,
+          idempotencyKey: k === 0 ? input.idempotencyKey : `${input.idempotencyKey}_w${k + 1}`,
+          history: [
+            {
+              at: nowIso(), by: user.id, from: null, to: "pending",
+              note: weekly ? `Weekly lesson ${k + 1} of ${starts.length} requested` : input.type === "trial" ? "Trial requested" : "Booking requested",
+              ...(seriesId ? { series: { id: seriesId, n: k + 1, of: starts.length } } : {}),
+            },
+            ...(instant ? [{ at: nowIso(), by: "system" as const, from: "pending" as const, to: "confirmed" as const, note: "Instant booking" }] : []),
+          ],
+          createdAt: nowIso(),
+        };
+        if (charge > 0) {
+          addPayment({
+            bookingId: id, userId: user.id, kind: "booking", amountCents: charge, currency, status: taken ? "succeeded" : "pending",
+            description: weekly ? `${description} (week ${k + 1} of ${starts.length})` : description,
+            method: paidOnline ? paidOnline.method : PAY_METHOD_LABEL[payWith],
+            // One Razorpay payment is recorded once: on the first lesson; the other weekly lessons share its order.
+            ...(paidOnline ? { provider: "razorpay" as const, providerPaymentId: k === 0 ? paidOnline.paymentId : undefined, providerOrderId: paidOnline.orderId } : {}),
+          });
+          // Credits leave the wallet straight away; a declined or expired request puts them back.
+          if (payWith === "wallet") addWalletTx({ userId: user.id, deltaCents: -charge, currency, kind: "lesson", description, bookingId: id });
+        }
+        return booking;
+      });
+      set((s) => ({ bookings: [...created, ...s.bookings] }));
+      const first = created[0];
+      // An instant booking (and weekly lessons) take a held payment straight away, whole.
+      if (paidOnline && !paidOnline.captured && (instant || weekly)) env.providerOps?.push({ kind: "capture", paymentId: paidOnline.paymentId, amount: total, currency, bookingId: first.id });
       get().startConversation(tutor.id, { childId: input.childId, subject: input.subject });
       const tutorUser = tutorUserId(tutor.id);
-      notify(user.id, { type: instant ? "booking_confirmed" : "booking_request", title: instant ? "Lesson confirmed" : "Request sent", body: `${subjectName(input.subject)} with ${tutor.firstName} · ${formatDateTime(booking.startUtc, tzOf(user.id))}`, href: `/dashboard/bookings/${id}` });
-      notify(tutorUser, { type: "booking_request", title: instant ? "New lesson booked" : "New booking request", body: `${user.firstName} ${user.lastName.charAt(0)}. · ${subjectName(input.subject)} · ${formatDateTime(booking.startUtc, tzOf(tutorUser))}`, href: `/dashboard/bookings/${id}` });
-      const kind = input.type === "trial" ? "trial lesson" : "lesson";
+      const n = starts.length;
+      const when = (to?: string) => (weekly ? `every week from ${formatDateTime(first.startUtc, tzOf(to))} (${n} lessons)` : formatDateTime(first.startUtc, tzOf(to)));
+      notify(user.id, {
+        type: instant ? "booking_confirmed" : "booking_request",
+        title: weekly ? (instant ? `${n} weekly lessons booked` : "Weekly lessons requested") : instant ? "Lesson confirmed" : "Request sent",
+        body: `${subjectName(input.subject)} with ${tutor.firstName} · ${when(user.id)}`, href: `/dashboard/bookings/${first.id}`,
+      });
+      notify(tutorUser, {
+        type: "booking_request",
+        title: weekly ? (instant ? `${n} weekly lessons booked` : `${n} weekly lessons requested`) : instant ? "New lesson booked" : "New booking request",
+        body: `${user.firstName} ${user.lastName.charAt(0)}. · ${subjectName(input.subject)} · ${when(tutorUser)}`, href: `/dashboard/bookings/${first.id}`,
+      });
+      const kind = weekly ? `${n} weekly lessons` : input.type === "trial" ? "trial lesson" : "lesson";
       notifyStaff("bookings.manage", {
         title: instant ? `New ${kind} booked` : `New ${kind} request`,
-        body: `${user.firstName} ${user.lastName.charAt(0)}. with ${tutor.firstName} ${tutor.lastName.charAt(0)}. · ${subjectName(input.subject)} · ${formatDateTime(booking.startUtc, SITE.defaultTimezone)}`,
-        href: `/admin/bookings?id=${id}`,
+        body: `${user.firstName} ${user.lastName.charAt(0)}. with ${tutor.firstName} ${tutor.lastName.charAt(0)}. · ${subjectName(input.subject)} · ${formatDateTime(first.startUtc, SITE.defaultTimezone)}`,
+        href: `/admin/bookings?id=${first.id}`,
       }, user.id);
-      return ok(booking);
+      return ok(first);
     },
     transitionBooking(id, to, note) {
       const r = requireUser();
@@ -993,74 +1150,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!actor) return fail("You don't have access to this booking.");
       if (to === "rescheduled") return fail("Use reschedule to pick a new time.");
       if (to === "disputed") return fail("Open a dispute from the booking page.");
-      const check = canTransition(b, to, actor, Date.now(), get().policy);
-      if (!check.ok) return fail(check.reason);
-
-      const policy = get().policy;
-      const paid = b.priceCents - b.discountCents;
-      const captured = b.paymentStatus === "paid"; // money actually taken (vs. an authorization hold)
-      // Work out any refund first, so staff without refund permission can't move money through a transition.
-      let refund: { cents: number; rule: string } | null = null;
-      if (to === "cancelled_by_student" || to === "cancelled_by_tutor") {
-        const res = cancellationRefund(b, actor === "booker" ? "booker" : actor === "tutor" ? "tutor" : "admin", Date.now(), policy);
-        refund = { cents: captured ? res.refundCents : 0, rule: res.rule };
-      } else if (to === "no_show_tutor") {
-        refund = { cents: captured ? percentOf(paid, policy.tutorNoShowRefundPercent) : 0, rule: `Tutor no-show — ${policy.tutorNoShowRefundPercent}% refund` };
-      } else if (to === "no_show_student") {
-        refund = { cents: captured ? percentOf(paid, policy.studentNoShowRefundPercent) : 0, rule: `Student no-show — ${policy.studentNoShowRefundPercent}% refund` };
-      } else if (to === "refunded") {
-        if (b.status === "disputed") return fail("Resolve the dispute to issue a refund — the decision and amount are recorded there.");
-      }
-      if (actor === "admin" && refund && refund.cents > 0 && !hasPermission(r.data, "payments.refund")) {
-        return fail("This change issues a refund. It needs the payments.refund permission.");
-      }
-      const bookingCurrency = asCurrency(b.currency);
-      // Paying again after a failed payment needs a new card / UPI payment (Study Credits were never taken back).
-      const retryPayment = to === "pending" && b.status === "payment_failed" && paid > 0 && !paidFromWallet(id) ? onlinePayment(paid, bookingCurrency) : ok(null);
-      if (!retryPayment.ok) return retryPayment;
-
-      const safeNote = note ? maskContactInfo(note).text : note;
-      const patch: Partial<Booking> = { status: to, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to, note: [safeNote, refund?.rule].filter(Boolean).join(" · ") || undefined }] };
-      const tutor = resolveTutor(get(), b.tutorId)!;
-      if (to === "confirmed" && paid > 0) {
-        // The tutor accepted: take the held payment (Razorpay capture, made before this is saved).
-        const held = b.paymentStatus === "authorized" ? onlineCharge(id) : undefined;
-        if (held?.providerPaymentId && held.status === "pending") env.providerOps?.push({ kind: "capture", paymentId: held.providerPaymentId, amount: paid, currency: bookingCurrency, bookingId: id });
-        patch.paymentStatus = "paid";
-        set((s) => ({ payments: s.payments.map((p) => (p.bookingId === id && p.status === "pending" ? { ...p, status: "succeeded" } : p)) }));
-      }
-      if (to === "pending" && b.status === "payment_failed") {
-        // Paying again: a new card / UPI payment, held until the tutor accepts.
-        const p = retryPayment.data;
-        patch.paymentStatus = paid > 0 ? (p?.captured ? "paid" : "authorized") : "unpaid";
-        if (p) addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: paid, currency: bookingCurrency, status: p.captured ? "succeeded" : "pending", description: "Payment for your lesson (paid again)", method: p.method, provider: "razorpay", providerPaymentId: p.paymentId, providerOrderId: p.orderId });
-      }
-      if (b.paymentStatus === "authorized" && (to === "cancelled_by_student" || to === "cancelled_by_tutor")) {
-        patch.paymentStatus = "refunded"; // authorization released, nothing was charged
-        set((s) => ({ payments: s.payments.map((p) => (p.bookingId === id && p.status === "pending" ? { ...p, status: "refunded", description: `${p.description} — authorization released` } : p)) }));
-        refundToWallet(id, b.bookerId, paid, "Request cancelled — credits returned");
-      } else if (refund && refund.cents > 0) {
-        patch.paymentStatus = refund.cents >= paid ? "refunded" : "partially_refunded";
-        // Card / UPI payments are refunded through Razorpay; Study Credits back to the wallet.
-        if (!refundOnline(b, refund.cents, `Refund — ${refund.rule}`)) {
-          addPayment({ bookingId: id, userId: b.bookerId, kind: "booking", amountCents: -refund.cents, currency: bookingCurrency, status: "refunded", description: `Refund — ${refund.rule}`, method: paidFromWallet(id) ? PAY_METHOD_LABEL.wallet : "Original payment method" });
-          refundToWallet(id, b.bookerId, refund.cents, `Refund — ${refund.rule}`);
-        }
-      }
-      patchBooking(id, patch);
-      const noShowCredit = fromDollarSetting(policy.tutorNoShowCreditCents, bookingCurrency);
-      if (to === "no_show_tutor" && noShowCredit > 0) {
-        addWalletTx({ userId: b.bookerId, deltaCents: noShowCredit, currency: bookingCurrency, kind: "credit", description: "Platform credit — tutor didn't show", bookingId: id });
-        notify(b.bookerId, { type: "refund", title: "We're sorry your tutor didn't show", body: `${formatMoney(noShowCredit, bookingCurrency)} platform credit has been added to your account.`, href: `/dashboard/bookings/${id}` });
-      }
-      if (actor === "admin") audit("booking.transition", "booking", id, { from: b.status, to });
-
-      const label = STATUS_META[to].label.toLowerCase();
-      const other = actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId;
-      notify(other, { type: to.startsWith("cancelled") ? "booking_cancelled" : to === "confirmed" ? "booking_confirmed" : "reminder", title: `Lesson ${label}`, body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(other))}`, href: `/dashboard/bookings/${id}` });
-      if (actor === "admin") notify(tutorUserId(b.tutorId), { type: to.startsWith("cancelled") ? "booking_cancelled" : "reminder", title: `Lesson ${label}`, body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(tutorUserId(b.tutorId)))}`, href: `/dashboard/bookings/${id}` });
-      if (to === "completed") notify(b.bookerId, { type: "review_request", title: `How was your lesson with ${tutor.firstName}?`, body: "Leave a review to help other families.", href: `/dashboard/bookings/${id}` });
-      return ok({ ...b, ...patch } as Booking);
+      return applyTransition(r.data, b, actor, to, note);
     },
     rescheduleBooking(id, newStartUtc) {
       const r = requireUser();
@@ -1079,9 +1169,14 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const availErr = actor === "tutor" ? ownTimeProblem(tutor, start) : withinAvailability(tutor, start, b.durationMin, true);
       if (availErr) return fail(availErr);
       if (slotConflict(b.tutorId, start, b.durationMin, b.id)) return fail("That time isn't available. Please choose another slot.");
-      const next = moveLesson(b, start, r.data.id, actor === "tutor" || b.status === "confirmed");
+      // Moved by the tutor without being asked: the person who booked can still say the new time doesn't work.
+      const next = moveLesson(b, start, r.data.id, actor === "tutor" || b.status === "confirmed", actor === "tutor");
       const other = actor === "booker" ? tutorUserId(b.tutorId) : b.bookerId;
-      notify(other, { type: "booking_rescheduled", title: "Lesson rescheduled", body: `${subjectName(b.subject)} moved to ${formatDateTime(start, tzOf(other))}`, href: `/dashboard/bookings/${next.id}` });
+      notify(other, {
+        type: "booking_rescheduled", title: "Lesson rescheduled",
+        body: `${subjectName(b.subject)} moved to ${formatDateTime(start, tzOf(other))}${actor === "tutor" ? ". If the new time doesn't work for you, cancel it on the lesson page for a full refund." : ""}`,
+        href: `/dashboard/bookings/${next.id}`,
+      });
       return ok(next);
     },
     requestReschedule(id, newStartUtc) {
@@ -1104,7 +1199,35 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const updated: Booking = { ...b, history: [...b.history, event] };
       set((s) => ({ bookings: s.bookings.map((x) => (x.id === id ? updated : x)) }));
       const tutorUser = tutorUserId(b.tutorId);
-      notify(tutorUser, { type: "booking_rescheduled", title: "New time requested", body: `${subjectName(b.subject)}: asks to move ${formatDateTime(b.startUtc, tzOf(tutorUser))} to ${formatDateTime(start, tzOf(tutorUser))}. Accept or keep the current time.`, href: `/dashboard/bookings/${id}` });
+      notify(tutorUser, { type: "booking_rescheduled", title: "New time requested", body: `${subjectName(b.subject)}: asks to move ${formatDateTime(b.startUtc, tzOf(tutorUser))} to ${formatDateTime(start, tzOf(tutorUser))}. Accept, suggest another time, or keep the current time.`, href: `/dashboard/bookings/${id}` });
+      return ok(updated);
+    },
+    suggestRescheduleTime(id, newStartUtc) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      const b = get().bookings.find((x) => x.id === id);
+      if (!b) return fail("Booking not found.");
+      if (actorFor(r.data, b) !== "tutor") return fail("Only the tutor can suggest another time.");
+      const req = openRescheduleRequest(b);
+      if (!req?.byBooker) return fail("There's no request for a new time to reply to. You can move the lesson yourself.");
+      const check = canTransition(b, "rescheduled", "tutor", Date.now(), get().policy);
+      if (!check.ok) return fail(check.reason);
+      const tutor = resolveTutor(get(), b.tutorId)!;
+      const start = new Date(newStartUtc).toISOString();
+      if (start === new Date(b.startUtc).toISOString()) return fail("That's the current time. Choose another one, or keep the current time.");
+      if (start === req.startUtc) return fail("That's the time they asked for: accept it instead.");
+      const problem = ownTimeProblem(tutor, start);
+      if (problem) return fail(problem);
+      if (slotConflict(b.tutorId, start, b.durationMin, b.id)) return fail("That time isn't available. Please choose another slot.");
+      const event: BookingEvent = { at: nowIso(), by: r.data.id, from: b.status, to: b.status, note: `Suggested ${formatDateTime(start, tzOf(r.data.id))} instead`, proposal: "asked", proposedStartUtc: start };
+      const updated: Booking = { ...b, history: [...b.history, event] };
+      set((s) => ({ bookings: s.bookings.map((x) => (x.id === id ? updated : x)) }));
+      const tz = tzOf(b.bookerId);
+      notify(b.bookerId, {
+        type: "booking_rescheduled", title: "Another time suggested",
+        body: `${subjectName(b.subject)}: ${tutor.firstName} can't do ${formatDateTime(req.startUtc, tz)} and suggests ${formatDateTime(start, tz)}. Accept it, or keep the current time (${formatDateTime(b.startUtc, tz)}).`,
+        href: `/dashboard/bookings/${id}`,
+      });
       return ok(updated);
     },
     answerRescheduleRequest(id, accept) {
@@ -1115,32 +1238,102 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       const actor = actorFor(r.data, b);
       const req = openRescheduleRequest(b);
       if (!req) return fail("There's no open request for a new time on this lesson.");
+      if (actor !== "booker" && actor !== "tutor") return fail("Only the student, parent or tutor can answer a request for a new time.");
       const close = (proposal: "accepted" | "declined" | "withdrawn", note: string): Booking => {
         const closed: Booking = { ...b, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to: b.status, note, proposal }] };
         set((s) => ({ bookings: s.bookings.map((x) => (x.id === id ? closed : x)) }));
         return closed;
       };
       const tutorUser = tutorUserId(b.tutorId);
-      if (actor === "booker") {
-        if (accept) return fail("Only the tutor can accept the new time.");
-        const kept = close("withdrawn", "Withdrew the request for a new time");
-        notify(tutorUser, { type: "booking_rescheduled", title: "Request withdrawn", body: `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(tutorUser))}.`, href: `/dashboard/bookings/${id}` });
+      // The student's request (the tutor answers) or the tutor's suggested time (the student answers).
+      const fromBooker = req.byBooker;
+      const askedBy = fromBooker ? b.bookerId : tutorUser;
+      const href = `/dashboard/bookings/${id}`;
+      // The side who asked can only withdraw it.
+      if (actor === (fromBooker ? "booker" : "tutor")) {
+        if (accept) return fail(fromBooker ? "Only the tutor can accept the new time." : "Only the student or parent can accept the time you suggested.");
+        const kept = close("withdrawn", fromBooker ? "Withdrew the request for a new time" : "Withdrew the suggested time");
+        const other = fromBooker ? tutorUser : b.bookerId;
+        notify(other, { type: "booking_rescheduled", title: fromBooker ? "Request withdrawn" : "Suggestion withdrawn", body: `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(other))}.`, href });
         return ok(kept);
       }
-      if (actor !== "tutor") return fail("Only the tutor can answer a request for a new time.");
       if (!accept) {
         const kept = close("declined", "Kept the current time");
-        notify(b.bookerId, { type: "booking_rescheduled", title: "Current time kept", body: `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(b.bookerId))}. Message your tutor to find another time.`, href: `/dashboard/bookings/${id}` });
+        notify(askedBy, {
+          type: "booking_rescheduled", title: "Current time kept",
+          body: fromBooker
+            ? `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(askedBy))}. Message your tutor to find another time.`
+            : `${subjectName(b.subject)} stays at ${formatDateTime(b.startUtc, tzOf(askedBy))}: the time you suggested didn't suit them.`,
+          href,
+        });
         return ok(kept);
       }
+      // Accepting moves the lesson as the tutor would (until it starts): the notice rule is for students moving it alone.
       const check = canTransition(b, "rescheduled", "tutor", Date.now(), get().policy);
       if (!check.ok) return fail(check.reason);
-      if (new Date(req.startUtc).getTime() <= Date.now()) return fail("That time has already passed. Keep the current time, or move the lesson yourself.");
-      if (slotConflict(b.tutorId, req.startUtc, b.durationMin, b.id)) return fail("That time isn't free any more. Keep the current time, or move the lesson to another time yourself.");
-      const accepted = close("accepted", "Accepted the new time");
+      if (new Date(req.startUtc).getTime() <= Date.now()) return fail(fromBooker ? "That time has already passed. Keep the current time, or move the lesson yourself." : "That time has already passed. Keep the current time, or ask for another one.");
+      if (slotConflict(b.tutorId, req.startUtc, b.durationMin, b.id)) return fail(fromBooker ? "That time isn't free any more. Keep the current time, or move the lesson to another time yourself." : "That time isn't free any more. Keep the current time, or ask your tutor for another one.");
+      const accepted = close("accepted", fromBooker ? "Accepted the new time" : "Accepted the suggested time");
       const next = moveLesson(accepted, req.startUtc, r.data.id, true);
-      notify(b.bookerId, { type: "booking_rescheduled", title: "New time accepted", body: `${subjectName(b.subject)} moved to ${formatDateTime(req.startUtc, tzOf(b.bookerId))}.`, href: `/dashboard/bookings/${next.id}` });
+      notify(askedBy, { type: "booking_rescheduled", title: fromBooker ? "New time accepted" : "Suggested time accepted", body: `${subjectName(b.subject)} moved to ${formatDateTime(req.startUtc, tzOf(askedBy))}.`, href: `/dashboard/bookings/${next.id}` });
       return ok(next);
+    },
+    answerTutorMove(id, works) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      const b = get().bookings.find((x) => x.id === id);
+      if (!b) return fail("Booking not found.");
+      if (actorFor(r.data, b) !== "booker") return fail("Only the student or parent who booked can answer this.");
+      if (!openTutorMove(b)) return fail("There's nothing to answer on this lesson.");
+      const tutorUser = tutorUserId(b.tutorId);
+      const who = `${r.data.firstName} ${r.data.lastName.charAt(0)}.`;
+      if (works) {
+        const updated: Booking = { ...b, history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to: b.status, note: "The new time works", moveAnswer: "ok" }] };
+        set((s) => ({ bookings: s.bookings.map((x) => (x.id === id ? updated : x)) }));
+        notify(tutorUser, { type: "booking_confirmed", title: "New time works", body: `${who} is fine with ${subjectName(b.subject)} at ${formatDateTime(b.startUtc, tzOf(tutorUser))}.`, href: `/dashboard/bookings/${id}` });
+        return ok(updated);
+      }
+      // The tutor moved it on their own and the new time doesn't work: cancelled with everything paid refunded.
+      const paid = b.priceCents - b.discountCents;
+      const res = applyTransition(r.data, b, "booker", "cancelled_by_student", "The new time didn't work", {
+        fullRefund: paid > 0 ? "The tutor moved this lesson and the new time didn't work — full refund." : undefined,
+        quiet: true,
+      });
+      if (!res.ok) return res;
+      notify(tutorUser, {
+        type: "booking_cancelled", title: "New time didn't work",
+        body: `${who} cancelled ${subjectName(b.subject)} at ${formatDateTime(b.startUtc, tzOf(tutorUser))}: the time you moved it to doesn't suit them${paid > 0 ? ", so they were refunded in full" : ""}.`,
+        href: `/dashboard/bookings/${id}`,
+      });
+      return res;
+    },
+    acceptWeeklyLessons(id) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      const b = get().bookings.find((x) => x.id === id);
+      if (!b) return fail("Booking not found.");
+      if (actorFor(r.data, b) !== "tutor") return fail("Only the tutor can accept these lessons.");
+      const series = seriesOf(b);
+      if (!series) return fail("This lesson isn't part of a set of weekly lessons.");
+      const waiting = get().bookings
+        .filter((x) => x.tutorId === b.tutorId && x.status === "pending" && seriesOf(x)?.id === series.id)
+        .sort((x, y) => startMs(x) - startMs(y));
+      if (!waiting.length) return fail("None of these weekly lessons are waiting for you to accept.");
+      let accepted = 0;
+      let problem: string | null = null;
+      for (const x of waiting) {
+        const res = applyTransition(r.data, get().bookings.find((y) => y.id === x.id)!, "tutor", "confirmed", undefined, { quiet: true });
+        if (res.ok) accepted++;
+        else problem ??= res.error;
+      }
+      if (!accepted) return fail(problem ?? "These lessons couldn't be accepted.");
+      const tutor = resolveTutor(get(), b.tutorId)!;
+      notify(b.bookerId, {
+        type: "booking_confirmed", title: accepted > 1 ? `${accepted} weekly lessons confirmed` : "Lesson confirmed",
+        body: `${subjectName(b.subject)} with ${tutor.firstName} · ${accepted > 1 ? "every week from " : ""}${formatDateTime(waiting[0].startUtc, tzOf(b.bookerId))}`,
+        href: `/dashboard/bookings/${waiting[0].id}`,
+      });
+      return ok({ accepted });
     },
     setLessonVideo(bookingId, input) {
       if (!flag("outside_meeting_links")) return fail("Zoom and Google Meet links are turned off: every online lesson uses the TutorLink classroom.");
@@ -1391,17 +1584,23 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (!r.ok) return r;
       const q = bookingQuote(r.data, input);
       if (!q.ok) return q;
-      const { tutor, charge, currency, instant } = q.data;
-      return ok({ charge, currency, instant, description: `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${tutor.firstName} ${tutor.lastName.charAt(0)}.` });
+      const { tutor, total, currency, instant, hold, starts } = q.data;
+      const who = `${tutor.firstName} ${tutor.lastName.charAt(0)}.`;
+      return ok({ charge: total, currency, instant, hold, description: starts.length > 1 ? `${starts.length} weekly lessons with ${who}` : `${input.type === "trial" ? "Trial lesson" : "Lesson"} with ${who}` });
     },
     markPaymentFailed(bookingId, reason) {
       const b = get().bookings.find((x) => x.id === bookingId);
       if (!b) return fail("Booking not found.");
       if (b.status === "payment_failed") return ok(undefined);
       const tutor = resolveTutor(get(), b.tutorId);
-      patchBooking(b.id, { status: "payment_failed", paymentStatus: "failed", history: [...b.history, { at: nowIso(), by: "system", from: b.status, to: "payment_failed", note: reason }] });
-      set((s) => ({ payments: s.payments.map((p) => (p.bookingId === b.id && p.amountCents > 0 && p.provider === "razorpay" && (p.status === "pending" || p.status === "succeeded") ? { ...p, status: "failed", description: `${p.description} — not taken` } : p)) }));
-      notify(b.bookerId, { type: "payment", title: "Your payment didn't go through", body: `Pay again to keep your ${subjectName(b.subject)} lesson${tutor ? ` with ${tutor.firstName}` : ""}. Nothing was charged.`, href: `/dashboard/bookings/${b.id}` });
+      // Weekly lessons share one payment: every one of them waits for it (each can be paid again on its own).
+      const charge = onlineCharge(b.id);
+      const sharing = new Set(charge?.providerOrderId ? get().payments.filter((p) => p.providerOrderId === charge.providerOrderId && p.amountCents > 0 && p.bookingId).map((p) => p.bookingId as string) : []);
+      const lessons = get().bookings.filter((x) => x.id === b.id || (sharing.has(x.id) && ["pending", "confirmed"].includes(x.status)));
+      for (const x of lessons) patchBooking(x.id, { status: "payment_failed", paymentStatus: "failed", history: [...x.history, { at: nowIso(), by: "system", from: x.status, to: "payment_failed", note: reason }] });
+      const failedIds = new Set(lessons.map((x) => x.id));
+      set((s) => ({ payments: s.payments.map((p) => (p.bookingId && failedIds.has(p.bookingId) && p.amountCents > 0 && p.provider === "razorpay" && (p.status === "pending" || p.status === "succeeded") ? { ...p, status: "failed", description: `${p.description} — not taken` } : p)) }));
+      notify(b.bookerId, { type: "payment", title: "Your payment didn't go through", body: `Pay again to keep your ${subjectName(b.subject)} ${lessons.length > 1 ? `lessons (${lessons.length})` : "lesson"}${tutor ? ` with ${tutor.firstName}` : ""}. Nothing was charged.`, href: `/dashboard/bookings/${b.id}` });
       notify(tutorUserId(b.tutorId), { type: "payment", title: "A lesson is waiting for payment", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(tutorUserId(b.tutorId)))}. We've asked the family to pay again.`, href: `/dashboard/bookings/${b.id}` });
       return ok(undefined);
     },
@@ -2616,7 +2815,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       set((s) => ({
         bookings: s.bookings.map((b) =>
           expiredIds.has(b.id)
-            ? { ...b, status: "cancelled_by_tutor" as const, paymentStatus: b.paymentStatus === "paid" || b.paymentStatus === "authorized" ? ("refunded" as const) : b.paymentStatus, history: [...b.history, { at, by: "system" as const, from: b.status, to: "cancelled_by_tutor" as const, note: "Request expired — the tutor didn't respond before the lesson time. Authorization released." }] }
+            ? { ...b, status: "cancelled_by_tutor" as const, paymentStatus: b.paymentStatus === "paid" || b.paymentStatus === "authorized" ? ("refunded" as const) : b.paymentStatus, history: [...b.history, { at, by: "system" as const, from: b.status, to: "cancelled_by_tutor" as const, note: `Request expired — the tutor didn't respond before the lesson time. ${b.paymentStatus === "paid" ? "Refunded in full." : "Authorization released."}` }] }
             : completedIds.has(b.id)
               ? { ...b, status: "completed" as const, history: [...b.history, { at, by: "system" as const, from: b.status, to: "completed" as const, note: "Completed automatically — no issue was reported within 24 hours" }] }
               : b,
@@ -2624,7 +2823,9 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         payments: s.payments.map((p) => (p.bookingId && expiredIds.has(p.bookingId) && p.status === "pending" ? { ...p, status: "refunded" as const, description: `${p.description} — authorization released` } : p)),
       }));
       for (const b of expired) refundToWallet(b.id, b.bookerId, b.priceCents - b.discountCents, "Request expired — credits returned");
-      for (const b of expired) notify(b.bookerId, { type: "booking_cancelled", title: "Lesson request expired", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))} — you weren't charged.`, href: `/dashboard/bookings/${b.id}` });
+      // Weekly lessons are paid when booked: one the tutor never accepted is refunded through Razorpay.
+      for (const b of expired) if (b.paymentStatus === "paid") refundOnline(b, b.priceCents - b.discountCents, "Refund — request expired");
+      for (const b of expired) notify(b.bookerId, { type: "booking_cancelled", title: "Lesson request expired", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))} — ${b.paymentStatus === "paid" ? "your payment for it is refunded in full" : "you weren't charged"}.`, href: `/dashboard/bookings/${b.id}` });
       for (const b of completed) notify(b.bookerId, { type: "review_request", title: "How was your lesson?", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))}`, href: `/dashboard/bookings/${b.id}` });
       return ok(expired.length + completed.length + reminders);
     },

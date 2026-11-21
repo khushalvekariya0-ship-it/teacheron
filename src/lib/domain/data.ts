@@ -40,6 +40,11 @@ export interface CreateBookingInput {
   couponCode?: string;
   /** "wallet" needs enough Study Credits for the whole charge. */
   payWith?: PayMethod;
+  /**
+   * Regular lessons only: book the same day and time every week, this many weeks in a row (2–8; 1 or unset =
+   * just this lesson). Each lesson is its own booking; every week has to be free.
+   */
+  repeatWeeks?: number;
   idempotencyKey: string;
 }
 

@@ -139,6 +139,52 @@ export function CancelDialog({ booking, actor, open, onOpenChange, counterpart, 
   );
 }
 
+/* ─── The tutor's new time doesn't work (person who booked) ─────────────────── */
+
+export function RefuseMoveDialog({ booking, open, onOpenChange, tutorName, fromUtc }: { booking: Booking; open: boolean; onOpenChange: (o: boolean) => void; tutorName: string; fromUtc: string }) {
+  const answerMove = useApp((s) => s.answerTutorMove);
+  const payments = useApp((s) => s.payments);
+  const tz = useViewerTimezone();
+  const paid = booking.priceCents - booking.discountCents;
+  const withCredits = payments.some((p) => p.bookingId === booking.id && p.method === PAY_METHOD_LABEL.wallet && p.amountCents > 0);
+  const money = (minor: number) => formatMoney(minor, booking.currency);
+  const refundLine =
+    paid <= 0
+      ? "Nothing was charged for this lesson."
+      : booking.paymentStatus === "authorized"
+        ? withCredits ? `The ${money(paid)} of Study Credits held for it goes back to your wallet.` : `Your card hold of ${money(paid)} is released — you won't be charged.`
+        : booking.paymentStatus === "paid"
+          ? `All ${money(paid)} goes back to ${withCredits ? "your Study Credits wallet" : "your original payment method"}.`
+          : "No payment was taken for this lesson, so there's nothing to refund.";
+  return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="The new time doesn't work?"
+      description={`${tutorName} moved this lesson from ${formatDateTime(fromUtc, tz)} to ${formatDateTime(booking.startUtc, tz)}. If you can't make it, the lesson is cancelled and ${tutorName} is told.`}
+      confirmLabel={paid > 0 && booking.paymentStatus === "paid" ? "Cancel with full refund" : "Cancel lesson"}
+      tone="danger"
+      onConfirm={async () => {
+        const res = await answerMove(booking.id, false);
+        if (!res.ok) return void toast.error(res.error);
+        toast.success("Lesson cancelled", { description: paid > 0 && booking.paymentStatus === "paid" ? "You're refunded in full." : `${tutorName} has been told.` });
+        onOpenChange(false);
+      }}
+    >
+      <div className="rounded-lg border border-line bg-canvas p-3.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[13px] font-medium text-ink">Your refund</p>
+          <p className="text-lg font-semibold tabular-nums text-ink">{paid > 0 && booking.paymentStatus === "paid" ? money(paid) : "No charge"}</p>
+        </div>
+        <p className="mt-1 text-[13px] leading-snug text-muted">{refundLine}</p>
+        <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-ink-2">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-muted" aria-hidden /> The tutor moved it, so the late-cancellation rule doesn&apos;t apply.
+        </p>
+      </div>
+    </ConfirmDialog>
+  );
+}
+
 /* ─── Reschedule ────────────────────────────────────────────────────────────── */
 
 export function RescheduleDialog({
@@ -148,6 +194,7 @@ export function RescheduleDialog({
   open,
   onOpenChange,
   onDone,
+  suggest,
 }: {
   booking: Booking;
   actor: Actor;
@@ -155,9 +202,12 @@ export function RescheduleDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone: (next: Booking) => void;
+  /** The tutor replies to a request for a new time with another time (the lesson stays until it's accepted). */
+  suggest?: { counterpart: string; askedUtc: string };
 }) {
   const reschedule = useApp((s) => s.rescheduleBooking);
   const requestReschedule = useApp((s) => s.requestReschedule);
+  const suggestTime = useApp((s) => s.suggestRescheduleTime);
   const policy = useApp((s) => s.policy);
   const tz = useViewerTimezone();
   const [slot, setSlot] = React.useState<string | null>(null);
@@ -167,7 +217,7 @@ export function RescheduleDialog({
   // Inside the late window the person who booked asks the tutor instead (the lesson stays until accepted).
   const now = useNow();
   const asking = actor === "booker" && lateToReschedule(booking, now, policy);
-  const autoConfirm = !asking && (actor === "tutor" || booking.status === "confirmed");
+  const autoConfirm = !asking && !suggest && (actor === "tutor" || booking.status === "confirmed");
 
   const close = (o: boolean) => {
     onOpenChange(o);
@@ -179,9 +229,11 @@ export function RescheduleDialog({
 
   const submit = async () => {
     if (!slot) return setError("Choose a new time first.");
-    const res = asking ? await requestReschedule(booking.id, slot) : await reschedule(booking.id, slot);
+    const res = suggest ? await suggestTime(booking.id, slot) : asking ? await requestReschedule(booking.id, slot) : await reschedule(booking.id, slot);
     if (!res.ok) return setError(res.error);
-    if (asking && res.data.id === booking.id) {
+    if (suggest) {
+      toast.success("Time suggested", { description: `${suggest.counterpart} can accept ${formatDateTime(slot, tz)} or keep the current time.` });
+    } else if (asking && res.data.id === booking.id) {
       toast.success("New time requested", { description: `${tutor.firstName} will accept it or keep the current time: ${formatDateTime(slot, tz)}` });
     } else {
       toast.success(res.data.status === "confirmed" ? "Lesson rescheduled" : "New time requested", {
@@ -196,9 +248,11 @@ export function RescheduleDialog({
     <Dialog open={open} onOpenChange={close}>
       <DialogContent
         size="lg"
-        title={asking ? "Ask to reschedule" : "Reschedule lesson"}
+        title={suggest ? "Suggest another time" : asking ? "Ask to reschedule" : "Reschedule lesson"}
         description={
-          actor === "tutor"
+          suggest
+            ? `${suggest.counterpart} asked for ${formatDateTime(suggest.askedUtc, tz)}. Choose a time that works for you instead: they can accept it in one tap. The lesson stays at the current time until then.`
+            : actor === "tutor"
             ? `Choose any free time, today included: your weekly hours and notice apply to students, not to you. The lesson length stays ${booking.durationMin} minutes.`
             : asking
               ? `It's less than ${policy.rescheduleMinHours} hours before the lesson, so ${tutor.firstName} decides: choose a new time from their availability and they'll accept it or keep the current time. Your lesson stays as it is until then. The length stays ${booking.durationMin} minutes.`
@@ -225,7 +279,9 @@ export function RescheduleDialog({
           <BookingCalendar tutor={tutor} durationMin={booking.durationMin} value={slot} onChange={(v) => { setSlot(v); setError(null); }} excludeBookingId={booking.id} anyTime={actor === "tutor"} />
           <p className="flex items-start gap-2 text-[13px] text-muted">
             <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden />
-            {asking
+            {suggest
+              ? `${suggest.counterpart} is notified and can accept your time or keep the current one. You can withdraw it until then.`
+              : asking
               ? `${tutor.firstName} is notified and can accept the new time or keep the current one. You can withdraw the request until then.`
               : autoConfirm
                 ? "The new time is confirmed right away and the other person is notified."
@@ -242,7 +298,7 @@ export function RescheduleDialog({
             <Button variant="secondary">Keep current time</Button>
           </DialogClose>
           <Button onClick={submit} disabled={!slot}>
-            {asking ? "Send request" : "Confirm new time"}
+            {suggest ? "Send suggestion" : asking ? "Send request" : "Confirm new time"}
           </Button>
         </DialogFooter>
       </DialogContent>

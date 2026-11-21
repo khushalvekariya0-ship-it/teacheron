@@ -33,14 +33,18 @@ const canReschedule: Rule["guard"] = (b, now, p, actor) => {
 /** Inside the platform's notice the person who booked can no longer move the lesson themselves. */
 export const lateToReschedule = (b: Booking, now: number, p: BookingPolicy) => now >= startMs(b) - p.rescheduleMinHours * 3_600_000;
 
-/** The open request to move this lesson (asked inside the late window), or null. It lapses when the lesson starts. */
-export function openRescheduleRequest(b: Booking, now = Date.now()): { startUtc: string; at: string; by: string } | null {
+/**
+ * The open request to move this lesson, or null: asked by the person who booked (inside the late window), or
+ * another time the tutor suggested in reply (`byBooker` false). The other side answers it; it lapses when the
+ * lesson starts.
+ */
+export function openRescheduleRequest(b: Booking, now = Date.now()): { startUtc: string; at: string; by: string; byBooker: boolean } | null {
   for (let i = b.history.length - 1; i >= 0; i--) {
     const e = b.history[i];
     if (!e.proposal) continue;
     if (e.proposal !== "asked" || !e.proposedStartUtc) return null;
     if (!["pending", "confirmed"].includes(b.status) || now >= startMs(b)) return null;
-    return { startUtc: e.proposedStartUtc, at: e.at, by: String(e.by) };
+    return { startUtc: e.proposedStartUtc, at: e.at, by: String(e.by), byBooker: e.by === b.bookerId };
   }
   return null;
 }
@@ -54,8 +58,27 @@ export function askToRescheduleProblem(b: Booking, actor: Actor, now: number, p:
   if (!["pending", "confirmed"].includes(b.status)) return "This lesson can't be moved.";
   if (now >= startMs(b)) return "This lesson has already started, so it can't be moved.";
   if ((b.rescheduleCount ?? 0) >= p.maxReschedulesPerBooking) return "This lesson has reached the reschedule limit.";
-  if (openRescheduleRequest(b, now)) return "You've already asked for a new time: wait for the tutor's answer, or withdraw it first.";
+  const open = openRescheduleRequest(b, now);
+  if (open) return open.byBooker ? "You've already asked for a new time: wait for the tutor's answer, or withdraw it first." : "Your tutor suggested another time: accept it or keep the current time first.";
   return null;
+}
+
+/** The most weeks one booking can repeat for (each week is its own lesson). */
+export const MAX_WEEKLY_LESSONS = 8;
+
+/** Lesson n of a set of weekly lessons booked together, or null. */
+export const seriesOf = (b: Booking) => b.history.find((e) => e.series)?.series ?? null;
+
+/**
+ * A lesson the tutor moved on their own that the person who booked hasn't answered yet: they can say the new
+ * time works, or cancel it with a full refund. Open until the lesson starts.
+ */
+export function openTutorMove(b: Booking, now = Date.now()): { fromUtc: string; at: string } | null {
+  const first = b.history[0];
+  if (!first?.movedByTutor || !first.previousStartUtc) return null;
+  if (b.history.some((e) => e.moveAnswer)) return null;
+  if (!["pending", "confirmed"].includes(b.status) || now >= startMs(b)) return null;
+  return { fromUtc: first.previousStartUtc, at: first.at };
 }
 
 export const TRANSITIONS: Record<BookingStatus, Partial<Record<BookingStatus, Rule>>> = {
@@ -111,6 +134,8 @@ export function cancellationRefund(b: Booking, by: "booker" | "tutor" | "admin",
   const paid = b.priceCents - b.discountCents;
   if (paid <= 0) return { refundCents: 0, rule: "Nothing was charged for this lesson." };
   if (by !== "booker") return { refundCents: paid, rule: "Cancelled by the tutor or platform — full refund." };
+  // A request the tutor hasn't accepted yet (weekly lessons are paid when booked) is never a late cancellation.
+  if (b.status === "pending") return { refundCents: paid, rule: "Cancelled before the tutor accepted — full refund." };
   const hoursLeft = (startMs(b) - now) / 3_600_000;
   const freeWindow = b.type === "trial" ? policy.trialFreeCancellationHours : policy.freeCancellationHours;
   if (hoursLeft >= freeWindow) return { refundCents: paid, rule: `Cancelled ${freeWindow}+ hours before the lesson — full refund.` };

@@ -97,6 +97,10 @@ export const PLANS: Record<ActionName, Plan> = {
   rescheduleBooking: (L, me, [id]) => L.bookingParticipants(str(id), me),
   requestReschedule: (L, me, [id]) => L.bookingParticipants(str(id), me),
   answerRescheduleRequest: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  suggestRescheduleTime: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  answerTutorMove: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  // The tutor's world holds every lesson of the weekly set.
+  acceptWeeklyLessons: (L, me, [id]) => L.bookingParticipants(str(id), me),
   // The tutor's world holds their other upcoming lessons (for "use this link for my other lessons").
   setLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
   removeLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),

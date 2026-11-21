@@ -44,9 +44,10 @@ async function planFor(me: User, kind: CheckoutKind, payload: Record<string, unk
   if (kind === "booking") {
     const q = await runAction("quoteBooking", [payload], { userId: me.id });
     if (!q.ok) return q;
-    const { charge, currency, instant, description } = q.data as { charge: number; currency: Currency; instant: boolean; description: string };
+    // A single lesson request holds the money until the tutor accepts; weekly lessons are paid at once.
+    const { charge, currency, hold, description } = q.data as { charge: number; currency: Currency; instant: boolean; hold: boolean; description: string };
     if (charge <= 0) return ok(null);
-    return ok({ amount: charge, currency, hold: !instant, description, payload });
+    return ok({ amount: charge, currency, hold, description, payload });
   }
   if (kind === "booking_retry") {
     const [b] = await db()`select id, price_cents, discount_cents, currency from public.bookings where id = ${String(payload.bookingId ?? "")} and booker_id = ${me.id} and status = 'payment_failed'`;

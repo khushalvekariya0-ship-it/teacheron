@@ -160,12 +160,15 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
 
   createBooking: t(z.object({
     tutorId: id, startUtc: iso, durationMin: int(15, 240), type: z.enum(["trial", "regular"]), mode: MODE, subject: text(80),
-    childId: id.optional(), notes: text(1000).optional(), couponCode: text(20).optional(), payWith: PAY_METHOD.optional(), idempotencyKey: text(100).min(8),
+    childId: id.optional(), notes: text(1000).optional(), couponCode: text(20).optional(), payWith: PAY_METHOD.optional(), repeatWeeks: int(1, 8).optional(), idempotencyKey: text(100).min(8),
   })),
   transitionBooking: t(id, BOOKING_STATUS, text(500).optional()),
   rescheduleBooking: t(id, iso),
   requestReschedule: t(id, iso),
   answerRescheduleRequest: t(id, z.boolean()),
+  suggestRescheduleTime: t(id, iso),
+  answerTutorMove: t(id, z.boolean()),
+  acceptWeeklyLessons: t(id),
   setLessonVideo: t(id, z.object({ link: text(500), passcode: text(20).optional(), applyToUpcoming: z.boolean().optional() })),
   removeLessonVideo: t(id),
   setLessonRecording: t(id, text(500)),

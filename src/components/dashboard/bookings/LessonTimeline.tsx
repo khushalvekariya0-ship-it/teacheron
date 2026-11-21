@@ -12,8 +12,13 @@ import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { shortName, type BookingPeople } from "./shared";
 
 function eventTitle(e: BookingEvent, b: Booking): string {
-  if (e.proposal) return { asked: "New time requested", accepted: "New time accepted", declined: "Current time kept", withdrawn: "Request withdrawn" }[e.proposal];
-  if (e.from === null && e.to === "pending") return b.type === "trial" ? "Trial requested" : "Lesson requested";
+  if (e.proposal) {
+    if (e.proposal === "asked" && e.by !== b.bookerId) return "Another time suggested";
+    return { asked: "New time requested", accepted: "New time accepted", declined: "Current time kept", withdrawn: "Request withdrawn" }[e.proposal];
+  }
+  if (e.moveAnswer) return "New time confirmed";
+  if (e.movedByTutor) return "Moved by the tutor";
+  if (e.from === null && e.to === "pending") return e.series ? "Weekly lesson requested" : b.type === "trial" ? "Trial requested" : "Lesson requested";
   if (e.from === null && e.to === "confirmed") return "Lesson booked";
   if (e.from === "payment_failed" && e.to === "pending") return "Payment retried";
   const custom: Partial<Record<BookingStatus, string>> = {
