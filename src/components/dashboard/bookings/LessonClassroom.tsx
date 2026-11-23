@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FileText, ImageIcon, Sparkles, Trash2 } from "lucide-react";
+import { FileText, ImageIcon, Sparkles, Trash2, UserCheck } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
 import { useViewerTimezone } from "@/lib/store/hooks";
@@ -11,7 +11,16 @@ import { GuestLinkBox } from "@/components/classroom/live/LiveClassroom";
 import { prefetchSpeechReader } from "@/components/classroom/live/deviceSpeech";
 import { useApp } from "@/lib/store";
 
+interface Attended {
+  name: string;
+  role: string;
+  firstSeen: string;
+  lastSeen: string;
+  minutes: number;
+  joins: number;
+}
 interface Info {
+  attendance?: Attended[];
   ready: boolean;
   isHost: boolean;
   hasRecap: boolean;
@@ -34,8 +43,8 @@ interface Recap {
 }
 
 /**
- * What the live classroom left on the lesson page: whiteboards the tutor shared, the caption transcript
- * with snapshots (and an AI recap when that's switched on), and for the tutor the guest link.
+ * What the live classroom left on the lesson page: who attended (and for how long), whiteboards the tutor shared,
+ * the caption transcript with snapshots (and an AI recap when that's switched on), and for the tutor the guest link.
  */
 export function LessonClassroomCard({ booking }: { booking: Booking }) {
   const tz = useViewerTimezone();
@@ -84,7 +93,8 @@ export function LessonClassroomCard({ booking }: { booking: Booking }) {
   };
 
   if (!info) return null;
-  const hasContent = boards.length > 0 || !!recap?.transcript || !!recap?.summary || (recap?.snapshots.length ?? 0) > 0;
+  const attendance = info.attendance ?? [];
+  const hasContent = attendance.length > 0 || boards.length > 0 || !!recap?.transcript || !!recap?.summary || (recap?.snapshots.length ?? 0) > 0;
   const showGuest = info.ready && info.isHost && (info.window.state === "open" || info.window.state === "upcoming");
   if (!hasContent && !showGuest) return null;
 
@@ -98,6 +108,27 @@ export function LessonClassroomCard({ booking }: { booking: Booking }) {
           </p>
         )}
         {showGuest && <GuestLinkBox bookingId={booking.id} />}
+
+        {attendance.length > 0 && (
+          <section aria-label="Attendance" data-attendance="">
+            <p className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+              <UserCheck className="size-4 text-brand" aria-hidden /> Attendance
+            </p>
+            <ul className="divide-y divide-line border border-line">
+              {attendance.map((a) => (
+                <li key={`${a.name}-${a.firstSeen}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-3 py-2 text-[13px]">
+                  <span className="font-semibold text-ink">
+                    {a.name} <span className="font-normal text-muted">· {a.role}</span>
+                  </span>
+                  <span className="text-ink-2">
+                    {a.minutes < 1 ? "under a minute" : `${a.minutes} min`} · joined {formatDateTime(a.firstSeen, tz)} · last seen {formatDateTime(a.lastSeen, tz)}
+                    {a.joins > 1 ? ` · joined ${a.joins} times` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {boards.length > 0 && (
           <section aria-label="Shared whiteboards">

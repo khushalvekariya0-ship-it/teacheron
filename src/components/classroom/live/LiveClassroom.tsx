@@ -6,10 +6,10 @@ import {
 } from "@livekit/components-react";
 import { ConnectionState, DisconnectReason, MediaDeviceFailure, RoomEvent, Track, type LocalAudioTrack, type Participant } from "livekit-client";
 import {
-  AlertTriangle, Camera, Check, Copy, FileText, Flag, LayoutGrid, Link2, Loader2, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp, PenLine, PhoneOff,
-  RefreshCw, User as UserIcon, Users, Video, VideoOff,
+  AlertTriangle, Camera, Check, Circle, Copy, FileText, Flag, Hand, LayoutGrid, Link2, Loader2, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp, PenLine, PhoneOff,
+  RefreshCw, SmilePlus, Square, User as UserIcon, Users, Video, VideoOff,
 } from "lucide-react";
-import { readMeta, TOPIC, type JoinTicket } from "@/lib/classroom";
+import { readMeta, REACTIONS, TOPIC, type JoinTicket } from "@/lib/classroom";
 import { maskMatches, scanContact, speechContact, speechEarlyContact, speechSplitContact } from "@/lib/domain/contact";
 import { cn } from "@/lib/utils";
 import { currentZoneName } from "@/lib/timezones";
@@ -21,6 +21,10 @@ import { canReadOnDevice, loadSpeechModel, readChunks, readVoice, sharedAudioCon
 import { ProtectedVoice } from "./protectedVoice";
 import { useApp } from "@/lib/store";
 import { downloadTranscriptPdf, type Snapshot } from "./transcriptPdf";
+import { PreJoin, savedChoice, type JoinChoice } from "./PreJoin";
+import { useClassSignals } from "./classSignals";
+import { guestPass } from "./guestPass";
+import { announceRecording, canRecordClass, REC_EVERY_MS, saveRecording, startClassRecording, useRecordingNotices, type ClassRecording } from "./classRecorder";
 
 /*
  * The live classroom: video, audio, screen share, whiteboard, chat, people, captions and a transcript,
@@ -112,10 +116,11 @@ function hasBrowserRecogniser(): boolean {
 
 export function LiveClassroom(props: Props) {
   const [attempt, setAttempt] = React.useState(0);
-  return <Joiner key={attempt} {...props} onRetry={() => setAttempt((a) => a + 1)} />;
+  // A rejoin (after a dropped connection) skips the device check: the same choices as before.
+  return <Joiner key={attempt} {...props} quick={attempt > 0} onRetry={() => setAttempt((a) => a + 1)} />;
 }
 
-function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onRetry }: Props & { onRetry: () => void }) {
+function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onRetry, quick }: Props & { onRetry: () => void; quick: boolean }) {
   const [state, setState] = React.useState<{ ticket?: JoinTicket; error?: string }>(given ? { ticket: given } : {});
   const [roomError, setRoomError] = React.useState<{ title: string; message: string } | null>(null);
   const [ended, setEnded] = React.useState<{ title: string; message: string; rejoin: boolean } | null>(null);
@@ -139,8 +144,22 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
   }, [safety.voice, safety.deviceSpeech]);
   // The first class on a phone (or in Safari / Firefox): nothing can check speech until the reader is ready, so
   // the connection starts with the microphone off and the room turns it on once the check is ready (holdMic).
-  const [holdAtStart] = React.useState(
-    () => safety.voice && safety.deviceSpeech && canReadOnDevice() && !speechModelLoaded("en-in") && !((isComputer() || safety.voiceOnPhones) && hasBrowserRecogniser()),
+  // Worked out when "Join class" is pressed (the reader often finishes downloading during the device check).
+  const holdNow = () => safety.voice && safety.deviceSpeech && canReadOnDevice() && !speechModelLoaded("en-in") && !((isComputer() || safety.voiceOnPhones) && hasBrowserRecogniser());
+  // The device check before joining (PreJoin): microphone / camera on or off and which ones.
+  const [choice, setChoice] = React.useState<(JoinChoice & { hold: boolean }) | null>(() => (quick ? { ...savedChoice(), hold: holdNow() } : null));
+  const micId = choice?.micId;
+  const camId = choice?.camId;
+  const speakerId = choice?.speakerId;
+  const roomOptions = React.useMemo(
+    () => ({
+      adaptiveStream: true,
+      dynacast: true,
+      ...(micId ? { audioCaptureDefaults: { deviceId: micId } } : {}),
+      ...(camId ? { videoCaptureDefaults: { deviceId: camId } } : {}),
+      ...(speakerId ? { audioOutput: { deviceId: speakerId } } : {}),
+    }),
+    [micId, camId, speakerId],
   );
 
   React.useEffect(() => {
@@ -161,7 +180,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
     };
   }, [bookingId, given]);
 
-  const shell = (children: React.ReactNode) => <div className="dark fixed inset-0 z-50 grid place-items-center bg-page p-4 text-ink">{children}</div>;
+  const shell = (children: React.ReactNode) => <div className="dark fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-page p-4 text-ink">{children}</div>;
 
   if (ended) {
     return shell(
@@ -203,6 +222,17 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
       </div>,
     );
   }
+  if (!choice) {
+    return shell(
+      <PreJoin
+        title={title}
+        name={state.ticket?.me.name ?? ""}
+        cameraBlocked={!!state.ticket?.cameraOffUntil}
+        onJoin={(c) => setChoice({ ...c, hold: holdNow() })}
+        onCancel={onLeave}
+      />,
+    );
+  }
   if (!state.ticket) {
     return shell(
       <div className="text-center" role="status">
@@ -238,9 +268,9 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
         token={ticket.token}
         serverUrl={ticket.wsUrl}
         connect
-        video={!ticket.startMuted}
-        audio={!ticket.startMuted && !holdAtStart}
-        options={{ adaptiveStream: true, dynacast: true }}
+        video={!ticket.startMuted && choice.cam && !ticket.cameraOffUntil}
+        audio={!ticket.startMuted && choice.mic && !choice.hold}
+        options={roomOptions}
         onError={(e) => setRoomError({ title: "Connection problem", message: e?.message || "We couldn't reach the class server. Check your internet and try again." })}
         onMediaDeviceFailure={(failure) =>
           setRoomError({
@@ -282,7 +312,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
         }}
         style={{ position: "fixed", inset: 0, zIndex: 50 }}
       >
-        <MeetingRoom bookingId={bookingId} title={title} ticket={ticket} chat={chat} onRefresh={onRefresh} leavingRef={leavingRef} onLeave={onLeave} onSafetyRemoved={onSafetyRemoved} micHeldAtStart={holdAtStart && !ticket.startMuted} />
+        <MeetingRoom bookingId={bookingId} title={title} ticket={ticket} chat={chat} onRefresh={onRefresh} leavingRef={leavingRef} onLeave={onLeave} onSafetyRemoved={onSafetyRemoved} micHeldAtStart={choice.hold && choice.mic && !ticket.startMuted} micOnAtStart={choice.mic && !ticket.startMuted} />
       </LiveKitRoom>
     </div>
   );
@@ -291,7 +321,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
 /* ─── Inner: the room ────────────────────────────────────────────────────── */
 
 function MeetingRoom({
-  bookingId, title, ticket, chat, onRefresh, leavingRef, onLeave, onSafetyRemoved, micHeldAtStart,
+  bookingId, title, ticket, chat, onRefresh, leavingRef, onLeave, onSafetyRemoved, micHeldAtStart, micOnAtStart,
 }: {
   bookingId: string;
   title: string;
@@ -303,6 +333,8 @@ function MeetingRoom({
   onSafetyRemoved: (suspended: boolean) => void;
   /** Joined with the microphone off while the speech check gets ready: it turns on once it's ready. */
   micHeldAtStart: boolean;
+  /** The person chose to join with their microphone on (the device check). */
+  micOnAtStart: boolean;
 }) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -314,6 +346,9 @@ function MeetingRoom({
 
   const [panel, setPanel] = React.useState<"people" | "chat" | "transcript" | null>(null);
   const [showBoard, setShowBoard] = React.useState(false);
+  React.useEffect(() => {
+    showBoardRef.current = showBoard;
+  }, [showBoard]);
   const [boardFull, setBoardFull] = React.useState(true);
   const [boardCanDraw, setBoardCanDraw] = React.useState(false);
   const [gridView, setGridView] = React.useState(true);
@@ -391,10 +426,23 @@ function MeetingRoom({
   // Who this page is in the room: the identity the server put in the join ticket. (The local participant's
   // own identity can still be empty when this first renders, and a warning must know it's about you.)
   const me = React.useMemo(() => ({ identity: ticket.identity, name: ticket.me.name }), [ticket.identity, ticket.me.name]);
+  // Raise hand and quick reactions (classSignals.ts).
+  const sayRef = React.useRef<(msg: string, ms?: number) => void>(() => {});
+  const onRaised = React.useCallback((p: Participant) => sayRef.current(`${nameOf(p)} raised their hand ✋`, 5000), []);
+  const { hands, myHandUp, toggleHand, lowerHand, reactions, react } = useClassSignals(room, me, onRaised);
+  const [reactOpen, setReactOpen] = React.useState(false);
+  // Recording on this person's own device (classRecorder.ts); everyone sees who is recording.
+  const onRecStarted = React.useCallback((name: string) => sayRef.current(`${name} started recording this class.`, 6000), []);
+  const recorders = useRecordingNotices(room, onRecStarted);
+  const [recording, setRecording] = React.useState<ClassRecording | null>(null);
+  const [recBusy, setRecBusy] = React.useState(false);
+  const recordingRef = React.useRef<ClassRecording | null>(null);
+  const showBoardRef = React.useRef(false);
+  const canRecord = !guest && canRecordClass();
   // An audio pause (contact details shared again): the server stops the microphone reaching the others
   // (a rejoin gets a pass without it); this page shows until when, and ends it when the time is up.
   const [pausedUntil, setPausedUntil] = React.useState<number | null>(ticket.audioPausedUntil ?? null);
-  const micWanted = React.useRef(true);
+  const micWanted = React.useRef(micOnAtStart);
   const onPaused = React.useCallback((until: number) => setPausedUntil(until), []);
   // Protected voice (Admin setting): this person's voice goes out a little late through this processor.
   const protectRef = React.useRef<ProtectedVoice | null>(null);
@@ -564,6 +612,64 @@ function MeetingRoom({
     window.setTimeout(() => setNotice((m) => (m === msg ? null : m)), ms);
   }, []);
 
+  React.useEffect(() => {
+    sayRef.current = say;
+  }, [say]);
+
+  /* ── recording ── */
+
+  /** Stops this person's recording and saves the file to this device. */
+  const stopRecording = React.useCallback(async () => {
+    const rec = recordingRef.current;
+    if (!rec) return;
+    recordingRef.current = null;
+    setRecording(null);
+    setRecBusy(true);
+    announceRecording(room, false);
+    void fetch("/api/classroom/recording", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, on: false }), keepalive: true }).catch(() => {});
+    try {
+      const file = await rec.stop();
+      if (file) {
+        saveRecording(file);
+        say(`Recording saved to this device: ${file.name}`, 8000);
+      } else say("Nothing was recorded.");
+    } finally {
+      setRecBusy(false);
+    }
+  }, [room, bookingId, say]);
+  const startRecording = async () => {
+    if (recordingRef.current || recBusy) return;
+    setRecBusy(true);
+    try {
+      const rec = await startClassRecording(room, { title, small: !onComputer, boardShown: () => showBoardRef.current });
+      recordingRef.current = rec;
+      setRecording(rec);
+      announceRecording(room, true);
+      void fetch("/api/classroom/recording", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, on: true }) }).catch(() => {});
+      say("Recording started. Everyone in the class can see that you're recording. It's saved to this device when you stop.", 7000);
+    } catch (e) {
+      say(`The recording couldn't start: ${(e as Error)?.message || "this browser can't record"}.`, 6000);
+    } finally {
+      setRecBusy(false);
+    }
+  };
+  // While recording: the others are told again every few seconds (late joiners too), and closing the page asks first.
+  React.useEffect(() => {
+    if (!recording) return;
+    const again = window.setInterval(() => announceRecording(room, true), REC_EVERY_MS);
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.clearInterval(again);
+      window.removeEventListener("beforeunload", warn);
+    };
+  }, [recording, room]);
+  // Leaving the room (or it closing) stops the recording and saves what was recorded.
+  React.useEffect(() => () => void stopRecording(), [stopRecording]);
+
   // The first class on a phone (or in Safari / Firefox, which have no speech recogniser to cover the wait): the
   // microphone stays off until the speech reader has downloaded, then turns on by itself.
   const holdMic = deviceRead && !modelReady && !(speechCheck && hasSpeechRecognition && !speechBlocked);
@@ -584,6 +690,18 @@ function MeetingRoom({
     protectRef.current?.reopen();
     void localParticipant.setMicrophoneEnabled(true).catch(() => {});
   }, [holdMic, isMicrophoneEnabled, localParticipant, pausedUntil, connection]);
+
+  // Attendance (shown on the lesson page): "still here" once a minute while connected, and once when leaving.
+  const attend = React.useCallback(
+    () => fetch("/api/classroom/attend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, ...guestPass() }), keepalive: true }).catch(() => {}),
+    [bookingId],
+  );
+  React.useEffect(() => {
+    if (connection !== ConnectionState.Connected) return;
+    void attend();
+    const t = window.setInterval(() => void attend(), 60_000);
+    return () => window.clearInterval(t);
+  }, [connection, attend]);
 
   const speechState: SpeechState = !safety.voice
       ? "off"
@@ -1087,6 +1205,7 @@ function MeetingRoom({
   const leave = async (endForEveryone: boolean) => {
     setLeaving(true);
     leavingRef.current = true;
+    if (recordingRef.current) await stopRecording();
     if (isHost && endForEveryone) {
       try {
         await fetch("/api/classroom/end", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId }) });
@@ -1108,6 +1227,7 @@ function MeetingRoom({
     }
     captionsOnRef.current = false;
     stopRecognition();
+    void attend();
     await room.disconnect();
     onLeave();
   };
@@ -1145,6 +1265,7 @@ function MeetingRoom({
           </div>
         )}
         <span className="absolute bottom-1.5 left-1.5 max-w-[85%] truncate bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
+          {hands.has(t.participant.identity) && <span className="mr-1" aria-label="hand raised">✋</span>}
           {self ? `${label} (you)` : label}
           {!t.participant.isMicrophoneEnabled && <MicOff className="ml-1 inline size-3 text-red-300" aria-label="muted" />}
         </span>
@@ -1204,6 +1325,12 @@ function MeetingRoom({
               { label: "Chat", on: safety.chat },
             ]}
           />
+          {(recording || recorders.size > 0) && (
+            <span className="flex max-w-[14rem] items-center gap-1.5 bg-danger/15 px-2 py-0.5 text-xs font-semibold text-red-300" role="status" data-recording-notice="">
+              <span className="size-2 shrink-0 animate-pulse rounded-full bg-danger" aria-hidden />
+              <span className="truncate">{[...(recording ? ["You"] : []), ...recorders.values()].join(", ")} recording</span>
+            </span>
+          )}
           <span className="flex items-center gap-1 text-sm text-muted" aria-label={`${participants.length} in the class`}>
             <Users className="size-4" aria-hidden /> {participants.length}
           </span>
@@ -1284,7 +1411,7 @@ function MeetingRoom({
 
             {panel === "people" && (
               <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                {participants.map((p) => {
+                {[...participants].sort((a, b) => (hands.get(a.identity) ?? Infinity) - (hands.get(b.identity) ?? Infinity)).map((p) => {
                   const meta = readMeta(p.metadata);
                   const self = p.identity === localParticipant.identity;
                   return (
@@ -1297,6 +1424,15 @@ function MeetingRoom({
                         <span className={cn("mt-0.5 inline-block px-1.5 py-0.5 text-[11px] font-semibold", meta?.isHost ? "bg-brand text-on-brand" : "bg-sunken text-ink-2")}>{meta?.isHost ? `Host · ${meta.role}` : (meta?.role ?? "Guest")}</span>
                       </div>
                       <div className="flex gap-1">
+                        {hands.has(p.identity) &&
+                          (isHost && !self ? (
+                            <button type="button" onClick={() => lowerHand(p.identity)} className="px-1 text-xs hover:bg-line" title="Lower their hand" aria-label={`Lower ${nameOf(p)}'s hand`}>
+                              ✋ Lower
+                            </button>
+                          ) : (
+                            <span aria-label="hand raised">✋</span>
+                          ))}
+                        {recorders.has(p.identity) && <span className="size-2 self-center rounded-full bg-danger" title="Recording" aria-label="recording" />}
                         {!p.isMicrophoneEnabled && <MicOff className="size-3.5 text-red-300" aria-label="microphone off" />}
                         {!p.isCameraEnabled && <VideoOff className="size-3.5 text-red-300" aria-label="camera off" />}
                       </div>
@@ -1382,6 +1518,19 @@ function MeetingRoom({
         </div>
       )}
 
+      {reactions.length > 0 && (
+        <div className="pointer-events-none absolute bottom-24 left-3 z-[45] flex flex-col-reverse gap-1.5" aria-live="polite">
+          {reactions.map((r) => {
+            const p = r.identity === me.identity ? null : room.getParticipantByIdentity(r.identity);
+            return (
+              <span key={r.id} className="flex items-center gap-2 bg-night/85 px-3 py-1.5 text-sm text-white shadow-xl" data-reaction="">
+                <span className="text-2xl leading-none">{r.emoji}</span>
+                {p ? nameOf(p) : "You"}
+              </span>
+            );
+          })}
+        </div>
+      )}
       <SafetyAlert alert={safetyAlert} onDismiss={dismissSafety} />
       {cameraAlert && (
         <div className="pointer-events-none absolute inset-x-0 bottom-44 z-[57] flex justify-center px-3" data-camera-alert>
@@ -1450,6 +1599,47 @@ function MeetingRoom({
           <button type="button" onClick={() => setShowBoard((v) => !v)} className={control(showBoard, false)} aria-label="Whiteboard" title="Whiteboard" aria-pressed={showBoard}>
             <PenLine className="size-5" />
           </button>
+          <button type="button" onClick={toggleHand} className={control(myHandUp, false)} aria-label={myHandUp ? "Lower your hand" : "Raise your hand"} title={myHandUp ? "Lower your hand" : "Raise your hand"} aria-pressed={myHandUp}>
+            <Hand className="size-5" />
+          </button>
+          <div className="relative">
+            <button type="button" onClick={() => setReactOpen((v) => !v)} className={control(reactOpen, false)} aria-label="React" title="React" aria-expanded={reactOpen}>
+              <SmilePlus className="size-5" />
+            </button>
+            {reactOpen && (
+              <div className="absolute bottom-14 left-1/2 z-50 flex -translate-x-1/2 gap-1 border border-line bg-surface p-1.5 shadow-2xl" role="menu" aria-label="Reactions">
+                {REACTIONS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      react(e);
+                      setReactOpen(false);
+                    }}
+                    className="grid size-10 place-items-center text-2xl hover:bg-sunken"
+                    aria-label={`React ${e}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {canRecord && (
+            <button
+              type="button"
+              onClick={() => void (recording ? stopRecording() : startRecording())}
+              disabled={recBusy}
+              className={cn(control(false, !!recording), "disabled:opacity-60")}
+              aria-label={recording ? "Stop recording" : "Record"}
+              title={recording ? "Stop recording (saved to this device)" : "Record this class on this device"}
+              aria-pressed={!!recording}
+              data-record=""
+            >
+              {recBusy ? <Loader2 className="size-5 animate-spin" /> : recording ? <Square className="size-4 fill-current" /> : <Circle className="size-5 fill-danger text-danger" />}
+            </button>
+          )}
           <button type="button" onClick={() => void leave(false)} disabled={leaving} className="flex h-12 items-center gap-2 rounded-full bg-danger px-5 text-sm font-semibold text-white hover:bg-danger/85 disabled:opacity-60 md:px-7">
             {leaving ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <PhoneOff className="size-5" aria-hidden />}
             {leaving ? "Leaving…" : "Leave"}

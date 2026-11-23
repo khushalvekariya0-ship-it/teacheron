@@ -174,6 +174,7 @@ export async function classInfo(user: User, lesson: Lesson, origin: string) {
   const [{ n: boards }] = await db()`select count(*)::int n from public.class_boards where booking_id = ${lesson.booking.id}`;
   const code = lesson.session?.guestCode ?? null;
   return {
+    attendance: await attendanceOf(lesson),
     ready: liveVideoReady(),
     role,
     isHost: host,
@@ -184,6 +185,61 @@ export async function classInfo(user: User, lesson: Lesson, origin: string) {
     hasRecap: !!recap?.has,
     boards,
   };
+}
+
+/* ─── Attendance ───────────────────────────────────────────────────────────────
+ * Each person's class page says "still here" once a minute (and once more when they leave); the lesson page
+ * shows who was in the class, from when, until when and for how long (table class_attendance).
+ */
+
+/** A gap longer than this between two signs isn't counted as time in the class (the person was away). */
+const ATTEND_GAP_SECONDS = 150;
+
+/** Postgres "no such table": attendance waits for its migration (20261123000000_class_attendance.sql). */
+const noTable = (e: unknown) => (e as { code?: string })?.code === "42P01";
+
+/** "Still here" from a person's class page. */
+export async function markAttendance(who: { user: User; guest?: undefined } | { guest: ClassGuest; user?: undefined }, lesson: Lesson) {
+  if (!windowOf(lesson).canJoin) return;
+  let identity: string, userId: string | null, name: string, role: ParticipantMeta["role"];
+  if (who.user) {
+    const meta = metaFor(who.user, lesson, requireRole(who.user, lesson));
+    identity = `u-${who.user.id}`;
+    userId = who.user.id;
+    name = meta.name;
+    role = meta.role;
+  } else {
+    identity = who.guest.identity;
+    userId = null;
+    name = `${who.guest.name} (guest)`;
+    role = "Guest";
+  }
+  await db()`insert into public.class_attendance (booking_id, who, user_id, name, role) values (${lesson.booking.id}, ${identity}, ${userId}, ${name.slice(0, 80)}, ${role})
+    on conflict (booking_id, who) do update set
+      seconds = public.class_attendance.seconds + case when now() - public.class_attendance.last_seen <= make_interval(secs => ${ATTEND_GAP_SECONDS})
+        then greatest(0, extract(epoch from now() - public.class_attendance.last_seen))::int else 0 end,
+      joins = public.class_attendance.joins + case when now() - public.class_attendance.last_seen > make_interval(secs => ${ATTEND_GAP_SECONDS}) then 1 else 0 end,
+      last_seen = now(), name = excluded.name`.catch((e) => {
+    if (!noTable(e)) throw e;
+  });
+}
+
+export interface AttendanceRow {
+  name: string;
+  role: ParticipantMeta["role"];
+  firstSeen: string;
+  lastSeen: string;
+  minutes: number;
+  joins: number;
+}
+
+/** Who was in this lesson's class (the lesson page; empty until anyone joined, or before the migration). */
+async function attendanceOf(lesson: Lesson): Promise<AttendanceRow[]> {
+  const rows = await db()`select name, role, first_seen, last_seen, seconds, joins from public.class_attendance where booking_id = ${lesson.booking.id} order by first_seen`.catch((e) => {
+    if (noTable(e)) return [];
+    throw e;
+  });
+  return rows.map((r) => ({ name: String(r.name), role: r.role as ParticipantMeta["role"], firstSeen: iso(r.first_seen)!, lastSeen: iso(r.last_seen)!, minutes: Math.round(Number(r.seconds) / 60), joins: Number(r.joins) }));
 }
 
 /* ─── Guests and the waiting room ──────────────────────────────────────────── */
@@ -833,6 +889,16 @@ export async function guestScreenFrame(guest: ClassGuest, lesson: Lesson, dataUr
   if (!kinds.size) return { checked: true as const, found: false as const, boxes: frame.boxes, maskable: true };
   const caught = record ? await guestCaught(guest, lesson, "screen", [...kinds]) : {};
   return { checked: true as const, found: true as const, kinds: [...kinds], boxes: frame.boxes, maskable, ...caught };
+}
+
+/**
+ * Someone started or stopped recording the class on their own device (the class shows everyone who is
+ * recording). Only the time goes into the audit log: the recording itself never reaches TutorLink.
+ */
+export async function noteRecording(user: User, lesson: Lesson, on: boolean) {
+  requireRole(user, lesson);
+  if (on && !windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  await auditDirect(user.id, on ? "classroom.recording_start" : "classroom.recording_stop", "booking", lesson.booking.id);
 }
 
 /**

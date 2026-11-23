@@ -4,7 +4,8 @@ import * as React from "react";
 import { useRoomContext } from "@livekit/components-react";
 import { ConnectionState, RoomEvent, type Participant } from "livekit-client";
 import {
-  ArrowDownToLine, ArrowUpToLine, Check, Circle, Copy, Eraser, Eye, ImagePlus, Minus, MousePointer2, PenLine, Redo2, Scissors, Share2, Square, Trash2, Type, Undo2, X,
+  ArrowDownToLine, ArrowUpToLine, Check, ChevronLeft, ChevronRight, Circle, Copy, Eraser, Eye, FileUp, ImagePlus, Minus, MousePointer2, PenLine, Plus, Redo2, Scissors, Share2,
+  Square, Trash2, Type, Undo2, X,
 } from "lucide-react";
 import { readMeta, TOPIC } from "@/lib/classroom";
 import { scanContact } from "@/lib/domain/contact";
@@ -12,6 +13,7 @@ import { handwrittenContacts, handwrittenNumbers, judge, nearNew } from "@/lib/h
 import { cn } from "@/lib/utils";
 import { BoardSnip } from "./BoardSnip";
 import { sendSafety, type SafetyResult } from "./LessonSafety";
+import { PDF_MAX_PAGES, readPdfPages } from "./pdfPages";
 
 /*
  * The shared whiteboard. Strokes travel over LiveKit's data channel (no server of our own in the loop):
@@ -20,6 +22,9 @@ import { sendSafety, type SafetyResult } from "./LessonSafety";
  * out drawing rights per person. Receivers check everything: who sent it (host-ness comes from the
  * server-signed token metadata), that images are ones the server stored after reading them for contact
  * details, and that text has no contact details.
+ *
+ * Pages: every stroke belongs to a page (0 when it has none), and the host turns the pages for everyone (a
+ * PDF worksheet becomes one page per PDF page). The host also picks the paper: plain, squared or lined.
  */
 
 type Tool = "select" | "pen" | "eraser" | "line" | "rect" | "circle" | "text";
@@ -39,8 +44,18 @@ interface Stroke {
   h?: number;
   /** On-screen aspect ratio of an image, so it keeps its shape when the board changes size. */
   sar?: number;
+  /** The board page it's on (0, the first, when missing). */
+  page?: number;
 }
 interface Person { id: string; name: string }
+type Paper = "plain" | "grid" | "lines";
+const PAPERS: { key: Paper; label: string }[] = [
+  { key: "plain", label: "Plain" },
+  { key: "grid", label: "Squared" },
+  { key: "lines", label: "Lined" },
+];
+/** Board pages at most (a long PDF is cut to PDF_MAX_PAGES). */
+const MAX_PAGES = 60;
 
 const COLORS = ["#15140f", "#e5582f", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#db2777", "#ffffff"];
 const SIZES = [2, 4, 8, 14, 22];
@@ -67,7 +82,13 @@ const finite = (n: unknown, lo = -10, hi = 10): n is number => typeof n === "num
 /** Only well-formed strokes, images the server stored, and text without contact details are accepted. */
 function cleanStroke(raw: unknown): Stroke | null {
   if (!raw || typeof raw !== "object") return null;
-  const s = raw as Record<string, unknown>;
+  const st = cleanStrokeBody(raw as Record<string, unknown>);
+  if (!st) return null;
+  const page = (raw as Record<string, unknown>).page;
+  return typeof page === "number" && Number.isInteger(page) && page > 0 && page < MAX_PAGES ? { ...st, page } : st;
+}
+
+function cleanStrokeBody(s: Record<string, unknown>): Stroke | null {
   if (typeof s.id !== "string" || s.id.length > 160) return null;
   if (s.tool === "image") {
     if (typeof s.url !== "string" || !s.url.startsWith(STORAGE_PREFIX) || s.url.length > 2000) return null;
@@ -103,6 +124,30 @@ function imageRect(st: Stroke, cw: number, ch: number) {
 /** Stroke ids are "<identity>-<time>-<n>": a receiver can check ownership without trusting the sender. */
 const strokeOwnedBy = (st: Stroke | undefined, identity: string | undefined) => !!st && !!identity && st.id.startsWith(`${identity}-`);
 const senderIsHost = (p: Participant | undefined) => !!readMeta(p?.metadata)?.isHost;
+const pageOf = (st: Stroke) => st.page ?? 0;
+
+/** The paper under the drawings (drawn on the canvas, so it's in shared copies and recordings too). */
+function drawPaper(ctx: CanvasRenderingContext2D, paper: Paper) {
+  if (paper === "plain") return;
+  const { width: w, height: h } = ctx.canvas;
+  const step = Math.max(16, Math.round(w / 40));
+  ctx.save();
+  ctx.strokeStyle = paper === "grid" ? "#dfe6ee" : "#d5dfea";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  if (paper === "grid") {
+    for (let x = step; x < w; x += step) {
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, h);
+    }
+  }
+  for (let y = step; y < h; y += step) {
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(w, y + 0.5);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
 
 async function postJson<T = Record<string, unknown>>(url: string, body: unknown): Promise<{ ok: boolean; error?: string } & Partial<T>> {
   try {
@@ -202,6 +247,16 @@ export function MeetingWhiteboard({
   const [maybe, setMaybe] = React.useState<{ ids: string[]; digits: string } | null>(null);
   const maybeRef = React.useRef<{ ids: string[]; digits: string } | null>(null);
 
+  // Pages and paper: the host's choice, for everyone.
+  const [page, setPageState] = React.useState(0);
+  const [pages, setPagesState] = React.useState(1);
+  const [paper, setPaperState] = React.useState<Paper>("plain");
+  const pageRef = React.useRef(0);
+  const pagesRef = React.useRef(1);
+  const paperRef = React.useRef<Paper>("plain");
+  const [paperOpen, setPaperOpen] = React.useState(false);
+  const [pdfBusy, setPdfBusy] = React.useState(false);
+
   const myId = room.localParticipant.identity;
   const canDraw = isHost || editors.includes(myId);
   React.useEffect(() => {
@@ -283,9 +338,29 @@ export function MeetingWhiteboard({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const s of strokesRef.current) drawStroke(ctx, s);
+    drawPaper(ctx, paperRef.current);
+    for (const s of strokesRef.current) if (pageOf(s) === pageRef.current) drawStroke(ctx, s);
     if (currentRef.current) drawStroke(ctx, currentRef.current);
   }, [drawStroke]);
+
+  /** Shows a page / page count / paper here (no message: see sendMeta). */
+  const applyMeta = React.useCallback(
+    (meta: { page?: unknown; pages?: unknown; paper?: unknown }) => {
+      const n = typeof meta.pages === "number" && Number.isInteger(meta.pages) ? Math.min(MAX_PAGES, Math.max(1, meta.pages)) : pagesRef.current;
+      const at = typeof meta.page === "number" && Number.isInteger(meta.page) ? Math.min(n - 1, Math.max(0, meta.page)) : Math.min(pageRef.current, n - 1);
+      const pap = meta.paper === "grid" || meta.paper === "lines" || meta.paper === "plain" ? meta.paper : paperRef.current;
+      pagesRef.current = n;
+      pageRef.current = at;
+      paperRef.current = pap;
+      setPagesState(n);
+      setPageState(at);
+      setPaperState(pap);
+      currentRef.current = null;
+      redraw();
+    },
+    [redraw],
+  );
+  const metaNow = () => ({ page: pageRef.current, pages: pagesRef.current, paper: paperRef.current });
   React.useEffect(() => {
     redrawRef.current = redraw;
   }, [redraw]);
@@ -400,13 +475,14 @@ export function MeetingWhiteboard({
     // Drawings still being checked stay on this screen only.
     const shown = strokesRef.current.filter((s) => !heldRef.current.has(s.id));
     const json = JSON.stringify(shown);
+    const meta = { page: pageRef.current, pages: pagesRef.current, paper: paperRef.current };
     if (json.length <= SNAP_CHUNK) {
-      send({ type: TOPIC.board, strokes: shown });
+      send({ type: TOPIC.board, strokes: shown, meta });
       return;
     }
     const seq = ++snapSeq.current;
     const parts = Math.ceil(json.length / SNAP_CHUNK);
-    for (let i = 0; i < parts; i++) send({ type: TOPIC.board, seq, part: i, parts, chunk: json.slice(i * SNAP_CHUNK, (i + 1) * SNAP_CHUNK) });
+    for (let i = 0; i < parts; i++) send({ type: TOPIC.board, seq, part: i, parts, chunk: json.slice(i * SNAP_CHUNK, (i + 1) * SNAP_CHUNK), meta });
   }, [send]);
 
   const broadcastSnapshot = React.useCallback(() => {
@@ -455,6 +531,7 @@ export function MeetingWhiteboard({
           const clean = list.map(cleanStroke).filter((s): s is Stroke => !!s);
           if (!fromHost && clean.length === 0) return;
           awaitingSyncRef.current = false;
+          if (msg.meta && typeof msg.meta === "object") applyMeta(msg.meta as Record<string, unknown>);
           // This person's drawings still being checked aren't in anyone else's board yet: keep them.
           strokesRef.current = [...clean, ...strokesRef.current.filter((s) => heldRef.current.has(s.id) && !clean.some((c) => c.id === s.id))];
           resetHistory();
@@ -468,7 +545,8 @@ export function MeetingWhiteboard({
         case TOPIC.clear:
           if (!fromHost) return;
           awaitingSyncRef.current = false;
-          strokesRef.current = [];
+          // One page (newer boards), or all of it.
+          strokesRef.current = typeof msg.page === "number" ? strokesRef.current.filter((x) => pageOf(x) !== msg.page) : [];
           heldRef.current.clear();
           setHolding(false);
           maybeRef.current = null;
@@ -514,6 +592,11 @@ export function MeetingWhiteboard({
           redraw();
           return;
         }
+        case TOPIC.page:
+          if (!fromHost) return;
+          applyMeta(msg);
+          if (selectedIdRef.current) selectImage(null);
+          return;
         case TOPIC.sync:
           if (isHost) {
             if (strokesRef.current.length || !awaitingSyncRef.current) broadcastSnapshot();
@@ -529,7 +612,7 @@ export function MeetingWhiteboard({
     return () => {
       room.off(RoomEvent.DataReceived, handler);
     };
-  }, [room, redraw, isHost, broadcastSnapshot, sendSnapshot, send, rebaseHistory, resetHistory, refreshSel, selectImage]);
+  }, [room, redraw, isHost, broadcastSnapshot, sendSnapshot, send, rebaseHistory, resetHistory, refreshSel, selectImage, applyMeta]);
 
   // Ask for the current board once connected (the host too: after a refresh the room has it), and again after
   // a reconnect. The board is set up while the room is still connecting, and a request sent then is lost.
@@ -554,7 +637,8 @@ export function MeetingWhiteboard({
   // and (when switched on) AI reading on the server. Clean drawings then go to everyone, in order, about a
   // second after the pen stops; drawings with contact details never leave this screen. If the server can't
   // answer in time the lesson goes on (the drawing is shown). Typed text and pictures are checked when added.
-  const gate = checkDrawings && !myId.startsWith("guest-");
+  // Guests' drawings too (their checks carry their claim: guestPass.ts).
+  const gate = !!checkDrawings;
   const checkTimer = React.useRef<number | undefined>(undefined);
   const checkingRef = React.useRef(false);
   const heldSince = React.useRef(0);
@@ -804,7 +888,7 @@ export function MeetingWhiteboard({
       if (!canvas) return null;
       for (let i = strokesRef.current.length - 1; i >= 0; i--) {
         const st = strokesRef.current[i];
-        if (!canEditStroke(st)) continue;
+        if (!canEditStroke(st) || pageOf(st) !== pageRef.current) continue;
         const r = imageRect(st, canvas.width, canvas.height);
         if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return st;
       }
@@ -982,7 +1066,7 @@ export function MeetingWhiteboard({
         }
       }
       pushHistory();
-      const stroke: Stroke = { ...cur, pts, id: nextStrokeId() };
+      const stroke: Stroke = { ...cur, pts, id: nextStrokeId(), ...(pageRef.current ? { page: pageRef.current } : {}) };
       strokesRef.current.push(stroke);
       // An eraser stroke can't share anything; it waits only behind drawings being checked (to keep the order).
       if (gate && (stroke.tool !== "eraser" || heldRef.current.size)) hold(stroke.id);
@@ -999,7 +1083,7 @@ export function MeetingWhiteboard({
       return;
     }
     pushHistory();
-    const stroke: Stroke = { id: nextStrokeId(), tool: "text", color, size, pts: [toFrac(textPos)], text: text.slice(0, 300) };
+    const stroke: Stroke = { id: nextStrokeId(), tool: "text", color, size, pts: [toFrac(textPos)], text: text.slice(0, 300), ...(pageRef.current ? { page: pageRef.current } : {}) };
     strokesRef.current.push(stroke);
     setTextInput("");
     setTextPos(null);
@@ -1012,15 +1096,87 @@ export function MeetingWhiteboard({
   const clearBoard = () => {
     if (!isHost) return;
     pushHistory();
-    strokesRef.current = [];
+    strokesRef.current = strokesRef.current.filter((x) => pageOf(x) !== pageRef.current);
     currentRef.current = null;
     heldRef.current.clear();
     setHolding(false);
     maybeRef.current = null;
     setMaybe(null);
     selectImage(null);
-    send({ type: TOPIC.clear });
+    send({ type: TOPIC.clear, page: pageRef.current });
     redraw();
+  };
+
+  /* ── pages, paper and PDF worksheets (host) ──────────────────────────── */
+
+  /** The host turns everyone's board to `meta` (and a late joiner gets it with the board). */
+  const sendMeta = React.useCallback(
+    (meta: { page?: number; pages?: number; paper?: Paper }) => {
+      if (!isHost) return;
+      awaitingSyncRef.current = false;
+      applyMeta({ ...metaNow(), ...meta });
+      selectImage(null);
+      send({ type: TOPIC.page, ...metaNow() });
+    },
+    [isHost, applyMeta, selectImage, send],
+  );
+  const goPage = (n: number) => sendMeta({ page: Math.min(pagesRef.current - 1, Math.max(0, n)) });
+  const addPage = () => {
+    if (pagesRef.current >= MAX_PAGES) return flash(`A board has ${MAX_PAGES} pages at most.`, 4000);
+    sendMeta({ pages: pagesRef.current + 1, page: pagesRef.current });
+  };
+
+  /**
+   * A PDF worksheet: each page is drawn here, read for contact details on the server (like any board picture)
+   * and put on a page of its own after the board's last page (or from the first, on an empty board).
+   */
+  const addPdf = async (file: File) => {
+    if (!isHost || pdfBusy) return;
+    if (file.size > 40 * 1024 * 1024) return flash("That PDF is over 40 MB. Try a smaller one.", 5000);
+    const empty = pagesRef.current === 1 && !strokesRef.current.length;
+    const first = empty ? 0 : pagesRef.current;
+    const space = MAX_PAGES - first;
+    if (space <= 0) return flash(`A board has ${MAX_PAGES} pages at most.`, 4000);
+    setPdfBusy(true);
+    pushHistory();
+    let placed = 0;
+    let at = first;
+    const skipped: number[] = [];
+    try {
+      const total = await readPdfPages(
+        file,
+        async (pg, total) => {
+          flash(`Checking page ${pg.number} of ${Math.min(total, PDF_MAX_PAGES, space)}…`, 60_000);
+          const res = await postJson<{ url: string }>("/api/classroom/board-image", { id: bookingId, image: pg.dataUrl });
+          if (!res.ok || !res.url) {
+            skipped.push(pg.number);
+            return;
+          }
+          const canvas = canvasRef.current;
+          const cw = canvas?.width || 1;
+          const chh = canvas?.height || 1;
+          const fit = Math.min((cw * 0.96) / pg.width, (chh * 0.96) / pg.height);
+          const w = (pg.width * fit) / cw;
+          const h = (pg.height * fit) / chh;
+          const stroke: Stroke = { id: nextStrokeId(), tool: "image", url: res.url, x: (1 - w) / 2, y: (1 - h) / 2, w, h, sar: pg.width / pg.height, ...(at ? { page: at } : {}) };
+          strokesRef.current.push(stroke);
+          broadcastStroke(stroke);
+          placed++;
+          at++;
+          if (placed === 1) sendMeta({ pages: Math.max(pagesRef.current, at), page: first });
+          else sendMeta({ pages: Math.max(pagesRef.current, at) });
+        },
+        Math.min(PDF_MAX_PAGES, space),
+      );
+      const cut = total > Math.min(PDF_MAX_PAGES, space) ? ` Only the first ${Math.min(PDF_MAX_PAGES, space)} pages were added.` : "";
+      const left = skipped.length ? ` Page${skipped.length > 1 ? "s" : ""} ${skipped.join(", ")} ${skipped.length > 1 ? "were" : "was"} left out: contact details or a page that couldn't be read.` : "";
+      flash(placed ? `PDF added: ${placed} page${placed > 1 ? "s" : ""}.${cut}${left}` : `Nothing was added.${left}`, left || cut ? 9000 : 3000);
+    } catch (e) {
+      flash((e as Error).message, 6000);
+    } finally {
+      setPdfBusy(false);
+      redraw();
+    }
   };
 
   const stepHistory = React.useCallback(
@@ -1097,7 +1253,7 @@ export function MeetingWhiteboard({
       const fit = Math.min((cw * 0.8) / iw, (chh * 0.8) / ih, 1);
       const w = (iw * fit) / cw;
       const h = (ih * fit) / chh;
-      const stroke: Stroke = { id: nextStrokeId(), tool: "image", url, x: (1 - w) / 2, y: (1 - h) / 2, w, h, sar: iw / ih };
+      const stroke: Stroke = { id: nextStrokeId(), tool: "image", url, x: (1 - w) / 2, y: (1 - h) / 2, w, h, sar: iw / ih, ...(pageRef.current ? { page: pageRef.current } : {}) };
       pushHistory();
       strokesRef.current.push(stroke);
       redraw();
@@ -1491,13 +1647,32 @@ export function MeetingWhiteboard({
                   }}
                 />
               </label>
+              <label className={cn("flex h-8 cursor-pointer items-center gap-1 border border-line px-2 text-[13px] hover:bg-sunken", pdfBusy && "opacity-60")} title={`Open a PDF worksheet: each page becomes a board page (up to ${PDF_MAX_PAGES})`}>
+                <FileUp className="size-4" aria-hidden /> {pdfBusy ? "Adding…" : "PDF"}
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  disabled={pdfBusy}
+                  data-board-pdf=""
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void addPdf(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
               <button type="button" onClick={() => setSnipPanel((v) => !v)} className={cn("flex h-8 items-center gap-1 border border-line px-2 text-[13px]", snipPanel ? "bg-brand text-on-brand" : "hover:bg-sunken")} title="Snip any part of your screen onto the board">
                 <Scissors className="size-4" aria-hidden /> Snip
                 {(autoClip || pushCode) && <span className="size-1.5 rounded-full bg-live" />}
               </button>
             </>
           )}
-          {pasteMsg && !privacyAlert && <span className="max-w-[16rem] truncate text-xs text-live" role="status">{pasteMsg}</span>}
+          {pasteMsg && !privacyAlert && (
+            <span className="max-w-[16rem] truncate text-xs text-live" role="status" title={pasteMsg}>
+              {pasteMsg}
+            </span>
+          )}
           {maybe && (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" role="alert" data-board-maybe>
               <span className="text-live">This looks like it could be contact details, so nobody else sees it yet.</span>
@@ -1537,7 +1712,7 @@ export function MeetingWhiteboard({
               <button type="button" onClick={redo} disabled={!histDepth.redo} className="grid size-8 place-items-center hover:bg-sunken disabled:opacity-40" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
                 <Redo2 className="size-4" />
               </button>
-              <button type="button" onClick={clearBoard} className="flex h-8 items-center gap-1 px-2 text-[13px] text-danger hover:bg-danger/10" title="Clear the board for everyone">
+              <button type="button" onClick={clearBoard} className="flex h-8 items-center gap-1 px-2 text-[13px] text-danger hover:bg-danger/10" title={pages > 1 ? "Clear this page for everyone" : "Clear the board for everyone"}>
                 <Trash2 className="size-4" aria-hidden /> Clear
               </button>
               <button
@@ -1573,6 +1748,54 @@ export function MeetingWhiteboard({
           onTouchMove={onMove}
           onTouchEnd={onUp}
         />
+
+        {/* Pages: the host turns them for everyone; the others see where they are. */}
+        {(isHost || pages > 1) && (
+          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 border border-line bg-surface/95 px-1 py-1 text-xs text-ink shadow-lg" data-board-pages="">
+            {isHost && (
+              <button type="button" onClick={() => goPage(page - 1)} disabled={page === 0} className="grid size-7 place-items-center hover:bg-sunken disabled:opacity-35" aria-label="Previous page">
+                <ChevronLeft className="size-4" />
+              </button>
+            )}
+            <span className="px-1 font-medium tabular-nums" aria-live="polite">
+              Page {page + 1} of {pages}
+            </span>
+            {isHost && (
+              <>
+                <button type="button" onClick={() => goPage(page + 1)} disabled={page >= pages - 1} className="grid size-7 place-items-center hover:bg-sunken disabled:opacity-35" aria-label="Next page">
+                  <ChevronRight className="size-4" />
+                </button>
+                <button type="button" onClick={addPage} className="grid size-7 place-items-center hover:bg-sunken" aria-label="New page" title="New page">
+                  <Plus className="size-4" />
+                </button>
+                <span className="mx-0.5 h-5 w-px bg-line" />
+                <div className="relative">
+                  <button type="button" onClick={() => setPaperOpen((v) => !v)} className="h-7 px-2 hover:bg-sunken" aria-expanded={paperOpen} title="Paper: plain, squared or lined">
+                    {PAPERS.find((x) => x.key === paper)?.label} ▾
+                  </button>
+                  {paperOpen && (
+                    <div className="absolute bottom-9 left-0 w-28 border border-line bg-surface shadow-xl">
+                      {PAPERS.map((x) => (
+                        <button
+                          key={x.key}
+                          type="button"
+                          onClick={() => {
+                            setPaperOpen(false);
+                            sendMeta({ paper: x.key });
+                          }}
+                          className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-sunken", paper === x.key && "text-brand")}
+                        >
+                          {x.label}
+                          {paper === x.key && <Check className="ml-auto size-3.5" aria-hidden />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* The privacy alert in full, at the foot of the board (the toolbar line is too short for it, and the
             top is where people write). */}

@@ -4,7 +4,7 @@ import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
   acceptPush, appealFromClass, boardMaybeShown, cameraBack, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, guestClassImage, guestFromClaim, guestScreenFrame,
-  guestSpeech, joinTicket, knock, listBoards, loadLesson, pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportHeard, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage,
+  guestSpeech, joinTicket, knock, listBoards, loadLesson, markAttendance, noteRecording, pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportHeard, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage,
   summarise, waitingGuests, validPushCode, type ClassGuest, type Lesson,
 } from "@/server/classroom";
 import { backendStatus } from "@/server/env";
@@ -32,6 +32,10 @@ import type { User } from "@/lib/types";
  *                                        someone else in the lesson said (on-device speech reader)
  *   POST /api/classroom/screen-frame     { id, image, record?, excerpt?, guest? }  a shared-screen frame, checked before
  *                                        others see it → { checked, found, kinds, boxes, maskable }
+ *   POST /api/classroom/attend           { id, guest? }  "still here" from a person's class page (once a minute):
+ *                                        attendance on the lesson page (GET info → attendance)
+ *   POST /api/classroom/recording        { id, on }  this person started / stopped recording on their own device
+ *                                        (audit log only; the recording never reaches the server)
  *   POST /api/classroom/board-image      { id, image }  host: a picture for the whiteboard (checked) → { url }
  *   POST /api/classroom/share-board      { id, title, image, recipients }  host: save + share the board
  *   GET  /api/classroom/boards?id=       boards shared from this lesson
@@ -243,6 +247,25 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         const v = z.object({ id }).safeParse(body);
         if (!v.success) return json({ ok: false, error: "Which lesson?" }, { status: 400 });
         return json({ ok: true, ...(await endOwnPause(user, await lessonOf(v.data.id))) });
+      }
+      case "attend": {
+        const v = z.object({ id }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "Which lesson?" }, { status: 400 });
+        const lesson = await lessonOf(v.data.id);
+        const who = await checker(body, lesson);
+        const stop = limited(`class-attend:${who.user ? who.user.id : `guest:${who.guest.id}`}`, 40, 10);
+        if (stop) return stop;
+        await markAttendance(who, lesson);
+        return json({ ok: true });
+      }
+      case "recording": {
+        const user = await signedIn();
+        const stop = limited(`class-recording:${user.id}`, 40, 10);
+        if (stop) return stop;
+        const v = z.object({ id, on: z.boolean() }).safeParse(body);
+        if (!v.success) return json({ ok: false, error: "Which lesson?" }, { status: 400 });
+        await noteRecording(user, await lessonOf(v.data.id), v.data.on);
+        return json({ ok: true });
       }
       case "board-maybe": {
         // A long handwritten number the writer said was maths and showed: a note for the moderators.

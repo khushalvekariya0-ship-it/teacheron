@@ -101,7 +101,14 @@ export const TOPIC = {
   caption: "caption", // one finished caption line
   safety: "safety", // contact details were caught (from the server, or the person's own browser about itself)
   lang: "class-lang", // the host sets the language speech is checked (and captioned) in
+  page: "wb-page", // the host turned the board to another page (or added one, or changed the paper)
+  hand: "hand", // a person raised or lowered their hand (or the host lowered someone's)
+  react: "react", // a quick reaction (one emoji from a fixed list)
+  rec: "rec", // a person is recording the class on their own device (sent again every few seconds while it lasts)
 } as const;
+
+/** The quick reactions in class: only these are shown (nothing typed travels this way). */
+export const REACTIONS = ["👍", "👏", "❤️", "😂", "😮", "🎉"] as const;
 
 /** What the server tells everyone in the room when contact details are caught in class. */
 export interface SafetyMessage {

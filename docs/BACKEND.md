@@ -84,6 +84,21 @@ rules `src/lib/classroom.ts`; migration `20261105000000_live_classroom.sql`). Se
 | `POST transcript`, `GET recap`, `POST delete-recap` | host / participants | captions saved with contact details masked; snapshots (≤ 20) checked and stored after the answer; optional Gemini recap |
 | `POST safety` | tutor, booker, admitted guests | `{ id, source: speech / board / screen / camera, kinds?, excerpt?, image?, guest? }`: contact details said out loud (found by the person's own device; only the masked words are sent) or a picture of their whiteboard drawing / shared screen / camera (read here with OCR, English + Gujarati + Hindi). A guest sends their claim as `guest` and gets the guest rules (below). Returns `{ found, kinds, strikes, removed }`. Rate-limited (speech 30, pictures 150 per 10 min) |
 | `POST report` | tutor, booker | `{ id, reason: asked_contact / shared_contact / pay_outside / other, details? }` → a `reports` row about the other side of the lesson (details masked), moderators alerted. 5 per 10 min |
+| `POST attend` | participants, admitted guests | `{ id, guest? }`: "still here", once a minute from the class page (and on leaving) → `class_attendance` (migration `20261123000000_class_attendance.sql`): first / last seen, seconds (gaps over 150 s not counted), joins. `GET info` returns it as `attendance` for the lesson page. Works (does nothing) before the migration. 40 per 10 min |
+| `POST recording` | tutor, booker, staff | `{ id, on }`: someone started / stopped recording on their own device → audit log `classroom.recording_start` / `_stop` only. Guests can't record. 40 per 10 min |
+
+In the class (all free, nothing extra stored):
+- **Device check before joining** (`PreJoin.tsx`): camera preview, microphone level, microphone / camera / speaker
+  pickers, join with them on or off (remembered on the device; a rejoin skips it).
+- **Raise hand and reactions** (`classSignals.ts`, topics `hand` / `react`): each person speaks only for
+  themselves; the host may lower anyone's hand; reactions are one emoji from `REACTIONS`.
+- **Recording** (`classRecorder.ts`): whoever wants presses Record; the browser puts the class together (shared
+  screen or whiteboard, cameras, all voices) and saves a .webm / .mp4 to that device when it stops. Nothing is
+  uploaded. Everyone sees who is recording (topic `rec`, repeated every 8 s); start / stop go to the audit log.
+- **Whiteboard pages and PDF worksheets**: strokes carry a `page`; the host turns pages, adds pages and picks the
+  paper (plain / squared / lined) for everyone (topic `wb-page`, also in board snapshots). A PDF is drawn page by
+  page in the tutor's browser with pdf.js (`pdfPages.ts`, files in `public/pdf/<version>`), each page goes through
+  `board-image` (read for contact details; a page with them is left out) onto a page of its own (30 at most).
 
 In the room, strokes, image moves, drawing rights and "new chat message" pings travel over LiveKit's
 data channel; every receiver checks them (only the host may clear, undo, grant or post images; image
