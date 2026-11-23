@@ -826,8 +826,8 @@ const REQUEST_LATIN: RegExp[] = [
   new RegExp(`\\b(?:send|share|forward)\\s+(?:you|it|them)\\b[^.!?\\n]{0,25}\\b(?:on|over|via)\\s+(?:whats ?app|wa|insta(?:gram)?|telegram|snap(?:chat)?|email|gmail)\\b`, "g"),
   // "follow me on Instagram", "find me on snap", "join my personal telegram"
   new RegExp(`\\b(?:follow|add|find|dm|join|subscribe(?:\\s+to)?)\\s+(?:me|us|my)\\b[^.!?\\n]{0,20}\\b${REACH}\\b`, "g"),
-  // "outside TutorLink", "off the app"
-  /\b(?:outside|off)\s+(?:of\s+)?(?:tutor ?link|this\s+(?:app|site|platform|website)|the\s+(?:app|site|platform|website))\b/g,
+  // "outside TutorLink", "off the app" (not "turn / switch / log off the app")
+  /\b(?:outside|(?<!\b(?:turn|turned|turning|switch|switched|switching|shut|log|logged|sign|signed|power|close|closed)\s+)off)\s+(?:of\s+)?(?:tutor ?link|this\s+(?:app|site|platform|website)|the\s+(?:app|site|platform|website))\b/g,
   // "pay me directly", "pay on gpay", "my upi id"
   /\bpay\s+(?:me\s+|us\s+)?(?:directly|outside|in\s+cash|by\s+cash|cash|on\s+(?:g ?pay|google\s+pay|paytm|phone ?pe|upi|bhim)|via\s+(?:g ?pay|google\s+pay|paytm|phone ?pe|upi|bhim))\b/g,
   /\b(?:my|mera|maro)\s+(?:upi|gpay|g pay|paytm|phone ?pe)(?:\s+(?:id|number|no))?\b/g,
@@ -1278,16 +1278,42 @@ function spokenDigits(said: string, withCounting = false): number {
 export function speechContact(said: string): { kinds: ContactKind[]; masked: string } | null {
   const found = scanCore(said, "chat", 0);
   const kinds = found.found ? found.kinds.filter((k) => k !== "phone" || spokenDigits(said) >= 10 || SPEECH_CUE.test(said)) : [];
-  // An email address said out loud often comes back from speech readers as loose words ("… at gmail",
-  // "… mail dot com"), with no "@" for the usual check to find.
-  if (!kinds.includes("email") && SPEECH_EMAIL.test(said)) kinds.push("email");
+  // Said out loud, these come back from speech readers as loose words, with no "@", "_" or "www." for the usual
+  // checks to find: an email ("… at gmail", "… mail dot com"), an app username ("my snapchat is riley shah"), a
+  // website ("riley shah dot com"), a home address ("I live at 23 MG Road …") or a plan to leave TutorLink.
+  let masked = found.found ? maskMatches(said, found.matches) : said;
+  for (const [kind, rule, label] of SPOKEN_RULES) {
+    if (!rule.test(said)) continue;
+    if (!kinds.includes(kind)) kinds.push(kind);
+    masked = masked.replace(new RegExp(rule.source, "gi"), `[${label} hidden]`);
+  }
   if (!kinds.length) return null;
-  return { kinds, masked: found.found ? maskMatches(said, found.matches) : said.replace(SPEECH_EMAIL_PART, "[email hidden]") };
+  return { kinds, masked };
 }
 
-/** An email address said out loud, as speech readers write it down. */
-const SPEECH_EMAIL = /\b(?:at(?: the rate(?: of)?)?|@)\s*(?:g ?mail|yahoo|hotmail|outlook|rediff(?:mail)?|icloud|proton ?mail)\b|\b(?:g ?mail|e ?mail|yahoo|hotmail|outlook|rediff|mail)\s+dot\s+(?:com|in|co)\b/i;
-const SPEECH_EMAIL_PART = /\b\S+\s+(?:at(?: the rate(?: of)?)?|@)\s*(?:g ?mail|yahoo|hotmail|outlook|rediff(?:mail)?|icloud|proton ?mail)(?:\s+dot\s+\S+)?|\b(?:g ?mail|e ?mail|yahoo|hotmail|outlook|rediff|mail)\s+dot\s+(?:com|in|co)\b/gi;
+/** An email address said out loud, as speech readers write it down ("riley at gmail", "… mail dot com"). */
+const SPEECH_EMAIL_PART = /\b\S+\s+(?:at(?: the rate(?: of)?)?|@)\s*(?:g ?mail|yahoo|hotmail|outlook|rediff(?:mail)?|icloud|proton ?mail)(?:\s+dot\s+\S+)?|\b(?:g ?mail|e ?mail|yahoo|hotmail|outlook|rediff|mail)\s+dot\s+(?:com|in|co)\b/i;
+/** Apps people give a username for. */
+const SPOKEN_APPS = "(?:snap ?chat|snap|insta(?:gram)?|face ?book|fb|telegram|twitter|linked ?in|discord|skype|signal|threads|youtube|tiktok|moj|josh|sharechat|koo|hike|imo|wechat|line|kik|viber)";
+const SPOKEN_RULES: [ContactKind, RegExp, string][] = [
+  ["email", SPEECH_EMAIL_PART, "email"],
+  // "my snapchat is riley shah", "my insta id riley", "my facebook name is …", "search me on snapchat …"
+  ["social", new RegExp(`\\b(?:my|mera|meri|maru|mari)\\s+${SPOKEN_APPS}(?:\\s+(?:id|i d|username|user name|handle|name|account|profile))?\\s+(?:is|hai|che|chhe)?\\s*\\w+(?:\\s+\\w+)?`, "i"), "username"],
+  ["social", new RegExp(`\\b(?:search|find|add|follow|message|text|dm|ping)\\s+(?:me|us)\\s+(?:on|in)\\s+${SPOKEN_APPS}\\b`, "i"), "username"],
+  // A website: "www dot …", "… dot com / net / co dot in / me / io …" (not .org / .edu / .gov: learning sites; not a
+  // bare "dot in", which is maths: "put a dot in the middle").
+  ["link", /\bwww\s*(?:dot|\.)\s*\w+|\b\w+(?:\s+\w+)?\s+(?:dot|\.)\s+(?:com|net|me|io|xyz|info|biz|site|online|store|link)\b|\b\w+\s+(?:dot|\.)\s+co\s+(?:dot|\.)\s+in\b/i, "link"],
+  // A home address: where someone lives, a number and a street-type word in the same sentence ("I live at 23 MG
+  // Road", "my house is in sector twenty one"); "I live in Ahmedabad" alone isn't one.
+  [
+    "address",
+    /\b(?:(?:i|we)\s+(?:live|stay)|my\s+(?:house|home|flat|place|building|society|address|ghar)|(?:come|reach)\s+(?:to\s+)?my\s+(?:house|home|place|flat))\b(?=.*\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\b)(?=.*\b(?:road|rd|street|lane|nagar|society|apartments?|flat|sector|colony|marg|chowk|layout|phase|block|tower|residency|heights|enclave|vihar|plot|bungalow|floor|pin ?code)\b).*/i,
+    "address",
+  ],
+  // Leaving TutorLink: "without TutorLink", "outside TutorLink", "meet outside the class", "classes directly
+  // without …".
+  ["request", /\b(?:without|outside(?:\s+of)?|off|skip(?:ping)?|bypass(?:ing)?)\s+(?:the\s+)?tutor\s?link\b|\bmeet\s+(?:me\s+|us\s+)?outside\s+(?:the\s+|this\s+)?(?:class|tutor\s?link)\b|\b(?:classes|lessons|teach|study|pay|payment|fees?)\b.{0,30}\b(?:directly|privately|personally)\b.{0,20}\b(?:without|outside|instead of)\b/i, "request to leave TutorLink"],
+];
 
 /** Digit words a Hindi or Gujarati speech reader writes (the usual number reading wants them in longer runs). */
 const SCRIPT_DIGITS: Record<string, string> = {
