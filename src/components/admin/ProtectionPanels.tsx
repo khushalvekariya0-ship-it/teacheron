@@ -293,8 +293,11 @@ export function AppealsPanel({ appeals, flags, restrictions }: { appeals: Safety
 const SWITCHES: { key: keyof ContactSafety; label: string; hint: string }[] = [
   { key: "chat", label: "Check messages", hint: "Messages, homework and lesson notes." },
   { key: "requests", label: "Catch requests to talk outside TutorLink", hint: "“Send me your number”, “બહાર વાત કરીએ”, “pay me on GPay” …" },
-  { key: "voice", label: "Check speech in class", hint: "Each person's own browser (Chrome / Edge send the audio to Google / Microsoft to recognise it)." },
-  { key: "voiceOnPhones", label: "Also check speech on phones", hint: "Phones may beep when listening restarts and can lose the call's microphone." },
+  { key: "voice", label: "Check speech in class", hint: "What each person says while their microphone is on." },
+  { key: "deviceSpeech", label: "Read speech on the device (free, private)", hint: "An open-source reader inside the class page: works on phones, Safari and Firefox, the voice never leaves the device, and each computer also checks what the other person says. A one-time download of about 40 MB. Off: Chrome / Edge's own reader on computers, which sends the audio to Google / Microsoft." },
+  { key: "voiceOnPhones", label: "Also use the browser's reader on phones", hint: "Only when reading on the device is off. Phones may beep when listening restarts and can lose the call's microphone." },
+  { key: "voiceCutEarly", label: "Cut the microphone while a number is being said", hint: "As soon as about 5–6 digits in a row, or “my WhatsApp is …” with digits, are heard: the microphone turns off at once with a warning, so the rest of the number isn't heard." },
+  { key: "protectedVoice", label: "Protected voice", hint: "Each person's voice reaches the others a little late (seconds below), so contact details are cut before anyone hears them. Talking feels slower; the picture isn't delayed." },
   { key: "images", label: "Read pictures", hint: "Chat and homework images, whiteboard pictures and drawings, shared screens." },
   { key: "screenShare", label: "Protect screen sharing", hint: "A shared screen is checked before the others see it: contact details are blacked out, or the share pauses. Needs “Read pictures”." },
   { key: "whiteboard", label: "Protect the whiteboard", hint: "Drawings and handwriting are checked before the others see them; contact details are removed. Needs “Read pictures”." },
@@ -304,7 +307,9 @@ const SWITCHES: { key: keyof ContactSafety; label: string; hint: string }[] = [
   { key: "aiReading", label: "Use Gemini to read class pictures", hint: "Better with handwriting and Gujarati / Hindi digits. Sends the pictures to Google; needs GEMINI_API_KEY." },
 ];
 
-const NUMBERS: { key: "strongWarningAt" | "muteAt" | "muteMinutes" | "removeAt" | "pauseAccountAfterRemovals" | "retentionDays" | "splitWindowMinutes" | "shareBlockAt" | "shareBlockMinutes" | "cameraBlockMinutes"; label: string; hint: string; min: number; max: number }[] = [
+const NUMBERS: { key: "strongWarningAt" | "muteAt" | "muteMinutes" | "removeAt" | "pauseAccountAfterRemovals" | "retentionDays" | "splitWindowMinutes" | "shareBlockAt" | "shareBlockMinutes" | "cameraBlockMinutes" | "micBlockMinutes" | "protectedVoiceSeconds"; label: string; hint: string; min: number; max: number }[] = [
+  { key: "micBlockMinutes", label: "Microphone off after a catch (minutes)", hint: "Contact details said out loud: the microphone turns off at once and stays off this long. 0 = only turned off.", min: 0, max: 120 },
+  { key: "protectedVoiceSeconds", label: "Protected voice delay (seconds)", hint: "Only when “Protected voice” is on. 2 is enough for most numbers; more protects more but talking feels slower.", min: 1, max: 4 },
   { key: "strongWarningAt", label: "Stronger warning from catch", hint: "In one lesson; moderators are told.", min: 1, max: 20 },
   { key: "muteAt", label: "Pause audio from catch", hint: "In one lesson. 0 = never.", min: 0, max: 20 },
   { key: "muteMinutes", label: "Audio pause (minutes)", hint: "Each further catch starts it again.", min: 1, max: 120 },

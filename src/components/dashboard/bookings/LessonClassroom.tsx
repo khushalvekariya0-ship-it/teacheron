@@ -8,6 +8,8 @@ import { useViewerTimezone } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { GuestLinkBox } from "@/components/classroom/live/LiveClassroom";
+import { prefetchSpeechReader } from "@/components/classroom/live/deviceSpeech";
+import { useApp } from "@/lib/store";
 
 interface Info {
   ready: boolean;
@@ -37,6 +39,7 @@ interface Recap {
  */
 export function LessonClassroomCard({ booking }: { booking: Booking }) {
   const tz = useViewerTimezone();
+  const speechOnDevice = useApp((s) => s.contactSafety.voice && s.contactSafety.deviceSpeech);
   const [info, setInfo] = React.useState<Info | null>(null);
   const [boards, setBoards] = React.useState<Board[]>([]);
   const [recap, setRecap] = React.useState<Recap | null>(null);
@@ -53,6 +56,10 @@ export function LessonClassroomCard({ booking }: { booking: Booking }) {
         const i = (await res.json()) as Info;
         if (cancelled) return;
         setInfo(i);
+        // The class checks speech with a reader on the device (about 40 MB the first time): fetched now when the
+        // class is open or starts within the hour, so it's ready the moment the person joins.
+        const soon = i.window.state === "open" || (i.window.state === "upcoming" && new Date(booking.startUtc).getTime() - Date.now() < 3_600_000);
+        if (i.ready && soon && speechOnDevice) prefetchSpeechReader();
         const [b, r] = await Promise.all([
           i.boards ? fetch(`/api/classroom/boards?id=${encodeURIComponent(booking.id)}`).then((x) => x.json() as Promise<{ boards?: Board[] }>) : Promise.resolve({ boards: [] as Board[] }),
           i.hasRecap ? fetch(`/api/classroom/recap?id=${encodeURIComponent(booking.id)}`).then((x) => x.json() as Promise<{ recap?: Recap }>) : Promise.resolve({ recap: undefined }),
@@ -67,7 +74,7 @@ export function LessonClassroomCard({ booking }: { booking: Booking }) {
     return () => {
       cancelled = true;
     };
-  }, [booking.id, reload]);
+  }, [booking.id, booking.startUtc, reload, speechOnDevice]);
 
   const post = async (op: string, body: Record<string, unknown>) => {
     setError(null);

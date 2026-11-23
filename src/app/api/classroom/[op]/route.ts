@@ -4,7 +4,7 @@ import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
   acceptPush, appealFromClass, boardMaybeShown, cameraBack, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
-  pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
+  pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportHeard, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
   validPushCode, type Lesson,
 } from "@/server/classroom";
 import { backendStatus } from "@/server/env";
@@ -25,6 +25,10 @@ import type { User } from "@/lib/types";
  *   GET  /api/classroom/guest?claim=     guest polls: a token only once the host admitted them
  *   GET  /api/classroom/guests?id=       host: people waiting
  *   POST /api/classroom/decide           { id, guestId, admit }  host
+ *   POST /api/classroom/safety           { id, source, kinds?, excerpt?, image? }  this person's own check (speech,
+ *                                        whiteboard, camera) → the ladder (warning … microphone / camera off)
+ *   POST /api/classroom/heard            { id, speaker, kinds, excerpt? }  this device heard contact details in what
+ *                                        someone else in the lesson said (on-device speech reader)
  *   POST /api/classroom/screen-frame     { id, image, record?, excerpt? }  a shared-screen frame, checked before
  *                                        others see it → { checked, found, kinds, boxes, maskable }
  *   POST /api/classroom/board-image      { id, image }  host: a picture for the whiteboard (checked) → { url }
@@ -188,6 +192,17 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         // read holds (judged here by the site's own rules): they can only make things stricter.
         const written = (v.data.kinds ?? []).filter((k): k is "email" | "social" | "link" => k === "email" || k === "social" || k === "link");
         return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting, written, v.data.qr ?? "", v.data.text ?? "")) });
+      }
+      case "heard": {
+        // This person's device heard contact details in what someone else in the lesson said (on-device reader).
+        const user = await signedIn();
+        const stop = limited(`class-safety-heard:${user.id}`, 30, 10);
+        if (stop) return stop;
+        const v = z
+          .object({ id, speaker: z.string().min(3).max(90), kinds: z.array(z.enum(["phone", "email", "social", "link", "request", "address"])).min(1).max(6), excerpt: z.string().max(600).optional() })
+          .safeParse(body);
+        if (!v.success) return json({ ok: false, error: "That safety check wasn't valid." }, { status: 400 });
+        return json({ ok: true, ...(await reportHeard(user, await lessonOf(v.data.id), v.data.speaker, v.data.kinds, v.data.excerpt ?? "", siteOrigin(request))) });
       }
       case "screen-frame": {
         // One frame of the person's shared screen, checked before the others see it (the page sends out only

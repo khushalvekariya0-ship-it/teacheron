@@ -8,6 +8,7 @@ import { SITE } from "@/lib/site";
 import type { Booking, User } from "@/lib/types";
 import { auditDirect, notifyDirect } from "./auth";
 import { db } from "./db";
+import { accountById } from "./session";
 import { env, liveVideoReady } from "./env";
 import { broadcastToRoom, closeRoom, mintToken, removeFromRoom, setPublishAllowed } from "./livekit";
 import { contactSafety } from "./safety-settings";
@@ -120,8 +121,9 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   if (role !== "staff" && safety.removeAt > 0 && (await liveStrikes(user.id, lesson.booking.id)) >= safety.removeAt) {
     throw new ClassError("You were removed from this class because contact details were shared in it. Our team will review it.", 403);
   }
-  // A paused person who rejoins gets a pass without the microphone, so leaving doesn't undo the pause.
-  const paused = role !== "staff" ? await activeRestriction(user.id, lesson.booking.id) : null;
+  // A paused person (or one whose microphone is off after a catch) who rejoins gets a pass without the
+  // microphone, so leaving doesn't undo it.
+  const paused = role !== "staff" ? await audioOffUntil(user.id, lesson.booking.id) : null;
   // Same for a camera turned off after contact details were shown on it.
   const cameraOff = role !== "staff" ? await cameraBlockedUntil(user.id, lesson.booking.id) : null;
   const meta = metaFor(user, lesson, role);
@@ -136,7 +138,7 @@ export async function joinTicket(user: User, lesson: Lesson): Promise<JoinTicket
   const identity = `u-${user.id}`;
   return {
     token: await mintToken({ room, identity, meta, ttlSeconds: ttl, noMicrophone: !!paused, noCamera: !!cameraOff }), wsUrl: env.livekitWsUrl, room, identity, me: meta, startMuted: false, closesAt: w.closesAt,
-    ...(paused ? { audioPausedUntil: Date.parse(paused.endsAt) } : {}),
+    ...(paused ? { audioPausedUntil: Date.parse(paused) } : {}),
     ...(cameraOff ? { cameraOffUntil: Date.parse(cameraOff) } : {}),
   };
 }
@@ -330,10 +332,45 @@ export async function cameraBlockedUntil(userId: string, bookingId: string): Pro
   return until.getTime() > Date.now() ? until.toISOString() : null;
 }
 
-/** Tells LiveKit what this person may send now: no microphone during an audio pause, no camera while it's off. */
+/**
+ * Until when this person's microphone stays off in this lesson: micBlockMinutes after their last catch in what
+ * they said (Admin → Chat safety → Settings). Worked out from the catches, so dismissing a wrong one (or
+ * accepting a review of it) lifts it.
+ */
+export async function micBlockedUntil(userId: string, bookingId: string): Promise<string | null> {
+  const s = await contactSafety();
+  if (!s.micBlockMinutes) return null;
+  const [r] = await db()`select max(created_at) last from public.contact_flags
+    where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source = 'speech' and status <> 'dismissed'`;
+  if (!r?.last) return null;
+  const until = new Date(new Date(r.last as string).getTime() + s.micBlockMinutes * 60_000);
+  return until.getTime() > Date.now() ? until.toISOString() : null;
+}
+
+/** Until when this person's audio doesn't reach the others: an audio pause, or the microphone off after a catch in speech. */
+export async function audioOffUntil(userId: string, bookingId: string): Promise<string | null> {
+  const [paused, mic] = await Promise.all([activeRestriction(userId, bookingId), micBlockedUntil(userId, bookingId)]);
+  const ends = [paused?.endsAt, mic].filter((x): x is string => !!x).sort();
+  return ends.at(-1) ?? null;
+}
+
+/** How a catch the other person's device reported is marked in its (masked) note. */
+const HEARD_MARK = "(heard by ";
+
+/**
+ * A catch in what this person said in the last few seconds: the same words reported by their own device and by
+ * the other person's count once. `heardOnly`: only a catch the other person's device reported.
+ */
+async function recentSpeechCatch(userId: string, bookingId: string, heardOnly = false, seconds = 20): Promise<boolean> {
+  const [r] = await db()`select 1 from public.contact_flags where channel = 'lesson' and context_id = ${bookingId} and user_id = ${userId} and source = 'speech'
+    and status <> 'dismissed' and created_at > now() - make_interval(secs => ${seconds}) and (${!heardOnly} or excerpt like ${`%${HEARD_MARK}%`}) limit 1`;
+  return !!r;
+}
+
+/** Tells LiveKit what this person may send now: no microphone while their audio is off, no camera while it's off. */
 async function syncPublishRights(userId: string, bookingId: string): Promise<boolean> {
-  const [paused, cameraOff] = await Promise.all([activeRestriction(userId, bookingId), cameraBlockedUntil(userId, bookingId)]);
-  return setPublishAllowed(roomFor(bookingId), `u-${userId}`, { microphone: !paused, camera: !cameraOff });
+  const [audioOff, cameraOff] = await Promise.all([audioOffUntil(userId, bookingId), cameraBlockedUntil(userId, bookingId)]);
+  return setPublishAllowed(roomFor(bookingId), `u-${userId}`, { microphone: !audioOff, camera: !cameraOff });
 }
 
 /** The person's own page when their camera's time off is over: the camera may be turned on again. */
@@ -366,7 +403,7 @@ const clockUtc = (iso: string) => new Date(iso).toISOString().slice(11, 16) + " 
  * others for muteMinutes (LiveKit enforces it, and a rejoin gets a pass without the microphone); removal
  * (removeAt) and pausing the account (pauseAccountAfterRemovals) only when switched on.
  */
-async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kinds: ContactKind[], excerpt: string, origin: string, detector: "speech" | "ocr" | "qr" | "ai") {
+async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kinds: ContactKind[], excerpt: string, origin: string, detector: "speech" | "ocr" | "qr" | "ai", heard = false) {
   const s = await contactSafety();
   const recipient = user.id === lesson.booking.bookerId ? lesson.tutorUserId : lesson.booking.bookerId;
   await db()`insert into public.contact_flags (id, user_id, channel, source, context_id, recipient_id, kinds, excerpt, detector)
@@ -395,14 +432,19 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
       mutedUntil = until.toISOString();
     }
   }
-  const message: SafetyMessage = { type: TOPIC.safety, name, identity, source, kinds, strikes, removed, level, mutedUntil, muteAt: s.muteAt, muteMinutes: s.muteMinutes };
+  // Said out loud: the microphone is off for micBlockMinutes (the person's own page turned it off at once).
+  const micOffUntil = source === "speech" ? await micBlockedUntil(user.id, lesson.booking.id) : null;
+  const message: SafetyMessage = {
+    type: TOPIC.safety, name, identity, source, kinds, strikes, removed, level, mutedUntil, muteAt: s.muteAt, muteMinutes: s.muteMinutes,
+    ...(micOffUntil ? { micOffUntil } : {}), ...(heard ? { heard: true } : {}),
+  };
   // LiveKit Cloud can take several seconds for a room people are in, so the room is told (and the audio
   // paused, or the person removed) after this answer goes back; the person's own page shows the warning
   // from the answer and tells the others itself straight away.
   after(async () => {
     await broadcastToRoom(room, message);
-    // An audio pause, and a camera turned off after contact details were shown on it: LiveKit enforces both.
-    if (level === "muted" || (source === "camera" && s.cameraBlockMinutes > 0)) await syncPublishRights(user.id, lesson.booking.id);
+    // An audio pause, a microphone or camera turned off after a catch: LiveKit enforces them.
+    if (level === "muted" || micOffUntil || (source === "camera" && s.cameraBlockMinutes > 0)) await syncPublishRights(user.id, lesson.booking.id);
     if (!removed) return;
     // Their own page leaves by itself 1.5 s after the answer and shows why; this is for a page that doesn't.
     await new Promise((done) => setTimeout(done, 3000));
@@ -411,7 +453,7 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
   const who = shortName(user.firstName, user.lastName);
   await alertStaff("reports.moderate", {
     title: removed ? `Removed from a lesson: ${who}` : level === "muted" ? `Audio paused in a lesson: ${who}` : `Contact details blocked: ${who}`,
-    body: `${LIVE_WHERE[source]} (${kinds.join(", ")}). ${strikes} in this lesson${mutedUntil ? `; audio paused until ${clockUtc(mutedUntil)}` : ""}.`,
+    body: `${LIVE_WHERE[source]}${heard ? " (heard by the other person's device)" : ""} (${kinds.join(", ")}). ${strikes} in this lesson${mutedUntil ? `; audio paused until ${clockUtc(mutedUntil)}` : micOffUntil ? `; microphone off until ${clockUtc(micOffUntil)}` : ""}.`,
     href: `/admin/chat-safety?user=${user.id}`,
   });
   if (level === "strong" && strikes === s.strongWarningAt) {
@@ -436,7 +478,7 @@ async function caughtInClass(user: User, lesson: Lesson, source: LiveSource, kin
     await alertModerators({ title: "Contact details shared in a lesson", body: `${name} was removed from a lesson after contact details were caught ${strikes} times (${LIVE_WHERE[source].toLowerCase()}). Review it in Chat safety.`, href: "/admin/chat-safety" }, origin);
   }
   const suspended = removed && s.pauseAccountAfterRemovals > 0 && !isStaff(user) ? await pauseRepeatOffender(user, name, origin, s.pauseAccountAfterRemovals, s.removeAt) : false;
-  return { strikes, level, removed, suspended, mutedUntil };
+  return { strikes, level, removed, suspended, mutedUntil, ...(micOffUntil ? { micOffUntil } : {}) };
 }
 
 /**
@@ -468,17 +510,46 @@ export async function reportSpeech(user: User, lesson: Lesson, kinds: ContactKin
   if (!kinds.length) throw new ClassError("Nothing to record.");
   const s = await contactSafety();
   if (!s.voice) return { found: false as const };
-  // While their audio is paused nobody hears them, so nothing was shared.
-  if (await activeRestriction(user.id, lesson.booking.id)) return { found: false as const, paused: true };
+  // While their audio is off nobody hears them, so nothing was shared.
+  if (await audioOffUntil(user.id, lesson.booking.id)) return { found: false as const, paused: true };
+  // The other person's device already reported these words: counted once.
+  if (await recentSpeechCatch(user.id, lesson.booking.id, true)) return { found: false as const, repeat: true };
   const clean = (speechContact(excerpt)?.masked ?? excerpt).trim().slice(0, 200);
   return { found: true as const, kinds, ...(await caughtInClass(user, lesson, "speech", kinds, `${LIVE_WHERE.speech}: "${clean}"`, origin, "speech")) };
 }
 
-/** The person's own page when their pause is over: their audio may reach the others again. */
+/**
+ * The other person's device heard contact details in what someone said (its on-device speech reader checks
+ * the voices it receives, so a speaker whose own device can't check is still covered). Only the masked words
+ * are sent. The speaker gets the same as if their own device had caught it; the catch notes who heard it, so
+ * moderators can dismiss a wrong one (which lifts the microphone time off).
+ */
+export async function reportHeard(listener: User, lesson: Lesson, speakerIdentity: string, kinds: ContactKind[], excerpt: string, origin: string) {
+  requireRole(listener, lesson);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  if (!kinds.length) throw new ClassError("Nothing to record.");
+  const s = await contactSafety();
+  if (!s.voice || !s.deviceSpeech) return { found: false as const };
+  const speakerId = /^u-([\w-]{3,80})$/.exec(speakerIdentity)?.[1];
+  if (!speakerId || speakerId === listener.id) throw new ClassError("Who was heard?");
+  // Only the lesson's own people are checked this way (guests have no account to hold to it).
+  if (speakerId !== lesson.booking.bookerId && speakerId !== lesson.tutorUserId) throw new ClassError("That person isn't in this lesson.", 403);
+  const speaker = await accountById(speakerId);
+  if (!speaker) throw new ClassError("That person isn't in this lesson.", 403);
+  if (await audioOffUntil(speakerId, lesson.booking.id)) return { found: false as const, paused: true };
+  if (await recentSpeechCatch(speakerId, lesson.booking.id)) return { found: false as const, repeat: true };
+  const clean = (speechContact(excerpt)?.masked ?? excerpt).trim().slice(0, 200);
+  const caught = await caughtInClass(speaker, lesson, "speech", kinds, `${LIVE_WHERE.speech} ${HEARD_MARK}${shortName(listener.firstName, listener.lastName)}'s device): "${clean}"`, origin, "speech", true);
+  return { found: true as const, kinds, ...caught };
+}
+
+/** The person's own page when their pause (or microphone time off) is over: their audio may reach the others again. */
 export async function endOwnPause(user: User, lesson: Lesson) {
   requireRole(user, lesson);
   const [r] = await db()`select id, ends_at from public.class_restrictions where booking_id = ${lesson.booking.id} and user_id = ${user.id} and lifted_at is null order by ends_at desc limit 1`;
   if (r && new Date(r.ends_at as string).getTime() > Date.now()) return { paused: true as const, until: new Date(r.ends_at as string).toISOString() };
+  const mic = await micBlockedUntil(user.id, lesson.booking.id);
+  if (mic) return { paused: true as const, until: mic };
   if (r) await db()`update public.class_restrictions set lifted_at = now(), lifted_by = 'system' where id = ${r.id} and lifted_at is null`;
   after(() => syncPublishRights(user.id, lesson.booking.id));
   return { paused: false as const };
@@ -507,12 +578,25 @@ export async function liftExpiredRestrictions(): Promise<number> {
 /** "Ask for a review" in the class: an appeal against this lesson's audio pause (moderators are told). */
 export async function appealFromClass(user: User, lesson: Lesson, note: string, origin: string) {
   requireRole(user, lesson);
+  const clean = maskText(note.trim()).slice(0, 1000);
+  const appealId = `apl_${randomBytes(6).toString("hex")}`;
+  // The microphone off after a catch in what they said (no pause): the review is about that catch, and
+  // accepting it (Chat safety) lifts the time off.
+  if (!(await activeRestriction(user.id, lesson.booking.id)) && (await micBlockedUntil(user.id, lesson.booking.id))) {
+    const [f] = await db()`select id from public.contact_flags where channel = 'lesson' and context_id = ${lesson.booking.id} and user_id = ${user.id} and source = 'speech' and status <> 'dismissed' order by created_at desc limit 1`;
+    if (f) {
+      const [open] = await db()`select id from public.safety_appeals where flag_id = ${f.id} and status = 'open'`;
+      if (open) throw new ClassError("You've already asked for a review. Our team will look at it.");
+      await db()`insert into public.safety_appeals (id, user_id, flag_id, note) values (${appealId}, ${user.id}, ${f.id}, ${clean})`;
+      await alertModerators({ title: "Review asked: microphone turned off in a lesson", body: `${shortName(user.firstName, user.lastName)} says it wasn't contact details${clean ? `: "${clean.slice(0, 160)}"` : "."} Review it in Chat safety.`, href: `/admin/chat-safety?user=${user.id}` }, origin);
+      return;
+    }
+  }
   const [r] = await db()`select id from public.class_restrictions where booking_id = ${lesson.booking.id} and user_id = ${user.id} order by created_at desc limit 1`;
   if (!r) throw new ClassError("There's nothing to review in this class.");
   const [open] = await db()`select id from public.safety_appeals where restriction_id = ${r.id} and status = 'open'`;
   if (open) throw new ClassError("You've already asked for a review. Our team will look at it.");
-  const clean = maskText(note.trim()).slice(0, 1000);
-  await db()`insert into public.safety_appeals (id, user_id, restriction_id, note) values (${`apl_${randomBytes(6).toString("hex")}`}, ${user.id}, ${r.id}, ${clean})`;
+  await db()`insert into public.safety_appeals (id, user_id, restriction_id, note) values (${appealId}, ${user.id}, ${r.id}, ${clean})`;
   await alertModerators({ title: "Review asked: audio pause in a lesson", body: `${shortName(user.firstName, user.lastName)} says the pause was a mistake${clean ? `: "${clean.slice(0, 160)}"` : "."} Review it in Chat safety.`, href: `/admin/chat-safety?user=${user.id}` }, origin);
 }
 

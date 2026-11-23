@@ -13,8 +13,11 @@ import { cn } from "@/lib/utils";
 
 /*
  * Keeping contact details out of the live class (the server side is in src/server/classroom.ts):
- *  - speech (computers): while someone's microphone is on, their own browser's speech recognition listens; a phone
- *    number, email or social media handle in what they say is reported (only the masked words);
+ *  - speech: while someone's microphone is on, a free speech reader on their own device listens (deviceSpeech.ts;
+ *    or, when that's switched off, the browser's own recogniser on computers), and on computers it also listens
+ *    to what the others say. A phone number, email or social media handle is caught while it's still being said:
+ *    the microphone turns off at once for a few minutes and only the masked words are reported. With protected
+ *    voice (protectedVoice.ts) the voice reaches the others a little late, so nothing of it is heard;
  *  - whiteboard: what each person draws is read on the server every few seconds (see MeetingWhiteboard);
  *  - shared screen and camera: a frame is read on the server every few seconds (when it changed);
  *  - speech is checked one sentence at a time and over the last minute (a number said in pieces), in
@@ -25,7 +28,13 @@ import { cn } from "@/lib/utils";
  *  - a banner says so, and Report sends the other side of the lesson to Admin → Reports.
  */
 
-export type SafetyResult = { found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean; suspended?: boolean; level?: SafetyMessage["level"]; mutedUntil?: string; blockedUntil?: string };
+export type SafetyResult = {
+  found: boolean; kinds?: ContactKind[]; strikes?: number; removed?: boolean; suspended?: boolean; level?: SafetyMessage["level"]; mutedUntil?: string; blockedUntil?: string;
+  /** Said out loud: the microphone is off until then. */
+  micOffUntil?: string;
+  /** Not counted: the person's audio was already off, or the same words were just reported. */
+  paused?: boolean; repeat?: boolean;
+};
 
 /** Sends one safety check to the server. Guests (no account) and network trouble return null. */
 export async function sendSafety(
@@ -61,16 +70,20 @@ export function useSafetyAlerts(
   ladder: { muteAt: number; muteMinutes: number },
   onRemoved: (suspended: boolean) => void,
   onPaused: (until: number) => void,
+  /** The other person's device heard this person say contact details: their microphone goes off here too. */
+  onMicOff?: (until: number | null) => void,
 ) {
   const [alert, setAlert] = React.useState<{ id: number; text: string; mine: boolean } | null>(null);
   const seq = React.useRef(0);
   const seen = React.useRef(new Set<string>());
   const onRemovedRef = React.useRef(onRemoved);
   const onPausedRef = React.useRef(onPaused);
+  const onMicOffRef = React.useRef(onMicOff);
   React.useEffect(() => {
     onRemovedRef.current = onRemoved;
     onPausedRef.current = onPaused;
-  }, [onRemoved, onPaused]);
+    onMicOffRef.current = onMicOff;
+  }, [onRemoved, onPaused, onMicOff]);
 
   const show = React.useCallback(
     (msg: SafetyMessage) => {
@@ -82,8 +95,12 @@ export function useSafetyAlerts(
       const level = msg.level ?? (msg.removed ? "removed" : "warning");
       const muteAt = msg.muteAt ?? ladder.muteAt;
       const minutes = msg.muteMinutes ?? ladder.muteMinutes;
-      const until = msg.mutedUntil ? new Date(msg.mutedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
+      const until = clock(msg.mutedUntil);
       const next = muteAt > msg.strikes ? ` ${msg.strikes} of ${muteAt}. At ${muteAt} your audio is paused for the others for ${minutes} minutes.` : "";
+      // Said out loud: the microphone was turned off at once (and stays off until micOffUntil).
+      const micOff = msg.source === "speech" && !!msg.micOffUntil;
+      const micNote = micOff ? (mine ? ` Your microphone was turned off until ${clock(msg.micOffUntil)}.` : " Their microphone was turned off for a few minutes.") : "";
       const text =
         level === "removed"
           ? mine
@@ -95,14 +112,16 @@ export function useSafetyAlerts(
               : `${msg.name}'s audio is paused for ${minutes} minutes: contact details were shared again. Our team has been told.`
             : mine
               ? level === "strong"
-                ? `Second warning: sharing ${what} isn't allowed on TutorLink (${WHERE[msg.source]}). It was blocked, and our team has been told.${next}`
-                : `Sharing ${what} isn't allowed on TutorLink (${WHERE[msg.source]}). It was blocked and recorded.${next}`
-              : `${msg.name} tried to share ${what} (${WHERE[msg.source]}). It was blocked and reported. Keep contact and payments on TutorLink.`;
+                ? `Second warning: sharing ${what} isn't allowed on TutorLink (${WHERE[msg.source]}). It was blocked, and our team has been told.${micNote}${next}`
+                : `Sharing ${what} isn't allowed on TutorLink (${WHERE[msg.source]}). It was blocked and recorded.${micNote}${next}`
+              : `${msg.name} tried to share ${what} (${WHERE[msg.source]}). It was blocked and reported.${micNote} Keep contact and payments on TutorLink.`;
       const id = ++seq.current;
       setAlert({ id, text, mine });
       if (!mine) window.setTimeout(() => setAlert((a) => (a?.id === id ? null : a)), 9000);
       if (mine && level === "removed") onRemovedRef.current(false);
       if (mine && level === "muted" && msg.mutedUntil) onPausedRef.current(Date.parse(msg.mutedUntil));
+      // Caught by the other person's device: this page turns the microphone off as well (the server already stopped it reaching anyone).
+      if (mine && msg.heard && msg.source === "speech") onMicOffRef.current?.(msg.micOffUntil ? Date.parse(msg.micOffUntil) : null);
     },
     [me.identity, ladder.muteAt, ladder.muteMinutes],
   );
@@ -131,6 +150,9 @@ export function useSafetyAlerts(
         mutedUntil: typeof msg.mutedUntil === "string" && !Number.isNaN(Date.parse(msg.mutedUntil)) ? msg.mutedUntil : undefined,
         muteAt: Number(msg.muteAt) || undefined,
         muteMinutes: Number(msg.muteMinutes) || undefined,
+        micOffUntil: typeof msg.micOffUntil === "string" && !Number.isNaN(Date.parse(msg.micOffUntil)) ? msg.micOffUntil : undefined,
+        // Only the server can say another device heard someone (a person's own page never says it about itself).
+        heard: !participant && msg.heard === true,
       });
     };
     room.on(RoomEvent.DataReceived, handler);
@@ -144,7 +166,7 @@ export function useSafetyAlerts(
       if (!res?.found || !res.kinds?.length) return;
       const msg: SafetyMessage = {
         type: TOPIC.safety, name: me.name, identity: me.identity, source, kinds: res.kinds, strikes: res.strikes ?? 0, removed: res.removed === true,
-        level: res.level, mutedUntil: res.mutedUntil, muteAt: ladder.muteAt, muteMinutes: ladder.muteMinutes,
+        level: res.level, mutedUntil: res.mutedUntil, muteAt: ladder.muteAt, muteMinutes: ladder.muteMinutes, ...(res.micOffUntil ? { micOffUntil: res.micOffUntil } : {}),
       };
       // The others hear it from this browser now; the server's own message follows and isn't shown twice.
       room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(msg)), { reliable: true, topic: TOPIC.safety }).catch(() => {});
@@ -173,9 +195,11 @@ export function SafetyAlert({ alert, onDismiss }: { alert: { text: string; mine:
 }
 
 /** Why speech is (or isn't) being checked for this person right now. */
-export type SpeechState = "on" | "off" | "phone" | "unsupported" | "mic-off" | "blocked" | "guest" | "muted";
+export type SpeechState = "device" | "starting" | "on" | "off" | "phone" | "unsupported" | "mic-off" | "blocked" | "guest" | "muted";
 
 const SPEECH_TEXT: Record<SpeechState, string> = {
+  device: "What you say is checked on this device by a free speech reader: your voice never leaves it.",
+  starting: "The private speech check is getting ready (the first class on a device downloads about 40 MB). Meanwhile, on a computer, your browser's own speech recognition checks what you say.",
   on: "What you say is checked (your browser's speech recognition: Chrome sends the audio to Google, Edge to Microsoft, only to turn it into text).",
   off: "Speech isn't checked in this class (switched off by TutorLink).",
   phone: "Speech isn't checked on phones; the whiteboard, shared screens, camera and chat still are.",
@@ -189,7 +213,7 @@ const SPEECH_TEXT: Record<SpeechState, string> = {
 /** "Protected": what is checked for this person in this class, and why something isn't. */
 export function SafetyStatus({ speech, checks }: { speech: SpeechState; checks: { label: string; on: boolean }[] }) {
   const [open, setOpen] = React.useState(false);
-  const full = speech === "on" || speech === "mic-off";
+  const full = speech === "on" || speech === "device" || speech === "mic-off";
   return (
     <div className="relative">
       <button
@@ -208,7 +232,7 @@ export function SafetyStatus({ speech, checks }: { speech: SpeechState; checks: 
           <p className="mb-2 font-semibold text-ink">Checked for contact details</p>
           <ul className="space-y-1.5">
             <li className="flex gap-2">
-              <span className={cn("mt-1 size-2 shrink-0 rounded-full", speech === "on" ? "bg-live" : speech === "mic-off" ? "bg-subtle" : "bg-warning")} aria-hidden />
+              <span className={cn("mt-1 size-2 shrink-0 rounded-full", speech === "on" || speech === "device" ? "bg-live" : speech === "mic-off" ? "bg-subtle" : "bg-warning")} aria-hidden />
               <span>{SPEECH_TEXT[speech]}</span>
             </li>
             {checks.map((c) => (
@@ -281,15 +305,18 @@ export function AudioPausedBar({ bookingId, until }: { bookingId: string; until:
 }
 
 /** Shown when the class opens: what isn't allowed and that it's checked. */
-export function SafetyBanner({ onReport }: { onReport?: () => void }) {
+export function SafetyBanner({ onReport, onDevice = false }: { onReport?: () => void; onDevice?: boolean }) {
   const [open, setOpen] = React.useState(true);
   if (!open) return null;
   return (
     <div className="flex items-start gap-2.5 border-b border-line bg-sunken px-3 py-2 text-[12.5px] leading-snug text-ink-2 md:px-4" role="note" data-safety-banner="">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-live" aria-hidden />
       <p className="flex-1">
-        <span className="font-semibold text-ink">Keep it on TutorLink.</span> Phone numbers, emails and social media aren&apos;t allowed in class. They&apos;re checked automatically in what you say (on a computer
-        while your microphone is on, by your browser&apos;s speech recognition, which sends the audio to Google in Chrome or Microsoft in Edge to turn it into text), on the whiteboard, on shared screens and on camera. Repeated tries pause your audio for the others, and our team is told.
+        <span className="font-semibold text-ink">Keep it on TutorLink.</span> Phone numbers, emails and social media aren&apos;t allowed in class. They&apos;re checked automatically in what you say{" "}
+        {onDevice
+          ? "(while your microphone is on, on your own device: your voice never leaves it)"
+          : "(on a computer while your microphone is on, by your browser's speech recognition, which sends the audio to Google in Chrome or Microsoft in Edge to turn it into text)"}
+        , on the whiteboard, on shared screens and on camera. Said out loud, your microphone turns off for a few minutes; repeated tries are reported to our team.
         {onReport && (
           <>
             {" "}

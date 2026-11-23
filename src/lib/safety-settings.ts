@@ -16,6 +16,22 @@ export interface ContactSafety {
   /** Speech is checked in class (by each person's browser), and also on phones. */
   voice: boolean;
   voiceOnPhones: boolean;
+  /**
+   * Speech is read on the device by a free open-source reader (Vosk): it works on phones, Safari and Firefox,
+   * the voice never leaves the device, and each computer also checks what the other person says. Off: the
+   * browser's own recogniser (Chrome / Edge send the audio to Google / Microsoft).
+   */
+  deviceSpeech: boolean;
+  /** The microphone is cut while a number is still being said (not only after the sentence), with a warning. */
+  voiceCutEarly: boolean;
+  /** Contact details said out loud: the microphone stays off this long (0 = only turned off). */
+  micBlockMinutes: number;
+  /**
+   * Protected voice: each person's voice reaches the others protectedVoiceSeconds late, so contact details are
+   * cut before anyone hears them. Conversation feels slower, so it's off unless an administrator turns it on.
+   */
+  protectedVoice: boolean;
+  protectedVoiceSeconds: number;
   /** Pictures are read (chat and homework images, whiteboard pictures and drawings, shared screens). */
   images: boolean;
   /** Each person's camera picture is read in class. */
@@ -59,6 +75,11 @@ export const DEFAULT_CONTACT_SAFETY: ContactSafety = {
   sensitivity: "normal",
   voice: true,
   voiceOnPhones: false,
+  deviceSpeech: true,
+  voiceCutEarly: true,
+  micBlockMinutes: 5,
+  protectedVoice: false,
+  protectedVoiceSeconds: 2,
   images: true,
   camera: true,
   documents: true,
@@ -100,6 +121,11 @@ export function readContactSafety(raw: unknown): ContactSafety {
     sensitivity: r.sensitivity === "strict" ? "strict" : "normal",
     voice: bool("voice"),
     voiceOnPhones: bool("voiceOnPhones"),
+    deviceSpeech: bool("deviceSpeech"),
+    voiceCutEarly: bool("voiceCutEarly"),
+    micBlockMinutes: int(r.micBlockMinutes, 0, 120, d.micBlockMinutes),
+    protectedVoice: bool("protectedVoice"),
+    protectedVoiceSeconds: int(r.protectedVoiceSeconds, 1, 4, d.protectedVoiceSeconds),
     images: bool("images"),
     camera: bool("camera"),
     documents: bool("documents"),

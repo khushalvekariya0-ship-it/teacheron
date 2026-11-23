@@ -119,6 +119,10 @@ export interface SafetyMessage {
   mutedUntil?: string;
   muteAt?: number;
   muteMinutes?: number;
+  /** Contact details said out loud: the person's microphone is off until then (Admin → Chat safety → Settings). */
+  micOffUntil?: string;
+  /** Caught by the other person's device (it heard the speaker), not the speaker's own. */
+  heard?: boolean;
 }
 
 /** Times contact details may be caught in one lesson before the person is removed from the class. */

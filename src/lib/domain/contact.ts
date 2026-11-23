@@ -1261,11 +1261,13 @@ export function isShortPiece(text: string): boolean {
 /** Words that show someone is giving a way to reach them (lessons are full of plain numbers). */
 const SPEECH_CUE = /whats ?app|call me|text me|message me|dm me|ping me|my (?:number|phone|mobile|cell|contact|mail|email|gmail|id|insta|handle)|phone|mobile|contact|insta|telegram|snapchat|signal app|gmail|e ?mail|mail id|dial|\+ ?91|ફોન|નંબર|વોટ્સ|फोन|नंबर|मोबाइल|व्हाट्स/i;
 
-/** Digits a sentence holds, in any script or as words ("nine", "નવ", "नौ"). */
-function spokenDigits(said: string): number {
-  let n = 0;
-  for (const w of said.split(/[\s,.;:!?]+/)) n += numberPiece(w)?.digits ?? 0;
-  return n;
+/**
+ * Digits a sentence holds as a number being spelled out, in any script or as words ("nine", "નવ", "नौ").
+ * Quantities ("nine thousand eight hundred") and decimals don't count, and counting ("1 2 3 4 …") only when
+ * `withCounting` (the person already said it's a way to reach them).
+ */
+function spokenDigits(said: string, withCounting = false): number {
+  return spokenRuns(said).filter((r) => withCounting || !counting(r)).reduce((n, r) => n + r.length, 0);
 }
 
 /**
@@ -1275,10 +1277,104 @@ function spokenDigits(said: string): number {
  */
 export function speechContact(said: string): { kinds: ContactKind[]; masked: string } | null {
   const found = scanCore(said, "chat", 0);
-  if (!found.found) return null;
-  const kinds = found.kinds.filter((k) => k !== "phone" || spokenDigits(said) >= 10 || SPEECH_CUE.test(said));
+  const kinds = found.found ? found.kinds.filter((k) => k !== "phone" || spokenDigits(said) >= 10 || SPEECH_CUE.test(said)) : [];
+  // An email address said out loud often comes back from speech readers as loose words ("… at gmail",
+  // "… mail dot com"), with no "@" for the usual check to find.
+  if (!kinds.includes("email") && SPEECH_EMAIL.test(said)) kinds.push("email");
   if (!kinds.length) return null;
-  return { kinds, masked: maskMatches(said, found.matches) };
+  return { kinds, masked: found.found ? maskMatches(said, found.matches) : said.replace(SPEECH_EMAIL_PART, "[email hidden]") };
+}
+
+/** An email address said out loud, as speech readers write it down. */
+const SPEECH_EMAIL = /\b(?:at(?: the rate(?: of)?)?|@)\s*(?:g ?mail|yahoo|hotmail|outlook|rediff(?:mail)?|icloud|proton ?mail)\b|\b(?:g ?mail|e ?mail|yahoo|hotmail|outlook|rediff|mail)\s+dot\s+(?:com|in|co)\b/i;
+const SPEECH_EMAIL_PART = /\b\S+\s+(?:at(?: the rate(?: of)?)?|@)\s*(?:g ?mail|yahoo|hotmail|outlook|rediff(?:mail)?|icloud|proton ?mail)(?:\s+dot\s+\S+)?|\b(?:g ?mail|e ?mail|yahoo|hotmail|outlook|rediff|mail)\s+dot\s+(?:com|in|co)\b/gi;
+
+/** Digit words a Hindi or Gujarati speech reader writes (the usual number reading wants them in longer runs). */
+const SCRIPT_DIGITS: Record<string, string> = {
+  शून्य: "0", सुन्न: "0", एक: "1", दो: "2", तीन: "3", चार: "4", पांच: "5", पाँच: "5", छह: "6", छः: "6", छे: "6", सात: "7", आठ: "8", नौ: "9",
+  શૂન્ય: "0", એક: "1", બે: "2", ત્રણ: "3", ચાર: "4", પાંચ: "5", છ: "6", સાત: "7", આઠ: "8", નવ: "9",
+};
+/** Words that make a number a quantity ("nine thousand eight hundred"), not digits said one by one. */
+const MAGNITUDE = /^(?:hundreds?|thousands?|lakhs?|lacs?|crores?|millions?|billions?|सौ|हज़ार|हजार|लाख|करोड़|સો|હજાર|લાખ|કરોડ)$/;
+
+/**
+ * The runs of digits said one after another in a piece of speech ("nine eight seven", "98765 43210",
+ * "ninety eight seventy six", "double five"). Quantities ("two thousand five hundred") and the digits after
+ * "point" (decimals) don't count.
+ */
+function spokenRuns(said: string): string[] {
+  const runs: string[] = [];
+  let run = "";
+  let repeat = 1;
+  // The digits after "point" are decimals: that run doesn't count.
+  let decimals = false;
+  const end = () => {
+    if (run && !decimals) runs.push(run);
+    run = "";
+    repeat = 1;
+    decimals = false;
+  };
+  for (const raw of said.toLowerCase().split(/[\s,;:!?()"“”]+/)) {
+    const w = raw.replace(/^[.'’-]+|[.'’-]+$/g, "");
+    if (!w) continue;
+    // "nine thousand eight hundred": a quantity, so the digits next to it aren't a number being spelled out.
+    if (MAGNITUDE.test(w)) {
+      run = "";
+      repeat = 1;
+      continue;
+    }
+    if (w === "point" || w === "decimal" || w === "दशमलव") {
+      end();
+      decimals = true;
+      continue;
+    }
+    if (w in REPEAT) {
+      repeat = REPEAT[w];
+      continue;
+    }
+    const d = w === "o" || w === "oh" ? "0" : SCRIPT_DIGITS[w] ?? (/^\d+$/.test(w) || w.length > 1 ? chunkDigits(w)?.digits ?? null : null);
+    if (d) {
+      run += d.repeat(repeat);
+      repeat = 1;
+      continue;
+    }
+    if (GLUE.has(w)) continue;
+    end();
+  }
+  end();
+  return runs;
+}
+
+const counting = (r: string) => r.length >= 3 && ([...r].every((ch, i) => i === 0 || +ch - +r[i - 1] === 1) || [...r].every((ch, i) => i === 0 || +ch - +r[i - 1] === -1));
+
+/**
+ * Contact details while they're still being said (the speech reader's words so far), so the microphone can be
+ * cut before the rest is heard. `recent` are the person's finished sentences from the last minute. With a
+ * "reach me" word ("WhatsApp", "my number", "call me") 4 digits in a row are enough; without one, 7 that look
+ * like a mobile number (from 6 to 9, not counting "1 2 3 4 …" or the same digit over and over). Emails,
+ * usernames and links count straight away.
+ */
+export function speechEarlyContact(pending: string, recent: string[] = []): { kinds: ContactKind[]; masked: string } | null {
+  if (!pending.trim()) return null;
+  const full = speechContact(pending);
+  if (full) return full;
+  const found = scanCore(pending, "chat", 0);
+  const other = found.kinds.filter((k) => k !== "phone" && k !== "address");
+  if (other.length) return { kinds: other, masked: maskMatches(pending, found.matches) };
+  const longest = spokenRuns(pending).reduce((a, r) => (r.length > a.length ? r : a), "");
+  if (!longest) return null;
+  const cue = SPEECH_CUE.test([...recent.slice(-2), pending].join(" "));
+  const phoneLike = cue ? longest.length >= 4 : longest.length >= 7 && /^[6-9]/.test(longest) && !counting(longest) && !/(\d)\1{4}/.test(longest);
+  if (!phoneLike) return null;
+  return { kinds: ["phone"], masked: maskSpokenDigits(pending) };
+}
+
+/** Speech with every digit (or digit word) shown as "•". */
+function maskSpokenDigits(said: string): string {
+  return said
+    .split(/(\s+)/)
+    .map((w) => (/\s/.test(w) || !w ? w : /\d/.test(w) || w.toLowerCase() === "oh" || SCRIPT_DIGITS[w] || (w.length > 1 && chunkDigits(w.toLowerCase().replace(/[^\p{L}\d]/gu, "")) && !MAGNITUDE.test(w.toLowerCase())) ? "•" : w))
+    .join("");
 }
 
 /**
@@ -1297,7 +1393,7 @@ export function speechSplitContact(recent: string[], said: string): { kinds: Con
   const lastStart = joined.length - said.length;
   const hits = found.matches.filter((m) => m.end > lastStart);
   if (!hits.length) return null;
-  const kinds = [...new Set(hits.map((m) => m.kind))].filter((k) => k !== "phone" || spokenDigits(joined) >= 10);
+  const kinds = [...new Set(hits.map((m) => m.kind))].filter((k) => k !== "phone" || spokenDigits(joined, true) >= 10);
   if (!kinds.length) return null;
   return { kinds, masked: maskMatches(joined, found.matches) };
 }

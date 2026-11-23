@@ -44,7 +44,11 @@ const nextConfig: NextConfig = {
   },
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/(.*)", headers: SECURITY_HEADERS },
+      // The on-device speech reader and its models (public/speech): versioned names, so a device downloads each once.
+      { source: "/speech/(.*)", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+    ];
   },
 };
 
