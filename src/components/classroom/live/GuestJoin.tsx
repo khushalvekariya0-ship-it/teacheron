@@ -6,6 +6,9 @@ import { Clock, Loader2, LogIn, ShieldAlert, User as UserIcon, Video } from "luc
 import type { JoinTicket } from "@/lib/classroom";
 import { Button } from "@/components/ui/Button";
 import { LiveClassroom } from "./LiveClassroom";
+import { setGuestClaim } from "./guestPass";
+import { canReadOnDevice, prefetchSpeechReader } from "./deviceSpeech";
+import { useApp } from "@/lib/store";
 
 /**
  * The guest link (/classroom/<lesson>?g=<code>) for someone without an account. They knock with their
@@ -49,6 +52,13 @@ export function GuestJoin({ bookingId, code }: { bookingId: string; code: string
     }
   };
 
+  // While waiting, the speech check downloads (what a guest says is checked too), so the microphone isn't held
+  // back for it once they're in.
+  const safety = useApp((s) => s.contactSafety);
+  React.useEffect(() => {
+    if (phase === "waiting" && safety.voice && safety.deviceSpeech && canReadOnDevice()) prefetchSpeechReader();
+  }, [phase, safety.voice, safety.deviceSpeech]);
+
   // Poll until the host admits (or turns us away).
   React.useEffect(() => {
     if (phase !== "waiting") return;
@@ -66,9 +76,12 @@ export function GuestJoin({ bookingId, code }: { bookingId: string; code: string
         const data = (await res.json().catch(() => ({}))) as { status?: string; ticket?: JoinTicket };
         if (!alive) return;
         if (data.status === "approved" && data.ticket) {
+          // The class checks send it along: what a guest says, draws or shows is checked too.
+          setGuestClaim(claim);
           setTicket(data.ticket);
           setPhase("admitted");
         } else if (data.status === "denied") {
+          setGuestClaim(null);
           setPhase("denied");
         } else if (data.status === "expired") {
           try {

@@ -3,9 +3,9 @@ import { z } from "zod";
 import { siteOrigin } from "@/server/auth";
 import { helperScript } from "@/server/board-helper";
 import {
-  acceptPush, appealFromClass, boardMaybeShown, cameraBack, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, joinTicket, knock, listBoards, loadLesson,
-  pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportHeard, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage, summarise, waitingGuests,
-  validPushCode, type Lesson,
+  acceptPush, appealFromClass, boardMaybeShown, cameraBack, checkClassImage, checkSharedScreenFrame, endOwnPause, liftRestriction, classInfo, ClassError, CLASS_REPORT_REASONS, collectPushes, decideGuest, deleteBoard, deleteRecap, endClass, guestClassImage, guestFromClaim, guestScreenFrame,
+  guestSpeech, joinTicket, knock, listBoards, loadLesson, pollGuest, pushCode, pushCodeLesson, recapFor, reportFromClass, reportHeard, reportSpeech, saveSnapshots, saveTranscript, setGuestLink, shareBoard, storeBoardImage,
+  summarise, waitingGuests, validPushCode, type ClassGuest, type Lesson,
 } from "@/server/classroom";
 import { backendStatus } from "@/server/env";
 import { clientIp, json, rateLimit, readJson, sameOrigin, serverError, tooMany } from "@/server/http";
@@ -25,11 +25,12 @@ import type { User } from "@/lib/types";
  *   GET  /api/classroom/guest?claim=     guest polls: a token only once the host admitted them
  *   GET  /api/classroom/guests?id=       host: people waiting
  *   POST /api/classroom/decide           { id, guestId, admit }  host
- *   POST /api/classroom/safety           { id, source, kinds?, excerpt?, image? }  this person's own check (speech,
- *                                        whiteboard, camera) → the ladder (warning … microphone / camera off)
+ *   POST /api/classroom/safety           { id, source, kinds?, excerpt?, image?, guest? }  this person's own check (speech,
+ *                                        whiteboard, camera) → the ladder (warning … microphone / camera off); a guest
+ *                                        sends their claim (`guest`) and gets the guest rules
  *   POST /api/classroom/heard            { id, speaker, kinds, excerpt? }  this device heard contact details in what
  *                                        someone else in the lesson said (on-device speech reader)
- *   POST /api/classroom/screen-frame     { id, image, record?, excerpt? }  a shared-screen frame, checked before
+ *   POST /api/classroom/screen-frame     { id, image, record?, excerpt?, guest? }  a shared-screen frame, checked before
  *                                        others see it → { checked, found, kinds, boxes, maskable }
  *   POST /api/classroom/board-image      { id, image }  host: a picture for the whiteboard (checked) → { url }
  *   POST /api/classroom/share-board      { id, title, image, recipients }  host: save + share the board
@@ -53,6 +54,15 @@ async function signedIn(): Promise<User> {
   if (!session) throw new ClassError("Please sign in to continue.", 401);
   if (session.user.status === "suspended") throw new ClassError("Your account is suspended.", 403);
   return session.user;
+}
+
+/**
+ * Who sends a class check: a guest the host let in (the secret claim their page got from knocking; also when
+ * that browser happens to be signed in to another account), else the signed-in person.
+ */
+async function checker(body: Record<string, unknown>, lesson: Lesson): Promise<{ user: User; guest?: undefined } | { guest: ClassGuest; user?: undefined }> {
+  if (typeof body.guest === "string") return { guest: await guestFromClaim(body.guest, lesson) };
+  return { user: await signedIn() };
 }
 
 async function lessonOf(raw: unknown): Promise<Lesson> {
@@ -167,8 +177,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
       }
       case "safety": {
         // Contact details found by the person's own browser (speech), or a picture of their whiteboard
-        // drawing / shared screen to read with OCR.
-        const user = await signedIn();
+        // drawing / shared screen to read with OCR. A guest's too (their claim instead of a session).
         const v = z
           .object({
             id, source: z.enum(["speech", "board", "screen", "camera"]), kinds: z.array(z.enum(["phone", "email", "social", "link", "request", "address"])).max(6).optional(),
@@ -177,13 +186,16 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
           .safeParse(body);
         if (!v.success) return json({ ok: false, error: "That safety check wasn't valid." }, { status: 400 });
         const lesson = await lessonOf(v.data.id);
+        const { user, guest } = await checker(body, lesson);
+        const who = user ? user.id : `guest:${guest.id}`;
         if (v.data.source === "speech") {
-          const stop = limited(`class-safety-speech:${user.id}`, 30, 10);
+          const stop = limited(`class-safety-speech:${who}`, 30, 10);
           if (stop) return stop;
+          if (guest) return json({ ok: true, ...(await guestSpeech(guest, lesson, v.data.kinds ?? [])) });
           return json({ ok: true, ...(await reportSpeech(user, lesson, v.data.kinds ?? [], v.data.excerpt ?? "", siteOrigin(request))) });
         }
         // The whiteboard is checked each time someone stops drawing (before others see it), so it gets more room.
-        const stop = limited(`class-safety-${v.data.source}:${user.id}`, v.data.source === "board" ? 600 : 150, 10);
+        const stop = limited(`class-safety-${v.data.source}:${who}`, v.data.source === "board" ? 600 : 150, 10);
         if (stop) return stop;
         if (!v.data.image) return json({ ok: false, error: "No picture to check." }, { status: 400 });
         // A handwritten number the person's own browser read (on their drawing or shared screen): the site's rules decide.
@@ -191,6 +203,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
         // An email, username or link the browser read in the person's handwriting, and what a QR code the browser
         // read holds (judged here by the site's own rules): they can only make things stricter.
         const written = (v.data.kinds ?? []).filter((k): k is "email" | "social" | "link" => k === "email" || k === "social" || k === "link");
+        if (guest) return json({ ok: true, ...(await guestClassImage(guest, lesson, v.data.source, v.data.image, handwriting, written, v.data.qr ?? "", v.data.text ?? "")) });
         return json({ ok: true, ...(await checkClassImage(user, lesson, v.data.source, v.data.image, siteOrigin(request), handwriting, written, v.data.qr ?? "", v.data.text ?? "")) });
       }
       case "heard": {
@@ -206,14 +219,16 @@ export async function POST(request: Request, ctx: RouteContext<"/api/classroom/[
       }
       case "screen-frame": {
         // One frame of the person's shared screen, checked before the others see it (the page sends out only
-        // frames this says are clean, or with the contact details blacked out and checked again).
-        const user = await signedIn();
-        const stop = limited(`class-screen-frame:${user.id}`, 1500, 10);
-        if (stop) return stop;
+        // frames this says are clean, or with the contact details blacked out and checked again). A guest's too.
         const v = z.object({ id, image: z.string().max(5_600_000), record: z.boolean().optional(), excerpt: z.string().max(80).optional() }).safeParse(body);
         if (!v.success) return json({ ok: false, error: "That frame wasn't valid." }, { status: 400 });
+        const lesson = await lessonOf(v.data.id);
+        const { user, guest } = await checker(body, lesson);
+        const stop = limited(`class-screen-frame:${user ? user.id : `guest:${guest.id}`}`, 1500, 10);
+        if (stop) return stop;
         const handwriting = (v.data.excerpt ?? "").replace(/[^0-9?]/g, "").slice(0, 40);
-        return json({ ok: true, ...(await checkSharedScreenFrame(user, await lessonOf(v.data.id), v.data.image, siteOrigin(request), !!v.data.record, handwriting)) });
+        if (guest) return json({ ok: true, ...(await guestScreenFrame(guest, lesson, v.data.image, !!v.data.record, handwriting)) });
+        return json({ ok: true, ...(await checkSharedScreenFrame(user, lesson, v.data.image, siteOrigin(request), !!v.data.record, handwriting)) });
       }
       case "camera-back": {
         // The person's own page when their camera's time off is over (the server checks the time).

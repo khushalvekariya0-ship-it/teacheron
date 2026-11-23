@@ -82,7 +82,7 @@ rules `src/lib/classroom.ts`; migration `20261105000000_live_classroom.sql`). Se
 | `POST share-board`, `GET boards`, `POST delete-board` | host / participants | the flattened board saved for the lesson page (checked the same way); the student is notified |
 | `POST push-code`, `GET helper?code=`, `POST push`, `GET push?code=` | host / the helper | the desktop snipping helper: a 12-hour room code (`XXXX-XXXX`, max 400 images) lets a PowerShell script post clipboard images; reading them back needs the host's own session |
 | `POST transcript`, `GET recap`, `POST delete-recap` | host / participants | captions saved with contact details masked; snapshots (≤ 20) checked and stored after the answer; optional Gemini recap |
-| `POST safety` | tutor, booker (not guests) | `{ id, source: speech / board / screen, kinds?, excerpt?, image? }`: contact details said out loud (found by the person's own browser; only the masked words are sent) or a picture of their whiteboard drawing / shared screen (read here with OCR). Returns `{ found, kinds, strikes, removed }`. Rate-limited (speech 30, pictures 150 per 10 min) |
+| `POST safety` | tutor, booker, admitted guests | `{ id, source: speech / board / screen / camera, kinds?, excerpt?, image?, guest? }`: contact details said out loud (found by the person's own device; only the masked words are sent) or a picture of their whiteboard drawing / shared screen / camera (read here with OCR, English + Gujarati + Hindi). A guest sends their claim as `guest` and gets the guest rules (below). Returns `{ found, kinds, strikes, removed }`. Rate-limited (speech 30, pictures 150 per 10 min) |
 | `POST report` | tutor, booker | `{ id, reason: asked_contact / shared_contact / pay_outside / other, details? }` → a `reports` row about the other side of the lesson (details masked), moderators alerted. 5 per 10 min |
 
 In the room, strokes, image moves, drawing rights and "new chat message" pings travel over LiveKit's
@@ -123,18 +123,31 @@ staff accept its appeal (`decideAppeal`: the catch becomes `dismissed`), the sam
 Switches: pictures, documents, QR.
 
 **Live class** (`src/components/classroom/live/LessonSafety.tsx`, `caughtInClass` in `src/server/classroom.ts`):
-- **Speech**: each person's own browser recognition (Chrome / Edge send the audio to Google / Microsoft to
-  turn it into text; nothing is recorded by TutorLink), while the microphone is on, on computers (phones
-  only when switched on: the recogniser beeps and can take the call's microphone). One sentence, or the
+- **Speech**: read on each person's own device by a free speech reader (`deviceSpeech.ts`, Vosk; the voice
+  never leaves the device; phones too), or, where that's switched off or can't run, the browser's own
+  recognition on computers (Chrome / Edge send the audio to Google / Microsoft). One sentence, or the
   last minute's sentences when one of them says it's a way to reach someone (`speechContact`,
-  `speechSplitContact`); digits and number words in any script. The host sets the **class language**
-  (data topic `class-lang`, accepted only from the host's signed metadata). Only masked words are sent.
+  `speechSplitContact`, `speechEarlyContact` while it's still being said); digits and number words in any
+  script, Hindi / Gujarati numbers 11–99 (numbers read in pairs) and English digits written in their letters.
+  The host sets the **class language** (data topic `class-lang`, accepted only from the host's signed
+  metadata): Hindi and Gujarati classes use the Hindi model (Gujarati numbers sound almost the same; Vosk's
+  Gujarati model is 347 MB unpacked, too heavy), others English (India). Only masked words are sent.
+- **First class on a device**: where nothing else can check while the reader downloads (phones, Safari,
+  Firefox), the microphone stays off until it's ready and then turns on by itself (`holding`). Guests'
+  devices download it while they wait to be let in.
+- **Guests** (no account) are checked like everyone else: their page sends its claim with each check, and
+  the tutor's device reads their voice too. One warning: the first catch turns their microphone (said) or
+  camera (shown) off for the rest of the class (LiveKit; a rejoin gets a pass without it); the second
+  removes them (`class_guests.status = 'denied'`). The step is kept on the guest row (`decided_by =
+  'safety:<source>'`), each catch is in the audit log (`classroom.guest_caught` / `guest_removed`) and staff
+  are alerted; nothing goes into `contact_flags` (catches belong to accounts). A guest's own device doesn't
+  read the others.
 - **Whiteboard** (own new strokes every 15 s; removed for everyone), **shared screen** (every 12 s when it
   changed; the share stops), **camera** (every 20 s when the picture changed by 4%; the camera is turned
   off). Pictures go through the same reader (OCR + QR, and Gemini when switched on and `GEMINI_API_KEY` is
   set: it only copies out the text; TutorLink's rules decide; either reader counts).
 - A **"Protected"** status in the class top bar says what is checked for this person and why speech
-  isn't (`data-safety-status`: on, mic-off, phone, unsupported, blocked, off, guest).
+  isn't (`data-safety-status`: device, starting, holding, on, mic-off, phone, unsupported, blocked, off, muted).
 - **The ladder** (settings, per lesson; dismissed catches don't count): a warning; from `strongWarningAt`
   (2) a stronger one and moderators are told; from `muteAt` (3) the person's **audio is paused** for the
   others for `muteMinutes` (10): a `class_restrictions` row, LiveKit `updateParticipant` without the
@@ -157,8 +170,8 @@ masked notes are shown or stored; never the number, the email, the audio or the 
 **Retention**: the scheduler deletes reviewed catches, ended restrictions and decided appeals older than
 `retentionDays` (180) (`forgetOldSafetyRecords`).
 
-**Not covered**: speech in other browsers (Firefox, Safari) and on phones unless switched on; small or
-unclear writing; code words; anything when two people agree to swap details outside. Server-side
+**Not covered**: a number said without any "my number / WhatsApp / call me" word when the reader mishears a
+digit; small or unclear writing; code words; anything when two people agree to swap details outside. Server-side
 listening (every lesson's audio through our own speech service) would cover phones and stop words before
 the other person hears them, but delays everyone's audio, needs an always-on server and a strong machine
 for free speech models, and sends all lesson audio through TutorLink; it isn't built.

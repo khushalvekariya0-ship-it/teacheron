@@ -4,6 +4,7 @@ import { Track, type LocalTrackPublication, type Room } from "livekit-client";
 import { judge, numbersInPicture } from "@/lib/handwriting/digits";
 import type { ContactKind } from "@/lib/domain/contact";
 import type { SafetyResult } from "./LessonSafety";
+import { guestPass } from "./guestPass";
 
 /*
  * Protected screen share: the screen is checked BEFORE anyone else sees it.
@@ -199,7 +200,7 @@ export async function startScreenGuard(opts: {
         const res = await fetch("/api/classroom/screen-frame", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: bookingId, image: small.toDataURL("image/jpeg", 0.85), record }),
+          body: JSON.stringify({ id: bookingId, ...guestPass(), image: small.toDataURL("image/jpeg", 0.85), record }),
           signal: stop.signal,
         });
         if (!res.ok) return null;
@@ -229,7 +230,7 @@ export async function startScreenGuard(opts: {
         recorded = await fetch("/api/classroom/screen-frame", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: bookingId, image: small.toDataURL("image/jpeg", 0.85), record: true, excerpt: phone }),
+          body: JSON.stringify({ id: bookingId, ...guestPass(), image: small.toDataURL("image/jpeg", 0.85), record: true, excerpt: phone }),
         }).then((r) => (r.ok ? (r.json() as Promise<Answer>) : null)).catch(() => null);
       }
       return { ...answer, ...(recorded ?? {}), found: true, kinds: [...new Set([...(answer.kinds ?? []), "phone" as const])], maskable: false };

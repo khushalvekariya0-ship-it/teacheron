@@ -32,6 +32,9 @@ const nextConfig: NextConfig = {
       // Every engine variant: which one loads depends on the server's CPU (Vercel's picks relaxed-SIMD).
       "./node_modules/tesseract.js-core/**/*",
       "./node_modules/@tesseract.js-data/eng/4.0.0_best_int/**/*",
+      // Gujarati and Hindi writing is read too.
+      "./node_modules/@tesseract.js-data/guj/4.0.0_best_int/**/*",
+      "./node_modules/@tesseract.js-data/hin/4.0.0_best_int/**/*",
       "./node_modules/wasm-feature-detect/**/*",
       "./node_modules/bmp-js/**/*",
       "./node_modules/is-url/**/*",

@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import {
-  isTrackReference, LiveKitRoom, RoomAudioRenderer, useLocalParticipant, useParticipants, useRoomContext, useTracks, VideoTrack, type TrackReferenceOrPlaceholder,
+  isTrackReference, LiveKitRoom, RoomAudioRenderer, useConnectionState, useLocalParticipant, useParticipants, useRoomContext, useTracks, VideoTrack, type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
-import { DisconnectReason, MediaDeviceFailure, RoomEvent, Track, type LocalAudioTrack, type Participant } from "livekit-client";
+import { ConnectionState, DisconnectReason, MediaDeviceFailure, RoomEvent, Track, type LocalAudioTrack, type Participant } from "livekit-client";
 import {
   AlertTriangle, Camera, Check, Copy, FileText, Flag, LayoutGrid, Link2, Loader2, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp, PenLine, PhoneOff,
   RefreshCw, User as UserIcon, Users, Video, VideoOff,
@@ -17,7 +17,7 @@ import { ChatPanel, type ChatLine } from "../ChatPanel";
 import { MeetingWhiteboard } from "./MeetingWhiteboard";
 import { AudioPausedBar, ReportDialog, SafetyAlert, SafetyBanner, SafetyStatus, sendSafety, useSafetyAlerts, useVideoCheck, type SpeechState } from "./LessonSafety";
 import { GUARD_TEXT, startScreenGuard, type GuardState, type ScreenGuard } from "./ScreenGuard";
-import { canReadOnDevice, loadSpeechModel, readChunks, readVoice, sharedAudioContext, speechModelFor } from "./deviceSpeech";
+import { canReadOnDevice, loadSpeechModel, readChunks, readVoice, sharedAudioContext, speechModelFor, speechModelLoaded } from "./deviceSpeech";
 import { ProtectedVoice } from "./protectedVoice";
 import { useApp } from "@/lib/store";
 import { downloadTranscriptPdf, type Snapshot } from "./transcriptPdf";
@@ -96,6 +96,20 @@ function useNarrow() {
 
 /* ─── Outer: the ticket, the connection and what happens when it ends ─────── */
 
+/** A computer (not a phone or tablet). */
+function isComputer(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+}
+
+/** The browser has its own speech recogniser (Chrome / Edge). */
+function hasBrowserRecogniser(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+  return !!(w.SpeechRecognition ?? w.webkitSpeechRecognition);
+}
+
 export function LiveClassroom(props: Props) {
   const [attempt, setAttempt] = React.useState(0);
   return <Joiner key={attempt} {...props} onRetry={() => setAttempt((a) => a + 1)} />;
@@ -116,14 +130,18 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
   }, []);
 
   // The on-device speech reader starts downloading as soon as the class page opens (about 40 MB the first time,
-  // cached after), so it's ready by the time anyone speaks. Not for guests (they aren't checked).
+  // cached after), so it's ready by the time anyone speaks (guests too: they're checked like everyone else).
   const safety = useApp((s) => s.contactSafety);
-  const guestTicket = !!given?.identity.startsWith("guest-");
   React.useEffect(() => {
-    if (guestTicket || !safety.voice || !safety.deviceSpeech || !canReadOnDevice()) return;
+    if (!safety.voice || !safety.deviceSpeech || !canReadOnDevice()) return;
     const inIndia = currentZoneName(Intl.DateTimeFormat().resolvedOptions().timeZone) === "Asia/Kolkata";
     void loadSpeechModel(speechModelFor(inIndia ? "en-IN" : "en-US")).catch(() => {});
-  }, [guestTicket, safety.voice, safety.deviceSpeech]);
+  }, [safety.voice, safety.deviceSpeech]);
+  // The first class on a phone (or in Safari / Firefox): nothing can check speech until the reader is ready, so
+  // the connection starts with the microphone off and the room turns it on once the check is ready (holdMic).
+  const [holdAtStart] = React.useState(
+    () => safety.voice && safety.deviceSpeech && canReadOnDevice() && !speechModelLoaded("en-in") && !((isComputer() || safety.voiceOnPhones) && hasBrowserRecogniser()),
+  );
 
   React.useEffect(() => {
     if (given) return;
@@ -221,7 +239,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
         serverUrl={ticket.wsUrl}
         connect
         video={!ticket.startMuted}
-        audio={!ticket.startMuted}
+        audio={!ticket.startMuted && !holdAtStart}
         options={{ adaptiveStream: true, dynacast: true }}
         onError={(e) => setRoomError({ title: "Connection problem", message: e?.message || "We couldn't reach the class server. Check your internet and try again." })}
         onMediaDeviceFailure={(failure) =>
@@ -244,7 +262,9 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
           if (safetyRemovedRef.current) {
             setEnded({
               title: "You were removed",
-              message: safetyRemovedRef.current.suspended
+              message: ticket.identity.startsWith("guest-")
+                ? "Contact details were shared again in this class, so you were removed from it. The tutor and TutorLink's team were told."
+                : safetyRemovedRef.current.suspended
                 ? `Contact details were shared too many times in this class. This is another lesson you were removed from, so your account is paused until TutorLink's team reviews it. We've emailed you.`
                 : `Contact details were shared too many times in this class, so you were removed and your messaging is paused for 24 hours. TutorLink's team will review it.`,
               rejoin: false,
@@ -262,7 +282,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
         }}
         style={{ position: "fixed", inset: 0, zIndex: 50 }}
       >
-        <MeetingRoom bookingId={bookingId} title={title} ticket={ticket} chat={chat} onRefresh={onRefresh} leavingRef={leavingRef} onLeave={onLeave} onSafetyRemoved={onSafetyRemoved} />
+        <MeetingRoom bookingId={bookingId} title={title} ticket={ticket} chat={chat} onRefresh={onRefresh} leavingRef={leavingRef} onLeave={onLeave} onSafetyRemoved={onSafetyRemoved} micHeldAtStart={holdAtStart && !ticket.startMuted} />
       </LiveKitRoom>
     </div>
   );
@@ -271,7 +291,7 @@ function Joiner({ bookingId, title, ticket: given, chat, onRefresh, onLeave, onR
 /* ─── Inner: the room ────────────────────────────────────────────────────── */
 
 function MeetingRoom({
-  bookingId, title, ticket, chat, onRefresh, leavingRef, onLeave, onSafetyRemoved,
+  bookingId, title, ticket, chat, onRefresh, leavingRef, onLeave, onSafetyRemoved, micHeldAtStart,
 }: {
   bookingId: string;
   title: string;
@@ -281,6 +301,8 @@ function MeetingRoom({
   leavingRef: React.RefObject<boolean>;
   onLeave: () => void;
   onSafetyRemoved: (suspended: boolean) => void;
+  /** Joined with the microphone off while the speech check gets ready: it turns on once it's ready. */
+  micHeldAtStart: boolean;
 }) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -322,27 +344,32 @@ function MeetingRoom({
   const guest = ticket.identity.startsWith("guest-");
   // Speech is checked on computers only: on phones the browser's recogniser beeps at every restart and
   // can take the microphone away from the call.
-  const onComputer = React.useMemo(() => {
-    if (typeof navigator === "undefined") return false;
-    const ua = navigator.userAgent;
-    return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
-  }, []);
-  const hasSpeechRecognition = React.useMemo(() => {
-    if (typeof window === "undefined") return false;
-    const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
-    return !!(w.SpeechRecognition ?? w.webkitSpeechRecognition);
-  }, []);
+  const onComputer = React.useMemo(() => isComputer(), []);
+  const hasSpeechRecognition = React.useMemo(() => hasBrowserRecogniser(), []);
   // Admin → Chat safety → Settings: what is checked (speech, also on phones, camera, pictures).
   const safety = useApp((s) => s.contactSafety);
   // Speech is read on the device (deviceSpeech.ts: every device, the voice never leaves it). Where that can't
   // run (an old browser, or the reader didn't download) the browser's own recogniser is used on computers.
   const deviceCapable = React.useMemo(() => canReadOnDevice(), []);
   const [deviceFailed, setDeviceFailed] = React.useState(false);
-  const deviceRead = !guest && safety.voice && safety.deviceSpeech && deviceCapable && !deviceFailed;
+  const deviceRead = safety.voice && safety.deviceSpeech && deviceCapable && !deviceFailed;
   // Ready once the reader listens to this person's microphone (the first class on a device downloads it first).
   const [deviceReady, setDeviceReady] = React.useState(false);
   // Until then, on computers, the browser's own recogniser covers the wait.
-  const speechCheck = !guest && safety.voice && (!deviceRead || !deviceReady) && (onComputer || safety.voiceOnPhones);
+  const speechCheck = safety.voice && (!deviceRead || !deviceReady) && (onComputer || safety.voiceOnPhones);
+  // Where nothing can cover the wait (phones; Safari and Firefox), the microphone stays off until the reader's
+  // model has downloaded (the first class on a device), so nothing is said unchecked; it comes on by itself.
+  const [modelReady, setModelReady] = React.useState(false);
+  React.useEffect(() => {
+    if (!deviceRead) return;
+    let alive = true;
+    loadSpeechModel(speechModelFor(lang))
+      .then(() => alive && setModelReady(true))
+      .catch(() => alive && setDeviceFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [deviceRead, lang]);
   const [speechBlocked, setSpeechBlocked] = React.useState(false);
   const canReport = !guest && ticket.me.role !== "Staff";
   const listenRef = React.useRef(false);
@@ -384,15 +411,20 @@ function MeetingRoom({
       void localParticipant.setMicrophoneEnabled(false).catch(() => {});
       if (until) setPausedUntil((u) => Math.max(u ?? 0, until));
       const time = until ? new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
-      setMicAlert(until ? `Personal information was detected in what you said, so your microphone was turned off until ${time}.` : "Personal information was detected in what you said, so your microphone was turned off.");
+      setMicAlert(
+        guest
+          ? "Personal information was detected in what you said, so your microphone was turned off for the rest of this class."
+          : until ? `Personal information was detected in what you said, so your microphone was turned off until ${time}.` : "Personal information was detected in what you said, so your microphone was turned off.",
+      );
       window.setTimeout(() => setMicAlert(null), 10_000);
     },
-    [localParticipant],
+    [localParticipant, guest],
   );
   const ladder = React.useMemo(() => ({ muteAt: safety.muteAt, muteMinutes: safety.muteMinutes }), [safety.muteAt, safety.muteMinutes]);
   const { alert: safetyAlert, dismiss: dismissSafety, caught } = useSafetyAlerts(room, me, ladder, removedForSafety, onPaused, micCaught);
   React.useEffect(() => {
-    if (!pausedUntil) return;
+    // A guest's microphone stays off for the rest of the class (the server's guest rules).
+    if (!pausedUntil || guest) return;
     let stop = false;
     const end = async () => {
       try {
@@ -417,7 +449,7 @@ function MeetingRoom({
       stop = true;
       window.clearTimeout(t);
     };
-  }, [pausedUntil, bookingId, room]);
+  }, [pausedUntil, bookingId, room, guest]);
   const caughtRef = React.useRef(caught);
   React.useEffect(() => {
     caughtRef.current = caught;
@@ -447,22 +479,22 @@ function MeetingRoom({
       if (at - lastSafetyAt.current < 5000) return true;
       lastSafetyAt.current = at;
       recentSaid.current = [];
-      micCaught(safety.micBlockMinutes ? at + safety.micBlockMinutes * 60_000 : null);
+      micCaught(guest ? ticket.closesAt : safety.micBlockMinutes ? at + safety.micBlockMinutes * 60_000 : null);
       void sendSafety(bookingId, { source: "speech", kinds: hit.kinds, excerpt: hit.masked }).then((res) => {
         if (res?.found && res.micOffUntil) setPausedUntil(Date.parse(res.micOffUntil));
         caughtRef.current("speech", res);
       });
       return true;
     },
-    [checkEarly, safety.micBlockMinutes, micCaught, bookingId],
+    [checkEarly, safety.micBlockMinutes, micCaught, bookingId, guest, ticket.closesAt],
   );
   const checkMineRef = React.useRef(checkMine);
   React.useEffect(() => {
     checkMineRef.current = checkMine;
   }, [checkMine]);
   // A shared screen is checked BEFORE the others see it (ScreenGuard): they get only checked pictures, with
-  // contact details blacked out, or a "paused" card. (Guests aren't checked.)
-  const protectScreen = !guest && safety.images && safety.screenShare;
+  // contact details blacked out, or a "paused" card. (Guests' screens too.)
+  const protectScreen = safety.images && safety.screenShare;
   const guardRef = React.useRef<ScreenGuard | null>(null);
   const [guard, setGuard] = React.useState<{ state: GuardState; found: boolean } | null>(null);
   // After repeated catches on this person's screen, sharing is blocked for a while (the server decides).
@@ -481,19 +513,23 @@ function MeetingRoom({
       void localParticipant.setCameraEnabled(false).catch(() => {});
       if (until) setCameraOffUntil((u) => Math.max(u ?? 0, until));
       const time = until ? new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
-      setCameraAlert(until ? `Personal information was detected on your camera, so your camera was turned off until ${time}.` : "Personal information was detected on your camera, so your camera was turned off.");
+      setCameraAlert(
+        guest
+          ? "Personal information was detected on your camera, so your camera was turned off for the rest of this class."
+          : until ? `Personal information was detected on your camera, so your camera was turned off until ${time}.` : "Personal information was detected on your camera, so your camera was turned off.",
+      );
       window.setTimeout(() => setCameraAlert(null), 10_000);
     },
-    [localParticipant],
+    [localParticipant, guest],
   );
   useVideoCheck({
     room,
     bookingId,
     source: "camera",
-    on: isCameraEnabled && !guest && safety.camera,
+    on: isCameraEnabled && safety.camera,
     everyMs: 20_000,
     localEveryMs: 2000,
-    onSpotted: () => cameraCaught(safety.cameraBlockMinutes ? Date.now() + safety.cameraBlockMinutes * 60_000 : null),
+    onSpotted: () => cameraCaught(guest ? ticket.closesAt : safety.cameraBlockMinutes ? Date.now() + safety.cameraBlockMinutes * 60_000 : null),
     onFound: (res) => {
       cameraCaught(res.blockedUntil ? Date.parse(res.blockedUntil) : null);
       caught("camera", res);
@@ -501,7 +537,8 @@ function MeetingRoom({
   });
   // When the time off is over, the server lets the camera back (LiveKit) and the button works again.
   React.useEffect(() => {
-    if (!cameraOffUntil) return;
+    // A guest's camera stays off for the rest of the class.
+    if (!cameraOffUntil || guest) return;
     let stop = false;
     const back = async () => {
       try {
@@ -520,19 +557,38 @@ function MeetingRoom({
       stop = true;
       window.clearTimeout(t);
     };
-  }, [cameraOffUntil, bookingId]);
+  }, [cameraOffUntil, bookingId, guest]);
 
   const say = React.useCallback((msg: string, ms = 4000) => {
     setNotice(msg);
     window.setTimeout(() => setNotice((m) => (m === msg ? null : m)), ms);
   }, []);
 
-  const speechState: SpeechState = guest
-    ? "guest"
-    : !safety.voice
+  // The first class on a phone (or in Safari / Firefox, which have no speech recogniser to cover the wait): the
+  // microphone stays off until the speech reader has downloaded, then turns on by itself.
+  const holdMic = deviceRead && !modelReady && !(speechCheck && hasSpeechRecognition && !speechBlocked);
+  const heldMic = React.useRef(micHeldAtStart);
+  const connection = useConnectionState();
+  React.useEffect(() => {
+    if (holdMic) {
+      if (!isMicrophoneEnabled) return;
+      heldMic.current = true;
+      const sent = localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack;
+      if (sent) sent.enabled = false;
+      void localParticipant.setMicrophoneEnabled(false).catch(() => {});
+      return;
+    }
+    if (!heldMic.current || connection !== ConnectionState.Connected) return;
+    heldMic.current = false;
+    if (!micWanted.current || (pausedUntil && pausedUntil > Date.now())) return;
+    protectRef.current?.reopen();
+    void localParticipant.setMicrophoneEnabled(true).catch(() => {});
+  }, [holdMic, isMicrophoneEnabled, localParticipant, pausedUntil, connection]);
+
+  const speechState: SpeechState = !safety.voice
       ? "off"
       : deviceRead
-        ? !isMicrophoneEnabled ? "mic-off" : deviceReady ? "device" : "starting"
+        ? holdMic ? "holding" : !isMicrophoneEnabled ? "mic-off" : deviceReady ? "device" : "starting"
         : !onComputer && !safety.voiceOnPhones ? "phone" : !hasSpeechRecognition ? "unsupported" : speechBlocked ? "blocked" : !isMicrophoneEnabled ? "mic-off" : "on";
 
   // Timer, and the clock used for "the room closes soon".
@@ -725,9 +781,9 @@ function MeetingRoom({
     }
   }, [room, ticket.me.name, say, stopRecognition]);
 
-  // The safety check listens while this person's microphone is on (guests have no account to hold to it).
+  // The safety check listens while this person's microphone is on (guests too: see /api/classroom/safety).
   React.useEffect(() => {
-    listenRef.current = isMicrophoneEnabled && !guest && speechCheck;
+    listenRef.current = isMicrophoneEnabled && speechCheck;
     if (listenRef.current && !recRef.current) startRecognition();
     else if (!listenRef.current && !captionsOnRef.current && recRef.current) stopRecognition();
   }, [isMicrophoneEnabled, guest, speechCheck, startRecognition, stopRecognition]);
@@ -752,7 +808,7 @@ function MeetingRoom({
   // out, a little late (protectedVoice.ts). Set on each new microphone track.
   const [voiceHold, setVoiceHold] = React.useState<ProtectedVoice | null>(null);
   React.useEffect(() => {
-    if (!safety.protectedVoice || guest || !micTrack) return;
+    if (!safety.protectedVoice || !micTrack) return;
     if (micTrack.getProcessor() instanceof ProtectedVoice) return;
     const p = new ProtectedVoice(safety.protectedVoiceSeconds);
     let cancelled = false;
@@ -822,10 +878,10 @@ function MeetingRoom({
 
   // On computers the device also reads what the others say: someone whose own device can't check is still
   // covered. Caught: they're silenced here at once, and the server turns their microphone off for everyone.
-  // Only the lesson's own people (guests have no account to hold to it).
+  // Guests' voices are read too; a guest's own device doesn't read the others (an outsider can't get the tutor cut).
   const remoteMics = useTracks([Track.Source.Microphone], { onlySubscribed: true });
   const voicesKey = remoteMics
-    .filter((r) => !r.participant.isLocal && r.participant.identity.startsWith("u-") && isTrackReference(r))
+    .filter((r) => !r.participant.isLocal && /^(?:u|guest)-/.test(r.participant.identity) && isTrackReference(r))
     .map((r) => `${r.participant.identity}|${r.publication?.trackSid ?? ""}`)
     .sort()
     .join(",");
@@ -854,11 +910,11 @@ function MeetingRoom({
     checkHeardRef.current = checkHeard;
   }, [checkHeard]);
   React.useEffect(() => {
-    if (!deviceRead || !onComputer || !voicesKey) return;
+    if (!deviceRead || !onComputer || guest || !voicesKey) return;
     const stops: (() => void)[] = [];
     let cancelled = false;
     for (const p of room.remoteParticipants.values()) {
-      if (!p.identity.startsWith("u-")) continue;
+      if (!/^(?:u|guest)-/.test(p.identity)) continue;
       const sound = p.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack;
       if (!sound) continue;
       const identity = p.identity;
@@ -870,7 +926,7 @@ function MeetingRoom({
       cancelled = true;
       for (const s of stops) s();
     };
-  }, [deviceRead, onComputer, voicesKey, room, speechModel]);
+  }, [deviceRead, onComputer, guest, voicesKey, room, speechModel]);
 
   const toggleCaptions = () => {
     if (!captionsOn) {
@@ -927,7 +983,13 @@ function MeetingRoom({
   const toggle = async (what: "mic" | "cam" | "screen") => {
     try {
       if (what === "mic") {
-        if (pausedUntil && pausedUntil > Date.now()) return say("Your audio is paused for the others for now: it comes back by itself.");
+        if (pausedUntil && pausedUntil > Date.now()) return say(guest ? "Your microphone is off for the rest of this class." : "Your audio is paused for the others for now: it comes back by itself.");
+        if (holdMic) {
+          // It turns on by itself once the speech check is ready.
+          micWanted.current = true;
+          heldMic.current = true;
+          return say("Your microphone turns on by itself in a moment: the speech check is still downloading (only in the first class on this device).", 6000);
+        }
         micWanted.current = !isMicrophoneEnabled;
         if (!isMicrophoneEnabled) protectRef.current?.reopen();
         await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
@@ -1134,11 +1196,11 @@ function MeetingRoom({
           <SafetyStatus
             speech={speechState}
             checks={[
-              ...(safety.protectedVoice && !guest ? [{ label: `Protected voice (your voice reaches the others ${safety.protectedVoiceSeconds} s later)`, on: !!micTrack && micTrack.getProcessor() instanceof ProtectedVoice }] : []),
-              ...(deviceRead && onComputer ? [{ label: "What the others say (read on this device)", on: true }] : []),
-              { label: "Whiteboard", on: !guest && safety.images },
-              { label: "Shared screen", on: !guest && safety.images },
-              { label: "Camera", on: !guest && safety.camera },
+              ...(safety.protectedVoice ? [{ label: `Protected voice (your voice reaches the others ${safety.protectedVoiceSeconds} s later)`, on: !!micTrack && micTrack.getProcessor() instanceof ProtectedVoice }] : []),
+              ...(deviceRead && onComputer && !guest ? [{ label: "What the others say (read on this device)", on: true }] : []),
+              { label: "Whiteboard", on: safety.images },
+              { label: "Shared screen", on: safety.images },
+              { label: "Camera", on: safety.camera },
               { label: "Chat", on: safety.chat },
             ]}
           />
@@ -1147,8 +1209,8 @@ function MeetingRoom({
           </span>
         </div>
       </div>
-      {pausedUntil && pausedUntil > now && <AudioPausedBar bookingId={bookingId} until={pausedUntil} />}
-      <SafetyBanner onReport={canReport ? () => setReportOpen(true) : undefined} onDevice={deviceRead} />
+      {pausedUntil && pausedUntil > now && <AudioPausedBar bookingId={bookingId} until={pausedUntil} guest={guest} />}
+      <SafetyBanner onReport={canReport ? () => setReportOpen(true) : undefined} onDevice={deviceRead} guest={guest} />
 
       {/* Main area */}
       <div className="relative flex flex-1 overflow-hidden">
@@ -1202,7 +1264,7 @@ function MeetingRoom({
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} checkDrawings={!guest && safety.images && safety.whiteboard} />
+            <MeetingWhiteboard isHost={isHost} bookingId={bookingId} title={title} participants={others} onCanDrawChange={setBoardCanDraw} onCaught={(res) => caught("board", res)} checkDrawings={safety.images && safety.whiteboard} />
           </div>
         </div>
 
@@ -1367,7 +1429,7 @@ function MeetingRoom({
       <div className="flex flex-col-reverse gap-2 border-t border-line px-2 py-2 md:flex-row md:items-center md:justify-between md:gap-0 md:px-6 md:py-3">
         <div className="hidden w-40 font-mono text-sm text-muted md:block">{clock(elapsed)}</div>
         <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
-          <button type="button" onClick={() => void toggle("mic")} disabled={!!pausedUntil && pausedUntil > now} className={cn(control(false, !isMicrophoneEnabled), "disabled:opacity-50")} aria-label={pausedUntil && pausedUntil > now ? "Audio paused" : isMicrophoneEnabled ? "Mute" : "Unmute"} title={pausedUntil && pausedUntil > now ? "Your audio is paused for the others for now" : isMicrophoneEnabled ? "Mute" : "Unmute"}>
+          <button type="button" onClick={() => void toggle("mic")} disabled={!!pausedUntil && pausedUntil > now} className={cn(control(false, !isMicrophoneEnabled), "disabled:opacity-50")} aria-label={pausedUntil && pausedUntil > now ? "Audio paused" : isMicrophoneEnabled ? "Mute" : "Unmute"} title={pausedUntil && pausedUntil > now ? (guest ? "Your microphone is off for the rest of this class" : "Your audio is paused for the others for now") : isMicrophoneEnabled ? "Mute" : "Unmute"}>
             {isMicrophoneEnabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
           </button>
           <button

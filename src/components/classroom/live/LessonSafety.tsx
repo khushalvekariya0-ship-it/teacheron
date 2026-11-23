@@ -8,6 +8,7 @@ import jsQR from "jsqr";
 import { scanContact, type ContactKind } from "@/lib/domain/contact";
 import { qrKinds } from "@/lib/domain/qr";
 import { readTextHere, warmLocalOcr } from "./localOcr";
+import { guestPass } from "./guestPass";
 import { handwrittenContactsInPicture, judge, numbersInPicture } from "@/lib/handwriting/digits";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +37,7 @@ export type SafetyResult = {
   paused?: boolean; repeat?: boolean;
 };
 
-/** Sends one safety check to the server. Guests (no account) and network trouble return null. */
+/** Sends one safety check to the server (a guest's carries their claim: guestPass.ts). Network trouble returns null. */
 export async function sendSafety(
   bookingId: string,
   body: { source: SafetyMessage["source"]; kinds?: ContactKind[]; excerpt?: string; image?: string; qr?: string; text?: string },
@@ -45,7 +46,7 @@ export async function sendSafety(
   const stop = new AbortController();
   const t = window.setTimeout(() => stop.abort(), timeoutMs);
   try {
-    const res = await fetch("/api/classroom/safety", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, ...body }), signal: stop.signal });
+    const res = await fetch("/api/classroom/safety", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: bookingId, ...guestPass(), ...body }), signal: stop.signal });
     if (!res.ok) return null;
     return (await res.json()) as SafetyResult;
   } catch {
@@ -97,10 +98,18 @@ export function useSafetyAlerts(
       const minutes = msg.muteMinutes ?? ladder.muteMinutes;
       const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
       const until = clock(msg.mutedUntil);
-      const next = muteAt > msg.strikes ? ` ${msg.strikes} of ${muteAt}. At ${muteAt} your audio is paused for the others for ${minutes} minutes.` : "";
+      // A guest (no account) has one warning: the next catch removes them from the class.
+      const next = msg.identity.startsWith("guest-")
+        ? " Another try removes you from this class."
+        : muteAt > msg.strikes ? ` ${msg.strikes} of ${muteAt}. At ${muteAt} your audio is paused for the others for ${minutes} minutes.` : "";
       // Said out loud: the microphone was turned off at once (and stays off until micOffUntil).
       const micOff = msg.source === "speech" && !!msg.micOffUntil;
-      const micNote = micOff ? (mine ? ` Your microphone was turned off until ${clock(msg.micOffUntil)}.` : " Their microphone was turned off for a few minutes.") : "";
+      const guestMsg = msg.identity.startsWith("guest-");
+      const micNote = micOff
+        ? mine
+          ? guestMsg ? " Your microphone was turned off for the rest of this class." : ` Your microphone was turned off until ${clock(msg.micOffUntil)}.`
+          : guestMsg ? " Their microphone was turned off for the rest of the class." : " Their microphone was turned off for a few minutes."
+        : "";
       const text =
         level === "removed"
           ? mine
@@ -195,18 +204,18 @@ export function SafetyAlert({ alert, onDismiss }: { alert: { text: string; mine:
 }
 
 /** Why speech is (or isn't) being checked for this person right now. */
-export type SpeechState = "device" | "starting" | "on" | "off" | "phone" | "unsupported" | "mic-off" | "blocked" | "guest" | "muted";
+export type SpeechState = "device" | "starting" | "holding" | "on" | "off" | "phone" | "unsupported" | "mic-off" | "blocked" | "muted";
 
 const SPEECH_TEXT: Record<SpeechState, string> = {
   device: "What you say is checked on this device by a free speech reader: your voice never leaves it.",
   starting: "The private speech check is getting ready (the first class on a device downloads about 40 MB). Meanwhile, on a computer, your browser's own speech recognition checks what you say.",
+  holding: "The private speech check is downloading (only in the first class on this device, about 40 MB). Your microphone turns on by itself as soon as it's ready.",
   on: "What you say is checked (your browser's speech recognition: Chrome sends the audio to Google, Edge to Microsoft, only to turn it into text).",
   off: "Speech isn't checked in this class (switched off by TutorLink).",
   phone: "Speech isn't checked on phones; the whiteboard, shared screens, camera and chat still are.",
   unsupported: "Speech can't be checked in this browser (use Chrome or Edge on a computer); the rest still is.",
   "mic-off": "Speech is checked while your microphone is on.",
   blocked: "Speech can't be checked: the microphone is blocked for speech recognition in this browser.",
-  guest: "Guests aren't checked.",
   muted: "Your audio is paused for the others for now.",
 };
 
@@ -251,8 +260,11 @@ export function SafetyStatus({ speech, checks }: { speech: SpeechState; checks: 
   );
 }
 
-/** While this person's audio is paused: until when, and "Ask for a review" (the pause was a mistake). */
-export function AudioPausedBar({ bookingId, until }: { bookingId: string; until: number }) {
+/**
+ * While this person's audio is paused: until when, and "Ask for a review" (the pause was a mistake). A guest's
+ * microphone stays off for the rest of the class (they have no account to ask for a review with).
+ */
+export function AudioPausedBar({ bookingId, until, guest = false }: { bookingId: string; until: number; guest?: boolean }) {
   const [asking, setAsking] = React.useState(false);
   const [note, setNote] = React.useState("");
   const [state, setState] = React.useState<"idle" | "sending" | "sent">("idle");
@@ -275,6 +287,16 @@ export function AudioPausedBar({ bookingId, until }: { bookingId: string; until:
       setError("Couldn't reach the server. Try again.");
     }
   };
+  if (guest) {
+    return (
+      <div className="border-b border-danger/40 bg-danger/15 px-3 py-2 text-[12.5px] leading-snug text-ink md:px-4" role="status" data-audio-paused="">
+        <p>
+          <span className="font-semibold">Your microphone is off for the rest of this class</span> because contact details were said in it. You can still hear, see and use the
+          chat. Another try removes you from the class.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="border-b border-danger/40 bg-danger/15 px-3 py-2 text-[12.5px] leading-snug text-ink md:px-4" role="status" data-audio-paused="">
       <p>
@@ -305,7 +327,7 @@ export function AudioPausedBar({ bookingId, until }: { bookingId: string; until:
 }
 
 /** Shown when the class opens: what isn't allowed and that it's checked. */
-export function SafetyBanner({ onReport, onDevice = false }: { onReport?: () => void; onDevice?: boolean }) {
+export function SafetyBanner({ onReport, onDevice = false, guest = false }: { onReport?: () => void; onDevice?: boolean; guest?: boolean }) {
   const [open, setOpen] = React.useState(true);
   if (!open) return null;
   return (
@@ -316,7 +338,10 @@ export function SafetyBanner({ onReport, onDevice = false }: { onReport?: () => 
         {onDevice
           ? "(while your microphone is on, on your own device: your voice never leaves it)"
           : "(on a computer while your microphone is on, by your browser's speech recognition, which sends the audio to Google in Chrome or Microsoft in Edge to turn it into text)"}
-        , on the whiteboard, on shared screens and on camera. Said out loud, your microphone turns off for a few minutes; repeated tries are reported to our team.
+        , on the whiteboard, on shared screens and on camera.{" "}
+        {guest
+          ? "As a guest, the first time your microphone or camera turns off for the rest of the class, and the second time you're removed from it."
+          : "Said out loud, your microphone turns off for a few minutes; repeated tries are reported to our team."}
         {onReport && (
           <>
             {" "}

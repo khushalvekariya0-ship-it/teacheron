@@ -121,7 +121,7 @@ function normalize(text: string): View {
     if (INVISIBLE.test(ch)) continue;
     // NFKD splits accents off ("gmáil" → "gmail") and turns fancy forms (𝟗, ９, ①, ﬁ) into plain ones.
     for (let c of special(ch.codePointAt(0)!) ?? ch.normalize("NFKD").toLowerCase()) {
-      if (/\p{M}/u.test(c)) continue; // accents, stacked marks, keycap marks
+      if (/[\p{M}\p{Cf}]/u.test(c)) continue; // accents, stacked marks, keycap marks, invisible joiners
       c = LOOKALIKE[c] ?? c;
       if (c > "\u007f" && /\p{Nd}/u.test(c)) c = digitValue(c);
       s.push(c);
@@ -254,6 +254,16 @@ const PROVIDER_ONLY = new RegExp(`^${PROVIDER}$`);
 // Endings recognised when written with spaces ("gmail . com", "dot net"). Words like "in" and "me" are left out.
 const TLD_SPACED = "(?:com|net|org|edu|gov|io|info|biz|xyz|uk|ca|au|ru|de|fr|cn)";
 
+// App names written in Gujarati or Hindi script. They are matched on the normalised text, which has no vowel
+// signs (they are marks), so the names are stripped the same way.
+const INDIC_APPS = `(?:${[
+  ...new Set(
+    ["ઇન્સ્ટાગ્રામ", "ઇન્સ્ટા", "ઈન્સ્ટા", "ઇંસ્ટા", "ફેસબુક", "ફેસ બુક", "સ્નેપચેટ", "સ્નેપ ચેટ", "ટેલિગ્રામ", "ટેલીગ્રામ", "ટ્વિટર",
+      "इंस्टाग्राम", "इंस्टा", "इन्स्टा", "फेसबुक", "फ़ेसबुक", "स्नैपचैट", "स्नैप चैट", "टेलीग्राम", "टेलिग्राम", "ट्विटर"]
+      .map((w) => w.normalize("NFKD").replace(/\p{M}/gu, "").replace(/ /g, "\\s*")),
+  ),
+].sort((a, b) => b.length - a.length).join("|")})`;
+
 // Other apps people use to swap contacts or payments.
 const APP_NAMES: RegExp[] = [
   /\bw+h*[a4@]+t+s+ ?[-_.]? ?[a4@]+p+\b/g, // whatsapp, whats app, watsapp, wh4tsap
@@ -280,6 +290,8 @@ const APP_NAMES: RegExp[] = [
   /\b(?:wapp|whtsapp|whtsap|wtsapp|watsap+|whatsap)\b/g,
   /\bk[a4]k[a4][o0](?:t[a4]lk)?\b/g, // KakaoTalk
   /\bline\s*id\b/g,
+  // Written in Gujarati or Hindi script (read off a whiteboard, camera or screen, or typed).
+  new RegExp(INDIC_APPS, "gu"),
   /\b(?:on|via|my)\s+(?:the\s+)?gram\b/g, // "on the gram" = Instagram
   /(?<![a-z0-9_.])[a-z0-9_.]{2,32}#\d{4}\b/g, // Discord tag jane#1234
   /\bwxid_[a-z0-9]{4,}\b/g, // WeChat ID
@@ -791,6 +803,8 @@ function findSocial(views: View[], mode: ScanMode): [number, number][] {
     spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b(?:\\s+id)?\\s+is\\s+@?(?=[a-z0-9_.]*[0-9_.])[a-z0-9_.]{3,}`, "g")));
     // "snap jordan_99": an app name right before a handle with a digit or underscore
     spans.push(...rangesOf(w, new RegExp(`\\b${SHORT_APPS}\\b\\s+@?(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_]|[a-z0-9_]+\\.[a-z0-9_])[a-z0-9_.]{4,}`, "g")));
+    // The same with the app name written in Gujarati or Hindi, maybe with a short word between ("ફેસબુક પર riley.shah").
+    spans.push(...rangesOf(w, new RegExp(`${INDIC_APPS}(?:\\s+(?:[^\\sa-z0-9_.@:=]{1,6}|id))?(?:\\s*[:=]\\s*|\\s+)@?(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_]|[a-z0-9_]+\\.[a-z0-9_])[a-z0-9_.]{4,}`, "gu")));
     spans.push(...rangesOf(w, new RegExp(`\\b(?:add|follow|text|msg|message|dm|ping|find|reach|contact|hmu|hit)\\s+(?:me|us)\\s+(?:up\\s+)?(?:on|at|via|in)\\s+${SHORT_APPS}\\b`, "g")));
     if (mode === "chat") spans.push(...rangesOf(w, new RegExp(`\\b(?:my|on|via)\\s+${MY_APPS}\\b(?!\\s+(?:of|to|the)\\b)`, "g")));
     if (mode === "chat" && RULES.sensitivity === "strict") {
@@ -1259,7 +1273,7 @@ export function isShortPiece(text: string): boolean {
 /* ─── 8. Speech in the live class ──────────────────────────────────────────────── */
 
 /** Words that show someone is giving a way to reach them (lessons are full of plain numbers). */
-const SPEECH_CUE = /whats ?app|call me|text me|message me|dm me|ping me|my (?:number|phone|mobile|cell|contact|mail|email|gmail|id|insta|handle)|phone|mobile|contact|insta|telegram|snapchat|signal app|gmail|e ?mail|mail id|dial|\+ ?91|ફોન|નંબર|વોટ્સ|फोन|नंबर|मोबाइल|व्हाट्स/i;
+const SPEECH_CUE = /whats ?app|call me|text me|message me|dm me|ping me|my (?:number|phone|mobile|cell|contact|mail|email|gmail|id|insta|handle)|phone|mobile|contact|insta|telegram|snapchat|signal app|gmail|e ?mail|mail id|dial|\+ ?91|ફોન|નંબર|વોટ્સ|વૉટ્સ|વ્હોટ્સ|વ્હૉટ્સ|મોબાઈલ|મોબાઇલ|ઈમેલ|ઇમેલ|જીમેલ|ફૉન|फोन|फ़ोन|नंबर|नम्बर|मोबाइल|मोबाईल|व्हाट्स|वॉट्स|वाट्स|व्हॉट्स|ईमेल|जीमेल/i;
 
 /**
  * Digits a sentence holds as a number being spelled out, in any script or as words ("nine", "નવ", "नौ").
@@ -1278,10 +1292,14 @@ function spokenDigits(said: string, withCounting = false): number {
 export function speechContact(said: string): { kinds: ContactKind[]; masked: string } | null {
   const found = scanCore(said, "chat", 0);
   const kinds = found.found ? found.kinds.filter((k) => k !== "phone" || spokenDigits(said) >= 10 || SPEECH_CUE.test(said)) : [];
+  // Ten or more digits said one after another as Hindi or Gujarati number words, which the usual reading doesn't
+  // know ("अट्ठानवे छिहत्तर …", "અઠ્ઠાણું છોતેર …"), are a phone number (not counting, not the same digit over and over).
+  const spelled = !kinds.includes("phone") && /[\u0900-\u0AFF]/.test(said) && spokenRuns(said).some((r) => r.length >= 10 && !counting(r) && !/(\d)\1{5}/.test(r));
+  if (spelled) kinds.push("phone");
   // Said out loud, these come back from speech readers as loose words, with no "@", "_" or "www." for the usual
   // checks to find: an email ("… at gmail", "… mail dot com"), an app username ("my snapchat is riley shah"), a
   // website ("riley shah dot com"), a home address ("I live at 23 MG Road …") or a plan to leave TutorLink.
-  let masked = found.found ? maskMatches(said, found.matches) : said;
+  let masked = spelled ? maskSpokenDigits(found.found ? maskMatches(said, found.matches) : said) : found.found ? maskMatches(said, found.matches) : said;
   for (const [kind, rule, label] of SPOKEN_RULES) {
     if (!rule.test(said)) continue;
     if (!kinds.includes(kind)) kinds.push(kind);
@@ -1295,11 +1313,15 @@ export function speechContact(said: string): { kinds: ContactKind[]; masked: str
 const SPEECH_EMAIL_PART = /\b\S+\s+(?:at(?: the rate(?: of)?)?|@)\s*(?:g ?mail|yahoo|hotmail|outlook|rediff(?:mail)?|icloud|proton ?mail)(?:\s+dot\s+\S+)?|\b(?:g ?mail|e ?mail|yahoo|hotmail|outlook|rediff|mail)\s+dot\s+(?:com|in|co)\b/i;
 /** Apps people give a username for. */
 const SPOKEN_APPS = "(?:snap ?chat|snap|insta(?:gram)?|face ?book|fb|telegram|twitter|linked ?in|discord|skype|signal|threads|youtube|tiktok|moj|josh|sharechat|koo|hike|imo|wechat|line|kik|viber)";
+/** The same apps as a Hindi or Gujarati speech reader writes them. */
+const SPOKEN_APPS_INDIC = "(?:इंस्टाग्राम|इन्स्टाग्राम|इंस्टा|इन्स्टा|फेसबुक|फ़ेसबुक|स्नैपचैट|स्नैप चैट|टेलीग्राम|टेलिग्राम|ट्विटर|यूट्यूब|ઇન્સ્ટાગ્રામ|ઈન્સ્ટાગ્રામ|ઇન્સ્ટા|ઈન્સ્ટા|ફેસબુક|ફેસ બુક|સ્નેપચેટ|સ્નેપ ચેટ|ટેલિગ્રામ|ટેલીગ્રામ|ટ્વિટર|યુટ્યુબ)";
 const SPOKEN_RULES: [ContactKind, RegExp, string][] = [
   ["email", SPEECH_EMAIL_PART, "email"],
   // "my snapchat is riley shah", "my insta id riley", "my facebook name is …", "search me on snapchat …"
   ["social", new RegExp(`\\b(?:my|mera|meri|maru|mari)\\s+${SPOKEN_APPS}(?:\\s+(?:id|i d|username|user name|handle|name|account|profile))?\\s+(?:is|hai|che|chhe)?\\s*\\w+(?:\\s+\\w+)?`, "i"), "username"],
   ["social", new RegExp(`\\b(?:search|find|add|follow|message|text|dm|ping)\\s+(?:me|us)\\s+(?:on|in)\\s+${SPOKEN_APPS}\\b`, "i"), "username"],
+  // The same in Hindi or Gujarati: "मेरा इंस्टाग्राम आईडी …", "મારું ઇન્સ્ટાગ્રામ આઈડી …" (the reader writes the app in their letters).
+  ["social", new RegExp(`(?:मेरा|मेरी|मेरे|मारू|मारो|मारी|મારું|મારુ|મારો|મારી|મારા)\\s+${SPOKEN_APPS_INDIC}(?:\\s+\\S+){1,3}`, "u"), "username"],
   // A website: "www dot …", "… dot com / net / co dot in / me / io …" (not .org / .edu / .gov: learning sites; not a
   // bare "dot in", which is maths: "put a dot in the middle").
   ["link", /\bwww\s*(?:dot|\.)\s*\w+|\b\w+(?:\s+\w+)?\s+(?:dot|\.)\s+(?:com|net|me|io|xyz|info|biz|site|online|store|link)\b|\b\w+\s+(?:dot|\.)\s+co\s+(?:dot|\.)\s+in\b/i, "link"],
@@ -1315,11 +1337,49 @@ const SPOKEN_RULES: [ContactKind, RegExp, string][] = [
   ["request", /\b(?:without|outside(?:\s+of)?|off|skip(?:ping)?|bypass(?:ing)?)\s+(?:the\s+)?tutor\s?link\b|\bmeet\s+(?:me\s+|us\s+)?outside\s+(?:the\s+|this\s+)?(?:class|tutor\s?link)\b|\b(?:classes|lessons|teach|study|pay|payment|fees?)\b.{0,30}\b(?:directly|privately|personally)\b.{0,20}\b(?:without|outside|instead of)\b/i, "request to leave TutorLink"],
 ];
 
-/** Digit words a Hindi or Gujarati speech reader writes (the usual number reading wants them in longer runs). */
-const SCRIPT_DIGITS: Record<string, string> = {
-  शून्य: "0", सुन्न: "0", एक: "1", दो: "2", तीन: "3", चार: "4", पांच: "5", पाँच: "5", छह: "6", छः: "6", छे: "6", सात: "7", आठ: "8", नौ: "9",
-  શૂન્ય: "0", એક: "1", બે: "2", ત્રણ: "3", ચાર: "4", પાંચ: "5", છ: "6", સાત: "7", આઠ: "8", નવ: "9",
-};
+/**
+ * Number words a Hindi or Gujarati speech reader writes (the usual number reading wants them in longer runs):
+ * digits, the numbers 11 to 99 (phone numbers are often read in pairs: "अट्ठानवे छिहत्तर", "અઠ્ઠાણું છોતેર"),
+ * and English digits written in their letters ("नाइन", "ઝીરો"). Gujarati said to the Hindi reader comes back
+ * close to Hindi ("वे" or "बे" for બે, "नव" for નવ), so those are here too. Each number is listed with the
+ * spellings the readers use (a slash between them).
+ */
+const SCRIPT_NUMBERS: [string, string][] = [
+  ["0", "शून्य/सुन्न/जीरो/ज़ीरो/શૂન્ય/શુન્ય/ઝીરો"],
+  ["1", "एक/वन/એક/વન"],
+  ["2", "दो/टू/बे/वे/બે/ટુ/ટૂ"],
+  ["3", "तीन/थ्री/त्रण/ત્રણ/થ્રી"],
+  ["4", "चार/फोर/फ़ोर/ચાર/ફોર"],
+  ["5", "पांच/पाँच/फाइव/फ़ाइव/फाईव/પાંચ/ફાઈવ/ફાઇવ"],
+  ["6", "छह/छः/छे/छ/सिक्स/છ/સિક્સ"],
+  ["7", "सात/सेवन/સાત/સેવન"],
+  ["8", "आठ/एट/ऐट/एइट/આઠ/એઈટ/એઇટ"],
+  ["9", "नौ/नव/नाइन/नाईन/નવ/નાઈન/નાઇન"],
+  ["10", "दस/દસ"],
+  // Hindi 11–99
+  ["11", "ग्यारह"], ["12", "बारह"], ["13", "तेरह"], ["14", "चौदह"], ["15", "पंद्रह/पन्द्रह"], ["16", "सोलह"], ["17", "सत्रह"], ["18", "अठारह/अट्ठारह/अठ्ठारह"], ["19", "उन्नीस"],
+  ["20", "बीस"], ["21", "इक्कीस"], ["22", "बाईस"], ["23", "तेईस"], ["24", "चौबीस"], ["25", "पच्चीस"], ["26", "छब्बीस"], ["27", "सत्ताईस"], ["28", "अट्ठाईस/अठ्ठाईस"], ["29", "उनतीस/उन्तीस"],
+  ["30", "तीस"], ["31", "इकतीस/इकत्तीस"], ["32", "बत्तीस"], ["33", "तैंतीस/तेंतीस"], ["34", "चौंतीस/चौतीस"], ["35", "पैंतीस"], ["36", "छत्तीस"], ["37", "सैंतीस"], ["38", "अड़तीस/अरतीस"], ["39", "उनतालीस/उंतालीस"],
+  ["40", "चालीस"], ["41", "इकतालीस"], ["42", "बयालीस/बियालीस"], ["43", "तैंतालीस/तेंतालीस"], ["44", "चवालीस/चौवालीस"], ["45", "पैंतालीस"], ["46", "छियालीस/छयालीस"], ["47", "सैंतालीस"], ["48", "अड़तालीस/अरतालीस"], ["49", "उनचास"],
+  ["50", "पचास"], ["51", "इक्यावन"], ["52", "बावन"], ["53", "तिरपन"], ["54", "चौवन/चव्वन/चौव्वन/चोपन"], ["55", "पचपन"], ["56", "छप्पन"], ["57", "सत्तावन"], ["58", "अट्ठावन/अठ्ठावन"], ["59", "उनसठ"],
+  ["60", "साठ"], ["61", "इकसठ"], ["62", "बासठ"], ["63", "तिरसठ"], ["64", "चौंसठ/चौसठ"], ["65", "पैंसठ"], ["66", "छियासठ"], ["67", "सड़सठ/सरसठ"], ["68", "अड़सठ/अरसठ"], ["69", "उनहत्तर"],
+  ["70", "सत्तर"], ["71", "इकहत्तर/इकत्तर"], ["72", "बहत्तर/बहतर"], ["73", "तिहत्तर"], ["74", "चौहत्तर/चौहतर"], ["75", "पचहत्तर"], ["76", "छिहत्तर/छियत्तर"], ["77", "सतहत्तर/सतत्तर"], ["78", "अठहत्तर/अठत्तर"], ["79", "उन्यासी/उनासी"],
+  ["80", "अस्सी"], ["81", "इक्यासी"], ["82", "बयासी/बियासी"], ["83", "तिरासी"], ["84", "चौरासी"], ["85", "पचासी"], ["86", "छियासी"], ["87", "सत्तासी"], ["88", "अट्ठासी/अठ्ठासी"], ["89", "नवासी"],
+  ["90", "नब्बे"], ["91", "इक्यानवे/इक्यानबे"], ["92", "बानवे/बानबे"], ["93", "तिरानवे/तिरानबे"], ["94", "चौरानवे/चौरानबे"], ["95", "पचानवे/पंचानवे"], ["96", "छियानवे/छियानबे"], ["97", "सत्तानवे/सत्तानबे"], ["98", "अट्ठानवे/अठ्ठानवे/अट्ठानबे"], ["99", "निन्यानवे/निन्यानबे"],
+  // Gujarati 11–99
+  ["11", "અગિયાર/અગ્યાર"], ["12", "બાર"], ["13", "તેર"], ["14", "ચૌદ/ચોદ"], ["15", "પંદર"], ["16", "સોળ"], ["17", "સત્તર"], ["18", "અઢાર"], ["19", "ઓગણીસ"],
+  ["20", "વીસ"], ["21", "એકવીસ"], ["22", "બાવીસ"], ["23", "તેવીસ"], ["24", "ચોવીસ/ચૌવીસ"], ["25", "પચ્ચીસ"], ["26", "છવ્વીસ"], ["27", "સત્તાવીસ"], ["28", "અઠ્ઠાવીસ/અઠાવીસ"], ["29", "ઓગણત્રીસ"],
+  ["30", "ત્રીસ"], ["31", "એકત્રીસ"], ["32", "બત્રીસ"], ["33", "તેત્રીસ"], ["34", "ચોત્રીસ/ચૌત્રીસ"], ["35", "પાંત્રીસ"], ["36", "છત્રીસ"], ["37", "સાડત્રીસ/સાડીત્રીસ"], ["38", "આડત્રીસ/અડત્રીસ"], ["39", "ઓગણચાલીસ/ઓગણચાળીસ"],
+  ["40", "ચાલીસ/ચાળીસ"], ["41", "એકતાલીસ/એકતાળીસ"], ["42", "બેતાલીસ/બેતાળીસ"], ["43", "તેંતાલીસ/તેતાલીસ"], ["44", "ચુંમાલીસ/ચુમ્માલીસ/ચૂંમાલીસ"], ["45", "પિસ્તાલીસ/પીસ્તાલીસ"], ["46", "છેંતાલીસ/છેતાલીસ"], ["47", "સુડતાલીસ/સુડતાળીસ"], ["48", "અડતાલીસ/અડતાળીસ"], ["49", "ઓગણપચાસ"],
+  ["50", "પચાસ"], ["51", "એકાવન"], ["52", "બાવન"], ["53", "ત્રેપન"], ["54", "ચોપન"], ["55", "પંચાવન"], ["56", "છપ્પન"], ["57", "સત્તાવન"], ["58", "અઠ્ઠાવન/અઠાવન"], ["59", "ઓગણસાઠ"],
+  ["60", "સાઠ"], ["61", "એકસઠ"], ["62", "બાસઠ"], ["63", "ત્રેસઠ"], ["64", "ચોસઠ/ચોંસઠ"], ["65", "પાંસઠ"], ["66", "છાસઠ/છાંસઠ"], ["67", "સડસઠ"], ["68", "અડસઠ"], ["69", "ઓગણોસિત્તેર/અગણોસિત્તેર/ઓગણસિત્તેર"],
+  ["70", "સિત્તેર/સીત્તેર"], ["71", "એકોતેર/ઇકોતેર"], ["72", "બોતેર/બોંતેર"], ["73", "તોતેર/તોંતેર"], ["74", "ચુમોતેર/ચુમ્મોતેર"], ["75", "પંચોતેર/પંચ્યોતેર"], ["76", "છોતેર/છોંતેર"], ["77", "સિત્યોતેર/સીત્યોતેર/સત્યોતેર"], ["78", "ઇઠ્યોતેર/અઠ્યોતેર"], ["79", "ઓગણએંસી/ઓગણાએંસી"],
+  ["80", "એંસી/એંશી"], ["81", "એક્યાસી/એકયાસી"], ["82", "બ્યાસી"], ["83", "ત્યાસી"], ["84", "ચોર્યાસી/ચોરાસી"], ["85", "પંચાસી"], ["86", "છ્યાસી/છયાસી"], ["87", "સિત્યાસી/સત્યાસી"], ["88", "અઠ્ઠ્યાસી/અઠયાસી"], ["89", "નેવ્યાસી/નવ્યાસી"],
+  ["90", "નેવું/નેવુ"], ["91", "એકાણું"], ["92", "બાણું"], ["93", "ત્રાણું"], ["94", "ચોરાણું"], ["95", "પંચાણું"], ["96", "છન્નું/છન્નુ"], ["97", "સત્તાણું"], ["98", "અઠ્ઠાણું/અઠાણું"], ["99", "નવ્વાણું/નવાણું"],
+];
+const SCRIPT_DIGITS = new Map(SCRIPT_NUMBERS.flatMap(([n, words]) => words.split("/").map((w): [string, string] => [w.normalize("NFC"), n])));
+/** The digits a Hindi or Gujarati number word stands for ("सात" → "7", "અઠ્ઠાણું" → "98"), or undefined. */
+const scriptDigits = (w: string) => SCRIPT_DIGITS.get(w.normalize("NFC"));
 /** Words that make a number a quantity ("nine thousand eight hundred"), not digits said one by one. */
 const MAGNITUDE = /^(?:hundreds?|thousands?|lakhs?|lacs?|crores?|millions?|billions?|सौ|हज़ार|हजार|लाख|करोड़|સો|હજાર|લાખ|કરોડ)$/;
 
@@ -1358,7 +1418,7 @@ function spokenRuns(said: string): string[] {
       repeat = REPEAT[w];
       continue;
     }
-    const d = w === "o" || w === "oh" ? "0" : SCRIPT_DIGITS[w] ?? (/^\d+$/.test(w) || w.length > 1 ? chunkDigits(w)?.digits ?? null : null);
+    const d = w === "o" || w === "oh" ? "0" : scriptDigits(w) ?? (/^\d+$/.test(w) || w.length > 1 ? chunkDigits(w)?.digits ?? null : null);
     if (d) {
       run += d.repeat(repeat);
       repeat = 1;
@@ -1399,7 +1459,7 @@ export function speechEarlyContact(pending: string, recent: string[] = []): { ki
 function maskSpokenDigits(said: string): string {
   return said
     .split(/(\s+)/)
-    .map((w) => (/\s/.test(w) || !w ? w : /\d/.test(w) || w.toLowerCase() === "oh" || SCRIPT_DIGITS[w] || (w.length > 1 && chunkDigits(w.toLowerCase().replace(/[^\p{L}\d]/gu, "")) && !MAGNITUDE.test(w.toLowerCase())) ? "•" : w))
+    .map((w) => (/\s/.test(w) || !w ? w : /\d/.test(w) || w.toLowerCase() === "oh" || scriptDigits(w) || (w.length > 1 && chunkDigits(w.toLowerCase().replace(/[^\p{L}\d]/gu, "")) && !MAGNITUDE.test(w.toLowerCase())) ? "•" : w))
     .join("");
 }
 

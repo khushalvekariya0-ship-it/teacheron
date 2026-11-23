@@ -31,8 +31,13 @@ const SCRIPT = "/speech/vosk-browser-0.0.8.js";
 const MODELS = { "en-in": "/speech/vosk-model-small-en-in-0.4.tar.gz", hi: "/speech/vosk-model-small-hi-0.22.tar.gz" } as const;
 export type SpeechModel = keyof typeof MODELS;
 
-/** The model for the class language: Hindi for Hindi, English (India) for everything else (it reads US English well enough too). */
-export const speechModelFor = (lang: string): SpeechModel => (lang.toLowerCase().startsWith("hi") ? "hi" : "en-in");
+/**
+ * The model for the class language: Hindi for Hindi and Gujarati, English (India) for everything else (it reads US
+ * English well enough too). Gujarati numbers sound almost the same as Hindi ones, and in tests the Hindi model heard
+ * Gujarati phone numbers (and app names) that the English one missed. Vosk's own Gujarati model is 347 MB once
+ * unpacked (the class tab grows by about 700 MB of memory), too heavy for phones and most computers.
+ */
+export const speechModelFor = (lang: string): SpeechModel => (/^(?:hi|gu)\b/i.test(lang) ? "hi" : "en-in");
 
 let script: Promise<void> | null = null;
 const models = new Map<SpeechModel, Promise<VoskModel>>();
@@ -60,10 +65,14 @@ export function loadSpeechModel(model: SpeechModel): Promise<VoskModel> {
   if (!p) {
     p = loadScript().then(() => window.Vosk!.createModel(MODELS[model], -1));
     models.set(model, p);
-    p.catch(() => models.delete(model));
+    p.then(() => loaded.add(model), () => models.delete(model));
   }
   return p;
 }
+
+const loaded = new Set<SpeechModel>();
+/** Whether this page already has the model ready (it loads once per page). */
+export const speechModelLoaded = (model: SpeechModel) => loaded.has(model);
 
 /**
  * Downloads the reader and a model into the browser's cache without starting anything (from the lesson page,

@@ -223,7 +223,7 @@ export type GuestPoll = { status: "pending" | "denied" | "expired" } | { status:
 
 export async function pollGuest(claimId: string): Promise<GuestPoll> {
   if (!/^[a-f0-9]{36}$/.test(claimId)) return { status: "expired" };
-  const [g] = await db()`select id, booking_id, name, status from public.class_guests where claim_hash = ${claimHash(claimId)} and created_at > now() - make_interval(hours => ${GUEST_HOURS})`;
+  const [g] = await db()`select id, booking_id, name, status, decided_by from public.class_guests where claim_hash = ${claimHash(claimId)} and created_at > now() - make_interval(hours => ${GUEST_HOURS})`;
   if (!g) return { status: "expired" };
   if (g.status !== "approved") return { status: g.status };
   const lesson = await loadLesson(g.booking_id);
@@ -232,11 +232,22 @@ export async function pollGuest(claimId: string): Promise<GuestPoll> {
   if (!w.canJoin) return { status: "expired" };
   if (!liveVideoReady()) notReady();
   const room = roomFor(lesson.booking.id);
-  const identity = `guest-${String(g.id).replace(/-/g, "").slice(0, 12)}`;
+  const identity = guestIdentity(String(g.id));
   const me: ParticipantMeta = { name: `${g.name} (guest)`, role: "Guest", isHost: false };
   const ttl = Math.ceil((w.closesAt - Date.now()) / 1000) + 600;
-  return { status: "approved", ticket: { token: await mintToken({ room, identity, meta: me, ttlSeconds: ttl }), wsUrl: env.livekitWsUrl, room, identity, me, startMuted: false, closesAt: w.closesAt } };
+  // Caught once (see guestCaught): the microphone or camera stays off for the rest of the class, rejoining too.
+  const caught = guestCatchOf(g.decided_by);
+  const noMicrophone = caught === "speech", noCamera = caught === "camera";
+  return {
+    status: "approved",
+    ticket: {
+      token: await mintToken({ room, identity, meta: me, ttlSeconds: ttl, noMicrophone, noCamera }), wsUrl: env.livekitWsUrl, room, identity, me, startMuted: false, closesAt: w.closesAt,
+      ...(noMicrophone ? { audioPausedUntil: w.closesAt } : {}), ...(noCamera ? { cameraOffUntil: w.closesAt } : {}),
+    },
+  };
 }
+
+const guestIdentity = (guestId: string) => `guest-${guestId.replace(/-/g, "").slice(0, 12)}`;
 
 export async function waitingGuests(user: User, lesson: Lesson) {
   requireRole(user, lesson, true);
@@ -530,9 +541,17 @@ export async function reportHeard(listener: User, lesson: Lesson, speakerIdentit
   if (!kinds.length) throw new ClassError("Nothing to record.");
   const s = await contactSafety();
   if (!s.voice || !s.deviceSpeech) return { found: false as const };
+  // A guest the host let in: the guest rules (guestCaught).
+  const guestHex = /^guest-([0-9a-f]{12})$/.exec(speakerIdentity)?.[1];
+  if (guestHex) {
+    const guest = await guestByIdentity(lesson, guestHex);
+    if (!guest) throw new ClassError("That person isn't in this lesson.", 403);
+    if (guest.caught === "speech") return { found: false as const, paused: true };
+    return { found: true as const, kinds, ...(await guestCaught(guest, lesson, "speech", kinds, shortName(listener.firstName, listener.lastName))) };
+  }
   const speakerId = /^u-([\w-]{3,80})$/.exec(speakerIdentity)?.[1];
   if (!speakerId || speakerId === listener.id) throw new ClassError("Who was heard?");
-  // Only the lesson's own people are checked this way (guests have no account to hold to it).
+  // Only the lesson's own people (and guests, above) are checked this way.
   if (speakerId !== lesson.booking.bookerId && speakerId !== lesson.tutorUserId) throw new ClassError("That person isn't in this lesson.", 403);
   const speaker = await accountById(speakerId);
   if (!speaker) throw new ClassError("That person isn't in this lesson.", 403);
@@ -628,18 +647,11 @@ async function readClassPicture(bytes: Buffer, mimeType: string, aiReading: bool
   return { kinds: [...kinds], detector };
 }
 
-/** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
-export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "", written: ("email" | "social" | "link")[] = [], qrText = "", seenText = "") {
-  requireRole(user, lesson);
-  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
-  const s = await contactSafety();
-  if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
-  if (source === "board" && !s.whiteboard) return { found: false as const };
-  // Drawing is blocked for now after repeated catches on the whiteboard: the drawing isn't shown.
-  if (source === "board") {
-    const blockedUntil = await sharingBlockedUntil(user.id, lesson.booking.id, "board");
-    if (blockedUntil) return { found: false as const, blockedUntil };
-  }
+/** What a class picture holds: read here, plus what the person's own browser read on it (TutorLink's rules decide on it all). */
+async function readClassImage(
+  s: Awaited<ReturnType<typeof contactSafety>>, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string,
+  handwriting: string, written: ("email" | "social" | "link")[], qrText: string, seenText: string,
+): Promise<{ kinds: ContactKind[]; detector: "ocr" | "qr" | "ai" }> {
   const img = decodeImage(dataUrl, 3 * 1024 * 1024);
   const read = await readClassPicture(img.bytes, img.type, s.aiReading, `${lesson.booking.id}:${source}`);
   // Digits the person's own browser read in their handwriting (whiteboard, shared screen): TutorLink's rules decide on them too.
@@ -652,6 +664,22 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
   if (digits.length >= 10) {
     for (const k of scanContact(digits, "file").kinds) if (!read.kinds.includes(k)) read.kinds.push(k);
   }
+  return read;
+}
+
+/** A picture of what the person drew on the whiteboard, a frame of their shared screen or of their camera. */
+export async function checkClassImage(user: User, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, origin: string, handwriting = "", written: ("email" | "social" | "link")[] = [], qrText = "", seenText = "") {
+  requireRole(user, lesson);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  const s = await contactSafety();
+  if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
+  if (source === "board" && !s.whiteboard) return { found: false as const };
+  // Drawing is blocked for now after repeated catches on the whiteboard: the drawing isn't shown.
+  if (source === "board") {
+    const blockedUntil = await sharingBlockedUntil(user.id, lesson.booking.id, "board");
+    if (blockedUntil) return { found: false as const, blockedUntil };
+  }
+  const read = await readClassImage(s, lesson, source, dataUrl, handwriting, written, qrText, seenText);
   if (!read.kinds.length) return { found: false as const };
   const caught = await caughtInClass(user, lesson, source, read.kinds, `[${LIVE_WHERE[source]}]`, origin, read.detector);
   const blockedUntil = source === "board" ? await sharingBlockedUntil(user.id, lesson.booking.id, "board") : source === "camera" ? await cameraBlockedUntil(user.id, lesson.booking.id) : null;
@@ -666,14 +694,7 @@ export async function checkClassImage(user: User, lesson: Lesson, source: "board
  * recorded like any other catch (warnings, the ladder); the frames after it aren't counted again.
  * Nothing read from the frame is stored.
  */
-export async function checkSharedScreenFrame(user: User, lesson: Lesson, dataUrl: string, origin: string, record: boolean, handwriting = "") {
-  requireRole(user, lesson);
-  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
-  const s = await contactSafety();
-  if (!s.images || !s.screenShare) return { checked: false as const, found: false as const };
-  // Sharing is blocked for now after repeated catches on this person's screen: the page stops the share.
-  const blocked = await sharingBlockedUntil(user.id, lesson.booking.id, "screen");
-  if (blocked) return { checked: true as const, found: false as const, blockedUntil: blocked };
+async function readScreenFrame(s: Awaited<ReturnType<typeof contactSafety>>, dataUrl: string, handwriting: string) {
   const img = decodeImage(dataUrl, 4 * 1024 * 1024);
   const frame = await checkScreenFrame(img.bytes, s.qr);
   const kinds = new Set<ContactKind>(frame.kinds);
@@ -684,11 +705,134 @@ export async function checkSharedScreenFrame(user: User, lesson: Lesson, dataUrl
     for (const k of written) kinds.add(k);
     if (written.length) maskable = false;
   }
+  return { kinds, frame, maskable };
+}
+
+export async function checkSharedScreenFrame(user: User, lesson: Lesson, dataUrl: string, origin: string, record: boolean, handwriting = "") {
+  requireRole(user, lesson);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  const s = await contactSafety();
+  if (!s.images || !s.screenShare) return { checked: false as const, found: false as const };
+  // Sharing is blocked for now after repeated catches on this person's screen: the page stops the share.
+  const blocked = await sharingBlockedUntil(user.id, lesson.booking.id, "screen");
+  if (blocked) return { checked: true as const, found: false as const, blockedUntil: blocked };
+  const { kinds, frame, maskable } = await readScreenFrame(s, dataUrl, handwriting);
   // Nothing found, though a long number may still need hiding while it's typed (not a catch).
   if (!kinds.size) return { checked: true as const, found: false as const, boxes: frame.boxes, maskable: true };
   const caught = record ? await caughtInClass(user, lesson, "screen", [...kinds], `[${LIVE_WHERE.screen}]`, origin, "ocr") : {};
   const blockedUntil = record ? await sharingBlockedUntil(user.id, lesson.booking.id, "screen") : null;
   return { checked: true as const, found: true as const, kinds: [...kinds], boxes: frame.boxes, maskable, ...caught, ...(blockedUntil ? { blockedUntil } : {}) };
+}
+
+/* ─── Guests: what they say, draw, show on camera or share is checked too ─────
+ * A guest has no account, so nothing is recorded against one (Chat safety's catches belong to accounts). The
+ * guest's own page sends its claim (the secret from knocking) with each check. One warning: the first catch
+ * turns their microphone (said) or camera (shown) off for the rest of the class (LiveKit enforces it, and a
+ * rejoin gets a pass without it); the second removes them from the class for good. Each catch is in the audit
+ * log and staff are alerted. A guest's own device doesn't read the others (an outsider can't get the tutor cut).
+ */
+
+export interface ClassGuest {
+  id: string;
+  name: string;
+  identity: string;
+  /** Where they were caught once already (null: not yet). */
+  caught: LiveSource | null;
+}
+
+const guestCatchOf = (decidedBy: unknown): LiveSource | null => {
+  const m = /^safety:(speech|board|screen|camera)$/.exec(String(decidedBy ?? ""));
+  return m ? (m[1] as LiveSource) : null;
+};
+
+const toGuest = (g: Record<string, unknown>): ClassGuest => ({ id: String(g.id), name: String(g.name), identity: guestIdentity(String(g.id)), caught: guestCatchOf(g.decided_by) });
+
+/** The guest behind a claim, let into this lesson and not removed; otherwise the check is refused. */
+export async function guestFromClaim(claimId: unknown, lesson: Lesson): Promise<ClassGuest> {
+  if (typeof claimId !== "string" || !/^[a-f0-9]{36}$/.test(claimId)) throw new ClassError("Please sign in to continue.", 401);
+  const [g] = await db()`select id, name, status, decided_by from public.class_guests
+    where claim_hash = ${claimHash(claimId)} and booking_id = ${lesson.booking.id} and created_at > now() - make_interval(hours => ${GUEST_HOURS})`;
+  if (!g || g.status !== "approved") throw new ClassError("You're not in this class.", 403);
+  if (!windowOf(lesson).canJoin) throw new ClassError("This class isn't open.", 403);
+  return toGuest(g);
+}
+
+async function guestByIdentity(lesson: Lesson, hex: string): Promise<ClassGuest | null> {
+  const [g] = await db()`select id, name, decided_by from public.class_guests
+    where booking_id = ${lesson.booking.id} and status = 'approved' and replace(id::text, '-', '') like ${`${hex}%`} limit 1`;
+  return g ? toGuest(g) : null;
+}
+
+type GuestCatch = { strikes: number; level: SafetyMessage["level"]; removed: boolean; suspended: false; repeat?: true; micOffUntil?: string; blockedUntil?: string };
+
+/** A guest's contact details were caught: one warning (microphone or camera off for the rest of the class), then removal. */
+async function guestCaught(guest: ClassGuest, lesson: Lesson, source: LiveSource, kinds: ContactKind[], heardBy?: string): Promise<GuestCatch> {
+  // One step at a time (in one statement, so two checks at once can't both count as the first), and the same
+  // words from the guest's own device and from the tutor's count once: within 20 seconds it isn't another try.
+  const [row] = await db()`update public.class_guests set
+      status = case when decided_by like 'safety:%' then 'denied' else status end,
+      decided_by = case when decided_by like 'safety:%' then 'safety:removed' else ${`safety:${source}`} end,
+      decided_at = now()
+    where id = ${guest.id} and status = 'approved' and not (coalesce(decided_by, '') like 'safety:%' and decided_at > now() - make_interval(secs => 20))
+    returning status`;
+  if (!row) return { strikes: 1, level: "warning", removed: false, suspended: false, repeat: true };
+  const removed = row.status === "denied";
+  const rest = new Date(windowOf(lesson).closesAt).toISOString();
+  const micOff = !removed && source === "speech";
+  const cameraOff = !removed && source === "camera";
+  const room = roomFor(lesson.booking.id);
+  const level: SafetyMessage["level"] = removed ? "removed" : "warning";
+  const strikes = removed ? 2 : 1;
+  console.info(`[class-safety] ${source} caught ${kinds.join("+")} · guest · ${strikes} (${level}) · ${lesson.booking.id}`);
+  const message: SafetyMessage = {
+    type: TOPIC.safety, name: `${guest.name} (guest)`, identity: guest.identity, source, kinds, strikes, removed, level, muteAt: 0,
+    ...(micOff ? { micOffUntil: rest } : {}), ...(heardBy ? { heard: true } : {}),
+  };
+  after(async () => {
+    await broadcastToRoom(room, message);
+    if (micOff || cameraOff) await setPublishAllowed(room, guest.identity, { microphone: !micOff, camera: !cameraOff });
+    if (!removed) return;
+    // Their own page leaves by itself; this is for a page that doesn't.
+    await new Promise((done) => setTimeout(done, 3000));
+    await removeFromRoom(room, guest.identity);
+  });
+  await auditDirect("system", removed ? "classroom.guest_removed" : "classroom.guest_caught", "booking", lesson.booking.id, { guest: guest.name, source, kinds, ...(heardBy ? { heardBy } : {}) }).catch(() => {});
+  await alertStaff("reports.moderate", {
+    title: removed ? `Guest removed from a lesson: ${guest.name}` : `Contact details blocked: ${guest.name} (guest)`,
+    body: `${LIVE_WHERE[source]}${heardBy ? ` (heard by ${heardBy}'s device)` : ""} (${kinds.join(", ")}). ${removed ? "Second time, so they were removed from the class." : micOff ? "Their microphone is off for the rest of the class." : cameraOff ? "Their camera is off for the rest of the class." : "First warning."}`,
+    href: `/admin/bookings?id=${lesson.booking.id}`,
+  });
+  return { strikes, level, removed, suspended: false, ...(micOff ? { micOffUntil: rest } : {}), ...(cameraOff ? { blockedUntil: rest } : {}) };
+}
+
+/** A guest's own device heard contact details in what they said. */
+export async function guestSpeech(guest: ClassGuest, lesson: Lesson, kinds: ContactKind[]) {
+  if (!kinds.length) throw new ClassError("Nothing to record.");
+  const s = await contactSafety();
+  if (!s.voice) return { found: false as const };
+  // Their microphone is already off for the rest of the class: nobody heard it.
+  if (guest.caught === "speech") return { found: false as const, paused: true };
+  return { found: true as const, kinds, ...(await guestCaught(guest, lesson, "speech", kinds)) };
+}
+
+/** A guest's whiteboard drawing or camera picture (as checkClassImage). */
+export async function guestClassImage(guest: ClassGuest, lesson: Lesson, source: "board" | "screen" | "camera", dataUrl: string, handwriting = "", written: ("email" | "social" | "link")[] = [], qrText = "", seenText = "") {
+  const s = await contactSafety();
+  if (source === "camera" ? !s.camera : !s.images) return { found: false as const };
+  if (source === "board" && !s.whiteboard) return { found: false as const };
+  const read = await readClassImage(s, lesson, source, dataUrl, handwriting, written, qrText, seenText);
+  if (!read.kinds.length) return { found: false as const };
+  return { found: true as const, kinds: read.kinds, ...(await guestCaught(guest, lesson, source, read.kinds)) };
+}
+
+/** One frame of a guest's shared screen, checked before the others see it (as checkSharedScreenFrame). */
+export async function guestScreenFrame(guest: ClassGuest, lesson: Lesson, dataUrl: string, record: boolean, handwriting = "") {
+  const s = await contactSafety();
+  if (!s.images || !s.screenShare) return { checked: false as const, found: false as const };
+  const { kinds, frame, maskable } = await readScreenFrame(s, dataUrl, handwriting);
+  if (!kinds.size) return { checked: true as const, found: false as const, boxes: frame.boxes, maskable: true };
+  const caught = record ? await guestCaught(guest, lesson, "screen", [...kinds]) : {};
+  return { checked: true as const, found: true as const, kinds: [...kinds], boxes: frame.boxes, maskable, ...caught };
 }
 
 /**

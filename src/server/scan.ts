@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
 import sharp from "sharp";
@@ -92,9 +93,28 @@ let worker: Promise<OcrWorker> | null = null;
 function ocrWorker(): Promise<OcrWorker> {
   worker ??= (async () => {
     const { createWorker } = await import("tesseract.js");
-    // English model shipped with the app (node_modules), so nothing is downloaded at run time.
-    const local = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "eng", "4.0.0_best_int");
-    return (await createWorker("eng", 1, { ...(existsSync(local) ? { langPath: local } : {}), cacheMethod: "none", gzip: true })) as unknown as OcrWorker;
+    // English, Gujarati and Hindi models shipped with the app (node_modules), so nothing is downloaded at run time:
+    // digits and words written in Gujarati / Hindi script ("૯૮૭૬૫ ૪૩૨૧૦") are read too. The reader loads its
+    // languages from one folder, so the three are copied together into a temporary one on first use.
+    const dir = path.join(os.tmpdir(), "tutorlink-ocr");
+    const langs: string[] = [];
+    for (const lang of ["eng", "guj", "hin"]) {
+      const from = path.join(process.cwd(), "node_modules", "@tesseract.js-data", lang, "4.0.0_best_int", `${lang}.traineddata.gz`);
+      if (!existsSync(from)) continue;
+      try {
+        mkdirSync(dir, { recursive: true });
+        const to = path.join(dir, `${lang}.traineddata.gz`);
+        if (!existsSync(to)) copyFileSync(from, to);
+        langs.push(lang);
+      } catch {
+        // no writable temporary folder: read English the old way below
+      }
+    }
+    if (!langs.includes("eng")) {
+      const local = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "eng", "4.0.0_best_int");
+      return (await createWorker("eng", 1, { ...(existsSync(local) ? { langPath: local } : {}), cacheMethod: "none", gzip: true })) as unknown as OcrWorker;
+    }
+    return (await createWorker(langs.join("+"), 1, { langPath: dir, cacheMethod: "none", gzip: true })) as unknown as OcrWorker;
   })().catch((e) => {
     worker = null;
     throw e;
