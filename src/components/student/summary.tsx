@@ -5,7 +5,7 @@ import { formatMoney, type Currency } from "@/lib/money";
 import { countryName } from "@/lib/location";
 import type { TutorSearch } from "@/lib/search";
 import { DAY_ORDER } from "@/components/jobs/jobUtils";
-import { EXPERIENCE_OPTIONS, GENDER_LABEL, PAYER_LABEL, PAY_METHOD_NAME, START_LABEL, TUTOR_GENDER_LABEL } from "./schema";
+import { EXPERIENCE_OPTIONS, GENDER_LABEL, PAYER_LABEL, PAY_METHOD_NAME, START_LABEL, TUTOR_GENDER_LABEL, budgetIsSet } from "./schema";
 
 /** One line of a profile summary (review step and My profile). */
 export interface SummaryRow {
@@ -64,6 +64,7 @@ export function scheduleRows(p: StudentProfile): SummaryRow[] {
 export function budgetRows(p: StudentProfile, currency?: Currency): SummaryRow[] {
   const week = (cents: number) => Math.round(cents * (p.lessonMinutes / 60) * p.sessionsPerWeek);
   const money = (minor: number) => formatMoney(minor, currency);
+  if (!budgetIsSet(p)) return [{ label: "Budget", value: "Not added" }];
   return [
     { label: "Budget", value: `${money(p.budgetMinCents)}–${money(p.budgetMaxCents)} an hour` },
     { label: "About", value: `${money(week(p.budgetMinCents))}–${money(week(p.budgetMaxCents))} a week` },
@@ -81,7 +82,8 @@ export function tutorSearchFor(me: User, p: StudentProfile): TutorSearch {
     mode: p.modes.length === 1 ? p.modes[0] : undefined,
     location: inPersonOnly ? me.zip : undefined,
     radius: inPersonOnly ? p.travelMiles : undefined,
-    maxRate: Math.round(p.budgetMaxCents / 100),
+    // Only a budget the student chose (an untouched default would hide most tutors).
+    maxRate: budgetIsSet(p) ? Math.round(p.budgetMaxCents / 100) : undefined,
     exp: p.minExperienceYears || undefined,
     lang: p.tutorLanguages.find((l) => l !== "English"),
   };

@@ -360,7 +360,7 @@ function Overview({ me }: { me: User }) {
             </Button>
           }
         >
-          Tell us what you want to learn, when you&apos;re free and your budget, so we can suggest tutors who fit you. About 5 minutes.
+          Tell us what you want to learn so we can suggest tutors who fit you. About a minute.
         </InlineAlert>
       )}
 

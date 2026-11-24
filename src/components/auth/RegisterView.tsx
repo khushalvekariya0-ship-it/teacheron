@@ -7,7 +7,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  ArrowRight, BadgeDollarSign, BookOpen, BriefcaseBusiness, CalendarDays, GraduationCap, Lock, Mail, MailCheck, MapPin, Monitor, Search, ShieldCheck, Star,
+  ArrowRight, BadgeDollarSign, BookOpen, BriefcaseBusiness, CalendarDays, GraduationCap, Lock, Mail, MailCheck, MapPin, Monitor, ShieldCheck, Star,
   UserRound, Users, Video,
 } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
@@ -99,14 +99,13 @@ const NEXT_STEPS: Record<"tutor" | "student", { title: string; time: string; par
     note: { icon: Star, text: "Reviews and ratings come from your students and parents after each lesson." },
   },
   student: {
-    title: "Next, you'll set up your learning profile",
-    time: "About 5 minutes. You can skip it and book a tutor straight away.",
+    title: "Next, tell us what you want to learn",
+    time: "About a minute. You can skip it and book a tutor straight away.",
     parts: [
-      { icon: UserRound, label: "Age, city, gender & photo" },
-      { icon: BookOpen, label: "What you want to learn" },
-      { icon: Search, label: "The tutor you'd like" },
-      { icon: CalendarDays, label: "When you're free" },
-      { icon: BadgeDollarSign, label: "Budget & how you'll pay" },
+      { icon: BookOpen, label: "Your class and subjects" },
+      { icon: Monitor, label: "Online or in person" },
+      { icon: CalendarDays, label: "When you're free (optional)" },
+      { icon: BadgeDollarSign, label: "Your budget (optional)" },
     ],
     note: { icon: Lock, text: "Only you can see your profile. We use it to suggest tutors who fit you." },
   },

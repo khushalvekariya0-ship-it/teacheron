@@ -136,7 +136,9 @@ export interface StudentProfile {
   budgetMaxCents: Cents;
   payer: "self" | "parent";
   payMethod: PayMethod;
-  /** Furthest setup step saved (1–6); completedAt is set when the student finishes setup. */
+  /** The student chose a budget (until then the budget above is only a default and isn't used to filter tutors). */
+  budgetSet?: boolean;
+  /** Furthest setup step saved; completedAt is set when the student finishes setup (two short steps). */
   step: number;
   completedAt?: ISODate;
   updatedAt: ISODate;

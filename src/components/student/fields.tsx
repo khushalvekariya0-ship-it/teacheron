@@ -19,14 +19,14 @@ import { InlineAlert } from "@/components/ui/States";
 import { GroupField, SubjectPicker } from "@/components/dashboard/tutor/shared";
 import {
   BUDGET_PRESETS, EXPERIENCE_OPTIONS, GENDERS, GOALS, LESSON_LENGTHS, PAY_METHOD_OPTIONS, START_OPTIONS,
-  type BasicValues, type BudgetValues, type LearningValues, type PreferencesValues, type ScheduleValues,
+  type BasicValues, type BudgetValues, type LearningValues, type PreferencesValues, type QuickLearnValues, type QuickWhenValues, type ScheduleValues,
 } from "./schema";
 import { LocationFields } from "@/components/domain/LocationFields";
-import { postalLabel, postalRequired } from "@/lib/postal";
+import { postalLabel, postalPlaceholder, postalRequired } from "@/lib/postal";
 
 /*
- * The fields of each part of a student's learning profile. Used by the setup wizard (/onboarding/student)
- * and by the editable sections of Dashboard → My profile, so both always ask the same questions.
+ * The fields of each part of a student's learning profile: the editable sections of Dashboard → My profile,
+ * and the two short setup steps (/onboarding/student: QuickLearnFields, QuickWhenFields).
  */
 
 /* ─── Basic information ─────────────────────────────────────────────────────── */
@@ -101,7 +101,7 @@ export function BasicFields({ form, me }: { form: UseFormReturn<BasicValues>; me
         </Field>
       </div>
 
-      <Field label="Age" required hint={teen ? "You signed up as 13–17." : "Only you can see your age."} error={errors.age?.message} className="max-w-44">
+      <Field label="Age" optional hint={teen ? "You signed up as 13–17." : "Only you can see your age."} error={errors.age?.message} className="max-w-44">
         <Input type="number" inputMode="numeric" min={teen ? 13 : 18} max={teen ? 17 : 99} suffix={<span className="pr-1 text-sm">years</span>} {...register("age", { valueAsNumber: true })} />
       </Field>
 
@@ -122,9 +122,137 @@ export function BasicFields({ form, me }: { form: UseFormReturn<BasicValues>; me
           for (const [k, v] of Object.entries(patch) as [keyof typeof patch, string][]) setValue(k, v, { shouldDirty: true, shouldValidate: !!errors[k] });
         }}
         errors={{ country: errors.country?.message, zip: errors.zip?.message, city: errors.city?.message, state: errors.state?.message }}
-        required={{ country: true, zip: postalRequired(loc[0]), city: true, state: true }}
+        required={{ country: true, zip: false, city: false, state: false }}
       />
       <p className="-mt-2 text-[13px] text-muted">Your location finds tutors near you for in-person lessons. Tutors never see your street address or {postalLabel(loc[0])}.</p>
+    </div>
+  );
+}
+
+/* ─── Setup step 1: what to learn and how ───────────────────────────────────── */
+
+export function QuickLearnFields({ form, country }: { form: UseFormReturn<QuickLearnValues>; country: string }) {
+  const { register, control, formState: { errors } } = form;
+  const modes = useWatch({ control, name: "modes" });
+  return (
+    <div className="space-y-7">
+      <Controller
+        name="grade"
+        control={control}
+        render={({ field }) => (
+          <Field label="Your class or level" required error={errors.grade?.message} className="max-w-xs">
+            <Select ref={field.ref} name={field.name} value={field.value} onChange={field.onChange} onBlur={field.onBlur} options={GRADES.map((g) => ({ value: g.value, label: g.label }))} placeholder="Select" />
+          </Field>
+        )}
+      />
+      <Controller
+        name="subjects"
+        control={control}
+        render={({ field }) => (
+          <GroupField legend="Subjects you want to learn" required hint={`${field.value.length} selected · up to 5`} error={errors.subjects?.message}>
+            <SubjectPicker value={field.value} onChange={field.onChange} max={5} />
+          </GroupField>
+        )}
+      />
+      <Controller
+        name="modes"
+        control={control}
+        render={({ field }) => (
+          <GroupField legend="How do you want lessons?" required hint="Choose both if either works for you." error={errors.modes?.message}>
+            <ChipGroup
+              label="Lesson format"
+              options={[
+                { value: "online", label: <span className="inline-flex items-center gap-1.5"><Monitor className="size-3.5" aria-hidden /> Online</span> },
+                { value: "in_person", label: <span className="inline-flex items-center gap-1.5"><Users className="size-3.5" aria-hidden /> In person</span> },
+              ]}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          </GroupField>
+        )}
+      />
+      {modes?.includes("in_person") && (
+        <Field
+          label={postalLabel(country)}
+          required={postalRequired(country)}
+          optional={!postalRequired(country)}
+          hint="To find tutors near you. Tutors never see it."
+          error={errors.zip?.message}
+          className="max-w-xs"
+        >
+          <Input inputMode="numeric" autoComplete="postal-code" placeholder={postalPlaceholder(country)} {...register("zip")} />
+        </Field>
+      )}
+    </div>
+  );
+}
+
+/* ─── Setup step 2: when and budget (optional) ──────────────────────────────── */
+
+export function QuickWhenFields({ form, timezone }: { form: UseFormReturn<QuickWhenValues>; timezone: string }) {
+  const { register, control, setValue, formState: { errors } } = form;
+  const currency = useViewerCurrency();
+  const [min, max] = useWatch({ control, name: ["budgetMin", "budgetMax"] });
+  return (
+    <div className="space-y-7">
+      <Controller
+        name="days"
+        control={control}
+        render={({ field }) => (
+          <GroupField legend="Days you're free" optional>
+            <ChipGroup label="Days you're free" options={DAY_ORDER.map((d) => ({ value: d as string, label: d }))} value={field.value} onChange={field.onChange} />
+          </GroupField>
+        )}
+      />
+      <Controller
+        name="timesOfDay"
+        control={control}
+        render={({ field }) => (
+          <GroupField legend="Times of day" optional hint={`In your time zone (${tzAbbrev(timezone)}).`}>
+            <ChipGroup
+              label="Times of day"
+              options={TIMES_OF_DAY.map((t) => ({ value: t.value as QuickWhenValues["timesOfDay"][number], label: <span>{t.label} <span className="font-normal opacity-70">{t.range}</span></span> }))}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          </GroupField>
+        )}
+      />
+      <GroupField legend="Budget per hour" optional hint="Pick a range, type your own, or leave it empty.">
+        <div className="flex flex-wrap gap-2">
+          {BUDGET_PRESETS(currency).map((p) => {
+            const on = min === p.min && max === p.max;
+            return (
+              <button
+                key={p.label}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setValue("budgetMin", on ? undefined : p.min, { shouldValidate: true, shouldDirty: true });
+                  setValue("budgetMax", on ? undefined : p.max, { shouldValidate: true, shouldDirty: true });
+                }}
+                className={cn(
+                  "h-9 border px-3.5 text-[13.5px] font-medium transition-colors",
+                  on ? "border-ink bg-ink text-on-ink" : "border-line-strong bg-surface text-ink-2 hover:border-ink hover:text-ink",
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4 flex flex-wrap items-start gap-3">
+          <Field label="From" error={errors.budgetMin?.message} className="w-36">
+            <Input type="number" inputMode="numeric" prefixText={currencySymbol(currency)} suffix={<span className="pr-1 text-sm">/hr</span>} {...register("budgetMin", { valueAsNumber: true })} />
+          </Field>
+          <Field label="To" error={errors.budgetMax?.message} className="w-36">
+            <Input type="number" inputMode="numeric" prefixText={currencySymbol(currency)} suffix={<span className="pr-1 text-sm">/hr</span>} {...register("budgetMax", { valueAsNumber: true })} />
+          </Field>
+        </div>
+      </GroupField>
+      <InlineAlert tone="info" title="Nothing to pay now">
+        You only pay when you book a lesson.
+      </InlineAlert>
     </div>
   );
 }
@@ -157,7 +285,7 @@ export function LearningFields({ form }: { form: UseFormReturn<LearningValues> }
         name="goals"
         control={control}
         render={({ field }) => (
-          <GroupField legend="What do you want to achieve?" required error={errors.goals?.message}>
+          <GroupField legend="What do you want to achieve?" optional error={errors.goals?.message}>
             <ChipGroup label="Learning goals" options={GOALS.map((g) => ({ value: g, label: g }))} value={field.value} onChange={field.onChange} />
           </GroupField>
         )}
@@ -237,7 +365,7 @@ export function PreferencesFields({ form }: { form: UseFormReturn<PreferencesVal
         name="tutorLanguages"
         control={control}
         render={({ field }) => (
-          <GroupField legend="Languages the tutor speaks" required error={errors.tutorLanguages?.message}>
+          <GroupField legend="Languages the tutor speaks" optional hint="Leave empty if any language is fine." error={errors.tutorLanguages?.message}>
             <ChipGroup size="sm" label="Tutor languages" options={LANGUAGES.map((l) => ({ value: l, label: l }))} value={field.value} onChange={field.onChange} />
           </GroupField>
         )}

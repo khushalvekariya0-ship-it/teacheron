@@ -824,6 +824,7 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         ...next,
         ...("photoUrl" in patch && !patch.photoUrl ? { photoUrl: "" } : {}),
         ...(patch.details !== undefined ? { details: maskContactInfo(patch.details.trim()).text } : {}),
+        ...(patch.budgetMinCents !== undefined || patch.budgetMaxCents !== undefined ? { budgetSet: true } : {}),
         step: Math.max(current.step, opts?.step ?? 0),
         completedAt: current.completedAt ?? (opts?.complete ? nowIso() : undefined),
         updatedAt: nowIso(),

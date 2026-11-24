@@ -133,7 +133,7 @@ function Profile({ me }: { me: User }) {
             </Button>
           }
         >
-          Six short steps: about you, what you want to learn, your ideal tutor, when you&apos;re free, and your budget. Or fill in the sections below one at a time.
+          About a minute: what you want to learn and, if you like, when you&apos;re free and your budget. Everything below is optional.
         </InlineAlert>
       )}
 
@@ -142,7 +142,7 @@ function Profile({ me }: { me: User }) {
           <ProfilePart
             id="basic"
             title="Basic information"
-            description="Name, age, gender, location and photo."
+            description="Your name. Age, gender, location and photo are optional."
             rows={basicRows(me, profile)}
             schema={basic}
             values={() => basicValues(me, profile)}

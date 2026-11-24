@@ -58,32 +58,40 @@ export const PAY_METHOD_NAME = Object.fromEntries(PAY_METHOD_OPTIONS.map((o) => 
 /** Quick budget choices in the learner's currency. */
 export const BUDGET_PRESETS = (currency: Currency) => budgetPresets(currency);
 
-/** Basic information. Age limits depend on how the student signed up (13–17 with a parent's consent, or 18+). */
+/** An empty number box gives NaN: that's "not given". */
+const optionalNumber = (n: z.ZodTypeAny) => z.preprocess((v) => (typeof v === "number" && Number.isNaN(v) ? undefined : v), n.optional());
+
+/**
+ * Basic information (My profile; not part of setup). Only the name is needed: age, gender, location and photo are
+ * optional. Age limits depend on how the student signed up (13–17 with a parent's consent, or 18+).
+ */
 export function basicSchema(teen: boolean) {
   return z
     .object({
     firstName: z.string().trim().min(1, "Enter your first name.").max(50, "Keep it under 50 characters."),
     lastName: z.string().trim().min(1, "Enter your last name.").max(50, "Keep it under 50 characters."),
-    age: z
-      .number({ invalid_type_error: "Enter your age." })
-      .int("Use whole years.")
-      .refine((n) => (teen ? n >= 13 && n <= 17 : n >= 18 && n <= 99), teen ? "You signed up as 13–17, so enter an age from 13 to 17." : "Enter an age from 18 to 99."),
+    age: optionalNumber(
+      z
+        .number()
+        .int("Use whole years.")
+        .refine((n) => (teen ? n >= 13 && n <= 17 : n >= 18 && n <= 99), teen ? "You signed up as 13–17, so enter an age from 13 to 17." : "Enter an age from 18 to 99."),
+    ) as z.ZodType<number | undefined>,
     gender: z.enum(["female", "male", "non_binary", "prefer_not"]).optional(),
     country: z.string().refine((v) => isCountryCode(v), "Choose your country."),
-    city: z.string().trim().min(2, "Enter your city.").max(60, "Keep it under 60 characters."),
-    state: z.string().min(1, "Choose your state or province.").max(60),
+    city: z.string().trim().max(60, "Keep it under 60 characters.").refine((v) => !v || v.length >= 2, "Enter your city."),
+    state: z.string().max(60),
     zip: z.string().trim(),
     photoUrl: z.string().optional(),
   })
     .superRefine((v, ctx) => {
-      if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
+      if (v.zip && !isPostalCode(v.zip, v.country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(v.country) });
     });
 }
 
 export const learningSchema = z.object({
   grade: z.enum(["K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "college", "adult"], { errorMap: () => ({ message: "Choose your grade or level." }) }),
   subjects: z.array(z.string()).min(1, "Choose at least one subject.").max(5, "Choose up to 5 subjects."),
-  goals: z.array(z.string()).min(1, "Choose at least one goal."),
+  goals: z.array(z.string()),
   details: z.string().max(600, "Keep this under 600 characters."),
   learningSupport: z.array(z.string()),
 });
@@ -92,7 +100,7 @@ export const preferencesSchema = z.object({
   modes: z.array(z.enum(["online", "in_person"])).min(1, "Choose online, in person, or both."),
   travelMiles: z.number().int().min(1).max(50),
   tutorGender: z.enum(["any", "female", "male"]),
-  tutorLanguages: z.array(z.string()).min(1, "Choose at least one language."),
+  tutorLanguages: z.array(z.string()),
   tutorCategories: z.array(z.enum(["certified_teacher", "subject_expert", "graduate_student", "test_prep_specialist", "learning_specialist"])),
   minExperienceYears: z.number().int().min(0).max(60),
 });
@@ -131,6 +139,70 @@ export type PreferencesValues = z.infer<typeof preferencesSchema>;
 export type ScheduleValues = z.infer<typeof scheduleSchema>;
 export type BudgetValues = z.infer<ReturnType<typeof budgetSchemaFor>>;
 
+/* ─── Setup: two short steps (everything else is optional, in My profile) ──── */
+
+export const SETUP_STEPS = [
+  { n: 1, title: "What do you want to learn?", short: "Learn", description: "Your class or level and subjects, and how you'd like lessons. That's all we need to find tutors for you." },
+  { n: 2, title: "When and budget", short: "When", description: "Optional: when you're free and what you'd like to spend. Skip it if you're not sure yet." },
+] as const;
+export const SETUP_TOTAL_STEPS = SETUP_STEPS.length;
+
+/** Step 1: what to learn and how (the PIN / postal code only for lessons in person). */
+export function quickLearnSchema(country: string) {
+  return z
+    .object({
+      grade: learningSchema.shape.grade,
+      subjects: learningSchema.shape.subjects,
+      modes: preferencesSchema.shape.modes,
+      zip: z.string().trim(),
+    })
+    .superRefine((v, ctx) => {
+      if (!v.modes.includes("in_person")) return;
+      if (v.zip ? !isPostalCode(v.zip, country) : postalRequired(country)) ctx.addIssue({ code: "custom", path: ["zip"], message: postalError(country) });
+    });
+}
+export type QuickLearnValues = z.infer<ReturnType<typeof quickLearnSchema>>;
+export const quickLearnValues = (me: User, p: StudentProfile): QuickLearnValues => ({
+  grade: p.grade as QuickLearnValues["grade"],
+  subjects: p.subjects,
+  modes: p.modes.length ? p.modes : ["online"],
+  zip: me.zip ?? "",
+});
+
+/** Step 2: when and budget, all optional (a budget is both amounts or neither). */
+export function quickWhenSchemaFor(currency: Currency) {
+  const { min, max } = budgetLimits(currency);
+  return z
+    .object({
+      days: z.array(z.string()),
+      timesOfDay: z.array(z.enum(["morning", "afternoon", "evening"])),
+      budgetMin: optionalNumber(z.number()) as z.ZodType<number | undefined>,
+      budgetMax: optionalNumber(z.number()) as z.ZodType<number | undefined>,
+    })
+    .superRefine((v, ctx) => {
+      const given = [v.budgetMin, v.budgetMax].filter((x) => x !== undefined) as number[];
+      if (!given.length) return;
+      if (given.length === 1) ctx.addIssue({ code: "custom", path: [v.budgetMin === undefined ? "budgetMin" : "budgetMax"], message: "Add both amounts, or leave both empty." });
+      for (const [k, n] of [["budgetMin", v.budgetMin], ["budgetMax", v.budgetMax]] as const) {
+        if (n === undefined) continue;
+        if (!Number.isInteger(n)) ctx.addIssue({ code: "custom", path: [k], message: "Use a whole amount." });
+        else if (n < min || n > max) ctx.addIssue({ code: "custom", path: [k], message: `Between ${formatMoney(min * 100, currency)} and ${formatMoney(max * 100, currency)}.` });
+      }
+      if (v.budgetMin !== undefined && v.budgetMax !== undefined && v.budgetMin > v.budgetMax) ctx.addIssue({ code: "custom", path: ["budgetMax"], message: "This has to be at least your lowest amount." });
+    });
+}
+export type QuickWhenValues = z.infer<ReturnType<typeof quickWhenSchemaFor>>;
+export const quickWhenValues = (p: StudentProfile): QuickWhenValues => ({
+  days: p.days,
+  timesOfDay: p.timesOfDay,
+  budgetMin: budgetIsSet(p) ? Math.round(p.budgetMinCents / 100) : undefined,
+  budgetMax: budgetIsSet(p) ? Math.round(p.budgetMaxCents / 100) : undefined,
+});
+
+/** Whether the student chose a budget (profiles from the old six-step setup: when they reached its budget step). */
+export const budgetIsSet = (p: StudentProfile) => p.budgetSet ?? p.step >= 5;
+
+/** All six parts of the profile (the sections of My profile). */
 export const STUDENT_STEPS = [
   { n: 1, title: "Basic information", short: "Basic info", description: "Who you are. Only you can see your age, gender and contact details." },
   { n: 2, title: "Learning requirements", short: "Learning", description: "What you want to learn and what you want to achieve." },
@@ -188,11 +260,11 @@ export const budgetToProfile = (v: BudgetValues) => ({ budgetMinCents: v.budgetM
 /** What's filled in, for the profile-strength list. */
 export function studentChecklist(me: User, p: StudentProfile) {
   return [
-    { key: "basic", label: "Age and location", done: !!p.age && !!me.city && !!me.zip, href: "/dashboard/profile#basic" },
+    { key: "basic", label: "Location (for lessons in person)", done: !!me.zip, href: "/dashboard/profile#basic" },
     { key: "photo", label: "Profile photo", done: !!p.photoUrl, href: "/dashboard/profile#basic" },
-    { key: "learning", label: "Subjects and goals", done: p.subjects.length > 0 && p.goals.length > 0 && !!p.grade, href: "/dashboard/profile#learning" },
+    { key: "learning", label: "Class and subjects", done: p.subjects.length > 0 && !!p.grade, href: "/dashboard/profile#learning" },
     { key: "preferences", label: "Tutor preferences", done: p.step >= 3, href: "/dashboard/profile#preferences" },
     { key: "schedule", label: "Days and times you're free", done: p.days.length > 0 && p.timesOfDay.length > 0, href: "/dashboard/profile#schedule" },
-    { key: "budget", label: "Budget and payment", done: p.step >= 5, href: "/dashboard/profile#budget" },
+    { key: "budget", label: "Budget", done: budgetIsSet(p), href: "/dashboard/profile#budget" },
   ];
 }

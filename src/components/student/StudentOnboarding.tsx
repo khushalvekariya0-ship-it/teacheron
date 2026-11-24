@@ -7,10 +7,11 @@ import { useForm, type FieldValues, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, LayoutDashboard, Lock, LogIn, Pencil, Search, ShieldAlert, Sparkles, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LayoutDashboard, Lock, LogIn, Search, ShieldAlert, Sparkles, UserPlus } from "lucide-react";
 import type { StudentProfile, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { currencyForCountry } from "@/lib/money";
+import { startCountry } from "@/lib/location";
 import { useApp, type Result } from "@/lib/store";
 import { useHydrated, useSession } from "@/lib/store/hooks";
 import { toQueryString } from "@/lib/search";
@@ -21,12 +22,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toast";
 import { EASE } from "@/components/motion";
 import { setSaveExitHandler } from "@/components/onboarding/saveExit";
-import { BasicFields, BudgetFields, LearningFields, PreferencesFields, ScheduleFields } from "./fields";
-import {
-  STUDENT_STEPS, STUDENT_TOTAL_STEPS, basicSchema, basicValues, budgetSchemaFor, budgetToProfile, budgetValues, learningSchema, learningValues,
-  preferencesSchema, preferencesValues, scheduleSchema, scheduleValues,
-} from "./schema";
-import { basicRows, budgetRows, learningRows, preferenceRows, scheduleRows, tutorSearchFor, type SummaryRow } from "./summary";
+import { QuickLearnFields, QuickWhenFields } from "./fields";
+import { SETUP_STEPS, SETUP_TOTAL_STEPS, quickLearnSchema, quickLearnValues, quickWhenSchemaFor, quickWhenValues, type QuickLearnValues, type QuickWhenValues } from "./schema";
+import { tutorSearchFor } from "./summary";
 import { useStudentProfile } from "./useStudentProfile";
 
 /* ─── Entry: gates ──────────────────────────────────────────────────────────── */
@@ -74,7 +72,7 @@ function SignedOutGate() {
         </>
       }
     >
-      Your learning profile takes about 5 minutes and helps us suggest tutors who fit you.
+      Tell us what you want to learn (about a minute) and we&apos;ll suggest tutors who fit you.
     </GateCard>
   );
 }
@@ -143,97 +141,24 @@ function StepForm<T extends FieldValues>({ n, form, schema, formId, persist, onS
   );
 }
 
-function BasicStep(p: StepProps) {
-  const schema = React.useMemo(() => basicSchema(!!p.me.parentalConsent), [p.me.parentalConsent]);
-  const form = useForm({ resolver: zodResolver(schema), defaultValues: basicValues(p.me, p.profile), mode: "onTouched" });
+function LearnStep(p: StepProps) {
+  const country = startCountry(p.me);
+  const schema = React.useMemo(() => quickLearnSchema(country), [country]);
+  const form = useForm({ resolver: zodResolver(schema), defaultValues: quickLearnValues(p.me, p.profile), mode: "onTouched" });
   return (
     <StepForm n={1} form={form} schema={schema} {...p}>
-      <BasicFields form={form} me={p.me} />
+      <QuickLearnFields form={form} country={country} />
     </StepForm>
   );
 }
 
-function LearningStep(p: StepProps) {
-  const form = useForm({ resolver: zodResolver(learningSchema), defaultValues: learningValues(p.profile), mode: "onTouched" });
+function WhenStep(p: StepProps) {
+  const schema = React.useMemo(() => quickWhenSchemaFor(currencyForCountry(p.me.country)), [p.me.country]);
+  const form = useForm({ resolver: zodResolver(schema), defaultValues: quickWhenValues(p.profile), mode: "onTouched" });
   return (
-    <StepForm n={2} form={form} schema={learningSchema} {...p}>
-      <LearningFields form={form} />
+    <StepForm n={2} form={form} schema={schema} {...p}>
+      <QuickWhenFields form={form} timezone={p.me.timezone} />
     </StepForm>
-  );
-}
-
-function PreferencesStep(p: StepProps) {
-  const form = useForm({ resolver: zodResolver(preferencesSchema), defaultValues: preferencesValues(p.profile), mode: "onTouched" });
-  return (
-    <StepForm n={3} form={form} schema={preferencesSchema} {...p}>
-      <PreferencesFields form={form} />
-    </StepForm>
-  );
-}
-
-function ScheduleStep(p: StepProps) {
-  const form = useForm({ resolver: zodResolver(scheduleSchema), defaultValues: scheduleValues(p.profile), mode: "onTouched" });
-  return (
-    <StepForm n={4} form={form} schema={scheduleSchema} {...p}>
-      <ScheduleFields form={form} timezone={p.me.timezone} />
-    </StepForm>
-  );
-}
-
-function BudgetStep(p: StepProps) {
-  const form = useForm({ resolver: zodResolver(budgetSchemaFor(currencyForCountry(p.me.country))), defaultValues: budgetValues(p.profile, !!p.me.parentalConsent), mode: "onTouched" });
-  return (
-    <StepForm n={5} form={form} schema={budgetSchemaFor(currencyForCountry(p.me.country))} {...p}>
-      <BudgetFields form={form} schedule={p.profile} />
-    </StepForm>
-  );
-}
-
-export function SummaryBlock({ title, rows, onEdit }: { title: string; rows: SummaryRow[]; onEdit?: () => void }) {
-  return (
-    <section className="rounded-xl border border-line p-4 sm:p-5" aria-label={title}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-ink">{title}</h3>
-        {onEdit && (
-          <Button variant="ghost" size="xs" onClick={onEdit} aria-label={`Edit ${title.toLowerCase()}`}>
-            <Pencil /> Edit
-          </Button>
-        )}
-      </div>
-      <dl className="space-y-2 text-sm">
-        {rows.map((r) => (
-          <div key={r.label} className="grid gap-0.5 sm:grid-cols-[9rem_1fr] sm:gap-3">
-            <dt className="text-muted">{r.label}</dt>
-            <dd className="min-w-0 break-words text-ink">{r.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  );
-}
-
-function ReviewStep({ formId, me, profile, onEdit, onFinish }: { formId: string; me: User; profile: StudentProfile; onEdit: (n: number) => void; onFinish: () => void }) {
-  return (
-    <form
-      id={formId}
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        onFinish();
-      }}
-      className="space-y-4"
-    >
-      <div className="grid gap-4 lg:grid-cols-2">
-        <SummaryBlock title="Basic information" rows={basicRows(me, profile)} onEdit={() => onEdit(1)} />
-        <SummaryBlock title="Learning requirements" rows={learningRows(profile)} onEdit={() => onEdit(2)} />
-        <SummaryBlock title="Tutor preferences" rows={preferenceRows(profile)} onEdit={() => onEdit(3)} />
-        <SummaryBlock title="Schedule & availability" rows={scheduleRows(profile)} onEdit={() => onEdit(4)} />
-      </div>
-      <SummaryBlock title="Budget & payment" rows={budgetRows(profile, currencyForCountry(me.country))} onEdit={() => onEdit(5)} />
-      <p className="flex items-center gap-2 text-[13px] text-muted">
-        <Lock className="size-4 shrink-0 text-navy" aria-hidden /> Only you can see your profile. We use it to suggest tutors who fit you.
-      </p>
-    </form>
   );
 }
 
@@ -282,7 +207,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
   const profile = useStudentProfile(me.id);
   const save = useApp((s) => s.saveStudentProfile);
   const updateMe = useApp((s) => s.updateMe);
-  const [step, setStep] = React.useState(() => (profile.completedAt ? 1 : Math.min(STUDENT_TOTAL_STEPS, profile.step + 1)));
+  const [step, setStep] = React.useState(() => (profile.completedAt ? 1 : Math.min(SETUP_TOTAL_STEPS, profile.step + 1)));
   const [dir, setDir] = React.useState(1);
   const [finished, setFinished] = React.useState(false);
   // A step is saved on the server before the next one opens; with a distant database that takes a moment.
@@ -290,10 +215,9 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
   const pending = React.useRef<() => Promise<unknown>>(async () => {});
   const navigated = React.useRef(false);
   const headingRef = React.useRef<HTMLHeadingElement>(null);
-  const teen = !!me.parentalConsent;
-  const furthest = profile.completedAt ? STUDENT_TOTAL_STEPS : Math.min(STUDENT_TOTAL_STEPS, Math.max(step, profile.step + 1));
-  const percent = Math.round((Math.min(profile.step, STUDENT_TOTAL_STEPS - 1) / (STUDENT_TOTAL_STEPS - 1)) * 100);
-  const meta = STUDENT_STEPS[step - 1];
+  const furthest = profile.completedAt ? SETUP_TOTAL_STEPS : Math.min(SETUP_TOTAL_STEPS, Math.max(step, profile.step + 1));
+  const percent = profile.completedAt ? 100 : Math.round((Math.min(profile.step, SETUP_TOTAL_STEPS) / SETUP_TOTAL_STEPS) * 100);
+  const meta = SETUP_STEPS[step - 1];
   const formId = `student-step-${step}`;
 
   const check = (res: Result<unknown>) => {
@@ -309,17 +233,21 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
       setBusy(true);
       try {
         if (n === 1) {
-          const v = values as ReturnType<typeof basicValues>;
-          if (!ok(await updateMe({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), country: v.country, city: v.city.trim(), state: v.state, zip: v.zip.trim() }))) return false;
-          return ok(await save({ age: v.age, gender: v.gender, photoUrl: v.photoUrl }, { step: 1 }));
+          const v = values as QuickLearnValues;
+          // The PIN / postal code only matters for lessons in person.
+          if (v.modes.includes("in_person") && v.zip.trim() !== (me.zip ?? "") && !ok(await updateMe({ zip: v.zip.trim() }))) return false;
+          return ok(await save({ grade: v.grade, subjects: v.subjects, modes: v.modes }, { step: 1 }));
         }
-        if (n === 5) return ok(await save(budgetToProfile(values as ReturnType<typeof budgetValues>), { step: 5 }));
-        return ok(await save(values as Partial<StudentProfile>, { step: n }));
+        const v = values as QuickWhenValues;
+        const budget = v.budgetMin !== undefined && v.budgetMax !== undefined ? { budgetMinCents: v.budgetMin * 100, budgetMaxCents: v.budgetMax * 100 } : {};
+        if (!ok(await save({ days: v.days, timesOfDay: v.timesOfDay, ...budget }, { step: 2 }))) return false;
+        // The last step: setup is done.
+        return ok(await save({}, { step: SETUP_TOTAL_STEPS, complete: true }));
       } finally {
         setBusy(false);
       }
     },
-    [save, updateMe],
+    [save, updateMe, me.zip],
   );
   const bindPending = React.useCallback((fn: () => Promise<unknown>) => {
     pending.current = fn;
@@ -335,28 +263,18 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
   };
   const advance = () => {
     pending.current = async () => {};
+    if (step >= SETUP_TOTAL_STEPS) return setFinished(true);
     setDir(1);
     navigated.current = true;
-    setStep((s) => Math.min(STUDENT_TOTAL_STEPS, s + 1));
+    setStep((s) => Math.min(SETUP_TOTAL_STEPS, s + 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const finish = async () => {
-    const parts: [number, boolean][] = [
-      [1, basicSchema(teen).safeParse(basicValues(me, profile)).success],
-      [2, learningSchema.safeParse(learningValues(profile)).success],
-      [3, preferencesSchema.safeParse(preferencesValues(profile)).success],
-      [4, scheduleSchema.safeParse(scheduleValues(profile)).success],
-      [5, budgetSchemaFor(currencyForCountry(me.country)).safeParse(budgetValues(profile, teen)).success],
-    ];
-    const missing = parts.find(([, valid]) => !valid);
-    if (missing) {
-      toast.error(`“${STUDENT_STEPS[missing[0] - 1].title}” needs attention before you finish.`);
-      goTo(missing[0]);
-      return;
-    }
+  /** "Skip" on the optional last step: setup is done without it. */
+  const skip = async () => {
+    pending.current = async () => {};
     setBusy(true);
-    const done = check(await save({}, { step: STUDENT_TOTAL_STEPS, complete: true }));
+    const done = check(await save({}, { step: SETUP_TOTAL_STEPS, complete: true }));
     setBusy(false);
     if (done) setFinished(true);
   };
@@ -376,22 +294,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
   if (finished) return <DoneScreen me={me} profile={profile} next={next} />;
 
   const common: StepProps = { formId, me, profile, persist, onSaved: advance, bindPending };
-  const content = (() => {
-    switch (step) {
-      case 1:
-        return <BasicStep {...common} />;
-      case 2:
-        return <LearningStep {...common} />;
-      case 3:
-        return <PreferencesStep {...common} />;
-      case 4:
-        return <ScheduleStep {...common} />;
-      case 5:
-        return <BudgetStep {...common} />;
-      default:
-        return <ReviewStep formId={formId} me={me} profile={profile} onEdit={goTo} onFinish={finish} />;
-    }
-  })();
+  const content = step === 1 ? <LearnStep {...common} /> : <WhenStep {...common} />;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-8 px-4 pb-10 pt-6 sm:px-6 sm:pt-10 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-12 lg:pb-16 lg:pt-14">
@@ -405,10 +308,10 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
           <nav aria-label="Setup steps" className="mt-6">
             <ol className="relative space-y-0.5">
               <span className="absolute bottom-4 left-[15px] top-4 w-px bg-line" aria-hidden />
-              {STUDENT_STEPS.map((s) => {
+              {SETUP_STEPS.map((s) => {
                 const current = s.n === step;
                 const reachable = s.n <= furthest;
-                const done = s.n <= profile.step && s.n < STUDENT_TOTAL_STEPS;
+                const done = s.n <= profile.step;
                 return (
                   <li key={s.n} className="relative">
                     <button
@@ -438,7 +341,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
             </ol>
           </nav>
           <p className="mt-6 flex gap-2 text-[12.5px] leading-snug text-muted">
-            <Sparkles className="mt-0.5 size-3.5 shrink-0 text-navy" aria-hidden /> Each step saves when you continue. Only you can see your profile.
+            <Sparkles className="mt-0.5 size-3.5 shrink-0 text-navy" aria-hidden /> About a minute. Only you can see your profile; you can add more (photo, goals, tutor preferences) later in My profile.
           </p>
         </div>
       </aside>
@@ -447,13 +350,13 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
         <div className="mb-6 lg:hidden">
           <div className="flex items-center justify-between gap-3 text-[13px]">
             <span className="font-medium text-ink">
-              Step {step} of {STUDENT_TOTAL_STEPS}
+              Step {step} of {SETUP_TOTAL_STEPS}
               <span className="text-muted"> · {meta.short}</span>
             </span>
             <span className="tabular-nums text-muted">{percent}% complete</span>
           </div>
-          <div className="mt-2 grid grid-cols-6 gap-1" aria-hidden>
-            {STUDENT_STEPS.map((s) => (
+          <div className="mt-2 grid grid-cols-2 gap-1" aria-hidden>
+            {SETUP_STEPS.map((s) => (
               <span key={s.n} className={cn("h-1 rounded-full transition-colors duration-300", s.n < step ? "bg-navy" : s.n === step ? "bg-navy/60" : "bg-sunken")} />
             ))}
           </div>
@@ -476,7 +379,7 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
             }}
           >
             <p className="text-[12.5px] font-medium uppercase tracking-[0.08em] text-muted">
-              Step {step} of {STUDENT_TOTAL_STEPS}
+              Step {step} of {SETUP_TOTAL_STEPS}
             </p>
             <h1 ref={headingRef} tabIndex={-1} className="mt-1.5 text-2xl font-semibold tracking-[-0.025em] text-ink outline-none sm:text-[28px]">
               {meta.title}
@@ -497,17 +400,24 @@ function Wizard({ me, next }: { me: User; next: string | null }) {
                 <ArrowLeft /> Back
               </Button>
             )}
-            <Button type="submit" form={formId} size="lg" loading={busy}>
-              {step === STUDENT_TOTAL_STEPS ? (
-                <>
-                  <Check /> Finish
-                </>
-              ) : (
-                <>
-                  Continue <ArrowRight />
-                </>
+            <div className="flex items-center gap-2">
+              {step === SETUP_TOTAL_STEPS && (
+                <Button variant="ghost" onClick={() => void skip()} disabled={busy} data-setup-skip="">
+                  Skip
+                </Button>
               )}
-            </Button>
+              <Button type="submit" form={formId} size="lg" loading={busy}>
+                {step === SETUP_TOTAL_STEPS ? (
+                  <>
+                    <Check /> Finish
+                  </>
+                ) : (
+                  <>
+                    Continue <ArrowRight />
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
