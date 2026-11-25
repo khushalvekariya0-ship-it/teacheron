@@ -21,6 +21,8 @@ import { sendVerificationCode, verifyEmailCode } from "@/server/email-verificati
 import { checkResetToken, exchangeResetCode, finishPasswordReset, RESET_MINUTES, resetOrigin, sendPasswordChangedEmail, startPasswordReset } from "@/server/password-reset";
 import { supabaseAdmin, supabaseForRequest } from "@/server/supabase";
 import { alertStaff, shortName } from "@/server/staff-alerts";
+import { GRADES } from "@/lib/data/catalog";
+import { emptyStudentProfile } from "@/lib/domain/data";
 
 /** Admin → Users: a new account (in-app alert to staff who can see users). */
 const newAccountAlert = (id: string, first: unknown, last: unknown, role: string, how: string) =>
@@ -78,9 +80,30 @@ const signUpSchema = z.object({
   zip: z.union([z.string().trim().regex(POSTAL_CODE), z.literal("")]).optional(),
   ageBand: z.enum(["18+", "13-17", "under13"]).optional(),
   parentEmail: z.union([email, z.literal("")]).optional(),
+  // A student's class or level, and a tutor's years of experience (asked at sign-up, saved for their setup).
+  grade: z.string().refine((v) => GRADES.some((g) => g.value === v), "Choose your class or level.").optional(),
+  experienceYears: z.number().int().min(0).max(60).optional(),
   timezone: zone,
   next: z.string().max(300).optional(),
 });
+
+/**
+ * What the short sign-up asks beyond the account: a student's class or level goes into their learning profile and
+ * a tutor's years of experience into their profile setup, so neither is asked again. Never fails the sign-up.
+ */
+async function saveSignUpDetails(userId: string, input: z.infer<typeof signUpSchema>) {
+  try {
+    if (input.role === "student" && input.grade) {
+      const profile = { ...emptyStudentProfile(userId), grade: input.grade, updatedAt: new Date().toISOString() };
+      await db()`insert into public.student_profiles (user_id, profile, updated_at) values (${userId}, ${db().json(profile as never)}, now()) on conflict (user_id) do nothing`;
+    }
+    if (input.role === "tutor" && input.experienceYears !== undefined) {
+      await db()`insert into public.onboarding_drafts (user_id, step, data, updated_at) values (${userId}, 0, ${db().json({ experienceYears: input.experienceYears })}, now()) on conflict (user_id) do nothing`;
+    }
+  } catch (e) {
+    console.error("[auth] sign-up details", e);
+  }
+}
 
 const fail = (error: string, status = 400, extra?: Record<string, unknown>) => json({ ok: false, error, ...extra }, { status });
 const isStaffRole = (role: string) => role === "admin" || role === "support";
@@ -304,6 +327,7 @@ export async function POST(request: Request, ctx: Ctx) {
             console.error("[auth] sign-up failed", err?.code, err?.message);
             return fail("We couldn't create your account. Please try again.");
           }
+          await saveSignUpDetails(created.data.user.id, input);
           let consent: { sent: boolean; error?: string } | undefined;
           if (teen) {
             const r = await sendConsentRequest(created.data.user.id, origin);
@@ -334,6 +358,7 @@ export async function POST(request: Request, ctx: Ctx) {
         if (data.user && (data.user.identities?.length ?? 0) === 0) return fail("An account with this email already exists. Try signing in.", 409);
         if (!data.user) return fail("We couldn't create your account. Please try again.");
         const newId = data.user.id;
+        await saveSignUpDetails(newId, input);
         after(() => newAccountAlert(newId, input.firstName, input.lastName, input.role, "email"));
         let consent: { sent: boolean; error?: string } | undefined;
         if (teen) {

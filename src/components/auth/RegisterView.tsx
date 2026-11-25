@@ -6,10 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  ArrowRight, BadgeDollarSign, BookOpen, BriefcaseBusiness, CalendarDays, GraduationCap, Lock, Mail, MailCheck, MapPin, Monitor, ShieldCheck, Star,
-  UserRound, Users, Video,
-} from "lucide-react";
+import { ArrowRight, Mail, MailCheck, ShieldCheck, UserRound } from "lucide-react";
 import { AnimatePresence, motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
@@ -21,15 +18,13 @@ import { useHydrated, useSession } from "@/lib/store/hooks";
 import { ROLE_LABEL } from "@/lib/data/users";
 import { toast } from "@/components/ui/Toast";
 import { destinationFor, safeNext } from "./authUtils";
-import { AddressLookup } from "@/components/domain/AddressLookup";
-import { PasswordInput, PasswordStrengthMeter } from "./PasswordField";
+import { PasswordInput } from "./PasswordField";
 import { EmailCodeForm } from "./EmailCodeForm";
 import { SocialSignIn, useEnabledProviders } from "./ProviderSignIn";
-import { isPostalCode, POSTAL_MAX_LENGTH, postalError, postalLabel, postalNumeric, postalPlaceholder, postalRequired } from "@/lib/postal";
-import { COUNTRIES, DEFAULT_COUNTRY, guessCountry, isCountryCode } from "@/lib/location";
+import { DEFAULT_COUNTRY, guessCountry } from "@/lib/location";
+import { GRADES } from "@/lib/data/catalog";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
 
 type RoleChoice = "student" | "parent" | "tutor";
 type AgeBand = "18+" | "13-17" | "under13";
@@ -43,15 +38,20 @@ const schema = z
     lastName: z.string().trim().min(1, "Enter your last name").max(50, "Keep it under 50 characters"),
     email: emailSchema,
     password: z.string().min(10, "Use at least 10 characters").max(128, "Use 128 characters or fewer"),
-    country: z.string().refine((v) => isCountryCode(v), "Choose your country"),
-    zip: z.string().trim(),
+    // Filled in from the visitor's browser (not asked); it can be changed later in Settings.
+    country: z.string(),
     ageBand: z.enum(["18+", "13-17", "under13"]).optional(),
     parentEmail: z.string().trim().optional(),
+    grade: z.string().optional(),
+    experienceYears: z.number().or(z.nan()).optional(),
     terms: z.boolean().refine((v) => v, "Please accept the Terms of Service and Privacy Policy"),
   })
   .superRefine((v, ctx) => {
-    // Students only choose their country; a PIN / postal code is asked of parents and tutors.
-    if (v.role !== "student" && (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zip"], message: postalError(v.country) });
+    if (v.role === "tutor") {
+      const y = v.experienceYears;
+      if (typeof y !== "number" || !Number.isInteger(y) || y < 0 || y > 60) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["experienceYears"], message: "Enter your years of experience (0 if you're new)" });
+      return;
+    }
     if (v.role !== "student") return;
     if (!v.ageBand) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ageBand"], message: "Tell us your age range" });
@@ -59,7 +59,9 @@ const schema = z
     }
     if (v.ageBand === "under13") {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ageBand"], message: "Students under 13 need a parent to create a Parent account" });
+      return;
     }
+    if (!v.grade) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["grade"], message: "Choose your class or level" });
     if (v.ageBand === "13-17") {
       const parsed = emailSchema.safeParse(v.parentEmail ?? "");
       if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["parentEmail"], message: "Enter your parent or guardian's email" });
@@ -71,44 +73,10 @@ const schema = z
 
 type Values = z.input<typeof schema>;
 
-const ROLE_OPTIONS: { value: RoleChoice; label: string; icon: React.ReactNode }[] = [
-  { value: "student", label: "Student", icon: <GraduationCap /> },
-  { value: "parent", label: "Parent", icon: <Users /> },
-  { value: "tutor", label: "Tutor", icon: <BookOpen /> },
-];
-
-const ROLE_HELP: Record<RoleChoice, string> = {
-  student: "Find tutors and book lessons for yourself.",
-  parent: "Add your children, book lessons for them and follow their progress.",
-  tutor: "Create a profile, set your rates and apply to student jobs.",
-};
-
-/** What tutors and students fill in right after creating the account (their setup steps). */
-const NEXT_STEPS: Record<"tutor" | "student", { title: string; time: string; parts: { icon: typeof BookOpen; label: string }[]; note: { icon: typeof Star; text: string } }> = {
-  tutor: {
-    title: "Next, you'll build your tutor profile",
-    time: "About 10 minutes. Your progress saves, so you can finish later.",
-    parts: [
-      { icon: BookOpen, label: "Subjects you'll teach" },
-      { icon: BriefcaseBusiness, label: "Teaching experience" },
-      { icon: GraduationCap, label: "Education & qualifications" },
-      { icon: Monitor, label: "Online, in person, or both" },
-      { icon: BadgeDollarSign, label: "Your pricing and trial lesson" },
-      { icon: Video, label: "Profile photo & intro video" },
-    ],
-    note: { icon: Star, text: "Reviews and ratings come from your students and parents after each lesson." },
-  },
-  student: {
-    title: "Next, tell us what you want to learn",
-    time: "About a minute. You can skip it and book a tutor straight away.",
-    parts: [
-      { icon: BookOpen, label: "Your class and subjects" },
-      { icon: Monitor, label: "Online or in person" },
-      { icon: CalendarDays, label: "When you're free (optional)" },
-      { icon: BadgeDollarSign, label: "Your budget (optional)" },
-    ],
-    note: { icon: Lock, text: "Only you can see your profile. We use it to suggest tutors who fit you." },
-  },
+const TITLE: Record<RoleChoice, string> = {
+  student: "Sign up as a student",
+  parent: "Sign up as a parent",
+  tutor: "Sign up as a tutor",
 };
 
 const AGE_OPTIONS: { value: AgeBand; label: string }[] = [
@@ -116,6 +84,15 @@ const AGE_OPTIONS: { value: AgeBand; label: string }[] = [
   { value: "13-17", label: "13–17" },
   { value: "under13", label: "Under 13" },
 ];
+
+/** A small link that switches the sign-up to another kind of account. */
+function RoleLink({ to, onPick, children }: { to: RoleChoice; onPick: (r: RoleChoice) => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={() => onPick(to)} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2" data-switch-role={to}>
+      {children}
+    </button>
+  );
+}
 
 function isRole(v: string | null): v is RoleChoice {
   return v === "student" || v === "parent" || v === "tutor";
@@ -148,17 +125,17 @@ export function RegisterView() {
       email: "",
       password: "",
       country: DEFAULT_COUNTRY,
-      zip: "",
       ageBand: undefined,
       parentEmail: "",
+      grade: "",
+      experienceYears: undefined,
       terms: false,
     },
   });
   const { errors, isSubmitting } = form.formState;
   const role = useWatch({ control: form.control, name: "role" });
   const ageBand = useWatch({ control: form.control, name: "ageBand" });
-  const password = useWatch({ control: form.control, name: "password" }) ?? "";
-  const country = useWatch({ control: form.control, name: "country" }) || DEFAULT_COUNTRY;
+
   // After the page loads, start from the visitor's own country (their browser's language or time zone).
   React.useEffect(() => {
     if (hydrated && !form.getFieldState("country").isDirty) form.setValue("country", guessCountry());
@@ -179,9 +156,10 @@ export function RegisterView() {
       email: v.email,
       password: v.password,
       country: v.country,
-      zip: v.role === "student" ? "" : v.zip.trim(),
       ...(v.role === "student" && v.ageBand && v.ageBand !== "under13" ? { ageBand: v.ageBand } : {}),
       ...(parentEmail ? { parentEmail } : {}),
+      ...(v.role === "student" && v.grade ? { grade: v.grade } : {}),
+      ...(v.role === "tutor" && typeof v.experienceYears === "number" && Number.isInteger(v.experienceYears) ? { experienceYears: v.experienceYears } : {}),
       next: setupFor(v.role),
     });
     if (!res.ok) {
@@ -361,19 +339,41 @@ export function RegisterView() {
   }
 
   /* ─── Form ────────────────────────────────────────────────────── */
+  // One page per kind of account, like the big marketplaces: the title says who it's for, small links switch.
+  const switchTo = (r: RoleChoice) => {
+    form.setValue("role", r);
+    form.clearErrors();
+    setServerError(null);
+    router.replace(`/register?role=${r}${next ? `&next=${encodeURIComponent(next)}` : ""}`, { scroll: false });
+  };
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
-        <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">Create your account</h1>
+        <h1 className="font-heading text-[2rem] font-bold leading-[1.05] tracking-[-0.03em] text-ink">{TITLE[role]}</h1>
         <p className="mt-2 text-[15px] text-muted">
-          Already have one?{" "}
+          Already have an account?{" "}
           <Link href={signInHref} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
-            Sign in
+            Log in
           </Link>
+        </p>
+        <p className="mt-1.5 text-[14px] text-muted">
+          {role === "student" ? (
+            <>
+              Are you a parent? <RoleLink to="parent" onPick={switchTo}>Sign up as a parent</RoleLink> · Want to teach? <RoleLink to="tutor" onPick={switchTo}>Become a tutor</RoleLink>
+            </>
+          ) : role === "parent" ? (
+            <>
+              Signing up for yourself? <RoleLink to="student" onPick={switchTo}>Student</RoleLink> · <RoleLink to="tutor" onPick={switchTo}>Tutor</RoleLink>
+            </>
+          ) : (
+            <>
+              Want to learn instead? <RoleLink to="student" onPick={switchTo}>Sign up as a student</RoleLink>
+            </>
+          )}
         </p>
       </motion.div>
 
-      {/* Sign up with Google / Facebook / Apple: the role is chosen on the next page (this pre-selects it). */}
+      {/* Sign up with Google / Facebook / Apple: the role is confirmed on the next page (this pre-selects it). */}
       <SocialSignIn
         next={next}
         providers={providers ?? []}
@@ -381,7 +381,7 @@ export function RegisterView() {
         divider={
           <div className="my-6 flex items-center gap-4" aria-hidden>
             <span className="h-px flex-1 bg-line" />
-            <span className="text-[14px] text-muted">or sign up with email</span>
+            <span className="text-[14px] text-muted">or</span>
             <span className="h-px flex-1 bg-line" />
           </div>
         }
@@ -393,7 +393,7 @@ export function RegisterView() {
         transition={{ duration: 0.5, ease: EASE, delay: 0.06 }}
         onSubmit={onSubmit}
         noValidate
-        className="mt-8 space-y-5"
+        className="mt-6 space-y-5"
       >
         <AnimatePresence initial={false}>
           {serverError && (
@@ -402,7 +402,7 @@ export function RegisterView() {
                 {serverError}{" "}
                 {/already exists/i.test(serverError) && (
                   <Link href={signInHref} className="font-semibold text-ink underline decoration-[1.5px] underline-offset-4 hover:decoration-2">
-                    Sign in instead
+                    Log in instead
                   </Link>
                 )}
               </InlineAlert>
@@ -410,21 +410,7 @@ export function RegisterView() {
           )}
         </AnimatePresence>
 
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium text-ink">I&apos;m joining as</legend>
-          <Controller
-            control={form.control}
-            name="role"
-            render={({ field }) => <RadioCards name="role" columns={3} value={field.value} onValueChange={field.onChange} options={ROLE_OPTIONS} />}
-          />
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.p key={role} initial={{ opacity: 0, y: -2 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="mt-2 text-[13px] text-muted">
-              {ROLE_HELP[role]}
-            </motion.p>
-          </AnimatePresence>
-        </fieldset>
-
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="First name" error={errors.firstName?.message}>
             <Input autoComplete="given-name" icon={<UserRound />} {...form.register("firstName")} />
           </Field>
@@ -437,154 +423,83 @@ export function RegisterView() {
           <Input type="email" autoComplete="email" inputMode="email" icon={<Mail />} placeholder="you@example.com" {...form.register("email")} />
         </Field>
 
-        <Field label="Password" error={errors.password?.message} id="reg-password">
+        <Field label="Password" error={errors.password?.message} id="reg-password" hint={errors.password ? undefined : "At least 10 characters."}>
           <PasswordInput autoComplete="new-password" placeholder="At least 10 characters" {...form.register("password")} />
         </Field>
-        <div className="-mt-3">
-          <PasswordStrengthMeter value={password} />
-        </div>
 
-        <div className={role === "student" ? "grid gap-5" : "grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]"}>
-          <Field label="Country" error={errors.country?.message} id="reg-country">
-            <Controller
-              control={form.control}
-              name="country"
-              render={({ field }) => (
-                <Select
-                  id="reg-country"
-                  options={COUNTRY_OPTIONS}
-                  autoComplete="country"
-                  value={field.value}
-                  onBlur={field.onBlur}
-                  onChange={(e) => {
-                    field.onChange(e.target.value);
-                    if (form.getValues("zip")) form.setValue("zip", "", { shouldValidate: false });
-                  }}
-                />
-              )}
-            />
-          </Field>
-          {/* Students only choose their country; parents and tutors also give a PIN / postal code. */}
-          {role !== "student" && (
-            <Field
-              label={postalLabel(country)}
-              error={errors.zip?.message}
-              optional={!postalRequired(country)}
-              hint={role === "tutor" ? "Sets your in-person service area. Your exact address is never shown." : "Helps us show tutors near you. Online tutors are available everywhere."}
-            >
-              <Input
-                inputMode={postalNumeric(country) ? "numeric" : "text"}
-                autoComplete="postal-code"
-                maxLength={POSTAL_MAX_LENGTH}
-                icon={<MapPin />}
-                placeholder={postalPlaceholder(country)}
-                {...form.register("zip")}
+        {role === "student" && (
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-sm font-medium text-ink" id="age-label">
+                Your age
+              </p>
+              <Controller
+                control={form.control}
+                name="ageBand"
+                render={({ field }) => (
+                  <div aria-labelledby="age-label">
+                    <RadioCards
+                      name="ageBand"
+                      columns={3}
+                      value={field.value}
+                      onValueChange={(v) => {
+                        field.onChange(v);
+                        field.onBlur();
+                      }}
+                      options={AGE_OPTIONS}
+                    />
+                  </div>
+                )}
               />
-            </Field>
-          )}
-        </div>
-        {role !== "student" && (
-          <AddressLookup key={country} collapsed country={country} className="-mt-2" onPick={(a) => a.zip && form.setValue("zip", a.zip, { shouldDirty: true, shouldValidate: true })} />
+              {errors.ageBand && ageBand !== "under13" && (
+                <p role="alert" className="mt-1.5 text-[13px] text-danger">
+                  {errors.ageBand.message}
+                </p>
+              )}
+            </div>
+            <AnimatePresence initial={false} mode="wait">
+              {ageBand === "13-17" && (
+                <motion.div key="teen" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  <Field label="Parent or guardian's email" error={errors.parentEmail?.message} hint="Students under 18 need their OK. We'll email them.">
+                    <Input type="email" autoComplete="off" inputMode="email" icon={<ShieldCheck />} placeholder="parent@example.com" {...form.register("parentEmail")} />
+                  </Field>
+                </motion.div>
+              )}
+              {ageBand === "under13" && (
+                <motion.div key="child" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  <InlineAlert
+                    tone="warning"
+                    title="A parent needs to sign up for you"
+                    action={
+                      <Button type="button" size="sm" variant="secondary" onClick={() => { switchTo("parent"); form.setValue("ageBand", undefined); }}>
+                        Sign up as a parent
+                      </Button>
+                    }
+                  >
+                    Children under 13 can&apos;t have their own account. A parent or guardian can sign up, add you as a child and book lessons for you.
+                  </InlineAlert>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {ageBand !== "under13" && (
+              <Controller
+                control={form.control}
+                name="grade"
+                render={({ field }) => (
+                  <Field label="Your class or level" error={errors.grade?.message} id="reg-grade">
+                    <Select id="reg-grade" ref={field.ref} name={field.name} value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} placeholder="Choose your class" options={GRADES.map((g) => ({ value: g.value, label: g.label }))} />
+                  </Field>
+                )}
+              />
+            )}
+          </div>
         )}
 
-        <AnimatePresence initial={false}>
-          {role === "student" && (
-            <motion.div key="age" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
-              <fieldset className="space-y-4 rounded-xl bg-canvas p-4">
-                <legend className="sr-only">Your age</legend>
-                <div>
-                  <p className="text-sm font-medium text-ink" id="age-label">
-                    How old are you?
-                  </p>
-                  <p className="mt-0.5 text-[13px] text-muted">We ask so we can apply the right safeguards for younger students.</p>
-                </div>
-                <Controller
-                  control={form.control}
-                  name="ageBand"
-                  render={({ field }) => (
-                    <div aria-labelledby="age-label">
-                      <RadioCards
-                        name="ageBand"
-                        columns={3}
-                        value={field.value}
-                        onValueChange={(v) => {
-                          field.onChange(v);
-                          field.onBlur();
-                        }}
-                        options={AGE_OPTIONS}
-                      />
-                    </div>
-                  )}
-                />
-                {errors.ageBand && ageBand !== "under13" && (
-                  <p role="alert" className="text-[13px] text-danger">
-                    {errors.ageBand.message}
-                  </p>
-                )}
-
-                <AnimatePresence initial={false} mode="wait">
-                  {ageBand === "13-17" && (
-                    <motion.div key="teen" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="space-y-3">
-                      <Field label="Parent or guardian's email" error={errors.parentEmail?.message} hint="We'll ask them to approve your account.">
-                        <Input type="email" autoComplete="off" inputMode="email" icon={<ShieldCheck />} placeholder="parent@example.com" {...form.register("parentEmail")} />
-                      </Field>
-                      <p className="text-[13px] leading-relaxed text-muted">
-                        Because you&apos;re under 18, a parent or guardian needs to give consent before you can message tutors or book lessons. They&apos;ll also be able to see your conversations and lessons.
-                      </p>
-                    </motion.div>
-                  )}
-                  {ageBand === "under13" && (
-                    <motion.div key="child" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-                      <InlineAlert
-                        tone="warning"
-                        title="A parent needs to sign up for you"
-                        action={
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              form.setValue("role", "parent");
-                              form.setValue("ageBand", undefined);
-                              form.clearErrors(["ageBand", "parentEmail"]);
-                            }}
-                          >
-                            Switch to Parent
-                          </Button>
-                        }
-                      >
-                        Under the Children&apos;s Online Privacy Protection Act (COPPA), children under 13 can&apos;t have their own account. Ask a parent or guardian to create a Parent account — they can add you as a child and book lessons for you.
-                      </InlineAlert>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </fieldset>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence initial={false} mode="wait">
-          {(role === "tutor" || (role === "student" && ageBand !== "under13")) && (
-            <motion.div key={`next-${role}`} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
-              <section aria-labelledby="next-steps-h" className="rounded-xl bg-canvas p-4">
-                <p id="next-steps-h" className="text-sm font-semibold text-ink">
-                  {NEXT_STEPS[role].title}
-                </p>
-                <p className="mt-0.5 text-[13px] text-muted">{NEXT_STEPS[role].time}</p>
-                <ul className="mt-3 grid gap-x-4 gap-y-2 text-[13.5px] text-ink-2 sm:grid-cols-2">
-                  {NEXT_STEPS[role].parts.map((p) => (
-                    <li key={p.label} className="flex items-center gap-2">
-                      <p.icon className="size-4 shrink-0 text-brand" aria-hidden /> {p.label}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-[13px] text-muted">
-                  {React.createElement(NEXT_STEPS[role].note.icon, { className: "mt-0.5 size-3.5 shrink-0", "aria-hidden": true })} {NEXT_STEPS[role].note.text}
-                </p>
-              </section>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {role === "tutor" && (
+          <Field label="Years of teaching experience" error={errors.experienceYears?.message} hint="0 if you're new to tutoring. You'll add the details in your tutor profile next." className="max-w-xs">
+            <Input type="number" inputMode="numeric" min={0} max={60} step={1} suffix={<span className="pr-1 text-sm">years</span>} {...form.register("experienceYears", { valueAsNumber: true })} />
+          </Field>
+        )}
 
         <div className="space-y-1.5">
           <Controller
@@ -623,9 +538,9 @@ export function RegisterView() {
         </div>
 
         <Button type="submit" size="lg" className="w-full" loading={isSubmitting} disabled={!hydrated || blocked}>
-          {role === "tutor" ? "Create tutor account" : "Create account"}
+          Sign up
         </Button>
-        <p className="text-center text-[12.5px] text-muted">Free to join. You only pay when you book a lesson.</p>
+        <p className="text-center text-[12.5px] text-muted">{role === "tutor" ? "Free to join. Next, you'll build your tutor profile." : "Free to join. You only pay when you book a lesson."}</p>
       </motion.form>
     </div>
   );

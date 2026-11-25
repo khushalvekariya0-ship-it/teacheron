@@ -36,9 +36,13 @@ export interface SignUpInput {
   password: string;
   /** ISO country code ("US", "IN"). */
   country?: string;
-  zip: string;
+  zip?: string;
   ageBand?: "18+" | "13-17";
   parentEmail?: string;
+  /** A student's class or level (Grade value). */
+  grade?: string;
+  /** A tutor's years of teaching experience. */
+  experienceYears?: number;
   next?: string;
 }
 
