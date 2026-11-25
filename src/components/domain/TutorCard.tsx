@@ -10,7 +10,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Overlay";
-import { VerifiedBadge } from "./Badges";
+import { TopTutorBadge, VerifiedBadge } from "./Badges";
 import { INTRO_SECONDS, IntroReel, OnlineNow, useOnlineNow } from "./TutorIntro";
 import { useTutorActions } from "./useTutorActions";
 import { subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
@@ -200,6 +200,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
               {online && <OnlineNow />}
             </div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <TopTutorBadge tutor={tutor} size="sm" />
               <VerifiedBadge tutor={tutor} size="sm" />
               {instant && (
                 <Badge tone="neutral" size="sm">
@@ -336,6 +337,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
         </h3>
         {tutor.verification.identity === "verified" && <BadgeCheck className="size-[18px] fill-brand text-surface" aria-label="Identity verified" />}
       </div>
+      <TopTutorBadge tutor={tutor} size="sm" className="mt-1.5" />
       <p className="mt-1 line-clamp-2 text-[14px] leading-snug text-ink-2">{tutor.headline}</p>
       <p className="mt-2 flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
         <GraduationCap className="size-3.5 shrink-0" aria-hidden /> {tutor.experienceYears} {tutor.experienceYears === 1 ? "year" : "years"} experience

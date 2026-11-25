@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StarRating } from "@/components/ui/StarRating";
 import { toast } from "@/components/ui/Toast";
-import { VerifiedBadge } from "@/components/domain/Badges";
+import { TopTutorBadge, VerifiedBadge } from "@/components/domain/Badges";
 import { useTutorActions } from "@/components/domain/useTutorActions";
 
 export function modeSummary(t: Pick<Tutor, "modes">): string {
@@ -62,6 +62,7 @@ export function ProfileHeader({ tutor, instant }: { tutor: Tutor; instant: boole
 
         <div className="min-w-0 flex-1">
           <motion.div {...fade(0.05)} className="flex flex-wrap items-center gap-2">
+            <TopTutorBadge tutor={tutor} />
             <VerifiedBadge tutor={tutor} />
             {instant && (
               <Badge tone="neutral">

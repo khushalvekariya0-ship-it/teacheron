@@ -1,9 +1,10 @@
 import * as React from "react";
-import { BadgeCheck, GraduationCap, ScrollText, ShieldCheck, Clock3, CircleDashed, CircleX, CircleAlert } from "lucide-react";
+import { Award, BadgeCheck, GraduationCap, ScrollText, ShieldCheck, Clock3, CircleDashed, CircleX, CircleAlert } from "lucide-react";
 import type { BookingStatus, PaymentStatus, Tutor, VerificationKind, VerificationStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/booking";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
+import { TOP_TUTOR_RULE, isTopTutor } from "@/lib/tutor-badges";
 
 export const VERIFICATION_LABEL: Record<VerificationKind, string> = {
   identity: "Identity",
@@ -27,6 +28,16 @@ export const VERIFICATION_STATUS_META: Record<VerificationStatus, { label: strin
   rejected: { label: "Rejected", tone: "danger" },
   expired: { label: "Expired", tone: "danger" },
 };
+
+/** The Top tutor badge (earned automatically: src/lib/tutor-badges.ts); nothing for other tutors. */
+export function TopTutorBadge({ tutor, className, size = "md" }: { tutor: Pick<Tutor, "rating" | "reviewCount" | "lessonsCompleted" | "responseTimeHours">; className?: string; size?: "sm" | "md" }) {
+  if (!isTopTutor(tutor)) return null;
+  return (
+    <Badge tone="solid" size={size} className={className} title={`Top tutor: ${TOP_TUTOR_RULE}`} data-top-tutor="">
+      <Award /> Top tutor
+    </Badge>
+  );
+}
 
 /** Renders nothing unless identity verification has actually been completed. */
 export function VerifiedBadge({ tutor, className, size = "md" }: { tutor: Pick<Tutor, "verification">; className?: string; size?: "sm" | "md" }) {

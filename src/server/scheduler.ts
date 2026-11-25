@@ -6,6 +6,7 @@ import { runAction } from "./engine";
 import { emailNotifications } from "./notify-email";
 import { retryPendingRefunds } from "./payment-ops";
 import { razorpayReady } from "./razorpay";
+import { refreshTutorStats } from "./tutor-stats";
 
 /*
  * Lifecycle jobs (expire unanswered booking requests, auto-complete finished lessons). They run from
@@ -28,7 +29,9 @@ export async function runScheduler(): Promise<number> {
   // records older than the retention period (Admin → Chat safety → Settings).
   const lifted = await liftExpiredRestrictions().catch((e) => (console.error("[scheduler] restrictions", e), 0));
   const forgotten = await forgetOldSafetyRecords().catch((e) => (console.error("[scheduler] retention", e), 0));
-  return (r.ok ? (r.data as number) : 0) + closed + refunds + lifted + forgotten;
+  // Lessons completed and response time on tutor profiles (and the Top tutor badge).
+  const stats = await refreshTutorStats().catch((e) => (console.error("[scheduler] tutor stats", e), 0));
+  return (r.ok ? (r.data as number) : 0) + closed + refunds + lifted + forgotten + stats;
 }
 
 export async function maybeRunScheduler(): Promise<void> {

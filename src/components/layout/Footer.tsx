@@ -15,6 +15,7 @@ const COLUMNS: { heading: string; links: { label: string; href: string }[] }[] =
       { label: "Browse subjects", href: "/subjects" },
       { label: "Online tutoring", href: "/tutors?mode=online" },
       { label: "Compare tutors", href: "/compare" },
+      { label: "Free English level test", href: "/english-level-test" },
       { label: "For students", href: "/for-students" },
     ],
   },
