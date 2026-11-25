@@ -14,6 +14,7 @@ import { TopTutorBadge, VerifiedBadge } from "./Badges";
 import { INTRO_SECONDS, IntroReel, OnlineNow, useOnlineNow } from "./TutorIntro";
 import { useTutorActions } from "./useTutorActions";
 import { subjectName, LEVEL_LABEL } from "@/lib/data/catalog";
+import { formatDistance } from "@/lib/data/geo";
 import { formatDateTime } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { useHydrated, useSlotBookings, useViewerTimezone } from "@/lib/store/hooks";
@@ -74,12 +75,14 @@ export interface TutorCardProps {
   layout?: "grid" | "row";
   /** Optional distance from the searched location, in miles. */
   distance?: number | null;
+  /** How to write that distance (miles unless given). */
+  distanceUnit?: "mi" | "km";
   /** Optional match content (concierge). */
   footer?: React.ReactNode;
   className?: string;
 }
 
-export function TutorCard({ tutor, layout = "grid", distance, footer, className }: TutorCardProps) {
+export function TutorCard({ tutor, layout = "grid", distance, distanceUnit = "mi", footer, className }: TutorCardProps) {
   const actions = useTutorActions(tutor);
   const opening = useNextOpening(tutor);
   const tz = useViewerTimezone();
@@ -220,7 +223,7 @@ export function TutorCard({ tutor, layout = "grid", distance, footer, className 
                 <MapPin className="size-4 shrink-0" aria-hidden />
                 <span>
                   {tutor.city}, {tutor.state} · <ModeLine tutor={tutor} />
-                  {distance != null && tutor.modes.includes("in_person") && <span className="text-muted"> · {distance < 1 ? "<1" : Math.round(distance)} mi</span>}
+                  {distance != null && tutor.modes.includes("in_person") && <span className="text-muted"> · {formatDistance(distance, distanceUnit)}</span>}
                 </span>
               </li>
               {tutor.languages.length > 0 && (

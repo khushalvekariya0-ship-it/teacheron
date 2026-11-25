@@ -4,7 +4,7 @@ import { Logo } from "@/components/ui/Logo";
 import FlashlightTextReveal from "@/components/ui/flashlight-text-reveal";
 import { SITE } from "@/lib/site";
 import { FooterSubjects } from "./FooterSubjects";
-import { METROS } from "@/lib/data/geo";
+import { METROS, metroLabel } from "@/lib/data/geo";
 
 const COLUMNS: { heading: string; links: { label: string; href: string }[] }[] = [
   {
@@ -110,9 +110,7 @@ export function Footer() {
             <ul className="mt-4 space-y-2.5">
               {CITIES.slice(0, 6).map((m) => (
                 <li key={m.slug}>
-                  <FooterLink href={`/locations/${m.slug}`}>
-                    {m.city}, {m.state}
-                  </FooterLink>
+                  <FooterLink href={`/locations/${m.slug}`}>{metroLabel(m)}</FooterLink>
                 </li>
               ))}
             </ul>

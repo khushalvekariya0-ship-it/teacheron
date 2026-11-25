@@ -33,7 +33,7 @@ const NAV: NavGroup[] = [
     links: [
       { label: "Search tutors", href: "/tutors", description: "Filter by subject, grade, schedule and budget", icon: Search },
       { label: "Browse subjects", href: "/subjects", description: "Math, science, test prep, languages and more", icon: BookOpen },
-      { label: "Tutors near you", href: "/locations", description: "In-person tutoring by city and ZIP code", icon: MapPin },
+      { label: "Tutors near you", href: "/locations", description: "In-person lessons in your city, in any country", icon: MapPin },
       { label: "Compare tutors", href: "/compare", description: "Side-by-side, up to three at a time", icon: GitCompareArrows },
       { label: "Post a requirement", href: "/post-requirement", description: "Describe what you need and let tutors apply", icon: ClipboardList },
     ],

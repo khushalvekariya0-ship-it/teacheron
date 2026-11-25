@@ -1,6 +1,6 @@
 import type { Subject, Tutor } from "@/lib/types";
 import { getCatalog } from "@/lib/data/catalog";
-import { METROS, distanceMiles, type Metro } from "@/lib/data/geo";
+import { allMetros, distanceMiles, type Metro } from "@/lib/data/geo";
 
 /*
  * Figures shown on public marketing pages, always computed from the tutors actually listed (passed in
@@ -58,9 +58,9 @@ export function onlineTutors(tutors: Tutor[]): Tutor[] {
   return tutors.filter((t) => t.modes.includes("online"));
 }
 
-/** Metros with at least one in-person tutor — the only location pages we index. */
+/** Cities (built in, or a tutor's own) with at least one in-person tutor — the only location pages we index. */
 export function indexableMetros(tutors: Tutor[]): Metro[] {
-  return METROS.filter((m) => inPersonTutorsForMetro(m, tutors).length > 0);
+  return allMetros(tutors).filter((m) => inPersonTutorsForMetro(m, tutors).length > 0);
 }
 
 export function rateRange(tutors: Tutor[]): { min: number; max: number } | null {

@@ -1,47 +1,85 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Clock, MapPin, Monitor, ShieldCheck } from "lucide-react";
-import { Reveal, Stagger, StaggerItem, WordReveal } from "@/components/motion";
+import { ArrowRight, Clock, Globe2, MapPin, Monitor, ShieldCheck } from "lucide-react";
+import { Reveal, WordReveal } from "@/components/motion";
 import { CtaBand, Section, SectionHeading } from "@/components/marketing/Section";
-import { MetroMap, type MapMetro } from "@/components/marketing/MetroMap";
-import { ZipSearch } from "@/components/content/ZipSearch";
+import { NearbySearch } from "@/components/content/NearbySearch";
 import { inPersonTutorsForMetro, onlineTutors } from "@/components/content/insights";
 import { listedTutors } from "@/server/public";
 import { Button } from "@/components/ui/Button";
-import { METROS } from "@/lib/data/geo";
+import { allMetros, type Metro } from "@/lib/data/geo";
+import { countryName } from "@/lib/location";
 
 /** Figures and content come from the database; the page is rebuilt at most once a minute. */
 export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Tutors by city",
-  description: "Find in-person tutors in New York, Boston, Chicago, Austin, Los Angeles and other U.S. cities — or learn online with tutors available anywhere in the country.",
+  description: "Find in-person tutors in Ahmedabad, Mumbai, Delhi, London, Toronto, Dubai, New York and other cities around the world — or learn online with tutors available anywhere.",
   alternates: { canonical: "/locations" },
 };
 
-/** Cities grouped by time zone — the zone your lessons are scheduled in. Phoenix keeps Mountain time. */
-const ZONES: { label: string; tzs: string[] }[] = [
-  { label: "Eastern time", tzs: ["America/New_York"] },
-  { label: "Central time", tzs: ["America/Chicago"] },
-  { label: "Mountain time", tzs: ["America/Denver", "America/Phoenix"] },
-  { label: "Pacific time", tzs: ["America/Los_Angeles"] },
-];
-
 const LOCAL_STEPS = [
-  { title: "Enter your ZIP code", body: "We place you on the map — your address is never needed." },
-  { title: "Choose a distance", body: "See tutors within 5, 10 or 25 miles of you." },
+  { title: "Enter your PIN, ZIP or postal code", body: "Or just your city. We place you on the map — your address is never needed." },
+  { title: "See tutors who travel to you", body: "Each tutor sets how far they travel. You see the ones whose area covers yours." },
   { title: "Meet where you agree", body: "At home, a library or another place you both choose." },
 ];
 
+/** Countries shown open first; every other country follows in the city list's order, under "More countries". */
+const FIRST_COUNTRIES = ["IN", "US", "GB", "CA", "AU", "AE"];
+
+type CityRow = Metro & { inPerson: number };
+
+/** Cities grouped by country: countries with the most in-person tutors first, then the usual order. */
+function byCountry(cities: CityRow[]): { country: string; cities: CityRow[]; inPerson: number }[] {
+  const groups = new Map<string, CityRow[]>();
+  for (const c of cities) groups.set(c.country, [...(groups.get(c.country) ?? []), c]);
+  const rank = (c: string) => (FIRST_COUNTRIES.includes(c) ? FIRST_COUNTRIES.indexOf(c) : FIRST_COUNTRIES.length);
+  const order = [...groups.keys()];
+  return order
+    .map((country) => {
+      const list = groups.get(country)!;
+      // Inside a country: cities with in-person tutors first, then the list's own order (biggest cities first).
+      const sorted = [...list].sort((a, b) => b.inPerson - a.inPerson || list.indexOf(a) - list.indexOf(b));
+      return { country, cities: sorted, inPerson: list.reduce((n, c) => n + c.inPerson, 0) };
+    })
+    .sort((a, b) => b.inPerson - a.inPerson || rank(a.country) - rank(b.country) || order.indexOf(a.country) - order.indexOf(b.country));
+}
+
+function CityLinks({ cities }: { cities: CityRow[] }) {
+  return (
+    <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      {cities.map((m) => (
+        <li key={m.slug}>
+          <Link
+            href={`/locations/${m.slug}`}
+            className="group flex h-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3.5 py-2.5 transition-colors duration-200 hover:border-ink"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-[14.5px] font-semibold text-ink">{m.city}</span>
+              <span className="block truncate text-[12.5px] tabular-nums text-muted">
+                {m.inPerson > 0 ? `${m.inPerson} in person` : m.state || "Online tutors"}
+              </span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden />
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function LocationsPage() {
   const tutors = await listedTutors();
-  const metros = METROS.map((m) => ({ ...m, inPerson: inPersonTutorsForMetro(m, tutors).length }));
+  const cities: CityRow[] = allMetros(tutors).map((m) => ({ ...m, inPerson: inPersonTutorsForMetro(m, tutors).length }));
+  const countries = byCountry(cities);
+  const open = countries.filter((c, i) => i < FIRST_COUNTRIES.length || c.inPerson > 0);
+  const more = countries.filter((c) => !open.includes(c));
   const online = onlineTutors(tutors).length;
-  const mapMetros: MapMetro[] = metros.map((m) => ({ slug: m.slug, city: m.city, state: m.state, lat: m.lat, lng: m.lng, inPerson: m.inPerson }));
   const facts = [
-    { icon: MapPin, label: `${METROS.length} city pages` },
-    { icon: Clock, label: `${ZONES.length} U.S. time zones` },
-    { icon: Monitor, label: "Online everywhere in the U.S." },
+    { icon: MapPin, label: `${cities.length} cities in ${countries.length} countries` },
+    { icon: Clock, label: "Times in your own time zone" },
+    { icon: Monitor, label: "Online lessons everywhere" },
   ];
 
   return (
@@ -65,11 +103,11 @@ export default async function LocationsPage() {
             />
             <Reveal delay={0.2}>
               <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2">
-                Search by ZIP code to find tutors who travel to your neighborhood, or pick a city below. Online lessons work from anywhere in the U.S.
+                Search by your PIN, ZIP or postal code — or your city — to find tutors who travel to you, or pick a city below. Online lessons work from anywhere in the world.
               </p>
             </Reveal>
             <Reveal delay={0.3} className="mt-8 max-w-xl">
-              <ZipSearch />
+              <NearbySearch />
             </Reveal>
             <Reveal delay={0.4}>
               <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[14.5px] font-medium text-ink-2" aria-label="At a glance">
@@ -105,52 +143,51 @@ export default async function LocationsPage() {
         </div>
       </section>
 
-      {/* ── Map ── */}
+      {/* ── Cities, by country ── */}
       <Section>
-        <SectionHeading eyebrow="Cities" title="Where our tutors teach in person" accent={2} description="Every dot is a city page. Hover or tap one to see how many tutors offer in-person lessons there." />
-        <Reveal>
-          <MetroMap metros={mapMetros} />
-        </Reveal>
-
-        {/* ── Cities, grouped by time zone ── */}
-        <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:mt-16 lg:grid-cols-4 lg:gap-6">
-          {ZONES.map((z) => {
-            const list = metros.filter((m) => z.tzs.includes(m.timezone));
-            return (
-              <section key={z.label} aria-labelledby={`zone-${z.label}`}>
-                <Reveal>
-                  <h2 id={`zone-${z.label}`} className="flex items-center justify-between border-b border-line pb-3">
-                    <span className="inline-flex items-center gap-2 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">
-                      <Clock className="size-4 text-brand" aria-hidden /> {z.label}
-                    </span>
-                    <span className="text-[13px] tabular-nums text-muted">{list.length} cities</span>
-                  </h2>
-                </Reveal>
-                <Stagger className="mt-3 space-y-2" stagger={0.04}>
-                  {list.map((m) => (
-                    <StaggerItem key={m.slug}>
-                      <Link
-                        href={`/locations/${m.slug}`}
-                        className="group flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 transition-[border-color,box-shadow] duration-300 hover:border-brand/40 hover:shadow-[0_12px_28px_-20px_rgb(15_23_42/0.45)]"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-[15px] font-semibold text-ink">
-                            {m.city}, {m.state}
-                          </span>
-                          <span className="mt-0.5 block text-[12.5px] tabular-nums text-muted">
-                            {m.inPerson > 0 ? `${m.inPerson} in-person ${m.inPerson === 1 ? "tutor" : "tutors"}` : "See tutors for this city"}
-                          </span>
-                        </span>
-                        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line text-muted transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-on-brand">
-                          <ArrowRight className="size-4" aria-hidden />
-                        </span>
-                      </Link>
-                    </StaggerItem>
-                  ))}
-                </Stagger>
+        <SectionHeading
+          eyebrow="Cities"
+          title="Find tutors by city"
+          accent={2}
+          description="Pick your city to see tutors who teach in person there, plus online tutors in your time zone. Don't see your city? Search above: it works for any place."
+        />
+        <div className="mt-10 space-y-10">
+          {open.map((g) => (
+            <Reveal key={g.country}>
+              <section aria-labelledby={`country-${g.country}`}>
+                <h2 id={`country-${g.country}`} className="flex items-baseline justify-between gap-3 border-b border-line pb-3">
+                  <span className="inline-flex items-center gap-2 font-heading text-[18px] font-bold tracking-[-0.01em] text-ink">
+                    <Globe2 className="size-4 text-brand" aria-hidden /> {countryName(g.country) || g.country}
+                  </span>
+                  <span className="text-[13px] tabular-nums text-muted">
+                    {g.cities.length} {g.cities.length === 1 ? "city" : "cities"}
+                    {g.inPerson > 0 && ` · ${g.inPerson} in person`}
+                  </span>
+                </h2>
+                <CityLinks cities={g.cities} />
               </section>
-            );
-          })}
+            </Reveal>
+          ))}
+          {more.length > 0 && (
+            <details className="group rounded-xl border border-line bg-canvas p-4 sm:p-5">
+              <summary className="cursor-pointer list-none text-[15px] font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                <span className="inline-flex items-start gap-2">
+                  <ArrowRight className="mt-0.5 size-4 shrink-0 text-brand transition-transform duration-200 group-open:rotate-90" aria-hidden />
+                  <span>
+                    More countries ({more.length}): <span className="font-normal text-ink-2">{more.map((g) => countryName(g.country) || g.country).join(", ")}</span>
+                  </span>
+                </span>
+              </summary>
+              <div className="mt-6 space-y-8">
+                {more.map((g) => (
+                  <section key={g.country} aria-label={countryName(g.country) || g.country}>
+                    <h3 className="border-b border-line pb-2 text-[16px] font-bold text-ink">{countryName(g.country) || g.country}</h3>
+                    <CityLinks cities={g.cities} />
+                  </section>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
 
         {/* ── Online everywhere ── */}
@@ -165,7 +202,7 @@ export default async function LocationsPage() {
                 <div>
                   <h2 className="font-heading text-[22px] font-bold tracking-[-0.02em] text-ink">Not near one of these cities?</h2>
                   <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-2">
-                    {online > 0 ? `${online} tutors teach online and` : "Online tutors"} are available anywhere in the United States, with lessons scheduled in your own time zone.
+                    {online > 0 ? `${online} tutors teach online and` : "Online tutors"} are available anywhere in the world, with lessons scheduled in your own time zone.
                   </p>
                 </div>
               </div>

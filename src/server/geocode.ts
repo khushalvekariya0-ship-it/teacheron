@@ -1,5 +1,6 @@
 import "server-only";
 import { countryName } from "@/lib/location";
+import { isPostalCode } from "@/lib/postal";
 import { db } from "./db";
 
 /*
@@ -26,7 +27,7 @@ export async function pointOf(place: string, country?: string): Promise<Point | 
   const url = `https://photon.komoot.io/api/?lang=en&limit=8&q=${encodeURIComponent(country ? `${q}, ${countryName(country)}` : q)}`;
   const res = await fetch(url, { headers: { "User-Agent": "TutorLink/1.0 (place lookup)" }, signal: AbortSignal.timeout(6000) });
   if (!res.ok) throw new Error(`photon ${res.status}`);
-  const body = (await res.json()) as { features?: { geometry?: { coordinates?: [number, number] }; properties?: { name?: string; city?: string; state?: string; country?: string; countrycode?: string; type?: string } }[] };
+  const body = (await res.json()) as { features?: { geometry?: { coordinates?: [number, number] }; properties?: { name?: string; city?: string; district?: string; county?: string; state?: string; country?: string; countrycode?: string; type?: string } }[] };
   const hits = (body.features ?? []).filter((f) => Array.isArray(f.geometry?.coordinates) && (!country || f.properties?.countrycode === country));
   // Towns and cities first: they're what people mean by "near".
   const best = hits.find((f) => ["city", "town", "village", "district", "county"].includes(f.properties?.type ?? "")) ?? hits[0];
@@ -34,7 +35,12 @@ export async function pointOf(place: string, country?: string): Promise<Point | 
   if (best) {
     const [lng, lat] = best.geometry!.coordinates!;
     const p = best.properties ?? {};
-    const label = [p.name ?? p.city, p.state, p.country].filter((x, i, a) => x && a.indexOf(x) === i).join(", ");
+    const uniq = (xs: (string | undefined)[]) => xs.filter((x, i, a) => x && a.indexOf(x) === i).join(", ");
+    // A postal code reads as the code and its town ("380015 · Ahmedabad, Gujarat"), not a building that carries it.
+    const label =
+      country && /\d/.test(q) && isPostalCode(q, country)
+        ? `${q.toUpperCase()} · ${uniq([p.city ?? p.district ?? p.county, p.state]) || countryName(country)}`
+        : uniq([p.name ?? p.city, p.state, p.country]);
     if (Number.isFinite(lat) && Number.isFinite(lng)) point = { lat: Math.round(lat * 10_000) / 10_000, lng: Math.round(lng * 10_000) / 10_000, label: label || q };
   }
   if (cache.size > 2000) cache.delete(cache.keys().next().value!);

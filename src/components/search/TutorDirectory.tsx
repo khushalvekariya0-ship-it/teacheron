@@ -131,7 +131,7 @@ function NoMatches({
       <h3 className="mt-5 font-heading text-[24px] font-bold tracking-[-0.02em] text-ink">No tutors match all of these filters</h3>
       <p className="mx-auto mt-2 max-w-lg text-[15.5px] leading-relaxed text-ink-2">
         {inPerson
-          ? "In-person tutors are limited by distance. Remove a filter or switch to online lessons, which work from anywhere in the U.S."
+          ? "In-person tutors are limited by distance. Remove a filter or switch to online lessons, which work from anywhere."
           : "Try removing a filter or two, or tell us what you need and we'll help you find a fit."}
       </p>
       <div className="mt-7 flex flex-wrap justify-center gap-3">

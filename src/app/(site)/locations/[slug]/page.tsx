@@ -8,8 +8,9 @@ import { inPersonTutorsForMetro, neutralOrder, onlineTutors } from "@/components
 import { TutorCard } from "@/components/domain/TutorCard";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
-import { subjectName, US_TIMEZONES } from "@/lib/data/catalog";
-import { METROS, METRO_BY_SLUG, distanceMiles } from "@/lib/data/geo";
+import { subjectName } from "@/lib/data/catalog";
+import { METROS, allMetros, distanceMiles, distanceUnit, formatDistance, metroBySlug, metroLabel, metroLocation, type Metro } from "@/lib/data/geo";
+import { countryName } from "@/lib/location";
 import { formatRateRange, ratesByCurrency } from "@/lib/search";
 import { SITE } from "@/lib/site";
 import { listedTutors } from "@/server/public";
@@ -19,21 +20,35 @@ export const revalidate = 60;
 
 type Props = { params: Promise<{ slug: string }> };
 
+/** A time zone's everyday name: "India Standard Time", "Gulf Standard Time", "Eastern Standard Time". */
+function zoneName(timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "long" }).formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value ?? timezone;
+  } catch {
+    return timezone;
+  }
+}
+
+/** The directory, filtered to in-person tutors whose travel area covers this city. */
+const inPersonSearch = (metro: Metro, subject?: string) =>
+  `/tutors?${new URLSearchParams({ ...(subject ? { subject } : {}), location: metroLocation(metro), mode: "in_person" }).toString()}`;
+
 export function generateStaticParams() {
   return METROS.map((m) => ({ slug: m.slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const metro = METRO_BY_SLUG[slug];
+  const tutors = await listedTutors();
+  const metro = metroBySlug(slug, tutors);
   if (!metro) return { title: "Location not found", robots: { index: false } };
-  const count = inPersonTutorsForMetro(metro, await listedTutors()).length;
-  const place = `${metro.city}, ${metro.state}`;
+  const count = inPersonTutorsForMetro(metro, tutors).length;
+  const place = metroLabel(metro);
   return {
     title: `Tutors in ${place}`,
     description:
       count > 0
-        ? `${count} ${count === 1 ? "tutor offers" : "tutors offer"} in-person lessons in ${place}, plus online tutors available anywhere in the U.S. Compare rates, trials and verified credentials.`
+        ? `${count} ${count === 1 ? "tutor offers" : "tutors offer"} in-person lessons in ${place}, plus online tutors available anywhere. Compare rates, trials and verified credentials.`
         : `Online tutors for students in ${place}. Compare rates, trials and verified credentials, or post a requirement for in-person help.`,
     alternates: { canonical: `/locations/${slug}` },
     // Thin-content guard: only cities with in-person supply are indexed.
@@ -43,25 +58,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LocationPage({ params }: Props) {
   const { slug } = await params;
-  const metro = METRO_BY_SLUG[slug];
+  const tutors = await listedTutors();
+  const metro = metroBySlug(slug, tutors);
   if (!metro) notFound();
 
-  const place = `${metro.city}, ${metro.state}`;
-  const tutors = await listedTutors();
+  const place = metroLabel(metro);
+  const unit = distanceUnit(metro.country); // km everywhere except the US and the UK
   const nearby = inPersonTutorsForMetro(metro, tutors);
   const nearbyIds = new Set(nearby.map((n) => n.tutor.id));
-  const tzLabel = US_TIMEZONES.find((z) => z.value === metro.timezone)?.label ?? metro.timezone;
+  const tzLabel = zoneName(metro.timezone);
   const online = onlineTutors(tutors).filter((t) => !nearbyIds.has(t.id));
   const sameZone = neutralOrder(online.filter((t) => t.timezone === metro.timezone));
   const onlineShown = [...sameZone, ...neutralOrder(online.filter((t) => t.timezone !== metro.timezone))].slice(0, 4);
   const localSubjects = Array.from(new Set(nearby.flatMap((n) => n.tutor.subjects))).slice(0, 12);
   // One range per currency the nearby tutors charge in (never mixed or converted).
   const ranges = ratesByCurrency(nearby.map((n) => n.tutor));
-  const otherMetros = METROS.filter((m) => m.slug !== slug)
+  const otherMetros = allMetros(tutors).filter((m) => m.slug !== slug)
     .map((m) => ({ m, d: distanceMiles(metro, m), n: inPersonTutorsForMetro(m, tutors).length }))
     .sort((a, b) => a.d - b.d)
     .slice(0, 4);
-  const inPersonHref = `/tutors?location=${metro.zip}&mode=in_person`;
+  const inPersonHref = inPersonSearch(metro);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -76,7 +92,7 @@ export default async function LocationPage({ params }: Props) {
     { k: "In-person tutors", v: String(nearby.length) },
     { k: "In-person rates", v: ranges.length ? ranges.map((r) => `${formatRateRange(r)}${r.min === r.max ? "/hr" : ""}`).join(" · ") : "—" },
     { k: "Online tutors", v: String(onlineTutors(tutors).length) },
-    { k: "Local time zone", v: tzLabel.replace(/ \(.+\)$/, "") },
+    { k: "Local time zone", v: tzLabel },
   ];
 
   return (
@@ -89,8 +105,14 @@ export default async function LocationPage({ params }: Props) {
               <ol className="flex flex-wrap items-center gap-2 text-[13.5px] text-ink/70">
                 <li><Link href="/locations" className="underline-offset-4 hover:text-ink hover:underline">Locations</Link></li>
                 <li aria-hidden>/</li>
-                <li>{metro.stateName}</li>
+                <li>{countryName(metro.country) || metro.country}</li>
                 <li aria-hidden>/</li>
+                {metro.stateName && metro.stateName !== metro.city && (
+                  <>
+                    <li>{metro.stateName}</li>
+                    <li aria-hidden>/</li>
+                  </>
+                )}
                 <li aria-current="page" className="font-semibold text-ink">{metro.city}</li>
               </ol>
             </nav>
@@ -111,7 +133,7 @@ export default async function LocationPage({ params }: Props) {
               <Reveal delay={0.3} className="mt-8 flex flex-wrap gap-3">
                 <Button asChild size="lg">
                   <Link href={inPersonHref}>
-                    <MapPin /> In-person tutors near {metro.zip}
+                    <MapPin /> In-person tutors in {metro.city}
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="secondary">
@@ -152,13 +174,13 @@ export default async function LocationPage({ params }: Props) {
                       tutor={tutor}
                       footer={
                         <p className="flex items-center gap-1.5 text-[12.5px] text-muted">
-                          <MapPin className="size-3.5 text-subtle" aria-hidden /> ~{distance < 1 ? "<1" : Math.round(distance)} mi from central {metro.city} · serves within {tutor.serviceRadiusMiles} mi
+                          <MapPin className="size-3.5 text-subtle" aria-hidden /> ~{formatDistance(distance, unit)} from central {metro.city} · serves within {formatDistance(tutor.serviceRadiusMiles, unit)}
                         </p>
                       }
                     />
                   </div>
                   <div className="hidden lg:block">
-                    <TutorCard tutor={tutor} layout="row" distance={distance} />
+                    <TutorCard tutor={tutor} layout="row" distance={distance} distanceUnit={unit} />
                   </div>
                 </StaggerItem>
               ))}
@@ -170,7 +192,7 @@ export default async function LocationPage({ params }: Props) {
                   {localSubjects.map((s) => (
                     <li key={s}>
                       <Link
-                        href={`/tutors?subject=${s}&location=${metro.zip}&mode=in_person`}
+                        href={inPersonSearch(metro, s)}
                         className="inline-flex rounded-lg border border-line bg-surface px-3.5 py-1.5 text-sm font-medium text-ink-2 transition-colors hover:border-ink hover:text-ink"
                       >
                         {subjectName(s)}
@@ -208,10 +230,10 @@ export default async function LocationPage({ params }: Props) {
         <Section tone="canvas">
           <SectionHeading
             eyebrow="Online"
-            title={sameZone.length > 0 ? `Online tutors in ${tzLabel.replace(/ \(.+\)$/, "")}` : "Online tutors, anywhere"}
+            title={sameZone.length > 0 ? "Online tutors in your time zone" : "Online tutors, anywhere"}
             description={
               sameZone.length > 0
-                ? `Tutors based in your time zone, so lesson times line up with the ${metro.city} school day. Every online tutor can teach you, wherever they live.`
+                ? `Tutors based in ${tzLabel}, so lesson times line up with the ${metro.city} school day. Every online tutor can teach you, wherever they live.`
                 : `Every online tutor can teach students in ${metro.city}. Times are always shown in your time zone.`
             }
             action={<ArrowLink href="/tutors?mode=online">All online tutors</ArrowLink>}
@@ -250,10 +272,10 @@ export default async function LocationPage({ params }: Props) {
                   <Link href={`/locations/${m.slug}`} data-spotlight className="group flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4 transition-colors">
                     <span>
                       <span className="block text-[15px] font-bold text-ink">
-                        {m.city}, {m.state}
+                        {metroLabel(m)}
                       </span>
                       <span className="text-[13px] tabular-nums text-muted">
-                        ~{Math.round(d)} mi · {n > 0 ? `${n} in person` : "online only"}
+                        ~{formatDistance(d, unit)} · {n > 0 ? `${n} in person` : "online only"}
                       </span>
                     </span>
                     <ArrowRight className="size-4 text-ink transition-transform group-hover:translate-x-0.5" aria-hidden />
@@ -267,7 +289,7 @@ export default async function LocationPage({ params }: Props) {
 
       <CtaBand
         title={`Search tutors near ${metro.city}.`}
-        description="Filter by subject, grade, schedule and budget, and set your own radius in miles."
+        description="Filter by subject, grade, schedule and budget, and see the tutors who travel to your area."
         primary={{ href: inPersonHref, label: "Search in-person tutors" }}
         secondary={{ href: "/concierge", label: "Help me find a tutor" }}
       />

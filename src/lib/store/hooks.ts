@@ -135,10 +135,16 @@ export function usePricing(): Pricing {
   return useApp((s) => s.pricing);
 }
 
-export function useViewerCurrency(): Currency {
+/** The viewer's country: from their account when signed in, otherwise guessed from the device (the US until then). */
+export function useViewerCountry(): string {
   const me = useSession();
   const hydrated = useHydrated();
-  return useMemo(() => currencyForCountry(me?.country ?? (hydrated ? guessCountry() : "US")), [me?.country, hydrated]);
+  return me?.country ?? (hydrated ? guessCountry() : "US");
+}
+
+export function useViewerCurrency(): Currency {
+  const country = useViewerCountry();
+  return useMemo(() => currencyForCountry(country), [country]);
 }
 
 export function useUnreadNotifications(): number {

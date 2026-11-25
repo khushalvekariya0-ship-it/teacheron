@@ -5,9 +5,11 @@ import { MapPin, Search, X } from "lucide-react";
 import type { Grade, Level, TutorCategory } from "@/lib/types";
 import { RADIUS_OPTIONS, ratePresets, type TutorSearch } from "@/lib/search";
 import { GRADES, LANGUAGES, LEARNING_SUPPORT, LEVELS, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
-import { useCatalog, useViewerCurrency } from "@/lib/store/hooks";
+import { useCatalog, useViewerCountry, useViewerCurrency } from "@/lib/store/hooks";
 import { currencySymbol } from "@/lib/money";
-import { isValidZip, locationLabel, pointLocation, resolveLocation } from "@/lib/data/geo";
+import { locationLabel, resolveLocation } from "@/lib/data/geo";
+import { findPlace, looksPostal } from "@/lib/find-place";
+import { postalLabel } from "@/lib/postal";
 import { cn } from "@/lib/utils";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Checkbox, ChipGroup, Segmented } from "@/components/ui/Controls";
@@ -103,6 +105,9 @@ export function LocationField({ value, onCommit }: { value: string | undefined; 
   }
   const resolved = value ? resolveLocation(value) : null;
   const [looking, setLooking] = React.useState(false);
+  const country = useViewerCountry();
+  const code = postalLabel(country); // "PIN code" in India, "ZIP code" in the US, "Postal code" elsewhere
+  const codeText = /^(PIN|ZIP)/.test(code) ? code : code.toLowerCase();
 
   const commit = async () => {
     const v = text.trim();
@@ -112,33 +117,23 @@ export function LocationField({ value, onCommit }: { value: string | undefined; 
       return;
     }
     if (v === locationLabel(value)) return;
-    if (resolveLocation(v)) {
-      setError(undefined);
-      if (v !== value) onCommit(v);
-      return;
-    }
-    // Not in the built-in US list: look the place up (any country), e.g. "Rajkot" or "Dubai Marina".
+    // A PIN/ZIP/postal code is looked up in the viewer's own country; a city anywhere in the world.
     setLooking(true);
-    try {
-      const res = await fetch(`/api/geo?kind=point&q=${encodeURIComponent(v)}`);
-      const data = (await res.json().catch(() => ({}))) as { point?: { lat: number; lng: number; label: string } | null };
-      if (data.point) {
-        setError(undefined);
-        onCommit(pointLocation(data.point));
-      } else setError(isValidZip(v) ? "We couldn't find this ZIP. Try a nearby city, or choose Online." : "We couldn't find that place. Try a city name, e.g. “Austin, TX” or “Rajkot”.");
-    } catch {
-      setError("You seem to be offline. Try again.");
-    } finally {
-      setLooking(false);
-    }
+    const found = await findPlace(v, country);
+    setLooking(false);
+    if ("location" in found) {
+      setError(undefined);
+      if (found.location !== value) onCommit(found.location);
+    } else if (found.problem === "failed") setError("We couldn't look that up just now. Check your connection and try again.");
+    else setError(looksPostal(v, country) ? `We couldn't find this ${codeText}. Try your city name, or choose Online.` : "We couldn't find that place. Try a city name, e.g. “Ahmedabad” or “London”.");
   };
 
   return (
-    <Field label="ZIP or city" error={error} hint={looking ? "Finding that place…" : !error && resolved ? `Searching near ${resolved.label}` : !error ? "Used for in-person lessons and distance." : undefined}>
+    <Field label={`${code} or city`} error={error} hint={looking ? "Finding that place…" : !error && resolved ? `Searching near ${resolved.label}` : !error ? "Used for in-person lessons and distance." : undefined}>
       <Input
         icon={<MapPin />}
         value={text}
-        placeholder="e.g. 60614, Chicago, IL or Rajkot"
+        placeholder={`Your ${codeText} or city`}
         autoComplete="postal-code"
         enterKeyHint="done"
         onChange={(e) => {
@@ -334,7 +329,7 @@ export function FilterPanel({
               />
             </div>
             <LocationField value={value.location} onCommit={(location) => set(location ? { location } : { location: undefined, radius: undefined })} />
-            <Field label="Distance" hint={value.location ? (value.mode === "in_person" ? "Only in-person tutors within this distance." : "Online tutors are always included.") : "Add a ZIP or city to filter by distance."}>
+            <Field label="Distance" hint={value.location ? (value.mode === "in_person" ? "Only in-person tutors within this distance." : "Online tutors are always included.") : "Add your city or postal code to filter by distance."}>
               <Select
                 value={value.radius ? String(value.radius) : ""}
                 disabled={!value.location}
