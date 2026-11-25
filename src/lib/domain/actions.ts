@@ -17,7 +17,7 @@ import { isFlagOn } from "@/lib/flags";
 import { inSection, notePath } from "@/lib/nav-sections";
 import { readContactSafety, rulesOf, type ContactSafety } from "@/lib/safety-settings";
 import { resolveLocation } from "@/lib/data/geo";
-import { askToRescheduleProblem, canTransition, cancellationRefund, endMs, lateToReschedule, MAX_WEEKLY_LESSONS, openRescheduleRequest, openTutorMove, seriesOf, startMs, STATUS_META, type Actor } from "@/lib/booking";
+import { askToRescheduleProblem, canTransition, cancellationRefund, endMs, freeSwitchCredit, freeSwitchProblem, lateToReschedule, MAX_WEEKLY_LESSONS, openRescheduleRequest, openTutorMove, seriesOf, startMs, STATUS_META, type Actor } from "@/lib/booking";
 import { checkPasscode, parseRecordingLink, parseVideoLink, VIDEO_PROVIDER_LABEL } from "@/lib/video-link";
 import { actorFor, hasPermission } from "@/lib/permissions";
 import { STARTER_SUBJECTS, STARTER_SUBJECT_CATEGORIES, slugify, subjectName } from "@/lib/data/catalog";
@@ -174,6 +174,8 @@ export interface DomainActions {
   /** Adds Study Credits to the signed-in learner's wallet, paid by card or UPI. */
   topUpWallet(packId: string, method: Exclude<PayMethod, "wallet">): Result<WalletTransaction>;
   submitReview(bookingId: string, rating: Review["rating"], body: string): Result<Review>;
+  /** Free tutor switch: the trial price back as Study Credits, so the next trial with another tutor is free. */
+  claimFreeTutorSwitch(bookingId: string, reason: string): Result<{ creditCents: number; currency: Currency }>;
   respondToReview(reviewId: string, body: string): Result;
   // messaging
   startConversation(tutorId: string, opts?: { childId?: string; subject?: string }): Result<Conversation>;
@@ -1391,6 +1393,27 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
       if (b.recordingUrl !== parsed.url) notify(b.bookerId, { type: "reminder", title: "Your lesson recording is ready", body: `${subjectName(b.subject)} · ${formatDateTime(b.startUtc, tzOf(b.bookerId))}`, href: `/dashboard/bookings/${b.id}` });
       if (actor === "admin") audit("booking.recording", "booking", b.id);
       return ok({ ...b, recordingUrl: parsed.url });
+    },
+    claimFreeTutorSwitch(bookingId, reason) {
+      const r = requireUser();
+      if (!r.ok) return r;
+      if (!flag("free_tutor_switch")) return fail("The free tutor switch isn't available right now.");
+      const b = get().bookings.find((x) => x.id === bookingId);
+      const disputed = get().disputes.some((d) => d.bookingId === bookingId && !["resolved", "rejected"].includes(d.status));
+      const problem = freeSwitchProblem(r.data.id, b, get().bookings, disputed);
+      if (problem || !b) return fail(problem ?? "Lesson not found.");
+      const credit = freeSwitchCredit(b);
+      const tutor = resolveTutor(get(), b.tutorId);
+      const why = reason.trim() ? maskContactInfo(reason.trim().slice(0, 500)).text : "";
+      patchBooking(b.id, { history: [...b.history, { at: nowIso(), by: r.data.id, from: b.status, to: b.status, note: why ? `Free tutor switch: ${why}` : "Free tutor switch", tutorSwitch: true }] });
+      addWalletTx({ userId: b.bookerId, deltaCents: credit, currency: b.currency, kind: "credit", description: `Free tutor switch: your trial${tutor ? ` with ${tutor.firstName}` : ""}`, bookingId: b.id });
+      notify(b.bookerId, {
+        type: "refund",
+        title: "Your next trial is on us",
+        body: `${formatMoney(credit, b.currency)} is in your Study Credits. Pick another ${subjectName(b.subject)} tutor and pay for their trial with it.`,
+        href: `/tutors?subject=${encodeURIComponent(b.subject)}`,
+      });
+      return ok({ creditCents: credit, currency: b.currency });
     },
     submitReview(bookingId, rating, body) {
       const r = requireUser(["student", "parent"]);

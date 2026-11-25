@@ -28,6 +28,7 @@ import { LessonVideoCard } from "./LessonVideo";
 import { LessonClassroomCard } from "./LessonClassroom";
 import { DisputeCard, DisputeDialog, ReportProblemCard, ReviewDisplay, ReviewForm, useLessonDispute, useLessonReview } from "./LessonPostLesson";
 import { LessonTimeline } from "./LessonTimeline";
+import { LessonFreeSwitch } from "./LessonFreeSwitch";
 import { bookingRef, timeRange, tzShort, usePeople } from "./shared";
 
 export function LessonView({ id }: { id: string }) {
@@ -320,6 +321,12 @@ function Lesson({ booking: b, me }: { booking: Booking; me: User }) {
           {b.mode === "online" && (
             <div className="order-3 min-w-0">
               <LessonClassroomCard booking={b} />
+            </div>
+          )}
+
+          {!isTutor && b.type === "trial" && b.status === "completed" && (
+            <div className="order-3 min-w-0">
+              <LessonFreeSwitch booking={b} meId={me.id} tz={tz} />
             </div>
           )}
 

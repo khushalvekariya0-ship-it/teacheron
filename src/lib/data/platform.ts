@@ -190,6 +190,7 @@ export const DEFAULT_FLAGS: FeatureFlag[] = [
   { key: "ai_matching", label: "AI-assisted matching", description: "Natural-language concierge input. Rules-based scoring remains the source of truth.", enabled: true, rolloutPercent: 25 },
   { key: "coupons", label: "Coupons", description: "Promotional codes at checkout.", enabled: true, rolloutPercent: 100 },
   { key: "referrals", label: "Referrals", description: "Referral codes and credits.", enabled: false, rolloutPercent: 0 },
+  { key: "free_tutor_switch", label: "Free tutor switch", description: "A learner unhappy after a paid trial gets the trial price back as Study Credits (once per account), so their next trial is free.", enabled: true, rolloutPercent: 100 },
   { key: "parent_accounts", label: "Parent accounts", description: "Parent accounts with child profiles.", enabled: true, rolloutPercent: 100 },
   { key: "progress_tracking", label: "Progress tracking", description: "Learning goals, homework and progress notes.", enabled: true, rolloutPercent: 100 },
   { key: "sms_notifications", label: "SMS notifications", description: "Send reminders by SMS via Twilio.", enabled: false, rolloutPercent: 0 },

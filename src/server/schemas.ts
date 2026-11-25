@@ -175,6 +175,7 @@ export const ACTION_ARGS: Partial<Record<ActionName, z.ZodTypeAny>> = {
   validateCoupon: t(text(20), int(0, 10_000_000)),
   topUpWallet: t(text(20), z.enum(["card", "upi"])),
   submitReview: t(id, int(1, 5), text(3000)),
+  claimFreeTutorSwitch: t(id, text(500)),
   respondToReview: t(id, text(2000)),
 
   startConversation: t(id, z.object({ childId: id.optional(), subject: text(80).optional() }).optional()),

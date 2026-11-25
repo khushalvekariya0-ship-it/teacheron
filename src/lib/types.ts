@@ -418,6 +418,8 @@ export interface BookingEvent {
   previousStartUtc?: ISODate;
   /** The person who booked said the tutor's new time works for them. */
   moveAnswer?: "ok";
+  /** The learner used their free tutor switch on this trial (src/lib/booking.ts: freeSwitchProblem). */
+  tutorSwitch?: true;
 }
 
 export interface Booking {

@@ -105,6 +105,10 @@ export const PLANS: Record<ActionName, Plan> = {
   setLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
   removeLessonVideo: (L, me, [id]) => L.bookingParticipants(str(id), me),
   setLessonRecording: (L, me, [id]) => L.bookingParticipants(str(id), me),
+  // The learner's own lessons (a switch already used, lessons booked with the tutor) and this trial's dispute.
+  claimFreeTutorSwitch: async (L, me, [bookingId]) => {
+    await Promise.all([L.self(me), L.bookingParticipants(str(bookingId), me)]);
+  },
   submitReview: async (L, me, [bookingId]) => {
     await Promise.all([L.bookingParticipants(str(bookingId), me), staffFor(L, "reports.moderate")]);
   },

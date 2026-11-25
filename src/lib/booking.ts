@@ -201,3 +201,31 @@ export function meetingLinkVisible(b: Booking, now = Date.now(), policy = DEFAUL
 }
 
 export { startMs, endMs };
+
+/* ─── Free tutor switch ──────────────────────────────────────────────────────
+ * A learner whose paid trial lesson didn't feel right gets the trial price back as Study Credits (paid by
+ * TutorLink; the tutor is still paid for the lesson), so their next trial with another tutor is free. Once per
+ * account, within FREE_SWITCH_DAYS of the trial, and only if they haven't booked lessons with that tutor. Used
+ * switches are marked on the trial's history (`tutorSwitch`). Feature flag: free_tutor_switch. */
+
+export const FREE_SWITCH_DAYS = 7;
+
+/** What the switch gives back: what was paid for the trial (0 for a free trial). */
+export const freeSwitchCredit = (b: Booking) => (b.paymentStatus === "paid" ? Math.max(0, b.priceCents - b.discountCents) : 0);
+
+/** Why `userId` can't use the free switch on lesson `b` (null: they can). `bookings`: the user's own lessons. */
+export function freeSwitchProblem(userId: string, b: Booking | undefined, bookings: Booking[], openDispute: boolean, now = Date.now()): string | null {
+  if (!b) return "Lesson not found.";
+  if (b.bookerId !== userId) return "Only the person who booked this lesson can do this.";
+  if (b.type !== "trial") return "The free switch is for trial lessons.";
+  if (b.status !== "completed") return "This works once the trial lesson is completed.";
+  if (bookings.some((x) => x.bookerId === userId && x.history.some((e) => e.tutorSwitch))) return "You've already used your free tutor switch.";
+  if (freeSwitchCredit(b) <= 0) return "This trial was free, so there's nothing to give back.";
+  if (now > endMs(b) + FREE_SWITCH_DAYS * 86_400_000) return `The free switch is available for ${FREE_SWITCH_DAYS} days after the trial.`;
+  const learner = b.childId ?? b.bookerId;
+  if (bookings.some((x) => x.tutorId === b.tutorId && x.type === "regular" && (x.childId ?? x.bookerId) === learner && !x.status.startsWith("cancelled"))) {
+    return "You've already booked lessons with this tutor.";
+  }
+  if (openDispute) return "There's an open problem report on this lesson: our team will sort it out first.";
+  return null;
+}
