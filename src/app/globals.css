@@ -718,3 +718,125 @@ h2,
   --shadow-xl: 0 30px 60px -24px rgb(0 0 0 / 0.8), 0 0 0 1px var(--color-line);
   --shadow-2xl: 0 40px 80px -28px rgb(0 0 0 / 0.85), 0 0 0 1px var(--color-line);
 }
+
+/* ─── Admin panel (white) ──────────────────────────────────────────────────────
+   /admin is always white with an admin layout: a dark menu on the left (.admin-sidebar), rounded cards with
+   a soft shadow and sans headings. `.admin-ui` is put on <html> on /admin pages (the head script, and
+   AdminTheme on client navigation); `.dark` is never set there. Only tokens and the global square-corner /
+   serif-headline rules change, so every admin page keeps its content. */
+.admin-ui {
+  color-scheme: light;
+
+  --color-grad-from: #f3f4f6;
+  --color-grad-via: #f1f2f4;
+  --color-grad-to: #eceef1;
+
+  --color-page: #ffffff;
+  --color-surface: #ffffff;
+  --color-canvas: #f6f7f9;
+  --color-sunken: #eef0f3;
+
+  --color-ink: #111827;
+  --color-ink-2: #374151;
+  --color-muted: #6b7280;
+  --color-subtle: #9ca3af;
+  --color-ink-soft: #111827;
+
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+
+  --color-on-ink: #ffffff;
+  --color-night: #111827;
+  --color-marker: rgb(217 72 15 / 0.18);
+
+  --color-brand: #d9480f;
+  --color-brand-hover: #c2410c;
+  --color-brand-press: #a8380b;
+  --color-brand-soft: rgb(217 72 15 / 0.1);
+  --color-brand-50: rgb(217 72 15 / 0.06);
+  --color-brand-deep: #111827;
+  --color-brand-glow: rgb(217 72 15 / 0.25);
+  --color-on-brand: #ffffff;
+
+  --color-cta: #111827;
+  --color-cta-hover: #1f2937;
+  --color-cta-press: #000000;
+  --color-on-cta: #ffffff;
+  --color-cta-soft: rgb(17 24 39 / 0.06);
+  --color-cta-50: rgb(17 24 39 / 0.04);
+  --color-cta-ink: #d9480f;
+
+  --color-navy: #111827;
+  --color-navy-hover: #1f2937;
+  --color-navy-press: #000000;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 18px;
+
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(16 24 40 / 0.08), 0 1px 2px rgb(16 24 40 / 0.04);
+  --shadow-md: 0 4px 10px -2px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.04);
+  --shadow-lg: 0 12px 24px -8px rgb(16 24 40 / 0.14);
+  --shadow-xl: 0 20px 40px -12px rgb(16 24 40 / 0.18), 0 0 0 1px var(--color-line);
+  --shadow-2xl: 0 28px 56px -16px rgb(16 24 40 / 0.22), 0 0 0 1px var(--color-line);
+
+  --glass-bg: rgb(255 255 255 / 0.86);
+  --glass-line: rgb(17 24 39 / 0.08);
+  --grid-line: rgb(17 24 39 / 0.05);
+  --grid-dot: rgb(17 24 39 / 0.12);
+}
+/* Pills, avatars and dots are round again in the admin panel. */
+.admin-ui .rounded-full {
+  border-radius: calc(infinity * 1px);
+}
+.admin-ui .rounded-t-full {
+  border-top-left-radius: calc(infinity * 1px);
+  border-top-right-radius: calc(infinity * 1px);
+}
+.admin-ui .rounded-b-full {
+  border-bottom-left-radius: calc(infinity * 1px);
+  border-bottom-right-radius: calc(infinity * 1px);
+}
+/* Admin headings in the sans, like a dashboard (the site's serif headline rule is above). */
+.admin-ui h1,
+.admin-ui h2,
+.admin-ui .font-heading,
+.admin-ui .display {
+  font-family: var(--font-sans) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
+}
+.admin-ui main h1 {
+  font-size: 1.5rem !important;
+  line-height: 2rem !important;
+}
+/* The left menu: dark, with light text. Tokens only, so the menu's own markup stays shared. */
+.admin-sidebar {
+  --color-page: #111827;
+  --color-surface: #111827;
+  --color-canvas: rgb(255 255 255 / 0.07);
+  --color-sunken: rgb(255 255 255 / 0.1);
+  --color-ink: #ffffff;
+  --color-ink-2: #c9d0da;
+  --color-muted: #8a94a6;
+  --color-subtle: #6b7280;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.16);
+  --color-on-ink: #111827;
+  color-scheme: dark;
+  background-color: #111827;
+  color: var(--color-ink);
+}
+/* Admin: a notice in the corner never stops a click on the button or switch under it (it stays visible for a
+   few seconds and stacks); only its own buttons (×, an action) take clicks. */
+.admin-ui [data-toasts] > * {
+  pointer-events: none;
+}
+.admin-ui [data-toasts] button {
+  pointer-events: auto;
+}

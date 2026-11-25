@@ -9,7 +9,9 @@ export const THEME_KEY = "theme";
 const EVENT = "tutorlink:theme";
 
 function apply(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
+  // The admin panel stays white (AdminTheme); the choice applies again when leaving it.
+  const root = document.documentElement;
+  root.classList.toggle("dark", theme === "dark" && !root.classList.contains("admin-ui"));
 }
 
 function read(): Theme {

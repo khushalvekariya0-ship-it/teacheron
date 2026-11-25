@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { SearchTrigger } from "@/components/layout/CommandPalette";
-import { Bell, ChevronsUpDown, LogOut, Menu, Search, Globe, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Bell, ChevronRight, ChevronsUpDown, LogOut, Menu, Search, Globe, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
 import { DarkModeToggle } from "@/components/ui/DarkModeToggle";
@@ -102,7 +102,7 @@ function useSidebarCollapsed(): [boolean, () => void] {
   return [collapsed, toggle];
 }
 
-function NavList({ sections, counts, onNavigate, collapsed = false }: { sections: NavSection[]; counts: Map<string, number>; onNavigate?: () => void; collapsed?: boolean }) {
+function NavList({ sections, counts, onNavigate, collapsed = false, admin = false }: { sections: NavSection[]; counts: Map<string, number>; onNavigate?: () => void; collapsed?: boolean; admin?: boolean }) {
   const pathname = usePathname();
   const unreadMsgs = useUnreadMessages();
   const unreadNotes = useUnreadNotifications();
@@ -128,10 +128,13 @@ function NavList({ sections, counts, onNavigate, collapsed = false }: { sections
                       active ? "font-semibold text-ink" : "font-medium text-ink-2 hover:bg-canvas hover:text-ink",
                     )}
                   >
-                    {active && (
-                      <motion.span layoutId="dash-nav-active" className="absolute inset-0 rounded-lg bg-ink/[0.06] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-gradient" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />
-                    )}
-                    <item.icon className={cn("relative size-[18px] shrink-0", active ? "text-brand [stroke-width:2.25]" : "text-ink-2")} />
+                    {active &&
+                      (admin ? (
+                        <motion.span layoutId="admin-nav-active" className="absolute inset-0 rounded-lg bg-brand shadow-sm" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />
+                      ) : (
+                        <motion.span layoutId="dash-nav-active" className="absolute inset-0 rounded-lg bg-ink/[0.06] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-gradient" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />
+                      ))}
+                    <item.icon className={cn("relative size-[18px] shrink-0", active ? (admin ? "text-white [stroke-width:2.25]" : "text-brand [stroke-width:2.25]") : "text-ink-2")} />
                     <span className={cn("relative flex-1 truncate", collapsed && "sr-only")}>
                       {item.label}
                       {count > 0 && <span className="sr-only">, {count} new</span>}
@@ -140,7 +143,7 @@ function NavList({ sections, counts, onNavigate, collapsed = false }: { sections
                       (collapsed ? (
                         <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-ink ring-2 ring-surface" />
                       ) : (
-                        <span className="relative rounded-full bg-brand px-1.5 py-px text-[11px] font-semibold tabular-nums text-on-brand">{count}</span>
+                        <span className={cn("relative rounded-full px-1.5 py-px text-[11px] font-semibold tabular-nums", admin && active ? "bg-white text-brand" : "bg-brand text-on-brand")}>{count}</span>
                       ))}
                   </Link>
                 </li>
@@ -288,10 +291,10 @@ function TopSearch({ role }: { role: Role }) {
   );
 }
 
-function ShellSkeleton() {
+function ShellSkeleton({ admin = false }: { admin?: boolean }) {
   return (
     <div className="flex min-h-dvh bg-page">
-      <div className="hidden w-[248px] shrink-0 border-r border-line p-4 lg:block">
+      <div className={cn("hidden w-[248px] shrink-0 border-r border-line p-4 lg:block", admin && "admin-sidebar")}>
         <Skeleton className="h-7 w-32" />
         <div className="mt-8 space-y-2">
           {Array.from({ length: 9 }).map((_, i) => (
@@ -323,7 +326,7 @@ export function DashboardShell({ area, children }: { area: "app" | "admin"; chil
   // Kept between renders: the sidebar counts and "opening an item reads it" compare items.
   const sections = React.useMemo(() => (user ? sectionsFor(user, area) : []), [user, area]);
 
-  if (!hydrated) return <ShellSkeleton />;
+  if (!hydrated) return <ShellSkeleton admin={area === "admin"} />;
 
   if (!user) {
     return (
@@ -405,12 +408,20 @@ function ShellLayout({
 }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const counts = useSectionBadges(sections, user, pathname);
+  const admin = area === "admin";
+  // The admin menu is long: the open page's item is scrolled into view (it can sit below the fold).
+  React.useEffect(() => {
+    if (!admin) return;
+    document.querySelector<HTMLElement>('aside [aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [admin, pathname, collapsed]);
+  // The admin top bar names the open page ("Admin / Users").
+  const current = admin ? sections.flatMap((x) => x.items).filter((i) => isActive(pathname, i.href)).sort((a, b) => b.href.length - a.href.length)[0] : undefined;
   const unreadMsgs = useUnreadMessages();
   const anyNew = unreadMsgs > 0 || [...counts.values()].some((n) => n > 0);
   return (
     <div className="min-h-dvh bg-page">
       {/* Desktop sidebar: white with a hairline edge, collapsible to an icon rail */}
-      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-page transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex", collapsed ? "w-[76px]" : "w-[248px]")}>
+      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-page transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex", collapsed ? "w-[76px]" : "w-[248px]", admin && "admin-sidebar")}>
         <div className={cn("flex h-16 shrink-0 items-center gap-2 border-b border-line", collapsed ? "justify-center px-2" : "justify-between pl-5 pr-3")}>
           <span className="flex items-center gap-2">
             <Logo compact={collapsed} href={area === "admin" ? "/admin" : "/dashboard"} />
@@ -428,7 +439,7 @@ function ShellLayout({
           </button>
         )}
         <div className={cn("scrollbar-none flex-1 overflow-y-auto pb-6 pt-4", collapsed ? "px-2" : "px-3")}>
-          <NavList sections={sections} counts={counts} collapsed={collapsed} />
+          <NavList sections={sections} counts={counts} collapsed={collapsed} admin={admin} />
         </div>
         {collapsed ? (
           <div className="flex justify-center border-t border-line p-3">
@@ -441,9 +452,9 @@ function ShellLayout({
 
       {/* Mobile nav */}
       <Sheet open={mobileNav} onOpenChange={setMobileNav}>
-        <SheetContent side="left" title={area === "admin" ? "Admin" : "Dashboard"} footer={<AccountMenu user={user} />}>
+        <SheetContent side="left" title={area === "admin" ? "Admin" : "Dashboard"} footer={<AccountMenu user={user} />} className={admin ? "admin-sidebar" : undefined}>
           <div className="px-3 py-4">
-            <NavList sections={sections} counts={counts} onNavigate={() => setMobileNav(false)} />
+            <NavList sections={sections} counts={counts} onNavigate={() => setMobileNav(false)} admin={admin} />
           </div>
         </SheetContent>
       </Sheet>
@@ -457,9 +468,21 @@ function ShellLayout({
           <span className="lg:hidden">
             <Logo compact href={area === "admin" ? "/admin" : "/dashboard"} />
           </span>
-          <TopSearch role={user.role} />
+          {admin && (
+            <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 text-[14px] lg:flex" data-admin-breadcrumb="">
+              <Link href="/admin" className="text-muted transition-colors hover:text-ink">
+                Admin
+              </Link>
+              <ChevronRight className="size-3.5 shrink-0 text-subtle" aria-hidden />
+              <span className="truncate font-semibold text-ink" aria-current="page">
+                {current?.label ?? "Overview"}
+              </span>
+            </nav>
+          )}
+          {!admin && <TopSearch role={user.role} />}
           <SearchTrigger compact className="md:hidden" />
           <div className="ml-auto flex items-center gap-2">
+            {admin && <TopSearch role={user.role} />}
             <SearchTrigger className="hidden md:inline-flex" />
             {user.role !== "admin" && user.role !== "support" && (
               <Button asChild variant="secondary" size="sm" className="hidden sm:inline-flex">
@@ -467,14 +490,15 @@ function ShellLayout({
               </Button>
             )}
             <WalletButton className="hidden sm:inline-flex" />
-            <DarkModeToggle className="size-9" />
+            {/* The admin panel is always white: no theme switch there. */}
+            {!admin && <DarkModeToggle className="size-9" />}
             <NotificationsPopover user={user} />
-            <div className="lg:hidden">
+            <div className={admin ? undefined : "lg:hidden"}>
               <AccountMenu user={user} compact />
             </div>
           </div>
         </header>
-        <main id="main" className="relative mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main id="main" className={cn("relative mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8", admin ? "max-w-[1400px]" : "max-w-[1240px]")}>
           <motion.div key={pathname} className="stagger-children" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
             {children}
           </motion.div>
