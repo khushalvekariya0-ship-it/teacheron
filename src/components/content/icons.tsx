@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, Brain, Calculator, Code, FlaskConical, Landmark, Languages, Music, PenLine, Target, type LucideIcon } from "lucide-react";
+import { Blocks, BookOpen, Brain, BriefcaseBusiness, Calculator, Code, Cog, FlaskConical, Landmark, Languages, Music, PenLine, Stethoscope, Target, type LucideIcon } from "lucide-react";
 
 /** Same category marks as the homepage subject grid. */
 const CATEGORY_ICON: Record<string, LucideIcon> = {
@@ -12,6 +12,10 @@ const CATEGORY_ICON: Record<string, LucideIcon> = {
   "social-studies": Landmark,
   arts: Music,
   "learning-support": Brain,
+  business: BriefcaseBusiness,
+  engineering: Cog,
+  health: Stethoscope,
+  "early-years": Blocks,
 };
 
 export function CategoryIcon({ slug, className }: { slug: string; className?: string }) {

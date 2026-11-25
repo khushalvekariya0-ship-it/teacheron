@@ -24,7 +24,8 @@ import { countryName, formatPlace } from "@/lib/location";
 import { uploadFile } from "@/lib/upload";
 import { postalLabel, postalRequired } from "@/lib/postal";
 import { useFlag, usePricing } from "@/lib/store/hooks";
-import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
+import { LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORIES, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
+import { LanguagePicker } from "@/components/domain/LanguagePicker";
 import { timeZoneLabel } from "@/lib/timezones";
 import { FREE_PLAN_ID, offeredPlans, starterPlan } from "@/lib/data/platform";
 import { applyBps, sessionPrice } from "@/lib/format";
@@ -699,7 +700,7 @@ export function ProfileStep({
         control={control}
         render={({ field }) => (
           <GroupField legend="Languages you teach in" required error={errors.languages?.message}>
-            <ChipGroup size="sm" label="Languages you teach in" options={LANGUAGES.map((l) => ({ value: l, label: l }))} value={field.value} onChange={field.onChange} />
+            <LanguagePicker label="Languages you teach in" value={field.value} onChange={field.onChange} />
           </GroupField>
         )}
       />

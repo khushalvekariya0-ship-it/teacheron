@@ -81,9 +81,24 @@ function FilterPill({ label, active, children, panelClassName }: { label: string
 
 /** A single-choice list with an "any" option and a check on the current choice. */
 function OptionList({ options, value, anyLabel, onSelect }: { options: Option[]; value: string | undefined; anyLabel: string; onSelect: (v: string | undefined) => void }) {
+  // Long lists (languages) get a search box.
+  const [q, setQ] = React.useState("");
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? options.filter((o) => String(o.label).toLowerCase().includes(needle)) : options;
   return (
+    <>
+      {options.length > 12 && (
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search…"
+          aria-label={`Search: ${anyLabel}`}
+          autoFocus
+          className="mb-1 h-9 w-full rounded-md border border-line bg-canvas px-3 text-sm outline-none focus:border-brand"
+        />
+      )}
     <ul className="max-h-80 overflow-y-auto" data-lenis-prevent>
-      {[{ value: "", label: anyLabel }, ...options].map((o) => {
+      {[...(needle ? [] : [{ value: "", label: anyLabel }]), ...shown].map((o) => {
         const selected = (value ?? "") === o.value;
         return (
           <li key={o.value || "__any"}>
@@ -99,7 +114,9 @@ function OptionList({ options, value, anyLabel, onSelect }: { options: Option[];
           </li>
         );
       })}
+      {needle && !shown.length && <li className="px-3 py-2 text-[14px] text-muted">No match</li>}
     </ul>
+    </>
   );
 }
 

@@ -6,7 +6,7 @@ import { ImageUp, Monitor, Users } from "lucide-react";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { imageFileToDataUrl } from "@/lib/image";
-import { GRADES, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
+import { GRADES, LEARNING_SUPPORT, TIMES_OF_DAY, TUTOR_CATEGORIES } from "@/lib/data/catalog";
 import { tzAbbrev } from "@/lib/format";
 import { currencySymbol, formatMoney, rateLimits, budgetLimits } from "@/lib/money";
 import { useViewerCurrency } from "@/lib/store/hooks";
@@ -22,6 +22,7 @@ import {
   type BasicValues, type BudgetValues, type LearningValues, type PreferencesValues, type QuickLearnValues, type QuickWhenValues, type ScheduleValues,
 } from "./schema";
 import { LocationFields } from "@/components/domain/LocationFields";
+import { LanguagePicker } from "@/components/domain/LanguagePicker";
 import { postalLabel, postalPlaceholder, postalRequired } from "@/lib/postal";
 
 /*
@@ -366,7 +367,7 @@ export function PreferencesFields({ form }: { form: UseFormReturn<PreferencesVal
         control={control}
         render={({ field }) => (
           <GroupField legend="Languages the tutor speaks" optional hint="Leave empty if any language is fine." error={errors.tutorLanguages?.message}>
-            <ChipGroup size="sm" label="Tutor languages" options={LANGUAGES.map((l) => ({ value: l, label: l }))} value={field.value} onChange={field.onChange} />
+            <LanguagePicker label="Tutor languages" value={field.value} onChange={field.onChange} />
           </GroupField>
         )}
       />

@@ -182,7 +182,7 @@ export function AnswerField({ name, control, errors, idPrefix = "cg", compact }:
     case "language":
       return (
         <Field label="Tutor speaks" id={id} optional={!compact} hint="Only languages other than English are scored.">
-          <Controller control={control} name="language" render={({ field }) => <Select id={id} {...field} placeholder="No preference" options={LANGUAGES.map((l) => ({ value: l, label: l }))} />} />
+          <Controller control={control} name="language" render={({ field }) => <Select id={id} {...field} placeholder="No preference" searchable searchLabel="Search languages" options={LANGUAGES.map((l) => ({ value: l, label: l }))} />} />
         </Field>
       );
     case "support":

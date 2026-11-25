@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, FileUp, Plus, UserRoundPlus, X, FileText } from "lucide-react";
+import { ArrowRight, FileUp, Plus, Search, UserRoundPlus, X, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -153,13 +153,40 @@ export function TagInput({
 
 /* ─── Subjects grouped by category ──────────────────────────────────────────── */
 
+/** Areas with more subjects than this show the first ones and "Show all" (chosen ones always show). */
+const SUBJECTS_SHOWN = 12;
+
 export function SubjectPicker({ value, onChange, max = 10 }: { value: string[]; onChange: (next: string[]) => void; max?: number }) {
   const catalog = useCatalog();
+  const [q, setQ] = React.useState("");
+  const [opened, setOpened] = React.useState<string[]>([]);
+  const needle = q.trim().toLowerCase();
+  const areas = catalog.categories
+    .map((cat) => {
+      const all = catalog.subjects.filter((s) => s.category === cat.slug);
+      const matching = needle ? all.filter((s) => s.name.toLowerCase().includes(needle) || cat.name.toLowerCase().includes(needle)) : all;
+      return { cat, all, matching };
+    })
+    .filter((x) => x.matching.length > 0);
   return (
     <div className="space-y-5">
-      {catalog.categories.map((cat) => {
-        const options = catalog.subjects.filter((s) => s.category === cat.slug).map((s) => ({ value: s.slug, label: s.name }));
-        const picked = value.filter((v) => options.some((o) => o.value === v)).length;
+      <Input
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        // Enter here filters; it must not submit the form around it.
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.preventDefault();
+        }}
+        placeholder="Search subjects, for example IELTS, Hindi or Accounting"
+        aria-label="Search subjects"
+        icon={<Search />}
+      />
+      {areas.length === 0 && <p className="text-[13.5px] text-muted">No subject matches “{q.trim()}”.</p>}
+      {areas.map(({ cat, all, matching }) => {
+        const open = !!needle || opened.includes(cat.slug) || matching.length <= SUBJECTS_SHOWN + 2;
+        const shown = open ? matching : [...matching.slice(0, SUBJECTS_SHOWN), ...matching.slice(SUBJECTS_SHOWN).filter((s) => value.includes(s.slug))];
+        const picked = value.filter((v) => all.some((o) => o.slug === v)).length;
         return (
           <div key={cat.slug}>
             <p className="mb-2 flex items-center gap-2 text-[13px] font-medium text-ink">
@@ -169,13 +196,23 @@ export function SubjectPicker({ value, onChange, max = 10 }: { value: string[]; 
             <ChipGroup
               size="sm"
               label={cat.name}
-              options={options}
+              options={shown.map((s) => ({ value: s.slug, label: s.name }))}
               value={value}
               onChange={(next) => {
                 if (next.length > max && next.length > value.length) return;
                 onChange(next);
               }}
             />
+            {!open && (
+              <button
+                type="button"
+                onClick={() => setOpened((o) => [...o, cat.slug])}
+                className="mt-2 text-[13px] font-medium text-ink underline underline-offset-2 hover:text-brand"
+                data-show-all={cat.slug}
+              >
+                Show all {matching.length} in {cat.name}
+              </button>
+            )}
           </div>
         );
       })}

@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils";
 import { imageFileToDataUrl } from "@/lib/image";
 import { useApp } from "@/lib/store";
 import { useFlag, useReviews } from "@/lib/store/hooks";
-import { LANGUAGES, LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
+import { LEARNING_SUPPORT, LEVELS, LEVEL_LABEL, MODE_LABEL, TUTOR_CATEGORY_LABEL, subjectName } from "@/lib/data/catalog";
+import { LanguagePicker } from "@/components/domain/LanguagePicker";
 import { applyBps, formatDuration, sessionPrice } from "@/lib/format";
 import { CURRENCIES, CURRENCY_CODES, asCurrency, currencyForCountry, formatMoney, rateLimits, rateProblem, toMinor, type Currency } from "@/lib/money";
 import { countryName } from "@/lib/location";
@@ -354,7 +355,7 @@ function LanguagesSection({ tutor }: { tutor: Tutor }) {
             control={control}
             render={({ field }) => (
               <GroupField legend="Languages you teach in" required error={errors.languages?.message}>
-                <ChipGroup size="sm" label="Languages you teach in" options={LANGUAGES.map((l) => ({ value: l, label: l }))} value={field.value} onChange={field.onChange} />
+                <LanguagePicker label="Languages you teach in" value={field.value} onChange={field.onChange} />
               </GroupField>
             )}
           />

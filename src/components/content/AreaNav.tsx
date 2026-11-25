@@ -26,7 +26,8 @@ export function AreaNav({ areas, icons = true, label = "Subject areas" }: { area
   return (
     <nav aria-label={label} className="sticky top-16 z-30 glass border-b border-line">
       <div className="container-page">
-        <ul className="scrollbar-none -mx-1 flex gap-1 overflow-x-auto px-1 py-2.5">
+        {/* Phones swipe sideways; wider screens wrap onto a second line so every area is in view. */}
+        <ul className="scrollbar-none -mx-1 flex gap-1 overflow-x-auto px-1 py-2.5 lg:flex-wrap lg:overflow-visible">
           {areas.map((a) => {
             const on = a.slug === active;
             return (
@@ -39,7 +40,7 @@ export function AreaNav({ areas, icons = true, label = "Subject areas" }: { area
                     on ? "bg-ink text-on-ink" : "text-ink-2 hover:bg-sunken hover:text-ink",
                   )}
                 >
-                  {/* Icon only on the current area, so all nine areas fit on one line */}
+                  {/* Icon only on the current area, to keep the bar compact */}
                   {on && icons && <CategoryIcon slug={a.slug} className="size-4" />}
                   {a.name}
                 </a>

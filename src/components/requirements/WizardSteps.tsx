@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { FileText, Info, Monitor, Paperclip, Pencil, ShieldCheck, Shuffle, Upload, UserRound, Users, X } from "lucide-react";
 import type { Child, Grade, Role } from "@/lib/types";
-import { GRADES, GRADE_LABEL, LANGUAGES, LEARNING_SUPPORT, TIMES_OF_DAY, subjectName } from "@/lib/data/catalog";
+import { GRADES, GRADE_LABEL, LEARNING_SUPPORT, TIMES_OF_DAY, subjectName } from "@/lib/data/catalog";
+import { LanguagePicker } from "@/components/domain/LanguagePicker";
 import { currencySymbol, formatMoney, fromDollarSetting, type Currency } from "@/lib/money";
 import { useListedTutors, useViewerCurrency } from "@/lib/store/hooks";
 import { Button } from "@/components/ui/Button";
@@ -525,7 +526,7 @@ export function StepBudget() {
       </div>
 
       <GroupField legend="Lesson language" error={errors.languages?.message} hint="Tutors who list a language other than English score higher for your requirement.">
-        <Controller control={control} name="languages" render={({ field }) => <ChipGroup label="Lesson language" size="sm" value={field.value} onChange={field.onChange} options={LANGUAGES.map((l) => ({ value: l, label: l }))} />} />
+        <Controller control={control} name="languages" render={({ field }) => <LanguagePicker label="Lesson language" value={field.value} onChange={field.onChange} />} />
       </GroupField>
 
       <Field label="Tutor preferences" id="req-prefs" optional error={errors.preferences?.message} hint="e.g. certified teacher, Orton-Gillingham training, patient with younger kids.">
