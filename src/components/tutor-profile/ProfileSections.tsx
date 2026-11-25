@@ -40,14 +40,14 @@ export function AboutSection({ tutor }: { tutor: Tutor }) {
         </Reveal>
       )}
       <Reveal y={10} amount={0.1}>
-        <p className="max-w-[68ch] whitespace-pre-line text-[15px] leading-relaxed text-ink-2 sm:text-base">{tutor.bio}</p>
+        <p className="max-w-[68ch] whitespace-pre-line text-[15px] leading-relaxed text-ink-2 [overflow-wrap:anywhere] sm:text-base">{tutor.bio}</p>
       </Reveal>
       <Reveal y={10} delay={0.05} amount={0.1}>
         <div data-spotlight className="mt-8 rounded-xl border border-line bg-canvas p-5 sm:p-6">
           <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
             <Sparkles className="size-4 text-navy" aria-hidden /> Teaching approach
           </h3>
-          <p className="mt-2 max-w-[68ch] text-[15px] leading-relaxed text-ink-2">{tutor.approach}</p>
+          <p className="mt-2 max-w-[68ch] text-[15px] leading-relaxed text-ink-2 [overflow-wrap:anywhere]">{tutor.approach}</p>
         </div>
       </Reveal>
       {tutor.specialties.length > 0 && (

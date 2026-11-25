@@ -225,10 +225,10 @@ function Profile({ tutor }: { tutor: Tutor }) {
           <div className="min-w-0 lg:col-start-1 lg:row-start-2">
             <SectionNav reviewCount={tutor.reviewCount} />
             <AboutSection tutor={tutor} />
-            <SubjectsSection tutor={tutor} />
-            <ExperienceSection tutor={tutor} />
-            <AvailabilitySection tutor={tutor} onBook={scrollToCalendar} />
             <ReviewsSection tutor={tutor} />
+            <AvailabilitySection tutor={tutor} onBook={scrollToCalendar} />
+            <ExperienceSection tutor={tutor} />
+            <SubjectsSection tutor={tutor} />
             <TrustSection tutor={tutor} />
           </div>
         </div>

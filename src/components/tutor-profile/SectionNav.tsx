@@ -6,10 +6,10 @@ import { motion } from "@/components/motion";
 
 export const PROFILE_SECTIONS = [
   { id: "about", label: "About" },
-  { id: "subjects", label: "Subjects" },
-  { id: "experience", label: "Experience" },
-  { id: "availability", label: "Availability" },
   { id: "reviews", label: "Reviews" },
+  { id: "availability", label: "Availability" },
+  { id: "experience", label: "Experience" },
+  { id: "subjects", label: "Subjects" },
   { id: "trust", label: "Trust" },
 ] as const;
 

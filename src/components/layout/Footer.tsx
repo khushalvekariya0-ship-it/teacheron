@@ -133,13 +133,13 @@ export function Footer() {
         </div>
       </div>
 
-      {/* The name, written on a dark wall at the very bottom. Move the pointer to light it; left alone, the light roams. */}
+      {/* The name, written on a light wall at the very bottom. Move the pointer to light it; left alone, the light roams. */}
       <FlashlightTextReveal
         text="TUTORLINK"
-        textColor="#eee9dd"
-        fontFamily="var(--font-heading)"
+        textColor="#18181b"
+        fontFamily="var(--font-sans)"
         fontSize="clamp(3.4rem, 15vw, 15rem)"
-        colors={["#15140f", "#3b372e"]}
+        colors={["#f6f6f7", "#ececef"]}
         ghost={0.06}
         radius={0.42}
         height="clamp(16rem, 36vw, 30rem)"
