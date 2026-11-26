@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, BookOpen, GraduationCap, KeyRound, Mail, MapPin, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BookOpen, GraduationCap, KeyRound, Mail, ShieldCheck, Users } from "lucide-react";
 import { motion } from "@/components/motion";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
@@ -16,27 +16,38 @@ import { InlineAlert, UnauthorizedState } from "@/components/ui/States";
 import { toast } from "@/components/ui/Toast";
 import { useApp } from "@/lib/store";
 import { useHydrated, useSession } from "@/lib/store/hooks";
-import { COUNTRIES, DEFAULT_COUNTRY, guessCountry, isCountryCode } from "@/lib/location";
-import { isPostalCode, POSTAL_MAX_LENGTH, postalError, postalLabel, postalNumeric, postalPlaceholder, postalRequired } from "@/lib/postal";
+import { guessCountry } from "@/lib/location";
+import { GRADES } from "@/lib/data/catalog";
 import { destinationFor, safeNext } from "./authUtils";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
+const GRADE_OPTIONS = GRADES.map((g) => ({ value: g.value, label: g.label }));
 const emailSchema = z.string().trim().min(1, "Enter your email address").email("Enter a valid email address");
 
+/** The same short questions as the email sign-up: a student's age and class, a tutor's years of experience. */
 const schema = z
   .object({
     role: z.enum(["student", "parent", "tutor"]),
     ageBand: z.enum(["18+", "13-17", "under13"]).optional(),
     parentEmail: z.string().trim().optional(),
-    country: z.string().refine((v) => isCountryCode(v), "Choose your country"),
-    zip: z.string().trim(),
+    grade: z.string().optional(),
+    experienceYears: z.number().or(z.nan()).optional(),
     terms: z.boolean().refine((v) => v, "Please accept the Terms of Service and Privacy Policy"),
   })
   .superRefine((v, ctx) => {
-    if (v.zip ? !isPostalCode(v.zip, v.country) : postalRequired(v.country)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zip"], message: postalError(v.country) });
+    if (v.role === "tutor") {
+      const y = v.experienceYears;
+      if (typeof y !== "number" || !Number.isInteger(y) || y < 0 || y > 60) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["experienceYears"], message: "Enter your years of experience (0 if you're new)" });
+      return;
+    }
     if (v.role !== "student") return;
-    if (!v.ageBand) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ageBand"], message: "Tell us your age range" });
+    if (!v.ageBand) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ageBand"], message: "Tell us your age range" });
+      return;
+    }
+    // Under 13: continuing removes this sign-in (the alert says so), so nothing else is asked.
+    if (v.ageBand === "under13") return;
+    if (!v.grade) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["grade"], message: "Choose your class or level" });
     if (v.ageBand === "13-17" && !emailSchema.safeParse(v.parentEmail ?? "").success) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["parentEmail"], message: "Enter your parent or guardian's email" });
   });
 type Values = z.input<typeof schema>;
@@ -178,7 +189,6 @@ function AddEmail() {
 function ChooseRole({ email, firstName }: { email: string; firstName: string }) {
   const router = useRouter();
   const params = useSearchParams();
-  const hydrated = useHydrated();
   const completeSignup = useApp((s) => s.completeSignup);
   const logout = useApp((s) => s.logout);
   const hint = params.get("role");
@@ -186,13 +196,10 @@ function ChooseRole({ email, firstName }: { email: string; firstName: string }) 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     mode: "onTouched",
-    defaultValues: { role: hint === "parent" || hint === "tutor" ? hint : "student", ageBand: undefined, parentEmail: "", country: DEFAULT_COUNTRY, zip: "", terms: false },
+    defaultValues: { role: hint === "parent" || hint === "tutor" ? hint : "student", ageBand: undefined, parentEmail: "", grade: "", experienceYears: undefined, terms: false },
   });
   const { errors, isSubmitting } = form.formState;
-  const [role, ageBand, country] = useWatch({ control: form.control, name: ["role", "ageBand", "country"] });
-  React.useEffect(() => {
-    if (hydrated && !form.getFieldState("country").isDirty) form.setValue("country", guessCountry());
-  }, [hydrated, form]);
+  const [role, ageBand] = useWatch({ control: form.control, name: ["role", "ageBand"] });
   const relay = /@privaterelay\.appleid\.com$/i.test(email);
 
   const onSubmit = form.handleSubmit(async (v) => {
@@ -201,8 +208,10 @@ function ChooseRole({ email, firstName }: { email: string; firstName: string }) 
       role: v.role,
       ageBand: v.role === "student" ? v.ageBand : undefined,
       parentEmail: v.role === "student" && v.ageBand === "13-17" ? v.parentEmail : undefined,
-      country: v.country,
-      zip: v.zip.trim() || undefined,
+      // Not asked: guessed from the browser, like the email sign-up (it can be changed later in Settings).
+      country: guessCountry(),
+      ...(v.role === "student" && v.ageBand !== "under13" && v.grade ? { grade: v.grade } : {}),
+      ...(v.role === "tutor" && typeof v.experienceYears === "number" && Number.isInteger(v.experienceYears) ? { experienceYears: v.experienceYears } : {}),
       terms: true,
       next: params.get("next") ?? undefined,
     });
@@ -260,23 +269,25 @@ function ChooseRole({ email, firstName }: { email: string; firstName: string }) 
                 Children under 13 can&apos;t have their own account. Continuing removes this sign-in; ask a parent to create a Parent account and add you as a child.
               </InlineAlert>
             )}
+            {ageBand !== "under13" && (
+              <Controller
+                control={form.control}
+                name="grade"
+                render={({ field }) => (
+                  <Field label="Your class or level" error={errors.grade?.message} id="welcome-grade">
+                    <Select id="welcome-grade" ref={field.ref} name={field.name} value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} placeholder="Choose your class" options={GRADE_OPTIONS} />
+                  </Field>
+                )}
+              />
+            )}
           </fieldset>
         )}
 
-        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]">
-          <Field label="Country" error={errors.country?.message} id="welcome-country">
-            <Controller
-              control={form.control}
-              name="country"
-              render={({ field }) => (
-                <Select id="welcome-country" options={COUNTRY_OPTIONS} autoComplete="country" value={field.value} onBlur={field.onBlur} onChange={(e) => { field.onChange(e.target.value); form.setValue("zip", ""); }} />
-              )}
-            />
+        {role === "tutor" && (
+          <Field label="Years of teaching experience" error={errors.experienceYears?.message} hint="0 if you're new to tutoring. You'll add the details in your tutor profile next." className="max-w-xs">
+            <Input type="number" inputMode="numeric" min={0} max={60} step={1} suffix={<span className="pr-1 text-sm">years</span>} {...form.register("experienceYears", { valueAsNumber: true })} />
           </Field>
-          <Field label={postalLabel(country)} optional={!postalRequired(country)} error={errors.zip?.message}>
-            <Input inputMode={postalNumeric(country) ? "numeric" : "text"} autoComplete="postal-code" maxLength={POSTAL_MAX_LENGTH} icon={<MapPin />} placeholder={postalPlaceholder(country)} {...form.register("zip")} />
-          </Field>
-        </div>
+        )}
 
         <div className="space-y-1.5">
           <Controller

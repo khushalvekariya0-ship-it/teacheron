@@ -91,7 +91,7 @@ const signUpSchema = z.object({
  * What the short sign-up asks beyond the account: a student's class or level goes into their learning profile and
  * a tutor's years of experience into their profile setup, so neither is asked again. Never fails the sign-up.
  */
-async function saveSignUpDetails(userId: string, input: z.infer<typeof signUpSchema>) {
+async function saveSignUpDetails(userId: string, input: { role: "student" | "parent" | "tutor"; grade?: string; experienceYears?: number }) {
   try {
     if (input.role === "student" && input.grade) {
       const profile = { ...emptyStudentProfile(userId), grade: input.grade, updatedAt: new Date().toISOString() };
@@ -563,6 +563,9 @@ export async function POST(request: Request, ctx: Ctx) {
             parentEmail: z.string().trim().max(200).optional(),
             country: z.string().max(2),
             zip: z.string().trim().max(12).optional(),
+            // The same short questions as the email sign-up: a student's class, a tutor's years of experience.
+            grade: z.string().refine((v) => GRADES.some((g) => g.value === v)).optional(),
+            experienceYears: z.number().int().min(0).max(60).optional(),
             timezone: zone,
             terms: z.literal(true),
           })
@@ -575,6 +578,7 @@ export async function POST(request: Request, ctx: Ctx) {
           if (r.deleted) await supabase.auth.signOut({ scope: "local" }).catch(() => {});
           return fail(r.error, 400, r.deleted ? { deleted: true } : undefined);
         }
+        await saveSignUpDetails(session.user.id, { role: r.role, grade: parsed.data.grade, experienceYears: parsed.data.experienceYears });
         let consent: { sent: boolean; error?: string } | undefined;
         if (r.teen) {
           const c = await sendConsentRequest(session.user.id, siteOrigin(request));

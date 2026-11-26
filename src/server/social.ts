@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient, User as AuthUser, UserIdentity } from "@supabase/supabase-js";
 import { SITE } from "@/lib/site";
 import { isCountryCode } from "@/lib/location";
-import { isPostalCode, postalError, postalRequired } from "@/lib/postal";
+import { isPostalCode, postalError } from "@/lib/postal";
 import { db } from "./db";
 import { CODE_MINUTES, codesThisHour, consumeCodeForUser, issueCode, MAX_CODE_TRIES } from "./email-codes";
 import { escapeHtml, sendEmail } from "./email";
@@ -205,7 +205,8 @@ export async function completeSignup(userId: string, c: SignupChoice): Promise<{
   if (teen && parentEmail === String(u.email).toLowerCase()) return { ok: false, error: "Use your parent or guardian's own email address." };
   if (!isCountryCode(c.country)) return { ok: false, error: "Choose your country." };
   const zip = (c.zip ?? "").trim();
-  if (zip ? !isPostalCode(zip, c.country) : postalRequired(c.country)) return { ok: false, error: postalError(c.country) };
+  // Like the email sign-up, no PIN/ZIP is asked here (tutors give it in their setup; students only for in-person lessons).
+  if (zip && !isPostalCode(zip, c.country)) return { ok: false, error: postalError(c.country) };
   const done = await db()`
     update public.users set role = ${c.role}, needs_role = false, country = ${c.country}, zip = ${zip || null},
       parental_consent = ${teen ? db().json({ parentEmail, status: "pending" }) : null}

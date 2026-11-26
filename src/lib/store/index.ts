@@ -114,7 +114,7 @@ interface ClientOnly {
   resendLinkCode(): Promise<Result>;
   cancelLink(): Promise<Result>;
   /** A first-time social account chooses its role (once). `next` is where its setup continues. */
-  completeSignup(input: { role: "student" | "parent" | "tutor"; ageBand?: "18+" | "13-17" | "under13"; parentEmail?: string; country: string; zip?: string; terms: true; next?: string }): Promise<Result<{ next: string; consent?: { sent: boolean; error?: string } }> & { deleted?: boolean }>;
+  completeSignup(input: { role: "student" | "parent" | "tutor"; ageBand?: "18+" | "13-17" | "under13"; parentEmail?: string; country: string; zip?: string; grade?: string; experienceYears?: number; terms: true; next?: string }): Promise<Result<{ next: string; consent?: { sent: boolean; error?: string } }> & { deleted?: boolean }>;
   /** A social account without an email adds one: a code goes to it, then finishAddEmail() confirms it. */
   startAddEmail(email: string): Promise<Result>;
   finishAddEmail(code: string): Promise<Result>;
