@@ -173,9 +173,7 @@ export function DetailsStep({
             {tutor.modes[0] === "online" ? "Online lesson" : `In person, within ~${tutor.serviceRadiusMiles} mi of ${tutor.city}, ${tutor.state}`}
           </p>
         )}
-        {draft.mode === "in_person" && (
-          <p className="mt-2 text-[13px] leading-snug text-muted">You&rsquo;ll agree on a meeting place with {tutor.firstName} in messages. Addresses are never shown publicly.</p>
-        )}
+        {draft.mode === "in_person" && <InPersonSafety tutorName={tutor.firstName} className="mt-3" />}
         {draft.mode === "online" && !onlineAllowed && (
           <p role="alert" className="mt-2 text-[13px] text-danger">
             Online lessons are temporarily unavailable. Choose in person or try again later.
@@ -274,6 +272,21 @@ function SummaryRow({ icon, label, children }: { icon: React.ReactNode; label: s
       <dt className="w-24 shrink-0 text-muted">{label}</dt>
       <dd className="min-w-0 flex-1 text-right font-medium text-ink">{children}</dd>
     </div>
+  );
+}
+
+/** Shown whenever an in-person lesson is being booked: on the details step and again before confirming. */
+function InPersonSafety({ tutorName, className }: { tutorName: string; className?: string }) {
+  return (
+    <InlineAlert className={className} tone="info" title="Staying safe at in-person lessons">
+      <ul className="mt-1 list-disc space-y-1 pl-4">
+        <li>Agree on the place with {tutorName} in TutorLink messages. Addresses are never shown publicly.</li>
+        <li>For the first lesson, meet at home with family around, or in a public place such as a library.</li>
+        <li>For students under 18, a parent or another adult should be nearby.</li>
+        <li>Pay only through TutorLink, never in cash or by phone.</li>
+        <li>If anything feels wrong, leave and report it from the lesson page.</li>
+      </ul>
+    </InlineAlert>
   );
 }
 
@@ -521,6 +534,8 @@ export function ReviewStep({
           </p>
         )}
       </section>
+
+      {draft.mode === "in_person" && <InPersonSafety tutorName={tutor.firstName} />}
 
       <section aria-labelledby="policy-heading">
         <h3 id="policy-heading" className="text-sm font-semibold text-ink">

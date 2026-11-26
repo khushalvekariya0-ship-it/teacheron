@@ -121,6 +121,7 @@ export function useDirectory(): Directory {
     const name = (id: string | undefined | null) => {
       if (!id) return "—";
       if (id === "system") return "System";
+      if (id === "guest") return "Visitor (not logged in)";
       const u = userById.get(id);
       if (u) return fullName(u);
       const t = tutorById.get(id);

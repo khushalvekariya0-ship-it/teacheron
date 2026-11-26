@@ -151,7 +151,7 @@ export async function POST(request: Request, ctx: Ctx) {
         const user = await ensureAccount(data.user);
         if (!user || user.status === "suspended") {
           await supabase.auth.signOut();
-          return fail(user ? "This account is suspended. Contact support for help." : "We couldn't find your account. Contact support for help.", 403);
+          return fail(user ? "This account is suspended. If you think this is a mistake, you can appeal." : "We couldn't find your account. Contact support for help.", 403);
         }
         const [lock] = await db()`select pending_link from public.users where id = ${user.id}`;
         if (lock?.pending_link) {
@@ -182,7 +182,7 @@ export async function POST(request: Request, ctx: Ctx) {
         const user = await accountById(u.user.id);
         if (!user || user.status === "suspended") {
           await supabase.auth.signOut();
-          return fail("This account is suspended. Contact support for help.", 403);
+          return fail("This account is suspended. If you think this is a mistake, you can appeal.", 403);
         }
         let recoveryCodes: string[] | undefined;
         if (enrolling) {
@@ -254,7 +254,7 @@ export async function POST(request: Request, ctx: Ctx) {
         const user = await accountById(u.user.id);
         if (!user || user.status === "suspended") {
           await supabase.auth.signOut();
-          return fail("This account is suspended. Contact support for help.", 403);
+          return fail("This account is suspended. If you think this is a mistake, you can appeal.", 403);
         }
         const admin = supabaseAdmin();
         const { data: listed, error: listError } = await admin.auth.admin.mfa.listFactors({ userId: user.id });

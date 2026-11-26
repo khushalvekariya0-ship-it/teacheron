@@ -83,6 +83,8 @@ export interface ChatModeration {
   unlockRequestNote?: string;
   /** Staff said no to the request; no new request until this pause ends. */
   unlockDeclinedAt?: ISODate;
+  /** When messages with abusive words were stopped (the last 24 hours); the third opens a report for staff. */
+  abuseAt?: ISODate[];
 }
 
 export type Permission =

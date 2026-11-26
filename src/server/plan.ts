@@ -126,6 +126,8 @@ export const PLANS: Record<ActionName, Plan> = {
     const [c] = await L.byId("conversations", [str(conversationId)]);
     await Promise.all([
       L.self(me), L.users([c?.user_id as string]), L.usersByTutor([c?.tutor_id as string]), recentFlags(L, me),
+      // An open automatic report about this person's abusive messages, so a second one isn't opened.
+      L.load("reports", "reporter_id = 'system' and target_type = 'user' and target_id = $1 and status in ('open', 'reviewing')", [me?.id ?? ""]),
       // The latest messages, so a number sent a piece at a time is noticed.
       L.load("messages", "id in (select id from public.messages where conversation_id = $1 order by created_at desc limit 45)", [str(conversationId) ?? ""]),
     ]);

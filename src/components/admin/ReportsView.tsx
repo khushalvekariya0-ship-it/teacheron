@@ -114,6 +114,8 @@ function useTargetSummary() {
           return t ? { text: `${fullName(t)} · tutor profile`, missing: false } : { text: `Tutor ${r.targetId} — no longer exists`, missing: true };
         }
         case "user": {
+          // A visitor's report that didn't name anyone (the details say who).
+          if (r.targetId === "unspecified") return { text: "Not named: see the details", missing: false };
           const u = dir.userById.get(r.targetId);
           return u ? { text: `${fullName(u)} · ${ROLE_LABEL[u.role]}`, missing: false } : { text: `Account ${r.targetId} — no longer exists`, missing: true };
         }

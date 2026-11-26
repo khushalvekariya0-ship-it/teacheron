@@ -26,6 +26,8 @@ import { GuestJoin } from "./live/GuestJoin";
 import { LiveClassroom, type ClassChat } from "./live/LiveClassroom";
 import { VideoStage } from "./VideoStage";
 import { Whiteboard } from "./Whiteboard";
+import { toast } from "@/components/ui/Toast";
+import { honestyReminder } from "@/lib/domain/respect";
 
 /**
  * The in-app classroom: video on the left, the whiteboard and chat on the right — one screen,
@@ -247,7 +249,11 @@ function useLessonChat(booking: Booking, me: User, actor: "booker" | "tutor" | "
       target = started.data.id;
     }
     const sent = await sendMessage(target, body);
-    return sent.ok ? null : sent.error;
+    if (!sent.ok) return sent.error;
+    // Asking for (or offering) graded work to be done: sent, with a friendly reminder.
+    const tip = honestyReminder(body, actor === "tutor");
+    if (tip) toast("A friendly reminder", { description: tip });
+    return null;
   };
   return {
     lines,

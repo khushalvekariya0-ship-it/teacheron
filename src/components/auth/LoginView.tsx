@@ -40,7 +40,7 @@ const LINK_ERRORS: Record<string, string> = {
   no_email: "Your account with that provider has no email address, so it can't be used here. Add an email there, or sign up with your email below.",
   account_exists: "This email already has a TutorLink account. Sign in with your email and password below.",
   busy: "Too many sign-in attempts. Please wait a few minutes and try again.",
-  suspended: "This account is suspended. Contact support for help.",
+  suspended: "This account is suspended. If you think this is a mistake, you can appeal.",
 };
 
 export function LoginView() {
@@ -54,7 +54,8 @@ export function LoginView() {
   const logout = useApp((s) => s.logout);
   const providers = useEnabledProviders();
   const linkError = LINK_ERRORS[params.get("error") ?? ""] ?? null;
-  const [error, setError] = React.useState<{ title: string; detail: string; unconfirmed?: string } | null>(null);
+  // `appeal`: the account is suspended, so the alert links to the appeal form (suspended accounts can't log in).
+  const [error, setError] = React.useState<{ title: string; detail: string; unconfirmed?: string; appeal?: boolean } | null>(null);
   const [redirecting, setRedirecting] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
   const mfaRequired = useApp((s) => s.mfaRequired);
@@ -76,7 +77,7 @@ export function LoginView() {
         setError({ title: "Confirm your email first", detail: "Open the link we emailed you when you signed up.", unconfirmed: values.email });
         return;
       }
-      setError({ title: res.error, detail: /incorrect/i.test(res.error) ? "Check for typos, or reset your password if you've forgotten it." : "" });
+      setError({ title: res.error, detail: /incorrect/i.test(res.error) ? "Check for typos, or reset your password if you've forgotten it." : "", appeal: /suspended/i.test(res.error) });
       form.resetField("password");
       form.setFocus("password");
       return;
@@ -177,7 +178,18 @@ export function LoginView() {
       </AnimatePresence>
 
       {linkError && !error && (
-        <InlineAlert className="mt-6" tone="warning" title={linkError} />
+        <InlineAlert
+          className="mt-6"
+          tone="warning"
+          title={linkError}
+          action={
+            params.get("error") === "suspended" ? (
+              <Button asChild size="sm" variant="secondary">
+                <Link href="/trust-safety#appeal">Appeal</Link>
+              </Button>
+            ) : undefined
+          }
+        />
       )}
       {params.get("reset") === "done" && !error && (
         <InlineAlert className="mt-6" tone="success" title="Your password was changed. Sign in with your new password." />
@@ -218,6 +230,10 @@ export function LoginView() {
                   error.unconfirmed ? (
                     <Button size="sm" variant="secondary" onClick={() => void resendLink(error.unconfirmed!)}>
                       Send it again
+                    </Button>
+                  ) : error.appeal ? (
+                    <Button asChild size="sm" variant="secondary">
+                      <Link href="/trust-safety#appeal">Appeal</Link>
                     </Button>
                   ) : undefined
                 }

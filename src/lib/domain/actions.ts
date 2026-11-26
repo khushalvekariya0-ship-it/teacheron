@@ -27,6 +27,7 @@ import { isPostalCode, postalError, postalLabel, postalRequired } from "@/lib/po
 import { isCountryCode } from "@/lib/location";
 import { DAY_MS, payoutBalances } from "@/lib/earnings";
 import { setContactRules, blockedMessage, contactIn, contactRules, fileNameContact, maskMatches, NAME_RULE, numberPiece, redactedExcerpt, scanContact, scanSplitMessages, splitAcrossReplies, type ContactKind } from "./contact";
+import { ABUSE_MESSAGE, abusiveIn } from "./respect";
 import {
   DEFAULT_NOTIFICATION_PREFS, emptyStudentProfile, fail, maskContactInfo, ok, resolveTutor,
   type BlogPostItem, type CreateBookingInput, type Data, type FaqItem, type Result, type TestimonialItem,
@@ -441,6 +442,26 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     set((s) => ({ users: s.users.map((x) => (x.id === u.id ? { ...x, chatModeration } : x)) }));
     notify(u.id, { type: "security", title: "Messaging paused for 1 hour", body: "Several of your messages included contact details. Keep conversations and payments on TutorLink.", href: "/dashboard/messages" });
     return true;
+  };
+  /**
+   * A message with abusive words was stopped. The times are kept on the account (last 24 hours); the third one
+   * opens a report for Trust & Safety to look at (one open at a time). Nothing is decided automatically.
+   */
+  const ABUSE_REPORT_AT = 3;
+  const ABUSE_REASON = "Abusive language in chat (automatic)";
+  const noteAbuse = (u: User, c: Conversation, text: string) => {
+    const dayAgo = Date.now() - 86_400_000;
+    const abuseAt = [...(u.chatModeration?.abuseAt ?? []).filter((t) => new Date(t).getTime() > dayAgo), nowIso()].slice(-20);
+    const chatModeration = { warnings: 0, ...u.chatModeration, abuseAt };
+    set((s) => ({ users: s.users.map((x) => (x.id === u.id ? { ...x, chatModeration } : x)) }));
+    if (abuseAt.length < ABUSE_REPORT_AT) return;
+    if (get().reports.some((x) => x.reporterId === "system" && x.targetType === "user" && x.targetId === u.id && x.reason === ABUSE_REASON && (x.status === "open" || x.status === "reviewing"))) return;
+    const rep: Report = {
+      id: uid("rpt"), reporterId: "system", targetType: "user", targetId: u.id, reason: ABUSE_REASON, status: "open", createdAt: nowIso(),
+      details: `${abuseAt.length} messages with abusive words were stopped in the last 24 hours (conversation ${c.id}). None of them reached the other person. The latest: "${maskContactInfo(text).text.slice(0, 300)}"`,
+    };
+    set((s) => ({ reports: [rep, ...s.reports] }));
+    notifyStaff("reports.moderate", { title: `Abusive language: ${u.firstName} ${u.lastName.charAt(0)}.`, body: `${abuseAt.length} messages with abusive words were stopped in 24 hours.`, href: `/admin/reports?id=${rep.id}` });
   };
   /** Whoever is on the other side of a conversation (an account id). */
   const counterpartOf = (c: Conversation, u: User) => (u.tutorId && u.tutorId === c.tutorId ? c.userId : (tutorUserId(c.tutorId) ?? c.tutorId));
@@ -1556,6 +1577,11 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
         const pause = nowPaused ? pausedMessage(get().users.find((x) => x.id === r.data.id) ?? r.data) : null;
         return fail(pause ? `${blockedMessage(split.kinds, "split")} ${pause}` : blockedMessage(split.kinds, "split"), "contact_blocked");
       }
+      // Rude or abusive words: the message isn't sent and the sender is asked to rephrase (see noteAbuse).
+      if (abusiveIn(trimmed).found) {
+        noteAbuse(r.data, c, trimmed);
+        return fail(ABUSE_MESSAGE, "abusive_language");
+      }
       const text = trimmed;
       const msg: Message = {
         id: uid("msg"), conversationId, senderId, body: text, createdAt: nowIso(),
@@ -2233,9 +2259,26 @@ export function createActions(get: () => DomainState, set: SetState, env: Domain
     setReportStatus(id, status) {
       const r = requireStaff(["admin", "support"], "reports.moderate", "You don't have permission to moderate reports.");
       if (!r.ok) return r;
-      if (!get().reports.some((x) => x.id === id)) return fail("Report not found.");
+      const before = get().reports.find((x) => x.id === id);
+      if (!before) return fail("Report not found.");
       set((s) => ({ reports: s.reports.map((x) => (x.id === id ? { ...x, status } : x)) }));
       audit("report.status", "report", id, { status });
+      // The person who reported hears the outcome, never details about the other person. Reports by the system,
+      // or by a visitor who wasn't logged in (answered by email), have no account to tell.
+      const closing = (status === "actioned" || status === "dismissed") && before.status !== status;
+      if (closing && before.reporterId !== "system" && before.reporterId !== "guest") {
+        const appeal = before.reason.startsWith("Appeal");
+        notify(before.reporterId, {
+          type: "security",
+          title: appeal ? "Your appeal was reviewed" : "Update on your report",
+          body: appeal
+            ? status === "actioned" ? "We looked at your appeal and your account is active again. Please keep to our community rules." : "We looked at your appeal again, and the decision stays."
+            : status === "actioned"
+              ? "Thank you for telling us. We looked into it and took action. For privacy, we can't share details about another person's account."
+              : "Thank you for telling us. We looked into it and didn't find a broken rule this time. If anything else happens, report it again.",
+          href: "/trust-safety#report",
+        });
+      }
       return ok(undefined);
     },
     moderateReview(id, status) {

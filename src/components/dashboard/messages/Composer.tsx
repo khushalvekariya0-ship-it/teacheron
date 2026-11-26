@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { uploadFile } from "@/lib/upload";
 import { formatSize } from "./shared";
 import { ContactHint } from "@/components/domain/ContactHint";
+import { toast } from "@/components/ui/Toast";
+import { useSession } from "@/lib/store/hooks";
+import { honestyReminder } from "@/lib/domain/respect";
 
 const MAX_HEIGHT = 168;
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.docx,.txt";
@@ -19,7 +22,9 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
   const send = useApp((s) => s.sendMessage);
   const [text, setText] = React.useState("");
   const [file, setFile] = React.useState<Picked | null>(null);
-  const [error, setError] = React.useState<{ message: string; blocked: boolean } | null>(null);
+  // `rude`: stopped for abusive words (no "ask for a review": that is for contact details).
+  const [error, setError] = React.useState<{ message: string; blocked: boolean; rude?: boolean } | null>(null);
+  const me = useSession();
   const appeal = useApp((s) => s.appealContactFlag);
   const [review, setReview] = React.useState<{ open: boolean; note: string; sent?: string; error?: string }>({ open: false, note: "" });
   const [step, setStep] = React.useState<"idle" | "uploading" | "checking" | "sending">("idle");
@@ -60,7 +65,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
     if (!res.ok) {
       // A file that showed contact details was deleted on the server; it has to be chosen again.
       if (res.code === "contact_blocked" && /^This file/.test(res.error)) setFile(null);
-      setError({ message: res.error, blocked: res.code === "contact_blocked" || res.code === "chat_paused" });
+      setError({ message: res.error, blocked: res.code === "contact_blocked" || res.code === "chat_paused" || res.code === "abusive_language", rude: res.code === "abusive_language" });
       taRef.current?.focus();
       return;
     }
@@ -71,6 +76,9 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
     if (taRef.current) taRef.current.style.height = "auto";
     taRef.current?.focus();
     onSent(res.data, sentText);
+    // Asking for (or offering) graded work to be done: the message is sent, with a friendly reminder.
+    const tip = honestyReminder(sentText, !!me?.tutorId);
+    if (tip) toast("A friendly reminder", { description: tip });
   };
 
   const canSend = !!text.trim() || !!file;
@@ -86,7 +94,7 @@ export function Composer({ conversationId, recipient, onSent }: { conversationId
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-danger">Not sent</p>
                 <p className="mt-0.5 text-ink-2">{error.message}</p>
-                {review.sent ? (
+                {error.rude ? null : review.sent ? (
                   <p className="mt-1 font-medium text-ink">{review.sent}</p>
                 ) : !review.open ? (
                   <button type="button" onClick={() => setReview({ open: true, note: "" })} className="mt-1 font-semibold text-ink underline underline-offset-2">
