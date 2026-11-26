@@ -17,7 +17,7 @@ const COMPARED = [
   { icon: GraduationCap, title: "Teaching", items: "Subjects, grade levels, experience, languages" },
   { icon: Award, title: "Credentials", items: "Education, certifications, verification checks" },
   { icon: Star, title: "Reviews", items: "Rating and reviews from completed lessons" },
-  { icon: CalendarCheck, title: "Price & booking", items: "Hourly rate, trial, availability, lesson type, area" },
+  { icon: CalendarCheck, title: "Price & booking", items: "Hourly rate, trial, availability, reply time, lesson type, area" },
 ];
 
 export default function ComparePage() {
@@ -51,7 +51,8 @@ export default function ComparePage() {
             </Reveal>
           </div>
 
-          <Reveal delay={0.2}>
+          {/* Phones skip this box so the tutors being compared come straight after the title. */}
+          <Reveal delay={0.2} className="hidden lg:block">
             <div className="rounded-2xl border border-line bg-surface p-6 shadow-[0_24px_60px_-36px_rgb(15_23_42/0.45)] sm:p-7">
               <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-muted">What you can compare</p>
               <ul className="mt-5 grid gap-5 sm:grid-cols-2">

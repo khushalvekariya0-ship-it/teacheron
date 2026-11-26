@@ -29,6 +29,9 @@ const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEK = [1, 2, 3, 4, 5, 6, 0];
 const KINDS: VerificationKind[] = ["identity", "education", "certification", "background"];
 
+/** A measured reply time in whole hours, at least 1 ("within 1 hour" rather than "within 0 hours"). */
+const replyHours = (h: number) => Math.max(1, Math.round(h));
+
 /** Factual, per-attribute highlights only when one tutor is strictly ahead. Never an overall winner. */
 function highlights(tutors: Tutor[]): Record<string, string[]> {
   const out: Record<string, string[]> = Object.fromEntries(tutors.map((t) => [t.id, []]));
@@ -43,6 +46,8 @@ function highlights(tutors: Tutor[]): Record<string, string[]> {
   if (new Set(tutors.map((t) => asCurrency(t.currency))).size === 1) unique((t) => t.hourlyRateCents, "min", "Lowest hourly rate");
   unique((t) => t.experienceYears, "max", "Most experience");
   unique((t) => t.lessonsCompleted, "max", "Most lessons completed");
+  // Reply times are only compared when every tutor has one (new tutors aren't measured yet).
+  if (tutors.every((t) => t.responseTimeHours != null)) unique((t) => replyHours(t.responseTimeHours!), "min", "Fastest replies");
   return out;
 }
 
@@ -76,11 +81,11 @@ function HeaderCard({ tutor, notes, onRemove }: { tutor: Tutor; notes: string[];
       )}
       <div className="mt-auto flex flex-col gap-2 pt-4">
         {tutor.trial.enabled ? (
-          <Button size="sm" variant="brand" onClick={actions.bookTrial} className="w-full">
+          <Button size="sm" variant="cta" onClick={actions.bookTrial} className="w-full">
             Book trial
           </Button>
         ) : (
-          <Button size="sm" variant="brand" onClick={actions.book} className="w-full">
+          <Button size="sm" variant="cta" onClick={actions.book} className="w-full">
             Book lesson
           </Button>
         )}
@@ -235,6 +240,16 @@ const ROWS: RowDef[] = [
   },
   { key: "availability", label: "Availability", render: (t) => <AvailabilityCell tutor={t} /> },
   {
+    key: "reply",
+    label: "Replies to messages",
+    render: (t) =>
+      t.responseTimeHours != null ? (
+        `Usually within ${replyHours(t.responseTimeHours)} ${replyHours(t.responseTimeHours) === 1 ? "hour" : "hours"}`
+      ) : (
+        <span className="text-muted">Not measured yet</span>
+      ),
+  },
+  {
     key: "mode",
     label: "Teaching mode",
     render: (t) => (
@@ -249,7 +264,8 @@ const ROWS: RowDef[] = [
     label: "Location",
     render: (t) => (
       <>
-        {t.city}, {t.state}
+        {/* A tutor without a city yet shows just the lesson type, not a lone comma. */}
+        {[t.city, t.state].filter(Boolean).join(", ")}
         <span className="block text-[12.5px] text-muted">{t.modes.includes("in_person") && t.serviceRadiusMiles > 0 ? `In person within ~${t.serviceRadiusMiles} mi` : "Online only"}</span>
       </>
     ),
@@ -263,7 +279,7 @@ const GROUPS: { label: string; keys: string[] }[] = [
   { label: "Teaching", keys: ["subjects", "levels", "experience", "languages"] },
   { label: "Credentials", keys: ["education", "certifications", "verification"] },
   { label: "Reviews", keys: ["rating", "reviews"] },
-  { label: "Price & booking", keys: ["rate", "trial", "availability", "mode", "location"] },
+  { label: "Price & booking", keys: ["rate", "trial", "availability", "reply", "mode", "location"] },
 ];
 const ROW_BY_KEY = Object.fromEntries(ROWS.map((r) => [r.key, r]));
 
