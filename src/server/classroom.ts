@@ -939,8 +939,9 @@ export async function reportFromClass(user: User, lesson: Lesson, reason: keyof 
 /** How long a whiteboard image link stays valid: until the room closes, plus an hour. */
 const linkSeconds = (lesson: Lesson) => Math.max(600, Math.min(12 * 3600, Math.ceil((windowOf(lesson).closesAt - Date.now()) / 1000) + 3600));
 
+/** A picture for the whiteboard (the tutor's, or the student's once the tutor lets them draw), read for contact details first. */
 export async function storeBoardImage(user: User, lesson: Lesson, dataUrl: string): Promise<string> {
-  requireRole(user, lesson, true);
+  requireRole(user, lesson);
   const img = decodeImage(dataUrl, 6 * 1024 * 1024);
   await checkImage(user.id, lesson, img.bytes, "whiteboard image");
   const path = `classroom/${lesson.booking.id}/paste-${fileStamp()}.${img.ext}`;
@@ -948,8 +949,10 @@ export async function storeBoardImage(user: User, lesson: Lesson, dataUrl: strin
   return signedDownload(path, linkSeconds(lesson));
 }
 
+/** Saves a copy of the board to the lesson page (the tutor, or the student for themselves; only the tutor can delete one). */
 export async function shareBoard(user: User, lesson: Lesson, input: { title: string; image: string; recipients: string[] }) {
-  requireRole(user, lesson, true);
+  const role = requireRole(user, lesson);
+  if (!isHostRole(role)) input = { ...input, recipients: [] };
   const img = decodeImage(input.image, 8 * 1024 * 1024);
   await checkImage(user.id, lesson, img.bytes, "shared whiteboard");
   const title = input.title.trim().slice(0, 120) || "Class whiteboard";

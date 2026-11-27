@@ -28,6 +28,7 @@ import { VideoStage } from "./VideoStage";
 import { Whiteboard } from "./Whiteboard";
 import { toast } from "@/components/ui/Toast";
 import { honestyReminder } from "@/lib/domain/respect";
+import { uploadFile } from "@/lib/upload";
 
 /**
  * The in-app classroom: video on the left, the whiteboard and chat on the right — one screen,
@@ -65,8 +66,10 @@ function DemoRoom() {
       leaveHref="/"
       chat={{
         lines,
-        onSend: (body) => {
-          setLines((l) => [...l, { id: `demo-${l.length}`, mine: true, body, time: formatTime(new Date().toISOString(), tz) }]);
+        onSend: (body, file) => {
+          // A demo file isn't uploaded: its name shows, as it would in a lesson.
+          const attachment = file ? { name: file.name, sizeKb: Math.max(1, Math.round(file.size / 1024)) } : undefined;
+          setLines((l) => [...l, { id: `demo-${l.length}`, mine: true, body, time: formatTime(new Date().toISOString(), tz), attachment }]);
           return null;
         },
         note: "Try it out. In a booked lesson your messages go to your tutor and stay in your inbox.",
@@ -232,7 +235,7 @@ function useLessonChat(booking: Booking, me: User, actor: "booker" | "tutor" | "
       conversationId
         ? messages
             .filter((m) => m.conversationId === conversationId)
-            .map((m) => ({ id: m.id, mine: m.senderId === me.id || (!!me.tutorId && m.senderId === me.tutorId), body: m.body, time: formatTime(m.createdAt, tz) }))
+            .map((m) => ({ id: m.id, mine: m.senderId === me.id || (!!me.tutorId && m.senderId === me.tutorId), body: m.body, time: formatTime(m.createdAt, tz), attachment: m.attachment }))
         : [],
     [messages, conversationId, me.id, me.tutorId, tz],
   );
@@ -240,7 +243,7 @@ function useLessonChat(booking: Booking, me: User, actor: "booker" | "tutor" | "
     if (conversationId && actor !== "admin") markConversationRead(conversationId);
   }, [conversationId, actor, lines.length, markConversationRead]);
 
-  const onSend = async (body: string): Promise<string | null> => {
+  const onSend = async (body: string, file?: File): Promise<string | null> => {
     let target = conversationId;
     if (!target) {
       if (actor !== "booker") return "The chat opens once the student has sent a first message.";
@@ -248,7 +251,15 @@ function useLessonChat(booking: Booking, me: User, actor: "booker" | "tutor" | "
       if (!started.ok) return started.error;
       target = started.data.id;
     }
-    const sent = await sendMessage(target, body);
+    // A shared file goes to private storage first (only the two of them can open it, once it passes the check),
+    // the same as a file sent from the inbox.
+    let attachment: { name: string; sizeKb: number; path?: string } | undefined;
+    if (file) {
+      const up = await uploadFile("messages", file);
+      if (!up.ok) return up.error;
+      attachment = { name: up.file.name, sizeKb: up.file.sizeKb, path: up.file.path };
+    }
+    const sent = await sendMessage(target, body, attachment);
     if (!sent.ok) return sent.error;
     // Asking for (or offering) graded work to be done: sent, with a friendly reminder.
     const tip = honestyReminder(body, actor === "tutor");
@@ -371,7 +382,7 @@ function Room({
   selfName: string;
   status: string;
   leaveHref: string;
-  chat: { lines: ChatLine[]; onSend: (body: string) => string | null | Promise<string | null>; disabledReason?: string; note: string };
+  chat: { lines: ChatLine[]; onSend: (body: string, file?: File) => string | null | Promise<string | null>; disabledReason?: string; note: string };
   /** A lesson that runs on the tutor's Zoom / Google Meet. */
   video?: Booking;
   /** Live video is set up and this lesson's live room opens soon. */

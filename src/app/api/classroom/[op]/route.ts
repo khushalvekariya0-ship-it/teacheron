@@ -36,8 +36,9 @@ import type { User } from "@/lib/types";
  *                                        attendance on the lesson page (GET info → attendance)
  *   POST /api/classroom/recording        { id, on }  this person started / stopped recording on their own device
  *                                        (audit log only; the recording never reaches the server)
- *   POST /api/classroom/board-image      { id, image }  host: a picture for the whiteboard (checked) → { url }
- *   POST /api/classroom/share-board      { id, title, image, recipients }  host: save + share the board
+ *   POST /api/classroom/board-image      { id, image }  tutor or student: a picture for the whiteboard (checked) → { url }
+ *   POST /api/classroom/share-board      { id, title, image, recipients }  tutor or student: save a copy of the board
+ *                                        to the lesson page (recipients: the tutor's only)
  *   GET  /api/classroom/boards?id=       boards shared from this lesson
  *   POST /api/classroom/delete-board     { id, boardId }  host
  *   POST /api/classroom/push-code        { id }  host: code for the desktop snipping helper

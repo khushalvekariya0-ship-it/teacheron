@@ -4,8 +4,8 @@ import * as React from "react";
 import { useRoomContext } from "@livekit/components-react";
 import { ConnectionState, RoomEvent, type Participant } from "livekit-client";
 import {
-  ArrowDownToLine, ArrowUpToLine, Check, ChevronLeft, ChevronRight, Circle, Copy, Eraser, Eye, FileUp, ImagePlus, Minus, MousePointer2, PenLine, Plus, Redo2, Scissors, Share2,
-  Square, Trash2, Type, Undo2, X,
+  ArrowDownToLine, ArrowUpToLine, Check, ChevronDown, ChevronLeft, ChevronRight, Circle, Copy, Download, Eraser, Eye, FileDown, FileUp, Highlighter, ImageDown, ImagePlus, Minus,
+  MousePointer2, MoveUpRight, Pencil, PenLine, Plus, Redo2, Save, Scissors, Share2, Square, Trash2, Triangle, Type, Undo2, X,
 } from "lucide-react";
 import { readMeta, TOPIC } from "@/lib/classroom";
 import { scanContact } from "@/lib/domain/contact";
@@ -23,11 +23,30 @@ import { PDF_MAX_PAGES, readPdfPages } from "./pdfPages";
  * server-signed token metadata), that images are ones the server stored after reading them for contact
  * details, and that text has no contact details.
  *
- * Pages: every stroke belongs to a page (0 when it has none), and the host turns the pages for everyone (a
- * PDF worksheet becomes one page per PDF page). The host also picks the paper: plain, squared or lined.
+ * Pages: every stroke belongs to a page (0 when it has none), and whoever can draw turns the pages for everyone
+ * (a PDF worksheet becomes one page per PDF page). The host picks the paper: plain, squared or lined.
+ *
+ * The student draws once the host lets them (a booked student can from the start; a guest only when the host
+ * says so). Then they have the same tools, pictures and PDFs included; they undo and clear only their own work.
+ *
+ * Layers: the paper and pictures are painted first, the ink on a layer of its own above them, so the eraser rubs
+ * out ink only (never a worksheet or the paper's lines) and the highlighter lets the text under it show through.
  */
 
-type Tool = "select" | "pen" | "eraser" | "line" | "rect" | "circle" | "text";
+type Tool = "select" | "pen" | "pencil" | "highlighter" | "eraser" | "line" | "arrow" | "rect" | "circle" | "triangle" | "text";
+type ShapeTool = "line" | "arrow" | "rect" | "circle" | "triangle";
+const SHAPES: { t: ShapeTool; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { t: "line", label: "Line", icon: Minus },
+  { t: "arrow", label: "Arrow", icon: MoveUpRight },
+  { t: "rect", label: "Rectangle", icon: Square },
+  { t: "circle", label: "Circle", icon: Circle },
+  { t: "triangle", label: "Triangle", icon: Triangle },
+];
+const isShape = (t: Tool): t is ShapeTool => SHAPES.some((s) => s.t === t);
+/** Everything drawn with the pointer (read for handwritten contact details before others see it). */
+const DRAWN: Tool[] = ["pen", "pencil", "highlighter", "line", "arrow", "rect", "circle", "triangle"];
+/** Written by hand, stroke by stroke (read for handwritten numbers, emails and usernames). */
+const HANDWRITING: Tool[] = ["pen", "pencil", "highlighter", "line"];
 interface Pt { x: number; y: number }
 interface Stroke {
   id: string;
@@ -47,7 +66,7 @@ interface Stroke {
   /** The board page it's on (0, the first, when missing). */
   page?: number;
 }
-interface Person { id: string; name: string }
+interface Person { id: string; name: string; role?: string }
 type Paper = "plain" | "grid" | "lines";
 const PAPERS: { key: Paper; label: string }[] = [
   { key: "plain", label: "Plain" },
@@ -58,7 +77,27 @@ const PAPERS: { key: Paper; label: string }[] = [
 const MAX_PAGES = 60;
 
 const COLORS = ["#15140f", "#e5582f", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#db2777", "#ffffff"];
+/** Highlighter colours (see-through on the board). */
+const HL_COLORS = ["#facc15", "#4ade80", "#f472b6", "#60a5fa", "#fb923c"];
 const SIZES = [2, 4, 8, 14, 22];
+const HIGHLIGHT_ALPHA = 0.4;
+/** Line widths for a size: the highlighter is broad, the pencil fine. */
+const highlighterWidth = (size: number) => size * 2.5 + 8;
+const pencilWidth = (size: number) => Math.max(1, size * 0.6);
+/** How many remove messages one packet carries (well under the data channel's size limit). */
+const REMOVE_CHUNK = 300;
+
+/** A small random generator from a stroke's id: a pencil line has the same grain on every screen. */
+function grain(id: string) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
 const MIN_IMAGE_PX = 32;
 // A data packet tops out around 60 KB, and a busy board is far bigger: snapshots go in pieces.
 const SNAP_CHUNK = 18_000;
@@ -95,7 +134,7 @@ function cleanStrokeBody(s: Record<string, unknown>): Stroke | null {
     if (![s.x, s.y].every((v) => finite(v)) || ![s.w, s.h].every((v) => finite(v, 0, 10))) return null;
     return { id: s.id, tool: "image", url: s.url, x: s.x as number, y: s.y as number, w: s.w as number, h: s.h as number, sar: finite(s.sar, 0, 1000) ? s.sar : undefined };
   }
-  const tools: Tool[] = ["pen", "eraser", "line", "rect", "circle", "text"];
+  const tools: Tool[] = [...DRAWN, "eraser", "text"];
   if (!tools.includes(s.tool as Tool)) return null;
   if (!Array.isArray(s.pts) || !s.pts.length || s.pts.length > MAX_POINTS) return null;
   const pts = (s.pts as unknown[]).map((p) => (p && typeof p === "object" && finite((p as Pt).x) && finite((p as Pt).y) ? { x: (p as Pt).x, y: (p as Pt).y } : null));
@@ -215,8 +254,17 @@ export function MeetingWhiteboard({
   // and must not announce it as the lesson (that would wipe everyone's).
   const awaitingSyncRef = React.useRef(true);
   const [histDepth, setHistDepth] = React.useState({ undo: 0, redo: 0 });
-  const [color, setColor] = React.useState(COLORS[0]);
+  const [inkColor, setInkColor] = React.useState(COLORS[0]);
+  const [hlColor, setHlColor] = React.useState(HL_COLORS[0]);
+  const color = tool === "highlighter" ? hlColor : inkColor;
+  const setColor = tool === "highlighter" ? setHlColor : setInkColor;
   const [size, setSize] = React.useState(4);
+  const [lastShape, setLastShape] = React.useState<ShapeTool>("rect");
+  const [shapesOpen, setShapesOpen] = React.useState(false);
+  const [saveOpen, setSaveOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  // Strokes this person has sent to everyone (a stroke brought back by undo/redo that was never checked is checked first).
+  const sentRef = React.useRef(new Set<string>());
   const [textInput, setTextInput] = React.useState("");
   const [textPos, setTextPos] = React.useState<Pt | null>(null);
   const [textError, setTextError] = React.useState<string | null>(null);
@@ -258,10 +306,20 @@ export function MeetingWhiteboard({
   const [pdfBusy, setPdfBusy] = React.useState(false);
 
   const myId = room.localParticipant.identity;
-  const canDraw = isHost || editors.includes(myId);
+  // A guest isn't signed in: they draw (when allowed) but can't add pictures or save to the lesson page.
+  const guest = myId.startsWith("guest-");
+  // The host: a booked student (or parent) may draw from the start unless the host set them to view only; a guest
+  // only once the host allows it. Everyone else: whoever the host's last message says.
+  const [viewOnly, setViewOnly] = React.useState<string[]>([]);
+  const granted = React.useMemo(() => {
+    if (!isHost) return editors;
+    const booked = participants.filter((p) => (p.role === "Student" || p.role === "Parent") && !p.id.startsWith("guest-") && !viewOnly.includes(p.id)).map((p) => p.id);
+    return [...new Set([...editors, ...booked])];
+  }, [isHost, editors, participants, viewOnly]);
+  const canDraw = isHost || granted.includes(myId);
   React.useEffect(() => {
-    editorsRef.current = editors;
-  }, [editors]);
+    editorsRef.current = granted;
+  }, [granted]);
   React.useEffect(() => {
     onCanDrawChange?.(canDraw);
   }, [canDraw, onCanDrawChange]);
@@ -302,46 +360,116 @@ export function MeetingWhiteboard({
     }
     const pts = (s.pts ?? []).map((p) => ({ x: p.x * cw, y: p.y * ch }));
     if (!pts.length) return;
+    const size = s.size ?? 4;
+    const path = (list: Pt[]) => {
+      ctx.beginPath();
+      list.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+    };
     ctx.save();
-    ctx.strokeStyle = s.tool === "eraser" ? "#ffffff" : (s.color ?? "#15140f");
+    ctx.strokeStyle = s.color ?? "#15140f";
     ctx.fillStyle = s.color ?? "#15140f";
-    ctx.lineWidth = s.size ?? 4;
+    ctx.lineWidth = size;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     const p0 = pts[0];
     const p1 = pts[pts.length - 1];
-    if (s.tool === "text") {
-      ctx.font = `${(s.size ?? 4) * 4}px ui-sans-serif, system-ui, sans-serif`;
+    if (s.tool === "eraser") {
+      // On the ink layer: rubs out ink, and the paper and pictures under it show again.
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.strokeStyle = "#000000";
+      path(pts);
+    } else if (s.tool === "highlighter") {
+      // See-through, so writing under it stays readable; darker where it crosses ink.
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = HIGHLIGHT_ALPHA;
+      ctx.lineWidth = highlighterWidth(size);
+      ctx.lineCap = "butt";
+      path(pts);
+    } else if (s.tool === "pencil") {
+      // A fine line with a light, uneven second pass: graphite rather than ink.
+      const w = pencilWidth(size);
+      const rnd = grain(s.id || "pencil");
+      ctx.lineWidth = w;
+      ctx.globalAlpha = 0.78;
+      path(pts);
+      ctx.globalAlpha = 0.32;
+      ctx.lineWidth = Math.max(0.6, w * 0.6);
+      path(pts.map((p) => ({ x: p.x + (rnd() - 0.5) * w * 1.6, y: p.y + (rnd() - 0.5) * w * 1.6 })));
+    } else if (s.tool === "text") {
+      ctx.font = `${size * 4}px ui-sans-serif, system-ui, sans-serif`;
       ctx.fillText(s.text ?? "", p0.x, p0.y);
-    } else if (s.tool === "line" && pts.length >= 2) {
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
+    } else if ((s.tool === "line" || s.tool === "arrow") && pts.length >= 2) {
+      path([p0, p1]);
+      if (s.tool === "arrow") {
+        const head = Math.max(10, size * 3.5);
+        const a = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+        path([
+          { x: p1.x - head * Math.cos(a - 0.45), y: p1.y - head * Math.sin(a - 0.45) },
+          p1,
+          { x: p1.x - head * Math.cos(a + 0.45), y: p1.y - head * Math.sin(a + 0.45) },
+        ]);
+      }
     } else if (s.tool === "rect" && pts.length >= 2) {
       ctx.strokeRect(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
     } else if (s.tool === "circle" && pts.length >= 2) {
       ctx.beginPath();
       ctx.ellipse(p0.x + (p1.x - p0.x) / 2, p0.y + (p1.y - p0.y) / 2, Math.abs(p1.x - p0.x) / 2, Math.abs(p1.y - p0.y) / 2, 0, 0, Math.PI * 2);
       ctx.stroke();
-    } else {
+    } else if (s.tool === "triangle" && pts.length >= 2) {
+      const top = Math.min(p0.y, p1.y);
+      const base = Math.max(p0.y, p1.y);
       ctx.beginPath();
-      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.moveTo((p0.x + p1.x) / 2, top);
+      ctx.lineTo(Math.max(p0.x, p1.x), base);
+      ctx.lineTo(Math.min(p0.x, p1.x), base);
+      ctx.closePath();
       ctx.stroke();
+    } else {
+      path(pts);
     }
     ctx.restore();
   }, []);
+
+  /**
+   * Paints one page onto `ctx`: the paper, then the pictures (in their order), then the ink from its own layer
+   * (`layer`, resized to match), so the eraser takes out ink only. `background` fills under it all (saved copies).
+   */
+  const paintPage = React.useCallback(
+    (ctx: CanvasRenderingContext2D, layer: HTMLCanvasElement, list: Stroke[], pageNo: number, paperKind: Paper, extra?: Stroke | null, background?: string) => {
+      const { width: w, height: h } = ctx.canvas;
+      ctx.clearRect(0, 0, w, h);
+      if (background) {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, w, h);
+      }
+      drawPaper(ctx, paperKind);
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      const ink = layer.getContext("2d");
+      if (!ink) return;
+      ink.clearRect(0, 0, w, h);
+      for (const s of list) {
+        if (pageOf(s) !== pageNo) continue;
+        drawStroke(s.tool === "image" ? ctx : ink, s);
+      }
+      if (extra) drawStroke(ink, extra);
+      ctx.drawImage(layer, 0, 0);
+    },
+    [drawStroke],
+  );
+  const inkLayerRef = React.useRef<HTMLCanvasElement | null>(null);
 
   const redraw = React.useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawPaper(ctx, paperRef.current);
-    for (const s of strokesRef.current) if (pageOf(s) === pageRef.current) drawStroke(ctx, s);
-    if (currentRef.current) drawStroke(ctx, currentRef.current);
-  }, [drawStroke]);
+    inkLayerRef.current ??= document.createElement("canvas");
+    paintPage(ctx, inkLayerRef.current, strokesRef.current, pageRef.current, paperRef.current, currentRef.current);
+  }, [paintPage]);
 
   /** Shows a page / page count / paper here (no message: see sendMeta). */
   const applyMeta = React.useCallback(
@@ -469,7 +597,20 @@ export function MeetingWhiteboard({
     [room, flush],
   );
 
-  const broadcastStroke = React.useCallback((stroke: Stroke) => send({ type: TOPIC.stroke, stroke }), [send]);
+  const broadcastStroke = React.useCallback(
+    (stroke: Stroke) => {
+      sentRef.current.add(stroke.id);
+      send({ type: TOPIC.stroke, stroke });
+    },
+    [send],
+  );
+  /** Takes strokes off everyone's board (each receiver checks the sender may: the host, or the strokes' owner). */
+  const sendRemoves = React.useCallback(
+    (ids: string[]) => {
+      for (let i = 0; i < ids.length; i += REMOVE_CHUNK) send({ type: TOPIC.remove, ids: ids.slice(i, i + REMOVE_CHUNK) });
+    },
+    [send],
+  );
 
   const sendSnapshot = React.useCallback(() => {
     // Drawings still being checked stay on this screen only.
@@ -570,22 +711,26 @@ export function MeetingWhiteboard({
           return;
         }
         case TOPIC.remove: {
-          const id = msg.id;
-          if (typeof id !== "string") return;
-          const victim = strokesRef.current.find((x) => x.id === id);
-          if (!victim || !mayDraw(participant, fromHost)) return;
-          if (!fromHost && !strokeOwnedBy(victim, participant?.identity)) return;
-          strokesRef.current = strokesRef.current.filter((x) => x.id !== id);
-          rebaseHistory((list) => list.filter((x) => x.id !== id));
-          if (id === selectedIdRef.current) selectImage(null);
+          // One stroke (`id`), or several at once (`ids`: undo, "Clear mine").
+          const asked = Array.isArray(msg.ids) ? (msg.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, REMOVE_CHUNK) : typeof msg.id === "string" ? [msg.id] : [];
+          if (!asked.length || !mayDraw(participant, fromHost)) return;
+          // Anyone but the host takes off only their own strokes.
+          const drop = new Set(asked.filter((id) => {
+            const victim = strokesRef.current.find((x) => x.id === id);
+            return !!victim && (fromHost || strokeOwnedBy(victim, participant?.identity));
+          }));
+          if (!drop.size) return;
+          strokesRef.current = strokesRef.current.filter((x) => !drop.has(x.id));
+          rebaseHistory((list) => list.filter((x) => !drop.has(x.id)));
+          if (selectedIdRef.current && drop.has(selectedIdRef.current)) selectImage(null);
           redraw();
           return;
         }
         case TOPIC.stroke: {
           const st = cleanStroke(msg.stroke);
           if (!st || !mayDraw(participant, fromHost)) return;
-          // Images come only from the host (only the host can store them).
-          if (st.tool === "image" && !fromHost) return;
+          // A student's picture must be one the server stored (after reading it) for this lesson, and theirs.
+          if (st.tool === "image" && !fromHost && (!st.url?.startsWith(`${STORAGE_PREFIX}${bookingId}/`) || !strokeOwnedBy(st, participant?.identity))) return;
           if (strokesRef.current.some((x) => x.id === st.id)) return;
           strokesRef.current.push(st);
           rebaseHistory((list) => (list.some((x) => x.id === st.id) ? list : [...list, st]));
@@ -593,8 +738,9 @@ export function MeetingWhiteboard({
           return;
         }
         case TOPIC.page:
-          if (!fromHost) return;
-          applyMeta(msg);
+          // Whoever can draw turns the pages (and adds them: a student's PDF); the paper is the host's choice.
+          if (!mayDraw(participant, fromHost)) return;
+          applyMeta(fromHost ? msg : { page: msg.page, pages: msg.pages });
           if (selectedIdRef.current) selectImage(null);
           return;
         case TOPIC.sync:
@@ -612,7 +758,7 @@ export function MeetingWhiteboard({
     return () => {
       room.off(RoomEvent.DataReceived, handler);
     };
-  }, [room, redraw, isHost, broadcastSnapshot, sendSnapshot, send, rebaseHistory, resetHistory, refreshSel, selectImage, applyMeta]);
+  }, [room, redraw, isHost, bookingId, broadcastSnapshot, sendSnapshot, send, rebaseHistory, resetHistory, refreshSel, selectImage, applyMeta]);
 
   // Ask for the current board once connected (the host too: after a refresh the room has it), and again after
   // a reconnect. The board is set up while the room is still connecting, and a request sent then is lost.
@@ -667,9 +813,9 @@ export function MeetingWhiteboard({
     checkingRef.current = true;
     let waitMore = 0;
     try {
-      const mine = strokesRef.current.filter((s) => s.id.startsWith(`${myId}-`) && (s.tool === "pen" || s.tool === "line" || s.tool === "rect" || s.tool === "circle"));
+      const mine = strokesRef.current.filter((s) => s.id.startsWith(`${myId}-`) && DRAWN.includes(s.tool as Tool));
       const canvas = canvasRef.current;
-      const ink = (list: Stroke[]) => list.filter((s) => s.tool === "pen" || s.tool === "line").map((s) => ({ pts: s.pts ?? [] }));
+      const ink = (list: Stroke[]) => list.filter((s) => HANDWRITING.includes(s.tool as Tool)).map((s) => ({ pts: s.pts ?? [] }));
       // Only the writing near the new strokes is read (a busy board stays quick to check).
       const near = nearNew(mine, (s) => batch.has(s.id), canvas?.width || 1280, canvas?.height || 800);
       // A handwritten phone number this drawing adds (one already on the board before doesn't count again).
@@ -732,7 +878,8 @@ export function MeetingWhiteboard({
       if (ctx) {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, c.width, c.height);
-        for (const s of mine) drawStroke(ctx, { ...s, color: "#000000", size: Math.max(3, s.size ?? 4) });
+        // Solid black lines read best (a pencil's grain or a highlighter's see-through ink would be faint).
+        for (const s of mine) drawStroke(ctx, { ...s, tool: s.tool === "pencil" || s.tool === "highlighter" ? "pen" : s.tool, color: "#000000", size: Math.max(3, s.size ?? 4) });
       }
       const image = ctx ? c.toDataURL("image/png") : "";
       const removeBatch = (why: "caught" | "blocked" = "caught") => {
@@ -844,6 +991,15 @@ export function MeetingWhiteboard({
       room.off(RoomEvent.ParticipantConnected, onJoin);
     };
   }, [room, isHost, broadcastSnapshot, send]);
+
+  // The host tells everyone who may draw whenever that changes (a booked student arriving can, straight away).
+  const grantedKey = granted.join(",");
+  const lastGrant = React.useRef("");
+  React.useEffect(() => {
+    if (!isHost || grantedKey === lastGrant.current) return;
+    lastGrant.current = grantedKey;
+    send({ type: TOPIC.grant, ids: grantedKey ? grantedKey.split(",") : [] });
+  }, [isHost, grantedKey, send]);
 
   // The canvas follows its box.
   React.useEffect(() => {
@@ -1022,6 +1178,8 @@ export function MeetingWhiteboard({
 
   const onDown = (e: React.MouseEvent | React.TouchEvent) => {
     if (!canDraw) return;
+    setShapesOpen(false);
+    setSaveOpen(false);
     const pt = getXY(e);
     if (tool === "select") {
       const hit = hitImage(pt.x, pt.y);
@@ -1039,7 +1197,8 @@ export function MeetingWhiteboard({
       return;
     }
     drawing.current = true;
-    currentRef.current = { id: "", tool, color, size, pts: [toFrac(pt)] };
+    // The id is set now so a pencil line has the same grain while it's drawn as after.
+    currentRef.current = { id: nextStrokeId(), tool, color, size, pts: [toFrac(pt)] };
   };
 
   const onMove = (e: React.MouseEvent | React.TouchEvent) => {
@@ -1058,15 +1217,15 @@ export function MeetingWhiteboard({
     if (cur) {
       const pts = cur.pts ?? [];
       if (pts.length < 2) {
-        // A click: a dot for the pen and eraser, nothing for a shape.
-        if (cur.tool === "pen" || cur.tool === "eraser") pts.push({ ...pts[0] });
+        // A click: a dot for the pen, pencil, highlighter and eraser, nothing for a shape.
+        if (cur.tool === "pen" || cur.tool === "pencil" || cur.tool === "highlighter" || cur.tool === "eraser") pts.push({ ...pts[0] });
         else {
           redraw();
           return;
         }
       }
       pushHistory();
-      const stroke: Stroke = { ...cur, pts, id: nextStrokeId(), ...(pageRef.current ? { page: pageRef.current } : {}) };
+      const stroke: Stroke = { ...cur, pts, id: cur.id || nextStrokeId(), ...(pageRef.current ? { page: pageRef.current } : {}) };
       strokesRef.current.push(stroke);
       // An eraser stroke can't share anything; it waits only behind drawings being checked (to keep the order).
       if (gate && (stroke.tool !== "eraser" || heldRef.current.size)) hold(stroke.id);
@@ -1107,18 +1266,43 @@ export function MeetingWhiteboard({
     redraw();
   };
 
-  /* ── pages, paper and PDF worksheets (host) ──────────────────────────── */
+  /** Anyone else clears only what they drew or added on this page (the others' work stays). */
+  const clearMine = () => {
+    const mine = strokesRef.current.filter((s) => pageOf(s) === pageRef.current && strokeOwnedBy(s, myId));
+    if (!mine.length) return flash("You haven't drawn anything on this page.", 2500);
+    pushHistory();
+    const ids = new Set(mine.map((s) => s.id));
+    strokesRef.current = strokesRef.current.filter((s) => !ids.has(s.id));
+    forgetHeld(ids);
+    if (selectedIdRef.current && ids.has(selectedIdRef.current)) selectImage(null);
+    sendRemoves([...ids]);
+    redraw();
+  };
 
-  /** The host turns everyone's board to `meta` (and a late joiner gets it with the board). */
+  /** Strokes taken off this board before they were checked: nothing is left waiting for them. */
+  const forgetHeld = (ids: Set<string>) => {
+    for (const id of ids) heldRef.current.delete(id);
+    const m = maybeRef.current;
+    if (m && m.ids.some((id) => ids.has(id))) {
+      const left = m.ids.filter((id) => !ids.has(id));
+      maybeRef.current = left.length ? { ...m, ids: left } : null;
+      setMaybe(maybeRef.current);
+    }
+    setHolding(heldRef.current.size > 0);
+  };
+
+  /* ── pages, paper and PDF worksheets ─────────────────────────────────── */
+
+  /** Turns everyone's board to `meta` (and a late joiner gets it with the board). The paper is the host's choice. */
   const sendMeta = React.useCallback(
     (meta: { page?: number; pages?: number; paper?: Paper }) => {
-      if (!isHost) return;
-      awaitingSyncRef.current = false;
-      applyMeta({ ...metaNow(), ...meta });
+      if (!canDraw) return;
+      if (isHost) awaitingSyncRef.current = false;
+      applyMeta({ ...metaNow(), ...meta, ...(isHost ? {} : { paper: paperRef.current }) });
       selectImage(null);
       send({ type: TOPIC.page, ...metaNow() });
     },
-    [isHost, applyMeta, selectImage, send],
+    [canDraw, isHost, applyMeta, selectImage, send],
   );
   const goPage = (n: number) => sendMeta({ page: Math.min(pagesRef.current - 1, Math.max(0, n)) });
   const addPage = () => {
@@ -1131,7 +1315,7 @@ export function MeetingWhiteboard({
    * and put on a page of its own after the board's last page (or from the first, on an empty board).
    */
   const addPdf = async (file: File) => {
-    if (!isHost || pdfBusy) return;
+    if (!canDraw || guest || pdfBusy) return;
     if (file.size > 40 * 1024 * 1024) return flash("That PDF is over 40 MB. Try a smaller one.", 5000);
     const empty = pagesRef.current === 1 && !strokesRef.current.length;
     const first = empty ? 0 : pagesRef.current;
@@ -1181,7 +1365,7 @@ export function MeetingWhiteboard({
 
   const stepHistory = React.useCallback(
     (back: boolean) => {
-      if (!isHost) return;
+      if (!canDraw) return;
       const from = back ? undoStack.current : redoStack.current;
       const to = back ? redoStack.current : undoStack.current;
       if (!from.length) return;
@@ -1190,14 +1374,40 @@ export function MeetingWhiteboard({
         setDragActive(false);
       }
       to.push(strokesRef.current.slice());
-      strokesRef.current = from.pop()!;
+      const target = from.pop()!;
       setHistDepth({ undo: undoStack.current.length, redo: redoStack.current.length });
+      if (isHost) {
+        // The host's board is the lesson's: everyone gets it whole.
+        strokesRef.current = target;
+        broadcastSnapshot();
+      } else {
+        // Someone else's work is the same in both states (see rebaseHistory): only this person's own strokes
+        // come and go, and everyone's board does the same.
+        const now = new Map(strokesRef.current.map((s) => [s.id, s]));
+        const want = new Map(target.map((s) => [s.id, s]));
+        const gone = new Set(strokesRef.current.filter((s) => !want.has(s.id) && strokeOwnedBy(s, myId)).map((s) => s.id));
+        const back_ = target.filter((s) => !now.has(s.id) && strokeOwnedBy(s, myId));
+        const moved = target.filter((s) => {
+          const was = now.get(s.id);
+          return s.tool === "image" && !!was && strokeOwnedBy(s, myId) && (was.x !== s.x || was.y !== s.y || was.w !== s.w || was.h !== s.h);
+        });
+        strokesRef.current = [...strokesRef.current.filter((s) => !gone.has(s.id)).map((s) => moved.find((m) => m.id === s.id) ?? s), ...back_];
+        if (gone.size) {
+          forgetHeld(gone);
+          sendRemoves([...gone]);
+        }
+        for (const s of moved) send({ type: TOPIC.update, final: true, stroke: { id: s.id, x: s.x, y: s.y, w: s.w, h: s.h, sar: s.sar } });
+        for (const s of back_) {
+          // Brought back: shown to everyone again, or first checked if it never was.
+          if (gate && DRAWN.includes(s.tool as Tool) && !sentRef.current.has(s.id)) hold(s.id);
+          else broadcastStroke(s);
+        }
+      }
       if (!strokesRef.current.some((x) => x.id === selectedIdRef.current)) selectImage(null);
       else refreshSel();
-      broadcastSnapshot();
       redraw();
     },
-    [isHost, broadcastSnapshot, redraw, refreshSel, selectImage],
+    [canDraw, isHost, myId, gate, broadcastSnapshot, broadcastStroke, sendRemoves, send, hold, redraw, refreshSel, selectImage],
   );
   const undo = React.useCallback(() => stepHistory(true), [stepHistory]);
   const redo = React.useCallback(() => stepHistory(false), [stepHistory]);
@@ -1269,7 +1479,7 @@ export function MeetingWhiteboard({
   /** Shrinks the picture, has the server read and store it, then broadcasts only its address. */
   const addImage = React.useCallback(
     async (file: Blob) => {
-      if (!isHost) return;
+      if (!canDraw || guest) return;
       setPasting(true);
       setPasteMsg("");
       try {
@@ -1304,7 +1514,7 @@ export function MeetingWhiteboard({
         setPasting(false);
       }
     },
-    [isHost, bookingId, placeImage],
+    [canDraw, guest, bookingId, placeImage],
   );
 
   // Whatever image is on the clipboard now, with a fingerprint so a snip is never added twice.
@@ -1428,7 +1638,7 @@ export function MeetingWhiteboard({
 
   // Ctrl+V anywhere while the board is open.
   React.useEffect(() => {
-    if (!isHost) return;
+    if (!canDraw || guest) return;
     const onPaste = (e: ClipboardEvent) => {
       if (!boardVisible()) return;
       for (const it of Array.from(e.clipboardData?.items ?? [])) {
@@ -1444,38 +1654,143 @@ export function MeetingWhiteboard({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [isHost, addImage]);
+  }, [canDraw, guest, addImage]);
 
+  // The host's switch per person (the others learn it from the grant message the change sends).
   const setRights = (id: string, may: boolean) => {
-    const next = may ? [...new Set([...editors, id])] : editors.filter((x) => x !== id);
-    setEditors(next);
-    send({ type: TOPIC.grant, ids: next });
+    setEditors((list) => (may ? [...new Set([...list, id])] : list.filter((x) => x !== id)));
+    setViewOnly((list) => (may ? list.filter((x) => x !== id) : [...new Set([...list, id])]));
     setShareMsg(may ? "They can draw now." : "Set back to view only.");
   };
 
   // Someone who left can't draw (and isn't counted).
   const present = React.useMemo(() => new Set(participants.map((p) => p.id)), [participants]);
-  const liveEditors = editors.filter((id) => present.has(id));
+  const liveEditors = granted.filter((id) => present.has(id));
 
-  /** Flattens the board onto white, hands drawing to whoever is chosen, and saves a copy for the student. */
-  const shareBoard = async () => {
+  /* ── saving the board ────────────────────────────────────────────────── */
+
+  /** The page now on screen, on white: what everyone sees (drawings still being checked included, on this device). */
+  const flatten = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
+    const flat = document.createElement("canvas");
+    flat.width = canvas.width;
+    flat.height = canvas.height;
+    const fx = flat.getContext("2d")!;
+    fx.fillStyle = "#ffffff";
+    fx.fillRect(0, 0, flat.width, flat.height);
+    fx.drawImage(canvas, 0, 0);
+    return flat;
+  };
+
+  /** Pictures on a page that hasn't been shown yet are loaded before it's painted for saving. */
+  const loadPictures = (list: Stroke[]) =>
+    Promise.all(
+      list
+        .filter((s) => s.tool === "image" && s.url && !imgCache.current.get(s.url))
+        .map(
+          (s) =>
+            new Promise<void>((resolve) => {
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => {
+                imgCache.current.set(s.url!, img);
+                resolve();
+              };
+              img.onerror = () => resolve();
+              img.src = s.url!;
+            }),
+        ),
+    );
+
+  const fileName = (ext: string, extra = "") => `${(title || "Whiteboard").replace(/[\\/:*?"<>|·]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 70) || "Whiteboard"}${extra}.${ext}`;
+  const download = (href: string, name: string) => {
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  /** This page as a picture, saved on this device. */
+  const downloadPage = () => {
+    setSaveOpen(false);
+    const flat = flatten();
+    if (!flat) return;
+    flat.toBlob((blob) => {
+      if (!blob) return flash("Couldn't save the picture.", 4000);
+      const url = URL.createObjectURL(blob);
+      download(url, fileName("png", pagesRef.current > 1 ? ` (page ${pageRef.current + 1})` : ""));
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      flash("Saved to your downloads", 2500);
+    }, "image/png");
+  };
+
+  /** Every page, in order, as one PDF saved on this device. */
+  const downloadPdf = async () => {
+    setSaveOpen(false);
+    const canvas = canvasRef.current;
+    if (!canvas || saving) return;
+    setSaving(true);
+    try {
+      const w = canvas.width;
+      const h = canvas.height;
+      const list = strokesRef.current.slice();
+      await loadPictures(list);
+      const { jsPDF } = await import("jspdf");
+      const orientation = w >= h ? "landscape" : "portrait";
+      const pdf = new jsPDF({ orientation, unit: "pt", format: [w, h] });
+      const sheet = document.createElement("canvas");
+      sheet.width = w;
+      sheet.height = h;
+      const layer = document.createElement("canvas");
+      const sx = sheet.getContext("2d")!;
+      for (let n = 0; n < pagesRef.current; n++) {
+        if (n > 0) pdf.addPage([w, h], orientation);
+        paintPage(sx, layer, list, n, paperRef.current, null, "#ffffff");
+        pdf.addImage(sheet.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, w, h);
+      }
+      pdf.save(fileName("pdf"));
+      flash(`Saved to your downloads (${pagesRef.current} page${pagesRef.current > 1 ? "s" : ""})`, 3000);
+    } catch (e) {
+      flash(`Couldn't make the PDF: ${(e as Error).message}`, 5000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** A copy of this page on the lesson page (read for contact details on the server first). */
+  const saveCopy = async (copyTitle: string, recipients: string[]) => {
+    const flat = flatten();
+    if (!flat) throw new Error("There's no board to save.");
+    const res = await postJson("/api/classroom/share-board", { id: bookingId, title: copyTitle.trim() || title, image: flat.toDataURL("image/png"), recipients });
+    if (!res.ok) throw new Error(res.error ?? "Couldn't save the board.");
+  };
+
+  const saveToLesson = async () => {
+    setSaveOpen(false);
+    if (saving) return;
+    setSaving(true);
+    flash("Saving a copy to the lesson page…", 60_000);
+    try {
+      await saveCopy(title, isHost ? liveEditors : []);
+      flash("Saved to the lesson page ✓", 3000);
+    } catch (e) {
+      flash((e as Error).message, 6000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Hands drawing to whoever is chosen (everyone there, when nobody is), and saves a copy for the student. */
+  const shareBoard = async () => {
+    if (!canvasRef.current) return;
     setSharing(true);
     setShareMsg("");
-    const grantIds = liveEditors.length ? liveEditors : participants.map((p) => p.id);
-    setEditors(grantIds);
-    send({ type: TOPIC.grant, ids: grantIds });
+    if (!liveEditors.length) for (const p of participants) setRights(p.id, true);
     try {
-      const flat = document.createElement("canvas");
-      flat.width = canvas.width;
-      flat.height = canvas.height;
-      const fx = flat.getContext("2d")!;
-      fx.fillStyle = "#ffffff";
-      fx.fillRect(0, 0, flat.width, flat.height);
-      fx.drawImage(canvas, 0, 0);
-      const res = await postJson("/api/classroom/share-board", { id: bookingId, title: shareTitle.trim() || title, image: flat.toDataURL("image/png"), recipients: liveEditors });
-      if (!res.ok) throw new Error(res.error ?? "Couldn't share the board.");
+      await saveCopy(shareTitle, liveEditors.length ? liveEditors : participants.map((p) => p.id));
       setShareMsg("Saved to the lesson page ✓");
       window.setTimeout(() => {
         setShareOpen(false);
@@ -1490,6 +1805,55 @@ export function MeetingWhiteboard({
 
   // A drawing removed for contact details (or drawing blocked for now): shown in full over the board.
   const privacyAlert = /^TutorLink Privacy Protection Alert!|^Drawing on the whiteboard is blocked/.test(pasteMsg);
+
+  const menuItem = "flex w-full items-start gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-sunken";
+  /** Save: this page as a picture or every page as a PDF (on this device), or a copy on the lesson page. */
+  const saveMenu = (where: "toolbar" | "viewer") => (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setSaveOpen((v) => !v);
+          setShapesOpen(false);
+        }}
+        disabled={saving}
+        aria-expanded={saveOpen}
+        data-board-save=""
+        title="Save the board"
+        className={cn("flex h-8 items-center gap-1 border border-line px-2 text-[13px] text-ink disabled:opacity-60", where === "viewer" && "bg-surface shadow-lg", saveOpen ? "bg-sunken" : "hover:bg-sunken")}
+      >
+        <Save className="size-4" aria-hidden /> {saving ? "Saving…" : "Save"}
+        <ChevronDown className="size-3" aria-hidden />
+      </button>
+      {saveOpen && (
+        <div className={cn("absolute top-9 z-30 w-72 border border-line bg-surface py-1 text-ink shadow-xl", where === "viewer" ? "right-0" : "left-0 sm:left-auto sm:right-0")} role="menu" data-board-save-menu="">
+          <button type="button" role="menuitem" onClick={downloadPage} className={menuItem} data-save="png">
+            <ImageDown className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+            <span>
+              <span className="block font-medium">This page as a picture</span>
+              <span className="block text-[11.5px] text-muted">PNG, saved on this device</span>
+            </span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => void downloadPdf()} className={menuItem} data-save="pdf">
+            <FileDown className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+            <span>
+              <span className="block font-medium">{pages > 1 ? `All ${pages} pages as a PDF` : "The board as a PDF"}</span>
+              <span className="block text-[11.5px] text-muted">Saved on this device</span>
+            </span>
+          </button>
+          {!guest && (
+            <button type="button" role="menuitem" onClick={() => void saveToLesson()} className={menuItem} data-save="lesson">
+              <Download className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+              <span>
+                <span className="block font-medium">Save a copy to the lesson page</span>
+                <span className="block text-[11.5px] text-muted">This page, for both of you to open after class</span>
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="relative flex size-full flex-col bg-white">
@@ -1588,7 +1952,7 @@ export function MeetingWhiteboard({
           <div className="mb-2 max-h-48 space-y-1 overflow-y-auto border border-line bg-canvas p-1.5">
             {participants.length === 0 && <p className="px-1 py-2 text-xs text-muted">No one else is in the room yet.</p>}
             {participants.map((p) => {
-              const may = editors.includes(p.id);
+              const may = granted.includes(p.id);
               return (
                 <div key={p.id} className="flex items-center gap-2 px-1 py-1.5 text-sm">
                   <span className="min-w-0 flex-1 truncate">{p.name}</span>
@@ -1622,16 +1986,54 @@ export function MeetingWhiteboard({
       {/* ── Toolbar ── */}
       {canDraw && (
         <div className="z-10 flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2 py-1.5 text-ink">
-          <div className="flex border border-line">
+          <div className="flex border border-line" data-board-tools="">
             <ToolBtn t="select" label="Select: move and resize a picture" icon={MousePointer2} tool={tool} setTool={pickTool} />
-            <ToolBtn t="pen" label="Pen" icon={PenLine} tool={tool} setTool={pickTool} />
+            <ToolBtn t="pen" label="Pen: for writing" icon={PenLine} tool={tool} setTool={pickTool} />
+            <ToolBtn t="pencil" label="Pencil: for drawing" icon={Pencil} tool={tool} setTool={pickTool} />
+            <ToolBtn t="highlighter" label="Highlighter: mark the important lines" icon={Highlighter} tool={tool} setTool={pickTool} />
             <ToolBtn t="eraser" label="Eraser" icon={Eraser} tool={tool} setTool={pickTool} />
-            <ToolBtn t="line" label="Line" icon={Minus} tool={tool} setTool={pickTool} />
-            <ToolBtn t="rect" label="Rectangle" icon={Square} tool={tool} setTool={pickTool} />
-            <ToolBtn t="circle" label="Circle" icon={Circle} tool={tool} setTool={pickTool} />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShapesOpen((v) => !v);
+                  setSaveOpen(false);
+                }}
+                title="Shapes: line, arrow, rectangle, circle, triangle"
+                aria-label="Shapes"
+                aria-expanded={shapesOpen}
+                aria-pressed={isShape(tool)}
+                className={cn("flex h-8 items-center gap-0.5 px-1.5 transition-colors", isShape(tool) ? "bg-brand text-on-brand" : "text-ink hover:bg-sunken")}
+              >
+                {React.createElement(SHAPES.find((s) => s.t === (isShape(tool) ? tool : lastShape))!.icon, { className: "size-4" })}
+                <ChevronDown className="size-3" aria-hidden />
+              </button>
+              {shapesOpen && (
+                <div className="absolute left-0 top-9 z-30 w-40 border border-line bg-surface py-1 shadow-xl" role="menu" data-board-shapes="">
+                  {SHAPES.map((s) => (
+                    <button
+                      key={s.t}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={tool === s.t}
+                      onClick={() => {
+                        setLastShape(s.t);
+                        setShapesOpen(false);
+                        pickTool(s.t);
+                      }}
+                      className={cn("flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] hover:bg-sunken", tool === s.t && "text-brand")}
+                    >
+                      <s.icon className="size-4" />
+                      {s.label}
+                      {tool === s.t && <Check className="ml-auto size-3.5" aria-hidden />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <ToolBtn t="text" label="Text" icon={Type} tool={tool} setTool={pickTool} />
           </div>
-          {isHost && (
+          {!guest && (
             <>
               <label className={cn("flex h-8 cursor-pointer items-center gap-1 border border-line px-2 text-[13px] hover:bg-sunken", pasting && "opacity-60")} title="Paste a screenshot (Ctrl+V) or choose an image">
                 <ImagePlus className="size-4" aria-hidden /> {pasting ? "Adding…" : "Image"}
@@ -1662,10 +2064,12 @@ export function MeetingWhiteboard({
                   }}
                 />
               </label>
-              <button type="button" onClick={() => setSnipPanel((v) => !v)} className={cn("flex h-8 items-center gap-1 border border-line px-2 text-[13px]", snipPanel ? "bg-brand text-on-brand" : "hover:bg-sunken")} title="Snip any part of your screen onto the board">
-                <Scissors className="size-4" aria-hidden /> Snip
-                {(autoClip || pushCode) && <span className="size-1.5 rounded-full bg-live" />}
-              </button>
+              {isHost && (
+                <button type="button" onClick={() => setSnipPanel((v) => !v)} className={cn("flex h-8 items-center gap-1 border border-line px-2 text-[13px]", snipPanel ? "bg-brand text-on-brand" : "hover:bg-sunken")} title="Snip any part of your screen onto the board">
+                  <Scissors className="size-4" aria-hidden /> Snip
+                  {(autoClip || pushCode) && <span className="size-1.5 rounded-full bg-live" />}
+                </button>
+              )}
             </>
           )}
           {pasteMsg && !privacyAlert && (
@@ -1690,8 +2094,8 @@ export function MeetingWhiteboard({
             </span>
           )}
           <span className="mx-0.5 h-6 w-px bg-line" />
-          <div className="flex gap-1">
-            {COLORS.map((c) => (
+          <div className="flex gap-1" data-board-colors={tool === "highlighter" ? "highlighter" : "ink"}>
+            {(tool === "highlighter" ? HL_COLORS : COLORS).map((c) => (
               <button key={c} type="button" onClick={() => setColor(c)} aria-label={`Colour ${c}`} className={cn("size-6 rounded-full border-2 transition-transform", color === c ? "scale-110 border-brand" : "border-line")} style={{ background: c }} />
             ))}
           </div>
@@ -1703,32 +2107,36 @@ export function MeetingWhiteboard({
               </button>
             ))}
           </div>
-          {isHost && (
-            <>
-              <span className="mx-0.5 h-6 w-px bg-line" />
-              <button type="button" onClick={undo} disabled={!histDepth.undo} className="grid size-8 place-items-center hover:bg-sunken disabled:opacity-40" title="Undo (Ctrl+Z)" aria-label="Undo">
-                <Undo2 className="size-4" />
-              </button>
-              <button type="button" onClick={redo} disabled={!histDepth.redo} className="grid size-8 place-items-center hover:bg-sunken disabled:opacity-40" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
-                <Redo2 className="size-4" />
-              </button>
-              <button type="button" onClick={clearBoard} className="flex h-8 items-center gap-1 px-2 text-[13px] text-danger hover:bg-danger/10" title={pages > 1 ? "Clear this page for everyone" : "Clear the board for everyone"}>
-                <Trash2 className="size-4" aria-hidden /> Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShareOpen((v) => !v);
-                  setShareMsg("");
-                }}
-                className="flex h-8 items-center gap-1 bg-brand px-2 text-[13px] font-semibold text-on-brand hover:bg-brand-hover"
-                title="Let the student draw, and save a copy to the lesson page"
-              >
-                <Share2 className="size-4" aria-hidden /> Share
-              </button>
-            </>
+          <span className="mx-0.5 h-6 w-px bg-line" />
+          <button type="button" onClick={undo} disabled={!histDepth.undo} className="grid size-8 place-items-center hover:bg-sunken disabled:opacity-40" title={isHost ? "Undo (Ctrl+Z)" : "Undo your last change (Ctrl+Z)"} aria-label="Undo">
+            <Undo2 className="size-4" />
+          </button>
+          <button type="button" onClick={redo} disabled={!histDepth.redo} className="grid size-8 place-items-center hover:bg-sunken disabled:opacity-40" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+            <Redo2 className="size-4" />
+          </button>
+          {isHost ? (
+            <button type="button" onClick={clearBoard} className="flex h-8 items-center gap-1 px-2 text-[13px] text-danger hover:bg-danger/10" title={pages > 1 ? "Clear this page for everyone" : "Clear the board for everyone"}>
+              <Trash2 className="size-4" aria-hidden /> Clear
+            </button>
+          ) : (
+            <button type="button" onClick={clearMine} className="flex h-8 items-center gap-1 px-2 text-[13px] text-danger hover:bg-danger/10" title="Clear what you drew on this page (the tutor's work stays)">
+              <Trash2 className="size-4" aria-hidden /> Clear mine
+            </button>
           )}
-          {!isHost && <span className="px-1 text-xs font-medium text-live">You can draw on this board</span>}
+          {saveMenu("toolbar")}
+          {isHost && (
+            <button
+              type="button"
+              onClick={() => {
+                setShareOpen((v) => !v);
+                setShareMsg("");
+              }}
+              className="flex h-8 items-center gap-1 bg-brand px-2 text-[13px] font-semibold text-on-brand hover:bg-brand-hover"
+              title="Choose who can draw, and save a copy to the lesson page"
+            >
+              <Share2 className="size-4" aria-hidden /> Share
+            </button>
+          )}
         </div>
       )}
 
@@ -1749,10 +2157,10 @@ export function MeetingWhiteboard({
           onTouchEnd={onUp}
         />
 
-        {/* Pages: the host turns them for everyone; the others see where they are. */}
-        {(isHost || pages > 1) && (
+        {/* Pages: whoever can draw turns them for everyone; the others see where they are. */}
+        {(canDraw || pages > 1) && (
           <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 border border-line bg-surface/95 px-1 py-1 text-xs text-ink shadow-lg" data-board-pages="">
-            {isHost && (
+            {canDraw && (
               <button type="button" onClick={() => goPage(page - 1)} disabled={page === 0} className="grid size-7 place-items-center hover:bg-sunken disabled:opacity-35" aria-label="Previous page">
                 <ChevronLeft className="size-4" />
               </button>
@@ -1760,7 +2168,7 @@ export function MeetingWhiteboard({
             <span className="px-1 font-medium tabular-nums" aria-live="polite">
               Page {page + 1} of {pages}
             </span>
-            {isHost && (
+            {canDraw && (
               <>
                 <button type="button" onClick={() => goPage(page + 1)} disabled={page >= pages - 1} className="grid size-7 place-items-center hover:bg-sunken disabled:opacity-35" aria-label="Next page">
                   <ChevronRight className="size-4" />
@@ -1768,6 +2176,10 @@ export function MeetingWhiteboard({
                 <button type="button" onClick={addPage} className="grid size-7 place-items-center hover:bg-sunken" aria-label="New page" title="New page">
                   <Plus className="size-4" />
                 </button>
+              </>
+            )}
+            {isHost && (
+              <>
                 <span className="mx-0.5 h-5 w-px bg-line" />
                 <div className="relative">
                   <button type="button" onClick={() => setPaperOpen((v) => !v)} className="h-7 px-2 hover:bg-sunken" aria-expanded={paperOpen} title="Paper: plain, squared or lined">
@@ -1898,8 +2310,16 @@ export function MeetingWhiteboard({
         )}
 
         {!canDraw && (
-          <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1 border border-warning/40 bg-warning-50 px-3 py-1 text-xs font-medium text-ink">
-            <Eye className="size-3.5" aria-hidden /> View only
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+            {pasteMsg && (
+              <span className="max-w-[16rem] truncate bg-surface/95 px-2 py-1 text-xs text-live shadow" role="status" title={pasteMsg}>
+                {pasteMsg}
+              </span>
+            )}
+            <span className="pointer-events-none flex h-8 items-center gap-1 border border-warning/40 bg-warning-50 px-3 text-xs font-medium text-ink">
+              <Eye className="size-3.5" aria-hidden /> View only
+            </span>
+            {saveMenu("viewer")}
           </div>
         )}
       </div>

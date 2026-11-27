@@ -35,7 +35,7 @@ import { announceRecording, canRecordClass, REC_EVERY_MS, saveRecording, startCl
 
 export interface ClassChat {
   lines: ChatLine[];
-  onSend: (body: string) => string | null | Promise<string | null>;
+  onSend: (body: string, file?: File) => string | null | Promise<string | null>;
   disabledReason?: string;
   note: string;
   peerName: string;
@@ -786,9 +786,9 @@ function MeetingRoom({
     };
   }, [room, onRefresh]);
 
-  const sendChat = async (body: string) => {
+  const sendChat = async (body: string, file?: File) => {
     if (!chat) return "Chat isn't available here.";
-    const err = await chat.onSend(body);
+    const err = await chat.onSend(body, file);
     if (!err) {
       // If this ping is lost, the other side still sees the message on its next refresh.
       room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: TOPIC.chat })), { reliable: true }).catch(() => {});
@@ -1244,7 +1244,10 @@ function MeetingRoom({
   const screenTracks = tracks.filter((t) => t.source === Track.Source.ScreenShare && isTrackReference(t));
   const camTracks = tracks.filter((t) => t.source !== Track.Source.ScreenShare);
   const pinnedTrack = pinned ? camTracks.find((t) => t.participant.identity === pinned) : undefined;
-  const others = React.useMemo(() => participants.filter((p) => p.identity !== localParticipant.identity).map((p) => ({ id: p.identity, name: nameOf(p) })), [participants, localParticipant.identity]);
+  const others = React.useMemo(
+    () => participants.filter((p) => p.identity !== localParticipant.identity).map((p) => ({ id: p.identity, name: nameOf(p), role: p.identity.startsWith("guest-") ? "Guest" : readMeta(p.metadata)?.role })),
+    [participants, localParticipant.identity],
+  );
   const chatUnread = chat ? Math.max(0, chat.lines.length - seenChat) : 0;
   if (panel === "chat" && chat && seenChat !== chat.lines.length) setSeenChat(chat.lines.length);
 
